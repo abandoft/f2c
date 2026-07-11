@@ -1,0 +1,5 @@
+20250303
+  Tweak mkfile.plan9 to generate sysdep.hd and add mkfile.plan9 to
+src.tgz and the makefile variants.  Thanks to Fernan Bolando
+<fernanbolando@gmail.com> for helpful E-mail.
+  makefile.vc needs tokdefs.h from makefile.u or mkfile.plan9.
