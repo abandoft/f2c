@@ -6,7 +6,8 @@ program complex_arithmetic
   implicit none
   use la_constants, only: zone
   complex :: a, b, c
-  double complex :: z
+  double complex :: z, q
+  double precision :: x
   integer :: status
   external validate_complex
 
@@ -40,9 +41,23 @@ program complex_arithmetic
 
   if (abs(zone - dcmplx(1.0, 0.0)) > 1.0d-12) error stop 9
 
+  x = huge(1.0d0)
+  z = dcmplx(x, 0.0d0)
+  if (z / z /= dcmplx(1.0d0, 0.0d0)) error stop 10
+  z = dcmplx(0.0d0, x)
+  if (z / z /= dcmplx(1.0d0, 0.0d0)) error stop 11
+  z = dcmplx(x, x)
+  if (z / z /= dcmplx(1.0d0, 0.0d0)) error stop 12
+  q = dcmplx(x, 0.0d0)
+  z = dcmplx(0.0d0, x)
+  if (z / q /= dcmplx(0.0d0, 1.0d0)) error stop 13
+  if (q / z /= dcmplx(0.0d0, -1.0d0)) error stop 14
+  q = dcmplx(x, -x)
+  if (z / q /= dcmplx(-0.5d0, 0.5d0)) error stop 15
+
   status = 0
   call validate_complex(-cmplx(1.0, 2.0), status)
-  if (status /= 1) error stop 10
+  if (status /= 1) error stop 16
 end program complex_arithmetic
 
 subroutine validate_complex(value, status)
