@@ -30,6 +30,42 @@ static void free_string_list(char **items, size_t count) {
     free(items);
 }
 
+static int actual_designates_const_dummy(const F2cExpr *actual) {
+    size_t child;
+    if (actual == NULL)
+        return 0;
+    if (actual->kind == F2C_EXPR_KEYWORD_ARGUMENT && actual->child_count == 1U)
+        return actual_designates_const_dummy(actual->children[0]);
+    if (actual->kind != F2C_EXPR_NAME && actual->kind != F2C_EXPR_ARRAY_REFERENCE &&
+        actual->kind != F2C_EXPR_SUBSTRING && actual->kind != F2C_EXPR_COMPONENT)
+        return 0;
+    if (actual->symbol != NULL && actual->symbol->argument &&
+        actual->symbol->intent == F2C_INTENT_IN)
+        return 1;
+    for (child = 0U; child < actual->child_count; ++child) {
+        if (actual_designates_const_dummy(actual->children[child]))
+            return 1;
+    }
+    return 0;
+}
+
+char *f2c_bridge_implicit_mutable_actual(const Symbol *callee, size_t parameter,
+                                         const F2cExpr *actual, const char *code) {
+    Buffer result = {0};
+    if (code == NULL)
+        return NULL;
+    if (callee == NULL || !callee->external || callee->external_signature_explicit ||
+        parameter >= callee->external_parameter_count ||
+        callee->external_parameter_const[parameter] ||
+        callee->external_parameter_allocatable[parameter] ||
+        callee->external_parameter_pointer[parameter] ||
+        callee->external_parameter_procedures[parameter] != NULL ||
+        !actual_designates_const_dummy(actual))
+        return f2c_strdup(code);
+    f2c_buffer_printf(&result, "f2c_implicit_mutable_actual(%s)", code);
+    return f2c_buffer_take(&result);
+}
+
 static char *lower_scalar_actual(Unit *unit, const char *text, const F2cExpr *ast) {
     char *copy = f2c_strdup(text);
     char *clean = copy != NULL ? f2c_trim(copy) : NULL;
@@ -451,6 +487,17 @@ void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
                 lowered_call_free(&call);
                 return;
             }
+        }
+        for (i = 0U; i < count && i < callee->external_parameter_count; ++i) {
+            char *bridged = f2c_bridge_implicit_mutable_actual(
+                callee, i, argument_expressions != NULL ? argument_expressions[i] : NULL,
+                call.arguments[i]);
+            if (bridged == NULL) {
+                lowered_call_free(&call);
+                return;
+            }
+            free(call.arguments[i]);
+            call.arguments[i] = bridged;
         }
     }
     if (!prepare_allocatable_descriptors(&call, unit, callee, argument_expressions, count,

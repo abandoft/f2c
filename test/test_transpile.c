@@ -258,7 +258,19 @@ static void test_character_and_external_interface(void) {
                                  "  character ( len = 3 ) :: path\n"
                                  "  path = 'ABI'\n"
                                  "  call consume_text(name, 'XY')\n"
-                                 "end subroutine forward_fixed\n";
+                                 "end subroutine forward_fixed\n"
+                                 "subroutine forward_readonly(n, values)\n"
+                                 "  integer, intent(in) :: n\n"
+                                 "  real, intent(in) :: values(*)\n"
+                                 "  external consume_values\n"
+                                 "  call consume_values(n, values)\n"
+                                 "end subroutine forward_readonly\n"
+                                 "double precision function inspect_readonly(n)\n"
+                                 "  integer, intent(in) :: n\n"
+                                 "  double precision inspect_value\n"
+                                 "  external inspect_value\n"
+                                 "  inspect_readonly = inspect_value(n)\n"
+                                 "end function inspect_readonly\n";
     F2cOptions options = {"character.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "character arguments and external function translate");
@@ -278,6 +290,12 @@ static void test_character_and_external_interface(void) {
                     "fixed dummies forward declared length while literals use static length");
     expect_contains(result.code, "extern void consume_text(char *, char *, size_t, size_t);",
                     "implicit external prototypes do not infer dummy constness from actuals");
+    expect_contains(result.code,
+                    "consume_values(f2c_implicit_mutable_actual(n), "
+                    "f2c_implicit_mutable_actual(values));",
+                    "legacy calls bridge const dummy actuals without changing the external ABI");
+    expect_contains(result.code, "inspect_value(f2c_implicit_mutable_actual(n))",
+                    "legacy function calls bridge const dummy actuals without a cast warning");
     f2c_result_free(&result);
 }
 

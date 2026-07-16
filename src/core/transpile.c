@@ -340,6 +340,13 @@ F2cResult f2c_transpile_project(const F2cInput *inputs, size_t input_count) {
                           "#define F2C_LOOP_UNROLL\n"
                           "#endif\n"
                           "#endif\n");
+        f2c_buffer_append(
+            &context.output,
+            "/* Preserve the legacy Fortran ABI when a read-only actual is passed through an "
+            "implicit external interface. */\n"
+            "static inline F2C_UNUSED void *f2c_implicit_mutable_actual(const void *pointer) { "
+            "void *mutable_pointer = NULL; memcpy(&mutable_pointer, &pointer, "
+            "sizeof(mutable_pointer)); return mutable_pointer; }\n");
         if (needs_complex) {
             f2c_buffer_append(&context.output,
                               "#ifndef F2C_GENERATED_COMPLEX_TYPES\n"

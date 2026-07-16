@@ -757,6 +757,17 @@ static char *emit_call(Unit *unit, const F2cExpr *expression, int *supported) {
     }
     for (i = 0U; i < expression->child_count; ++i) {
         char *actual = emit_external_actual(unit, expression->children[i], arguments[i]);
+        char *bridged;
+        if (actual == NULL) {
+            free_arguments(arguments, types, expression->child_count);
+            free(f2c_buffer_take(&result));
+            *supported = 0;
+            return NULL;
+        }
+        bridged = f2c_bridge_implicit_mutable_actual(expression->symbol, i,
+                                                     expression->children[i], actual);
+        free(actual);
+        actual = bridged;
         if (actual == NULL) {
             free_arguments(arguments, types, expression->child_count);
             free(f2c_buffer_take(&result));
