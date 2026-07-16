@@ -1,0 +1,55 @@
+# The only supported location for generated files.  Do not add build-*, out/,
+# object/module files, or in-source CMake output here: those violate the project
+# layout and must remain visible in `git status`.
+/build/
+
+# Local CMake configuration must not change the repository-wide build contract.
+/CMakeUserPresets.json
+
+# Operating-system metadata.
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Editors and IDEs.
+/.idea/
+/.vscode/
+/.vs/
+/.clangd/
+*.code-workspace
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+*.swp
+*.swo
+*.xcuserstate
+*~
+xcuserdata/
+
+# Python tooling used by numerical-report scripts.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+/.venv/
+/venv/
+
+# Local environment files may contain credentials.  A documented example may
+# still be committed.
+/.env
+/.env.*
+!/.env.example
+
+# Crash dumps and editor/patch leftovers.
+/core
+/core.*
+/vgcore.*
+/*.stackdump
+*.bak
+*.orig
+*.rej
+*.tmp
+*.temp

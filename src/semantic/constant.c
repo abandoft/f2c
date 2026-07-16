@@ -1,0 +1,171 @@
+#include "internal/f2c.h"
+
+#include <errno.h>
+#include <limits.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+static int checked_add(int64_t left, int64_t right, int64_t *result) {
+    if ((right > 0 && left > INT64_MAX - right) || (right < 0 && left < INT64_MIN - right))
+        return 0;
+    *result = left + right;
+    return 1;
+}
+
+static int checked_subtract(int64_t left, int64_t right, int64_t *result) {
+    if ((right < 0 && left > INT64_MAX + right) || (right > 0 && left < INT64_MIN + right))
+        return 0;
+    *result = left - right;
+    return 1;
+}
+
+static int checked_multiply(int64_t left, int64_t right, int64_t *result) {
+    if (left == 0 || right == 0) {
+        *result = 0;
+        return 1;
+    }
+    if ((left == -1 && right == INT64_MIN) || (right == -1 && left == INT64_MIN))
+        return 0;
+    if (left > 0) {
+        if ((right > 0 && left > INT64_MAX / right) || (right < 0 && right < INT64_MIN / left))
+            return 0;
+    } else if ((right > 0 && left < INT64_MIN / right) || (right < 0 && left < INT64_MAX / right)) {
+        return 0;
+    }
+    *result = left * right;
+    return 1;
+}
+
+static int64_t literal_character_length(const char *text) {
+    const char quote = text != NULL ? text[0] : '\0';
+    int64_t length = 0;
+    size_t i;
+    const size_t source_length = text != NULL ? strlen(text) : 0U;
+    const char *payload;
+    size_t payload_length;
+    if (f2c_hollerith_payload(text, &payload, &payload_length))
+        return payload_length <= (size_t)INT64_MAX ? (int64_t)payload_length : -1;
+    if ((quote != '\'' && quote != '"') || source_length < 2U)
+        return -1;
+    for (i = 1U; i + 1U < source_length; ++i) {
+        if (text[i] == quote && i + 1U < source_length - 1U && text[i + 1U] == quote)
+            ++i;
+        ++length;
+    }
+    return length;
+}
+
+static int evaluate(Unit *unit, const F2cExpr *expression, int64_t *value, unsigned int depth) {
+    int64_t left;
+    int64_t right;
+    if (expression == NULL || value == NULL || depth > 64U)
+        return 0;
+    if (expression->kind == F2C_EXPR_INTEGER_LITERAL && expression->text != NULL) {
+        char *end = NULL;
+        long long parsed;
+        errno = 0;
+        parsed = strtoll(expression->text, &end, 10);
+        if (errno != 0 || end == expression->text || (*end != '\0' && *end != '_'))
+            return 0;
+        *value = (int64_t)parsed;
+        return 1;
+    }
+    if (expression->kind == F2C_EXPR_NAME && expression->symbol != NULL &&
+        expression->symbol->parameter && expression->symbol->initializer != NULL) {
+        F2cExpr *initializer =
+            f2c_parse_expression_ast(unit, expression->symbol->initializer, NULL);
+        const int result = evaluate(unit, initializer, value, depth + 1U);
+        f2c_expr_free(initializer);
+        return result;
+    }
+    if (expression->kind == F2C_EXPR_UNARY && expression->child_count == 1U &&
+        evaluate(unit, expression->children[0], &left, depth + 1U)) {
+        if (strcmp(expression->text, "+") == 0) {
+            *value = left;
+            return 1;
+        }
+        if (strcmp(expression->text, "-") == 0 && left != INT64_MIN) {
+            *value = -left;
+            return 1;
+        }
+        return 0;
+    }
+    if (expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
+        expression->child_count != 0U) {
+        size_t i;
+        if (strcmp(expression->text, "len") == 0 && expression->child_count == 1U) {
+            const F2cExpr *argument = expression->children[0];
+            if (argument->kind == F2C_EXPR_STRING_LITERAL) {
+                left = literal_character_length(argument->text);
+                if (left >= 0) {
+                    *value = left;
+                    return 1;
+                }
+            }
+            if (argument->symbol != NULL && argument->symbol->character_length != NULL)
+                return f2c_evaluate_integer_text(unit, argument->symbol->character_length, value);
+            return 0;
+        }
+        if ((strcmp(expression->text, "max") == 0 || strcmp(expression->text, "min") == 0) &&
+            evaluate(unit, expression->children[0], value, depth + 1U)) {
+            for (i = 1U; i < expression->child_count; ++i) {
+                if (!evaluate(unit, expression->children[i], &right, depth + 1U))
+                    return 0;
+                if ((strcmp(expression->text, "max") == 0 && right > *value) ||
+                    (strcmp(expression->text, "min") == 0 && right < *value))
+                    *value = right;
+            }
+            return 1;
+        }
+        return 0;
+    }
+    if (expression->kind != F2C_EXPR_BINARY || expression->child_count != 2U ||
+        !evaluate(unit, expression->children[0], &left, depth + 1U) ||
+        !evaluate(unit, expression->children[1], &right, depth + 1U))
+        return 0;
+    if (strcmp(expression->text, "+") == 0)
+        return checked_add(left, right, value);
+    if (strcmp(expression->text, "-") == 0)
+        return checked_subtract(left, right, value);
+    if (strcmp(expression->text, "*") == 0)
+        return checked_multiply(left, right, value);
+    if (strcmp(expression->text, "/") == 0) {
+        if (right == 0 || (left == INT64_MIN && right == -1))
+            return 0;
+        *value = left / right;
+        return 1;
+    }
+    if (strcmp(expression->text, "**") == 0 && right >= 0) {
+        int64_t base = left;
+        int64_t exponent = right;
+        int64_t result = 1;
+        while (exponent != 0) {
+            if ((exponent & 1) != 0 && !checked_multiply(result, base, &result))
+                return 0;
+            exponent >>= 1;
+            if (exponent != 0 && !checked_multiply(base, base, &base))
+                return 0;
+        }
+        *value = result;
+        return 1;
+    }
+    return 0;
+}
+
+int f2c_evaluate_integer_constant(Unit *unit, const F2cExpr *expression, int64_t *value) {
+    return evaluate(unit, expression, value, 0U);
+}
+
+int f2c_evaluate_integer_text(Unit *unit, const char *text, int64_t *value) {
+    const char *error_at = NULL;
+    F2cExpr *expression;
+    int result;
+    if (text == NULL)
+        return 0;
+    expression = f2c_parse_expression_ast(unit, text, &error_at);
+    result = expression != NULL && error_at == NULL &&
+             f2c_evaluate_integer_constant(unit, expression, value);
+    f2c_expr_free(expression);
+    return result;
+}
