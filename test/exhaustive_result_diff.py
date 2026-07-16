@@ -13,6 +13,7 @@ import math
 from pathlib import Path
 import re
 import sys
+import tempfile
 
 
 NUMBER_TEXT = (
@@ -181,6 +182,12 @@ def generated_records(path: Path, mode: str) -> list[NumericRecord]:
             records.append(
                 NumericRecord(value, token, context, line_number)
             )
+    if not records and mode not in KEYED_MODES:
+        # Current generated C preserves the official formatted result labels.
+        # Older translators emitted a list-directed stream after instrumentation,
+        # so keep that parser above and use the native-style parser as a strict
+        # fallback when no legacy records are present.
+        return native_records(path, mode)
     return records
 
 
@@ -617,6 +624,16 @@ def self_test() -> None:
     assert NATIVE_TEST_TOTAL.search("passed the threshold (  48 tests run)")
     assert EIG_HEADER.match("SST -- Real Symmetric eigenvalue problem")
     assert EIG_HEADER.match("GLM: GLM Problem")
+    with tempfile.TemporaryDirectory() as directory:
+        formatted = Path(directory) / "formatted.out"
+        formatted.write_text(
+            "SGE: General dense matrices\n"
+            " M = 1, N = 1, type 1, test( 1) = 0.125\n",
+            encoding="utf-8",
+        )
+        formatted_records = generated_records(formatted, "lin")
+        assert len(formatted_records) == 1
+        assert formatted_records[0].value == 0.125
     generated = [
         NumericRecord(1.0, "1", "DEV 1 1", 1),
         NumericRecord(2.0, "2", "DEV 1 2", 2),
