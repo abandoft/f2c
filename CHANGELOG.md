@@ -35,19 +35,25 @@
 
 - New command-line options -I8 and -cf:
 
+  ```text
   -I8	Assume 8-byte integer and logical, 4-byte REAL, 8-byte
-  	double precision and complex, and 16-byte double complex
-  	variables.  Appropriate changes to f2c.h may be needed.
+      double precision and complex, and 16-byte double complex
+  variables.  Appropriate changes to f2c.h may be needed.
 
   -cf	Do not report the current .f file except in error messages.
+  ```
 
 ## 20230428
 
 - proc.c:  fix another allocation glitch in proc.c:
+
+  ```diff
   1701c1701
   <	    ckalloc( sizeof(int) + (3+2*nd)*sizeof(expptr) );
   ---
   >	    ckalloc( sizeof(struct Dimblock) + 2*sizeof(expptr)*(nd-1) );
+  ```
+
   This is similar to the change of 20181026 and the need for it was
   revealed in E-mail from Ole Streicher.
 
@@ -75,10 +81,13 @@
 ## 20191129
 
 - pread.c: fix a glitch not known to have caused any trouble:
+
+  ```diff
   355c355
   < 		if (c < '0' && c > '9')
   ---
   > 		if (c < '0' || c > '9')
+  ```
 
 ## 20190311
 
@@ -87,10 +96,14 @@
 ## 20181026
 
 - Fix an allocation glitch in proc.c:
+
+  ```diff
   1149c1149
   < 	    size = sizeof(int) + (3 + 2 * nd) * sizeof (expptr);
   ---
   > 	    size = sizeof(struct Dimblock) + 2*sizeof(expptr)*(nd-1);
+  ```
+
   Thanks to Ole Streicher for pointing out the need for this change.
 
 ## 20160102
@@ -107,7 +120,7 @@
 ## Thu Sep 26 16:42:35 MDT 2013
 
 - arithchk.c and sysdep1.h0 updated.  The former has a new
-  "#ifdef NO_SSZIZE_T" section for use elsewhere.  The latter has a
+  "#ifdef NO\_SSZIZE\_T" section for use elsewhere.  The latter has a
   change supplied by Gregor Richards for use with some libc variants.
 
 ## Mon Aug  1 13:46:40 MDT 2011
@@ -134,7 +147,7 @@
 
 ## Fri Jan  2 23:13:25 MST 2009
 
-- libf2c.zip: add  -DNO_ISATTY to CFLAGS assignment in makefile.vc.
+- libf2c.zip: add  -DNO\_ISATTY to CFLAGS assignment in makefile.vc.
 
 ## Wed Nov 26 23:23:27 MST 2008
 
@@ -161,7 +174,7 @@
 ## Sun Oct  8 02:45:04 MDT 2006
 
 - putpcc.c: fix glitch in subscripting complex variables:  subscripts
-  of type integer*8 were converted to integer*4, which causes trouble
+  of type integer\*8 were converted to integer\*4, which causes trouble
   when 32-bit addressing does not suffice.
 
 ## Sun May  7 00:38:59 MDT 2006
@@ -177,18 +190,18 @@
 
 - libf2c.zip:  uninit.c:  on IA32 Linux systems, leave the rounding
   precision alone rather than forcing it to 53 bits; compile with
-  -DUNINIT_F2C_PRECISION_53 to get the former behavior.  This only
+  -DUNINIT\_F2C\_PRECISION\_53 to get the former behavior.  This only
   affects Fortran files translated by f2c -trapuv .
 
 ## Sun May  1 21:45:46 MDT 2005
 
 - sysdep.c:  fix a possible fault under -DMSDOS and improper handling
-  of a tmpnam failure under the unusual combination of both -DNO_MKDTEMP
-  and -DNO_MKSTEMP (without -DNO_TEMPDIR).
+  of a tmpnam failure under the unusual combination of both -DNO\_MKDTEMP
+  and -DNO\_MKSTEMP (without -DNO\_TEMPDIR).
 
 ## Sun Mar 27 20:06:49 MST 2005
 
-- sysdep.c: in set_tmp_names(), fix botched placement of
+- sysdep.c: in set\_tmp\_names(), fix botched placement of
   "if (debugflag == 1) return;":  move it below declarations.
 
 ## Fri Mar  4 18:40:48 MST 2005
@@ -204,12 +217,12 @@
   as far as I know), then f2c's temporary files will be written in a
   temporary directory that is readable and writable only by the user and
   that is removed at the end of f2c's execution.  To disable today's
-  change, compile sysdep.c with -DNO_TEMPDIR (i.e., with NO_TEMPDIR
+  change, compile sysdep.c with -DNO\_TEMPDIR (i.e., with NO\_TEMPDIR
   #defined).
 
 ## Thu Oct  7 23:25:28 MDT 2004
 
-- names.c: for convenience of MSVC++ users, map "cdecl" to "cdecl__".
+- names.c: for convenience of MSVC++ users, map "cdecl" to "cdecl\_\_".
 
 ## Sat Oct 25 07:57:53 MDT 2003
 
@@ -227,30 +240,35 @@
 ## Fri Mar 21 13:14:05 EST 2003
 
 - libf2c.zip: err.c: before writing to a file after reading from it,
-  do an f_seek(file, 0, SEEK_CUR) to make writing legal in ANSI C.
+  do an f\_seek(file, 0, SEEK\_CUR) to make writing legal in ANSI C.
 
 ## Thu Mar 20 13:50:12 EST 2003
 
 - format.c:  code around a bug (reported by Nelson H. F. Beebe) in
-  some versions of FreeBSD.  Compiling with __FreeBSD__ but not
-  NO_FSCANF_LL_BUG #defined or with FSCANF_LL_BUG #defined causes
+  some versions of FreeBSD.  Compiling with \_\_FreeBSD\_\_ but not
+  NO\_FSCANF\_LL\_BUG #defined or with FSCANF\_LL\_BUG #defined causes
   special logic to replace  fscanf(infile, "%llx", result)  with
   custom logic.  Here's an example (from Beebe) where the bug bit:
-  	integer*8 m, n
-  	m = 9223372036854775807
-  	end
+
+  ```text
+  integer*8 m, n
+  m = 9223372036854775807
+  end
+  ```
 
 ## Thu Mar  6 22:48:08 EST 2003
 
-- output.c: fix a bug leading to "Unexpected tag 4 in opconv_fudge"
+- output.c: fix a bug leading to "Unexpected tag 4 in opconv\_fudge"
   when f2c -s processes the real part of a complex array reference.
   Example (simplified from netlib/linpack/zchdc.f):
 
-  	subroutine foo(a,work,n,k)
-  	integer k, n
-  	complex*16 a(n,n), work(n)
-  	work(k) = dcmplx(dsqrt(dreal(a(k,k))),0.0d0)
-  	end
+  ```text
+  subroutine foo(a,work,n,k)
+  integer k, n
+  complex*16 a(n,n), work(n)
+  work(k) = dcmplx(dsqrt(dreal(a(k,k))),0.0d0)
+  end
+  ```
 
   (Thanks to Nickolay A. Khokhlov for the bug report.)
 
@@ -259,20 +277,28 @@
 - Fix a fault with f2c -s on the following example of invalid Fortran
   (reported by Nickolay A. Khokhlov); "function" should appear before
   "cat" on the first line:
-  	character*(*) cat(a, b)
-  	character*(*) a, b
-  	cat = a // b
-  	end
+
+  ```text
+  character*(*) cat(a, b)
+  character*(*) a, b
+  cat = a // b
+  end
+  ```
+
   Issue warnings about inappropriate uses of arrays a, b, c and pass
   a temporary for d in
-  	real a(2), b(2), c(2), d
-  	call foo((a), 1*b, +c, +d)
-  	end
+
+  ```text
+  real a(2), b(2), c(2), d
+  call foo((a), 1*b, +c, +d)
+  end
+  ```
+
   (correcting bugs reported by Arnaud Desitter).
 
 ## Thu Dec 12 22:16:00 EST 2002
 
-- proc.c: tweak to omit "* 1" from "a_offset = 1 + a_dim1 * 1;".
+- proc.c: tweak to omit "\* 1" from "a\_offset = 1 + a\_dim1 \* 1;".
   libf2c.zip: uninit.c: adjust to work with HP-UX B.11.11 as well as
   HP-UX B.10.20; f77vers.c not changed.
 
@@ -284,7 +310,7 @@
 ## Fri Sep  6 18:39:24 EDT 2002
 
 - libf2c.zip: rsne.c: fix bug with multiple repeat counts in reading
-  namelists, e.g., &nl a(2) = 3*1.0, 2*2.0, 3*3.0 /
+  namelists, e.g., &nl a(2) = 3\*1.0, 2\*2.0, 3\*3.0 /
   (Bug found by Jim McDonald, reported by Toon Moene.)
 
 ## Tue Jun 25 15:13:32 EDT 2002
@@ -294,20 +320,24 @@
   Under -K, cast string-length arguments to (ftnlen).  This should
   matter only in the unusual case that "readme" instructs obtaining
   f2c.h by
-  	sed 's/long int /long long /' f2c.h0 >f2c.h
+
+  ```text
+  sed 's/long int /long long /' f2c.h0 >f2c.h
+  ```
+
   Increase defaults for some table sizes:  make -Nn802 -Nq300 -Nx400
   the default.
 
 ## Wed Jun  5 16:13:34 EDT 2002
 
 - libf2c: uninit.c: for Linux on an ARM processor, add some
-  #ifndef _FPU... tests; f77vers.c not changed.
+  #ifndef \_FPU... tests; f77vers.c not changed.
 
 ## Thu May  2 19:09:01 EDT 2002
 
-- src/misc.c, src/sysdep.h, src/gram.c: tweaks for KR_headers (a rare
+- src/misc.c, src/sysdep.h, src/gram.c: tweaks for KR\_headers (a rare
   concern today); version.c touched but left unchanged.
-  libf2c: fix glitch in makefile.vc; KR_header tweaks in s_stop.c
+  libf2c: fix glitch in makefile.vc; KR\_header tweaks in s\_stop.c
   and uninit.c (which also had a misplaced #endif).
 
 ## Thu Mar 14 12:53:08 EST 2002
@@ -317,13 +347,17 @@
   exactly 72 characters long, and f2c is run on a system (such as a Unix
   or Linux system) that does not distinguish text and binary modes.
   Example (in CRLF form):
+
+  ```text
         write(*,*)"Hello world, with a source line that is 72 chars long."
         end
-  libf2c/z_log.c:  add code to cope with buggy compilers (e.g., some
+  ```
+
+  libf2c/z\_log.c:  add code to cope with buggy compilers (e.g., some
   versions of gcc under -O2 or -O3) that do floating-point comparisons
   against values computed into extended-precision registers on some
   systems (such as Intel IA32 systems).  Compile with
-  -DNO_DOUBLE_EXTENDED to omit the kludge that circumvents this bug.
+  -DNO\_DOUBLE\_EXTENDED to omit the kludge that circumvents this bug.
 
 ## Fri Feb  8 08:43:40 EST 2002
 
@@ -332,13 +366,15 @@
   assignments.  (Yesterday's changes to expr.c are recanted; expr.c
   is now restored to that of 20010820.)  Now
 
-  	subroutine foo(n)
-  	character*8 s
-  	double precision goo
-  	do while (sin(goo(s(n+1:n+2))) .ge. 0.2)
-  		n = n + 1
-  		enddo
-  	end
+  ```text
+  subroutine foo(n)
+  character*8 s
+  double precision goo
+  do while (sin(goo(s(n+1:n+2))) .ge. 0.2)
+      n = n + 1
+      enddo
+  end
+  ```
 
   is correctly translated.
 
@@ -347,13 +383,15 @@
 - Fix bug handling leading array dimensions in common:  invalid C
   resulted.  Example (after one provided by Dmitry G. Baksheyev):
 
-  	subroutine foo(a)
-  	common/c/m
-  	integer m, n
-  	equivalence(m,n)
-  	integer a(n,2)
-  	a(1,2) = 3
-  	end
+  ```text
+  subroutine foo(a)
+  common/c/m
+  integer m, n
+  equivalence(m,n)
+  integer a(n,2)
+  a(1,2) = 3
+  end
+  ```
 
   Fix a bug, apparently introduced sometime after 19980913, in
   handling certain substring expressions that involve temporary
@@ -362,57 +400,67 @@
   the temporary assignments appeared too soon.  Examples are hard to
   find, but here is one (after an example provided by Nat Bachman):
 
-  	subroutine foo(n)
-  	character*8 s
-  	do while (moo(s(n+1:n+2)) .ge. 2)
-  		n = n + 1
-  		enddo
-  	end
+  ```text
+  subroutine foo(n)
+  character*8 s
+  do while (moo(s(n+1:n+2)) .ge. 2)
+      n = n + 1
+      enddo
+  end
+  ```
 
   It is hard for f2c to get this sort of example correct when the
   "untyped" function is a generic intrinsic.  When incorrect code would
   otherwise result, f2c now issues an error message and declines to
   produce C.  For example,
 
-  	subroutine foo(n)
-  	character*8 s
-  	double precision goo
-  	do while (sin(goo(s(n+1:n+2))) .ge. 2)
-  		n = n + 1
-  		enddo
-  	end
+  ```text
+  subroutine foo(n)
+  character*8 s
+  double precision goo
+  do while (sin(goo(s(n+1:n+2))) .ge. 2)
+      n = n + 1
+      enddo
+  end
+  ```
 
   gives the new error message, but both
 
-  	subroutine foo(n)
-  	character*8 s
-  	double precision goo
-  	do while (dsin(goo(s(n+1:n+2))) .ge. 2)
-  		n = n + 1
-  		enddo
-  	end
+  ```text
+  subroutine foo(n)
+  character*8 s
+  double precision goo
+  do while (dsin(goo(s(n+1:n+2))) .ge. 2)
+      n = n + 1
+      enddo
+  end
+  ```
+
   and
-  	subroutine foo(n)
-  	character*8 s
-  	double precision goo
-  	do while (sin(goo(min(n, (n-3)**2))) .ge. 2)
-  		n = n + 1
-  		enddo
-  	end
+
+  ```text
+  subroutine foo(n)
+  character*8 s
+  double precision goo
+  do while (sin(goo(min(n, (n-3)**2))) .ge. 2)
+      n = n + 1
+      enddo
+  end
+  ```
 
   give correct C.
 
 ## Fri Jan 18 16:17:44 EST 2002
 
-- libf2c.zip:   fix bugs (reported by Holger Helmke) in qbit_bits():
+- libf2c.zip:   fix bugs (reported by Holger Helmke) in qbit\_bits():
   wrong return type, missing ~ on y in return value.  This affects
-  the intrinsic ibits function for first argument of type integer*8.
+  the intrinsic ibits function for first argument of type integer\*8.
 
 ## Wed Nov 28 17:58:12 EST 2001
 
 - libf2c.zip:  on IEEE systems, print -0 as -0 when the relevant
-  libf2c/makefile.* is suitably adjusted:  see comments about
-  -DSIGNED_ZEROS in libf2c/makefile.*.
+  libf2c/makefile.\* is suitably adjusted:  see comments about
+  -DSIGNED\_ZEROS in libf2c/makefile.\*.
 
 ## Fri Nov 16 02:00:03 EST 2001
 
@@ -424,17 +472,17 @@
 ## Wed Aug 22 08:01:37 EDT 2001
 
 - cds.c, expr.c: in constants, preserve the sign of 0.
-  expr.c: fix some glitches in folding constants to integer*8
-  (when NO_LONG_LONG is not #defined).
+  expr.c: fix some glitches in folding constants to integer\*8
+  (when NO\_LONG\_LONG is not #defined).
   intr.c: fold constant min(...) and max(...) expressions.
 
 ## Thu Jul  5 22:00:51 EDT 2001
 
-- libf2c.zip: modify uninit.c for __mc68k__ under Linux.
+- libf2c.zip: modify uninit.c for \_\_mc68k\_\_ under Linux.
 
 ## Sat Jun 23 23:08:22 EDT 2001
 
-- New command-line option -trapuv adds calls on _uninit_f2c() to prologs
+- New command-line option -trapuv adds calls on \_uninit\_f2c() to prologs
   to dynamically initialize local variables, except those appearing in
   SAVE or DATA statements, with values that may help find references to
   uninitialized variables.  For example, with IEEE arithmetic, floating-
@@ -442,7 +490,7 @@
   expr.c: new warning for out-of-bounds constant substring expressions.
   Under -C, such expressions now inhibit C output.
   libf2c/mkfile.plan9: fix glitch with rule for "check" (or xsum.out).
-  libf2c.zip: add uninit.c (for _uninit_f2c()) in support of -trapuv.
+  libf2c.zip: add uninit.c (for \_uninit\_f2c()) in support of -trapuv.
   fc, f2c.1, f2c.1t: adjust for -trapuv.
 
 ## Tue Mar 20 22:03:23 EST 2001
@@ -454,9 +502,9 @@
 ## Thu Mar  1 16:25:19 EST 2001
 
 - Cosmetic change for consistency with some other netlib directories:
-  change NO_LONGLONG to NO_LONG_LONG.  (This includes adjusting the above
+  change NO\_LONGLONG to NO\_LONG\_LONG.  (This includes adjusting the above
   entry for Feb 23 2001.)  No change (other than timestamp) to version.c.
-  libf2c:  endfile.c:  switch to ftruncate (absent -DNO_TRUNCATE),
+  libf2c:  endfile.c:  switch to ftruncate (absent -DNO\_TRUNCATE),
   thus permitting truncation of scratch files on true Unix systems,
   where scratch files have no name.  Add an fflush() (surprisingly)
   needed on some Linux systems.
@@ -464,7 +512,7 @@
 ## Wed Feb 28 00:50:04 EST 2001
 
 - Adjust misc.c for (older) systems that recognize long long but do not
-  have LLONG_MAX or LONGLONG_MAX in limits.h.
+  have LLONG\_MAX or LONGLONG\_MAX in limits.h.
   main.c: filter out bad files before dofork loop to avoid trouble
   in Win32 "f2c.exe" binaries.
 
@@ -472,9 +520,13 @@
 
 - Prevent malloc(0) when a subroutine of no arguments has an entry
   with no arguments, as in
-  	subroutine foo
-  	entry goo
-  	end
+
+  ```text
+  subroutine foo
+  entry goo
+  end
+  ```
+
   Fix a fault that was possible when MAIN (illegally) had entry points.
   Fix a buffer overflow connected with the error message for names more
   than MAXNAMELEN (i.e., 50) bytes long.
@@ -482,25 +534,25 @@
   "f2c -!czork foo.f" to complain about two invalid flags ('-ork' and
   '-oo.f') instead of just one ('-ork').
   fc: add -s option (strip executable); portability tweaks.
-  Adjustments to handing of integer*8 to permit processing 8-byte hex,
+  Adjustments to handing of integer\*8 to permit processing 8-byte hex,
   binary, octal, and decimal constants.  The adjustments are only
   available when type long long (for >= 64 bit integers) is available to
   f2c; they are assumed available unless f2c is compiled with either
-  -DNO_TYQUAD or -DNO_LONGLONG.  As has long been the case, compilation
-  of f2c itself with -DNO_TYQUAD eliminates recognition of integer*8
-  altogether.  Compilation with just -DNO_LONGLONG permits the previous
-  handling of integer*8, which could only handle 32-bit constants
-  associated with integer*8 variables.
+  -DNO\_TYQUAD or -DNO\_LONGLONG.  As has long been the case, compilation
+  of f2c itself with -DNO\_TYQUAD eliminates recognition of integer\*8
+  altogether.  Compilation with just -DNO\_LONGLONG permits the previous
+  handling of integer\*8, which could only handle 32-bit constants
+  associated with integer\*8 variables.
   New command-line argument -i8const (available only when f2c itself
-  is compiled with neither -DNO_TYQUAD nor -DNO_LONGLONG) suppresses
+  is compiled with neither -DNO\_TYQUAD nor -DNO\_LONGLONG) suppresses
   the new automatic promotion of integer constants too long to express
-  as 32-bit values to type integer*8.  There are corresponding updates
+  as 32-bit values to type integer\*8.  There are corresponding updates
   to f2c.1 and f2c.1t.
 
 ## Fri Feb 23 00:43:56 EST 2001
 
 - libf2c: endfile.c: adjust to use truncate() unless compiled with
-  -DNO_TRUNCATE (or with -DMSDOS).  Add libf2c/mkfile.plan9.
+  -DNO\_TRUNCATE (or with -DMSDOS).  Add libf2c/mkfile.plan9.
 
 ## Tue Dec  5 22:55:56 EST 2000
 
@@ -509,8 +561,8 @@
 
 ## Sat Sep 30 00:28:30 EDT 2000
 
-- libf77, libf2c.zip: dtime_.c, etime_.c: use floating-point divide;
-  dtime_.d, erf_.c, erfc_.c, etime.c: for use with "f2c -R", compile with
+- libf77, libf2c.zip: dtime\_.c, etime\_.c: use floating-point divide;
+  dtime\_.d, erf\_.c, erfc\_.c, etime.c: for use with "f2c -R", compile with
   -DREAL=float.
 
 ## Thu Aug 17 21:38:36 EDT 2000
@@ -524,7 +576,11 @@
   (suggestion of Nelson Beebe).  Note that fc simply appends to CFLAGS,
   so system-specific stuff can be supplied in the environment variable
   CFLAGS.  With some shells, invocations of the form
-  	CFLAGS='system-specific stuff' fc ...
+
+  ```text
+  CFLAGS='system-specific stuff' fc ...
+  ```
+
   are one way to do this.
 
 ## Thu Jul  6 23:46:07 EDT 2000
@@ -539,10 +595,14 @@
 
 - misc.c, function "addressable": fix fault with "f2c -I2 foo.f" when
   foo.f consists of the 4 lines
-  	subroutine foo(c)
-  	character*(*) c
-  	i = min(len(c),23)
-  	end
+
+  ```text
+  subroutine foo(c)
+  character*(*) c
+  i = min(len(c),23)
+  end
+  ```
+
   Sundry files: tweaks for portability, e.g., for compilation by overly
   fastidious C++ compilers; "false" and "true" now treated as C keywords
   (so they get two underscores appended).
@@ -560,14 +620,14 @@
 
 ## Thu Apr 20 13:02:54 EDT 2000
 
-- libf77, libi77, libf2c.zip: s_cat.c, rsne.c, xwsne.c: fix type
+- libf77, libi77, libf2c.zip: s\_cat.c, rsne.c, xwsne.c: fix type
   errors that only matter if sizeof(ftnint) != sizeof(ftnlen).
 
 ## Fri Mar 10 18:48:17 EST 2000
 
-- libf77, libf2c.zip: z_log.c: the real part of the double complex log
+- libf77, libf2c.zip: z\_log.c: the real part of the double complex log
   of numbers near, e.g., (+-1,eps) with |eps| small is now more accurate.
-  For example if z = (1,1d-7), then "write(*,*) z" now writes
+  For example if z = (1,1d-7), then "write(\*,\*) z" now writes
   "(5.E-15,1.E-07" rather than the previous "(4.88498131E-15,1.E-07)".
 
 ## Tue Feb  1 18:38:32 EST 2000
@@ -579,7 +639,7 @@
 
 - Minor updates to make compiling Win32 console binaries easier.  A
   side effect is that the MSDOS restriction of only one Fortran file
-  per invocation is lifted (and "f2c *.f") works.
+  per invocation is lifted (and "f2c \*.f") works.
 
 ## Tue Jan 18 19:22:24 EST 2000
 
@@ -617,9 +677,9 @@
   machines with 8-byte longs and doubles, 4-byte int's and floats,
   while working with a forthcoming (ill-advised) update to the C
   standard that outlaws plain "unsigned".
-  f2c.h, libf2c/f2c.h0: change "if 0" to "#ifdef INTEGER_STAR_8".
-  libf77, libf2c.zip: [cz]_div.c and README: arrange for compilation
-  under -DIEEE_COMPLEX_DIVIDE to make these routines avoid calling sig_die
+  f2c.h, libf2c/f2c.h0: change "if 0" to "#ifdef INTEGER\_STAR\_8".
+  libf77, libf2c.zip: [cz]\_div.c and README: arrange for compilation
+  under -DIEEE\_COMPLEX\_DIVIDE to make these routines avoid calling sig\_die
   when the denominator of a complex or double complex division vanishes;
   instead, they return pairs of NaNs or Infinities, depending whether the
   numerator also vanishes or not.
@@ -628,25 +688,25 @@
 
 - libf2c.zip, libi77: rsne.c: fix bug in namelist input: a misplaced
   increment could cause wrong array elements to be assigned; e.g.,
-  "&input k(5)=10*1 &end" assigned k(5) and k(15 .. 23).
+  "&input k(5)=10\*1 &end" assigned k(5) and k(15 .. 23).
 
 ## Fri Jun 18 02:33:08 EDT 1999
 
 - libf2c.zip: rename backspace.c backspac.c, and fix a glitch in it
-  -- b->ufd may change in t_runc().  (For now, it's still backspace.c
+  -- b->ufd may change in t\_runc().  (For now, it's still backspace.c
   in the libi77 bundle.)
 
 ## Mon May  3 13:14:07 EDT 1999
 
 - "Invisible" changes to omit a few compiler warnings in f2c and
   libf2c; two new casts in libf2c/open.c that matter with 64-bit longs,
-  and one more tweak (libf2c/c_log.c) for pathological equivalences.
+  and one more tweak (libf2c/c\_log.c) for pathological equivalences.
   Minor update to "fc" script: new -L flag and comment correction.
 
 ## Sun May  2 22:38:25 EDT 1999
 
-- libf77, libi77, libf2c.zip: make getenv_() more portable (call
-  getenv() rather than knowing about char **environ); adjust some
+- libf77, libi77, libf2c.zip: make getenv\_() more portable (call
+  getenv() rather than knowing about char \*\*environ); adjust some
   complex intrinsics to work with overlapping arguments (caused by
   inappropriate use of equivalence); open.c: get "external" versus
   "internal" right in the error message if a file cannot be opened;
@@ -677,13 +737,13 @@
 ## Sat Feb 13 10:18:27 EST 1999
 
 - libf2c: endfile.c, lread.c, signal1.h0: minor tweaks to make some
-  (C++) compilers happier; f77_aloc.c: make exit_() visible to C++
+  (C++) compilers happier; f77\_aloc.c: make exit\_() visible to C++
   compilers.  Version strings not changed.
 
 ## Wed Feb 10 22:59:52 EST 1999
 
 - defs.h lex.c: permit long names (up to at least roughly
-  MAX_SHARPLINE_LEN = 1000 characters long) in #line lines (which only
+  MAX\_SHARPLINE\_LEN = 1000 characters long) in #line lines (which only
   matters under -g).
   fc: add -U option; recognize .so files.
 
@@ -694,7 +754,7 @@
 
 ## Sun Sep 13 22:23:41 EDT 1998
 
-- format.c: fix bug in writing prototypes under f2c -A ... *.P:
+- format.c: fix bug in writing prototypes under f2c -A ... \*.P:
   under some circumstances involving external functions with no known
   type, a null pointer was passed to printf.
 
@@ -705,7 +765,7 @@
 
 ## Mon Sep  7 19:48:51 EDT 1998
 
-- libi77: move e_wdfe from sfe.c to dfe.c, where it was originally.
+- libi77: move e\_wdfe from sfe.c to dfe.c, where it was originally.
   Why did it ever move to sfe.c?
 
 ## Mon Aug 31 10:38:54 EDT 1998
@@ -713,45 +773,57 @@
 - formatdata.c: if possible, and assuming doubles must be aligned on
   double boundaries, use existing holes in DATA for common blocks to
   force alignment of the block.  For example,
-  	block data
-  	common /abc/ a, b
-  	double precision a
-  	integer b(2)
-  	data b(2)/1/
-  	end
+
+  ```text
+  block data
+  common /abc/ a, b
+  double precision a
+  integer b(2)
+  data b(2)/1/
+  end
+  ```
+
   used to generate
-  	struct {
-  	    integer fill_1[3];
-  	    integer e_2;
-  	    doublereal e_3;
-  	    } abc_ = { {0}, 1, 0. };
+
+  ```text
+  struct {
+      integer fill_1[3];
+      integer e_2;
+      doublereal e_3;
+      } abc_ = { {0}, 1, 0. };
+  ```
+
   and now generates
-  	struct {
-  	    doublereal fill_1[1];
-  	    integer fill_2[1];
-  	    integer e_3;
-  	    } abc_ = { {0}, {0}, 1 };
-  In the old generated C, e_3 was added to force alignment; in the new C,
-  fill_1 does this job.
+
+  ```text
+  struct {
+      doublereal fill_1[1];
+      integer fill_2[1];
+      integer e_3;
+      } abc_ = { {0}, {0}, 1 };
+  ```
+
+  In the old generated C, e\_3 was added to force alignment; in the new C,
+  fill\_1 does this job.
 
 ## Thu Jun 18 01:22:52 EDT 1998
 
 - libi77: lread.c: modified so floating-point numbers (containing
   either a decimal point or an exponent field) are treated as errors
   when they appear as list input for integer data.  Compile lread.c with
-  -DALLOW_FLOAT_IN_INTEGER_LIST_INPUT to restore the old behavior.
+  -DALLOW\_FLOAT\_IN\_INTEGER\_LIST\_INPUT to restore the old behavior.
 
 ## Thu May 28 22:45:59 EDT 1998
 
 - libi77: backspace.c dfe.c due.c iio.c lread.c rsfe.c sue.c wsfe.c:
-  set f__curunit sooner so various error messages will correctly
+  set f\_\_curunit sooner so various error messages will correctly
   identify the I/O unit involved.
   libf2c.zip: above, plus tweaks to PC makefiles: for some purposes,
   it's still best to compile with -DMSDOS (even for use with NT).
 
 ## Wed May 27 16:02:35 EDT 1998
 
-- libf2c.zip: tweak description of compiling libf2c for INTEGER*8
+- libf2c.zip: tweak description of compiling libf2c for INTEGER\*8
   to accord with makefile.u rather than libF77/makefile.
 
 ## Sat May 16 19:08:51 EDT 1998
@@ -775,15 +847,15 @@
 
 ## Wed Mar 18 18:08:47 EST 1998
 
-- libf77: minor tweaks to [ed]time_.c; Version.c not changed.
+- libf77: minor tweaks to [ed]time\_.c; Version.c not changed.
   libi77: endfile.c, open.c: acquire temporary files from tmpfile(),
-  unless compiled with -DNON_ANSI_STDIO, which uses mktemp().
-  New buffering scheme independent of NON_UNIX_STDIO for handling T
-  format items.  Now -DNON_UNIX_STDIO is no longer be necessary for
+  unless compiled with -DNON\_ANSI\_STDIO, which uses mktemp().
+  New buffering scheme independent of NON\_UNIX\_STDIO for handling T
+  format items.  Now -DNON\_UNIX\_STDIO is no longer be necessary for
   Linux, and libf2c no longer causes stderr to be buffered -- the former
   setbuf or setvbuf call for stderr was to make T format items work.
   open.c: use the Posix access() function to check existence or
-  nonexistence of files, except under -DNON_POSIX_STDIO, where trial
+  nonexistence of files, except under -DNON\_POSIX\_STDIO, where trial
   fopen calls are used.  In open.c, fix botch in changes of 19980304.
   libf2c.zip: the PC makefiles are now set for NT/W95, with comments
   about changes for DOS.
@@ -791,14 +863,14 @@
 ## Mon Mar  9 23:56:56 EST 1998
 
 - putpcc.c: omit an unnecessary temporary variable in computing
-  (expr)**3.
+  (expr)\*\*3.
   libf77, libi77: minor tweaks to make some C++ compilers happy;
   Version.c not changed.
 
 ## Wed Mar  4 13:13:21 EST 1998
 
 - libi77: open.c: fix glitch in comparing file names under
-  -DNON_UNIX_STDIO.
+  -DNON\_UNIX\_STDIO.
 
 ## Wed Feb 25 08:29:39 EST 1998
 
@@ -816,7 +888,7 @@
   yacc floating around.
   libi77: backspace.c: for b->ufmt==0, change sizeof(int) to
   sizeof(uiolen).  On machines where this would make a difference, it is
-  best for portability to compile libI77 with -DUIOLEN_int, which will
+  best for portability to compile libI77 with -DUIOLEN\_int, which will
   render the change invisible.
 
 ## Thu Dec  4 22:10:09 EST 1997
@@ -828,7 +900,7 @@
 
 ## Sun Sep 21 22:05:19 EDT 1997
 
-- libf77: [de]time_.c (Unix systems only): change return type to double.
+- libf77: [de]time\_.c (Unix systems only): change return type to double.
 
 ## Wed Sep 17 00:39:29 EDT 1997
 
@@ -853,7 +925,7 @@
   libi77: lread.c: adjust to accord with a change to the Fortran 8X
   draft (in 1990 or 1991) that rescinded permission to elide quote marks
   in namelist input of character data; to get the old behavior, compile
-  with F8X_NML_ELIDE_QUOTES #defined.  wrtfmt.o: wrt_G: tweak to print
+  with F8X\_NML\_ELIDE\_QUOTES #defined.  wrtfmt.o: wrt\_G: tweak to print
   the right number of 0's for zero under G format.
 
 ## Thu Jul 24 17:11:23 EDT 1997
@@ -868,7 +940,7 @@
 
 - proc.c: fix glitch in logic for "nonpositive dimension" message.
   libi77: inquire.c: always include string.h (for possible use with
-  -DNON_UNIX_STDIO); Version.c not changed.
+  -DNON\_UNIX\_STDIO); Version.c not changed.
 
 ## Mon Jun  9 00:04:37 EDT 1997
 
@@ -878,16 +950,16 @@
 
 ## Tue May 27 09:18:52 EDT 1997
 
-- libi77: ftell_.c: fix typo that caused the third argument to be
+- libi77: ftell\_.c: fix typo that caused the third argument to be
   treated as 2 on some systems.
 
 ## Fri Apr 25 19:32:09 EDT 1997
 
-- libf77: add [de]time_.c (which may give trouble on some systems).
+- libf77: add [de]time\_.c (which may give trouble on some systems).
 
 ## Thu Apr 17 22:42:43 EDT 1997
 
-- libf77: add F77_aloc.o to makefile (and makefile.u in libf2c.zip).
+- libf77: add F77\_aloc.o to makefile (and makefile.u in libf2c.zip).
 
 ## Fri Apr 11 14:05:57 EDT 1997
 
@@ -896,7 +968,7 @@
 
 ## Tue Apr  8 20:57:08 EDT 1997
 
-- libf77: [cz]_div.c: tweaks invisible on most systems (that may
+- libf77: [cz]\_div.c: tweaks invisible on most systems (that may
   improve things slightly with optimized compilation on systems that use
   gratuitous extra precision).
   libi77: fmt.c: adjust to complain at missing numbers in formats
@@ -909,8 +981,8 @@
   libf77: adjust functions with a complex output argument to permit
   aliasing it with input arguments.  (For now, at least, this is just
   for possible benefit of g77.)
-  libi77: tweak to ftell_.c for systems with strange definitions of
-  SEEK_SET, etc.
+  libi77: tweak to ftell\_.c for systems with strange definitions of
+  SEEK\_SET, etc.
 
 ## Mon Feb 24 23:44:54 EST 1997
 
@@ -920,26 +992,33 @@
 
 ## Wed Feb 12 00:18:03 EST 1997
 
-- output.c: fix (seldom problematic) glitch in out_call: put parens
+- output.c: fix (seldom problematic) glitch in out\_call: put parens
   around the ... in a test of the form "if (q->tag == TADDR && ...)".
-  vax.c: fix bug revealed in the "psi_offset =" assignment in the
+  vax.c: fix bug revealed in the "psi\_offset =" assignment in the
   following example:
-  	subroutine foo(psi,m)
-  	integer z(100),m
-  	common /a/ z
-  	double precision psi(z(m):z(m) + 10)
-  	call foo(m+1, psi(0),psi(10))
-  	end
+
+  ```text
+  subroutine foo(psi,m)
+  integer z(100),m
+  common /a/ z
+  double precision psi(z(m):z(m) + 10)
+  call foo(m+1, psi(0),psi(10))
+  end
+  ```
 
 ## Mon Dec  9 23:15:02 EST 1996
 
 - Fix glitch in parameter adjustments for arrays whose lower
   bound depends on a scalar argument.  Example:
-  	subroutine bug(p,z,m,n)
-  	integer z(*),m,n
-  	double precision p(z(m):z(m) + n)	! p_offset botched
-  	call foo(p(0), p(n))
-  	end
+
+  ```text
+  subroutine bug(p,z,m,n)
+  integer z(*),m,n
+  double precision p(z(m):z(m) + n)	! p_offset botched
+  call foo(p(0), p(n))
+  end
+  ```
+
   libi77: complain about non-positive rec= in direct read and write
   statements.
   libf77: trivial adjustments; Version.c not changed.
@@ -947,16 +1026,23 @@
 ## Wed Dec  4 13:59:14 EST 1996
 
 - Fix bug revealed by
-  	subroutine test(cdum,rdum)
-  	complex cdum
-  	rdum=cos(real(cdum))	! "Unexpected tag 3 in opconv_fudge"
-  	end
+
+  ```text
+  subroutine test(cdum,rdum)
+  complex cdum
+  rdum=cos(real(cdum))	! "Unexpected tag 3 in opconv_fudge"
+  end
+  ```
+
   Fix glitch in parsing "DO 10 D0 = 1, 10".
   Fix glitch in parsing
-  	real*8 x
-  	real*8 x	! erroneous "incompatible type" message
-  	call foo(x)
-  	end
+
+  ```text
+  real*8 x
+  real*8 x	! erroneous "incompatible type" message
+  call foo(x)
+  end
+  ```
 
 ## Thu Oct 17 13:37:22 EDT 1996
 
@@ -964,11 +1050,15 @@
   double complex) functions; the bug could cause length arguments
   for character arguments to be omitted on invocations appearing
   textually after the first invocation.  For example, in
-  	subroutine foo
-  	character c
-  	complex zot
-  	call goo(zot(c), zot(c))
-  	end
+
+  ```text
+  subroutine foo
+  character c
+  complex zot
+  call goo(zot(c), zot(c))
+  end
+  ```
+
   the length was omitted from the second invocation of zot, and
   there was an erroneous error message about inconsistent calling
   sequences.
@@ -980,19 +1070,22 @@
 
 ## Thu Sep 26 07:47:10 EDT 1996
 
-- libi77:  fmt.h:  for formatted writes of negative integer*1 values,
-  make ic signed on ANSI systems.  If formatted writes of integer*1
+- libi77:  fmt.h:  for formatted writes of negative integer\*1 values,
+  make ic signed on ANSI systems.  If formatted writes of integer\*1
   values trouble you when using a K&R C compiler, switch to an ANSI
   compiler or use a compiler flag that makes characters signed.
 
 ## Tue Sep 17 17:48:09 EDT 1996
 
 - Fix fault in handling some complex parameters.  Example:
-  	subroutine foo(a)
-  	double complex a, b
-  	parameter(b = (0,1))
-  	a = b	! f2c faulted here
-  	end
+
+  ```text
+  subroutine foo(a)
+  double complex a, b
+  parameter(b = (0,1))
+  a = b	! f2c faulted here
+  end
+  ```
 
 ## Fri Sep 13 08:54:40 EDT 1996
 
@@ -1000,7 +1093,7 @@
 
 ## Thu Sep 12 14:04:07 EDT 1996
 
-- equiv.c: fix glitch with -DKR_headers.
+- equiv.c: fix glitch with -DKR\_headers.
   libi77: fmtlib.c: fix bug in printing the most negative integer.
 
 ## Tue Aug 27 08:31:32 EDT 1996
@@ -1017,80 +1110,109 @@
 
 - Fix yet another case of intrinsic "real" applied to a complex
   argument.  Example:
-  	complex a(3)
-  	x = sqrt(real(a(2)))	! gave error message about bad tag
-  	end
+
+  ```text
+  complex a(3)
+  x = sqrt(real(a(2)))	! gave error message about bad tag
+  end
+  ```
 
 ## Thu Jul 11 17:27:16 EDT 1996
 
 - Fix a memory fault associated with complicated, illegal input.
   Example:
-  	subroutine goo
-  	character a
-  	call foo(a)	! inconsistent with subsequent def and call
-  	end
-  	subroutine foo(a)
-  	end
-  	call foo(a)
-  	end
+
+  ```text
+  subroutine goo
+  character a
+  call foo(a)	! inconsistent with subsequent def and call
+  end
+  subroutine foo(a)
+  end
+  call foo(a)
+  end
+  ```
 
 ## Wed Jul 10 23:04:16 EDT 1996
 
 - Fix more glitches in the intrinsic "real" function when applied to a
   complex (or double complex) variable and passed as an argument to
   some intrinsic functions.  Example:
-  	complex a, b
-  	r = sqrt(real(conjg(a))) + sqrt(real(a*b))
-  	end
+
+  ```text
+  complex a, b
+  r = sqrt(real(conjg(a))) + sqrt(real(a*b))
+  end
+  ```
 
 ## Wed Jul 10 09:25:49 EDT 1996
 
 - Fix bug (possible memory fault) in handling erroneously placed
   and inconsistent declarations.  Example that faulted:
-  	character*1 w(8)
-  	call foo(w)
-  	end
-  	subroutine foo(m)
-  	data h /0.5/
-  	integer m(2)	! should be before data
-  	end
+
+  ```text
+  character*1 w(8)
+  call foo(w)
+  end
+  subroutine foo(m)
+  data h /0.5/
+  integer m(2)	! should be before data
+  end
+  ```
+
   Fix bug (possible fault) in handling illegal "if" constructions.
   Example (that faulted):
-  	subroutine foo(i,j)
-  	if (i) then		! bug: i is integer, not logical
-  	else if (j) then	! bug: j is integer, not logical
-  	endif
-  	end
-  Fix glitch with character*(*) argument named "ret_len" to a
-  character*(*) function.
+
+  ```text
+  subroutine foo(i,j)
+  if (i) then		! bug: i is integer, not logical
+  else if (j) then	! bug: j is integer, not logical
+  endif
+  end
+  ```
+
+  Fix glitch with character\*(\*) argument named "ret\_len" to a
+  character\*(\*) function.
 
 ## Sat Jul  6 00:44:56 EDT 1996
 
 - Fix glitch in the intrinsic "real" function when applied to a
   complex (or double complex) variable and passed as an argument to
   some intrinsic functions.  Example:
-  	complex a
-  	b = sqrt(a)
-  	end
+
+  ```text
+  complex a
+  b = sqrt(a)
+  end
+  ```
+
   Fix glitch (only visible if you do not use f2c's malloc and the
   malloc you do use is defective in the sense that malloc(0) returns 0)
   in handling include files that end with another include (perhaps
   followed by comments).
-  Fix glitch with character*(*) arguments named "h" and "i" when
+  Fix glitch with character\*(\*) arguments named "h" and "i" when
   the body of the subroutine invokes the intrinsic LEN function.
   Arrange that after a previous "f2c -P foo.f" has produced foo.P,
   running "f2c foo.P foo.f" will produce valid C when foo.f contains
-  	call sub('1234')
-  	end
-  	subroutine sub(msg)
-  	end
+
+  ```text
+  call sub('1234')
+  end
+  subroutine sub(msg)
+  end
+  ```
+
   Specifically, the length argument in "call sub" is now suppressed.
   With or without foo.P, it is also now suppressed when the order of
   subprograms in file foo.f is reversed:
-  	subroutine sub(msg)
-  	end
-  	call sub('1234')
-  	end
+
+  ```text
+  subroutine sub(msg)
+  end
+  call sub('1234')
+  end
+  ```
+
   Adjust copyright notices to reflect AT&T breakup.
 
 ## Tue Jul  2 16:11:27 EDT 1996
@@ -1099,19 +1221,25 @@
   (an omission that was harmless on most machines).
   expr.c: fix a dereference of NULL that was only possible with buggy
   input, such as
-  	subroutine $sub(s)	! the '$' is erroneous
-  	character s*(*)
-  	s(1:) = ' '
-  	end
+
+  ```text
+  subroutine $sub(s)	! the '$' is erroneous
+  character s*(*)
+  s(1:) = ' '
+  end
+  ```
 
 ## Fri Jun 28 14:16:11 EDT 1996
 
 - Fix glitch with -onetrip: the temporary variable used for nonconstant
   initial loop variable values was recycled too soon.  Example:
-  	do i = j+1, k
-  		call foo(i+1)	! temp for j+1 was reused here
-  		enddo
-  	end
+
+  ```text
+  do i = j+1, k
+      call foo(i+1)	! temp for j+1 was reused here
+      enddo
+  end
+  ```
 
 ## Wed Jun 26 14:00:02 EDT 1996
 
@@ -1126,7 +1254,7 @@
 
 ## Thu Jun 20 13:30:43 EDT 1996
 
-- Complain at character*(*) in common (rather than faulting).
+- Complain at character\*(\*) in common (rather than faulting).
   Fix bug in recognizing hex constants that start with "16#" (e.g.,
   16#1234abcd, which is a synonym for z'1234abcd').
   Fix bugs in constant folding of expressions involving btest, ibclr,
@@ -1138,22 +1266,25 @@
 
 ## Wed Jun 19 08:12:47 EDT 1996
 
-- f2c.h: add types uinteger, ulongint (for libF77); add qbit_clear
-  and qbit_set macros (in a commented-out section) for integer*8.
-  For integer*8, use qbit_clear and qbit_set for ibclr and ibset.
+- f2c.h: add types uinteger, ulongint (for libF77); add qbit\_clear
+  and qbit\_set macros (in a commented-out section) for integer\*8.
+  For integer\*8, use qbit\_clear and qbit\_set for ibclr and ibset.
   libf77: add casts to unsigned in [lq]bitshft.c.
 
 ## Wed Jun 12 00:24:28 EDT 1996
 
 - Fix bug in output.c (dereferencing a freed pointer) revealed in
-  	print *		!np in out_call in output.c clobbered by free
-  	end		!during out_expr.
+
+  ```text
+  print *		!np in out_call in output.c clobbered by free
+  end		!during out_expr.
+  ```
 
 ## Mon Jun 10 22:59:57 EDT 1996
 
-- Add Bits_per_Byte to sysdep.h and adjust definition of Table_size
-  to depend on Bits_per_Byte (forcing Table_size to be a power of 2); in
-  lex.c, change "comstart[c & 0xfff]" to "comstart[c & (Table_size-1)]"
+- Add Bits\_per\_Byte to sysdep.h and adjust definition of Table\_size
+  to depend on Bits\_per\_Byte (forcing Table\_size to be a power of 2); in
+  lex.c, change "comstart[c & 0xfff]" to "comstart[c & (Table\_size-1)]"
   to avoid an out-of-range subscript on end-of-file.
 
 ## Mon Jun 10 01:20:16 EDT 1996
@@ -1161,7 +1292,7 @@
 - Update netlib E-mail and ftp addresses in f2c/readme and
   f2c/src/readme (which are different files) -- to reflect the upcoming
   breakup of AT&T.
-  libf77: trivial tweaks to F77_aloc.c and system_.c; Version.c not
+  libf77: trivial tweaks to F77\_aloc.c and system\_.c; Version.c not
   changed.
   libi77: Adjust rsli.c and lread.c so internal list input with too
   few items in the input string will honor end= .
@@ -1179,9 +1310,13 @@
   name to named block data subprograms (so they can be called somewhere
   to force them to be loaded from a library).
   Fix bug (memory fault) in handling the following illegal Fortran:
-  	parameter(i=1)
-  	equivalence(i,j)
-  	end
+
+  ```text
+  parameter(i=1)
+  equivalence(i,j)
+  end
+  ```
+
   Treat cdabs, cdcos, cdexp, cdlog, cdsin, and cdsqrt as synonyms for
   the double complex intrinsics zabs, zcos, zexp, zlog, zsin, and zsqrt,
   respectively, unless -cd is specified.
@@ -1189,20 +1324,20 @@
   ibclr, ibits, ibset, ieor, ior, ishft, and ishftc, unless -i90 is
   specified.  Note that iand, ieor, and ior are thus now synonyms for
   "and", "xor", and "or", respectively.
-  Add three macros (bit_test, bit_clear, bit_set) to f2c.h for use
+  Add three macros (bit\_test, bit\_clear, bit\_set) to f2c.h for use
   with btest, ibclr, and ibset, respectively.  Add new functions
-  [lq]bit_bits, [lq]bit_shift, and [lq]_bit_cshift to libF77 for
+  [lq]bit\_bits, [lq]bit\_shift, and [lq]\_bit\_cshift to libF77 for
   use with ibits, ishft, and ishftc, respectively.
   Add integer function ftell(unit) (returning -1 on error) and
-  subroutine fseek(unit, offset, whence, *) to libI77 (with branch to
-  label * on error).
+  subroutine fseek(unit, offset, whence, \*) to libI77 (with branch to
+  label \* on error).
 
 ## Tue Mar 19 23:08:32 EST 1996
 
 - lex.c: arrange for a "statement" consisting of a single short bogus
   keyword to elicit an error message showing the whole keyword.  The
   error message formerly omitted the last letter of the bad keyword.
-  libf77: s_cat.c: supply missing break after overlap detection.
+  libf77: s\_cat.c: supply missing break after overlap detection.
 
 ## Fri Mar 15 17:29:54 EST 1996
 
@@ -1217,24 +1352,30 @@
 
 - Fix bug in handling character parameters assigned a char() value.
   Example:
-  	character*2 b,c
-  	character*1 esc
-  	parameter(esc = char(27))
-  	integer i
-  	data (b(i:i),i=1,2)/esc,'a'/
-  	data (c(i:i),i=1,2)/esc,'b'/	! memory fault
-  	call foo(b,c)
-  	end
+
+  ```text
+  character*2 b,c
+  character*1 esc
+  parameter(esc = char(27))
+  integer i
+  data (b(i:i),i=1,2)/esc,'a'/
+  data (c(i:i),i=1,2)/esc,'b'/	! memory fault
+  call foo(b,c)
+  end
+  ```
 
 ## Wed Feb 28 12:49:01 EST 1996
 
 - Fix a glitch in handling complex parameters assigned a "wrong" type.
   Example:
-  	complex d, z
-  	parameter(z = (0d0,0d0))
-  	data d/z/	! elicited "non-constant initializer"
-  	call foo(d)
-  	end
+
+  ```text
+  complex d, z
+  parameter(z = (0d0,0d0))
+  data d/z/	! elicited "non-constant initializer"
+  call foo(d)
+  end
+  ```
 
 ## Sun Feb 25 22:20:20 EST 1996
 
@@ -1250,7 +1391,7 @@
 
 ## Tue Dec 19 22:54:06 EST 1995
 
-- libf77: s_cat.c: fix bug when 2nd or later arg overlaps lhs.
+- libf77: s\_cat.c: fix bug when 2nd or later arg overlaps lhs.
 
 ## Tue Nov  7 23:52:57 EST 1995
 
@@ -1269,23 +1410,23 @@
 
 ## Wed Oct 11 13:27:05 EDT 1995
 
-- libi77: move defs of f__hiwater, f__svic, f__icptr from wrtfmt.c
+- libi77: move defs of f\_\_hiwater, f\_\_svic, f\_\_icptr from wrtfmt.c
   to err.c.  This should work around a problem with buggy loaders and
   sometimes leads to smaller executable programs.
 
 ## Tue Oct 10 10:47:54 EDT 1995
 
-- Under -ext, warn about X**-Y and X**+Y.  Following the original f77,
-  f2c treats these as X**(-Y) and X**(+Y), respectively.  (They are not
+- Under -ext, warn about X\*\*-Y and X\*\*+Y.  Following the original f77,
+  f2c treats these as X\*\*(-Y) and X\*\*(+Y), respectively.  (They are not
   allowed by the official Fortran 77 Standard.)  Some Fortran compilers
   give a bizarre interpretation to larger contexts, making multiplication
-  noncommutative: they treat X**-Y*Z as X**(-Y*Z) rather than X**(-Y)*Z,
-  which, following the rules of Fortran 77, is the same as (X**(-Y))*Z.
+  noncommutative: they treat X\*\*-Y\*Z as X\*\*(-Y\*Z) rather than X\*\*(-Y)\*Z,
+  which, following the rules of Fortran 77, is the same as (X\*\*(-Y))\*Z.
 
 ## Thu Oct  5 07:52:56 EDT 1995
 
-- libi77: wrtfmt.c: fix bug with t editing (f__cursor was not always
-  zeroed in mv_cur).
+- libi77: wrtfmt.c: fix bug with t editing (f\_\_cursor was not always
+  zeroed in mv\_cur).
 
 ## Wed Sep 20 17:24:19 EDT 1995
 
@@ -1300,22 +1441,22 @@
 
 ## Thu Sep  7 09:05:40 EDT 1995
 
-- libi77: rdfmt.c:  one more tweak for -DAllow_TYQUAD.
+- libi77: rdfmt.c:  one more tweak for -DAllow\_TYQUAD.
 
 ## Thu Sep  7 00:36:04 EDT 1995
 
-- Fix glitch in integer*8 exponentiation function: it's pow_qq, not
-  pow_qi.
-  libi77: fix some bugs with -DAllow_TYQUAD (for integer*8); when
+- Fix glitch in integer\*8 exponentiation function: it's pow\_qq, not
+  pow\_qi.
+  libi77: fix some bugs with -DAllow\_TYQUAD (for integer\*8); when
   looking for the &name that starts NAMELIST input, treat lines whose
   first nonblank character is something other than &, $, or ? as
   comment lines (i.e., ignore them), unless rsne.c is compiled with
-  -DNo_Namelist_Comments.
+  -DNo\_Namelist\_Comments.
 
 ## Wed Sep  6 09:06:19 EDT 1995
 
-- libf77: Fix return type of system_ (integer) under -DKR_headers.
-  libi77: Move some f_init calls around for people who do not use
+- libf77: Fix return type of system\_ (integer) under -DKR\_headers.
+  libi77: Move some f\_init calls around for people who do not use
   libF77's main(); now open and namelist read statements that are the
   first I/O statements executed should work right in that context.
   Adjust namelist input to treat a subscripted name whose subscripts do
@@ -1326,23 +1467,23 @@
 
 ## Wed Aug 30 00:19:32 EDT 1995
 
-- libf77: add F77_aloc, now used in s_cat and system_ (to allocate
+- libf77: add F77\_aloc, now used in s\_cat and system\_ (to allocate
   memory and check for failure in so doing).
   libi77: improve MSDOS logic in backspace.c.
 
 ## Tue Aug  8 12:49:02 EDT 1995
 
-- Modify yesterday's change: merge st_fields with c_keywords, to
+- Modify yesterday's change: merge st\_fields with c\_keywords, to
   cope with equivalences introduced to permit initializing numeric
   variables with character data.  DATA statements causing these
   equivalences can appear after executable statements, so the only
   safe course is to rename all local variable with names in the
-  former st_fields list.  This has the unfortunate side effect that
-  the common local variable "i" will henceforth be renamed "i__".
+  former st\_fields list.  This has the unfortunate side effect that
+  the common local variable "i" will henceforth be renamed "i\_\_".
 
 ## Mon Aug  7 08:04:00 EDT 1995
 
-- Append "_eqv" rather than just "_" to names that that appear in
+- Append "\_eqv" rather than just "\_" to names that that appear in
   EQUIVALENCE statements as well as structs in f2c.h (to avoid a
   conflict when these names also name common blocks).
 
@@ -1353,13 +1494,21 @@
 ## Fri Jul 21 11:18:36 EDT 1995
 
 - Fix glitch on line 159 of init.c: change
-  	"(shortlogical *)0)",
+
+  ```text
+  "(shortlogical *)0)",
+  ```
+
   to
-  	"(shortlogical *)0",
+
+  ```text
+  "(shortlogical *)0",
+  ```
+
   This affects multiple entry points when some but not all have
-  arguments of type logical*2.
+  arguments of type logical\*2.
   libi77: adjust lwrite.c, wref.c, wrtfmt.c so compiling with
-  -DWANT_LEAD_0 causes formatted writes of floating-point numbers of
+  -DWANT\_LEAD\_0 causes formatted writes of floating-point numbers of
   magnitude < 1 to have an explicit 0 before the decimal point (if the
   field-width permits it).  Note that the Fortran 77 Standard leaves it
   up to the implementation whether to supply these superfluous zeros.
@@ -1368,21 +1517,33 @@
 
 - Fix botch in simplifying constants in certain complex
   expressions.  Example:
-  	subroutine foo(s,z)
-  	double complex z
-  	double precision s, M, P
-  	parameter ( M = 100.d0, P = 2.d0 )
-  	z = M * M  / s  * dcmplx (1.d0, P/M)
-  *** The imaginary part of z was miscomputed ***
-  	end
+
+  ```text
+  subroutine foo(s,z)
+  double complex z
+  double precision s, M, P
+  parameter ( M = 100.d0, P = 2.d0 )
+  z = M * M  / s  * dcmplx (1.d0, P/M)
+  ```
+
+  \*\*\* The imaginary part of z was miscomputed \*\*\*
+
+  ```text
+  end
+  ```
+
   Under -ext, complain about nonintegral dimensions.
 
 ## Fri Jun  2 11:56:50 EDT 1995
 
 - Fix memory fault in
-  	parameter (x=2.)
-  	data x /2./
-  	end
+
+  ```text
+  parameter (x=2.)
+  data x /2./
+  end
+  ```
+
   This now elicits two error messages; the second ("too many
   initializers"), though not desirable, seems hard to eliminate
   without considerable hassle.
@@ -1396,7 +1557,7 @@
 ## Fri May 26 10:03:17 EDT 1995
 
 - fc script: add recognition of -P and .P files.
-  libi77: iio.c: z_wnew: fix bug in handling T format items in internal
+  libi77: iio.c: z\_wnew: fix bug in handling T format items in internal
   writes whose last item is written to an earlier position than some
   previous item.
 
@@ -1415,14 +1576,18 @@
 
 - Fix glitch (in io.c) in handling 0-length strings in format
   statements, as in
-  	write(*,10)
+
+  ```text
+  write(*,10)
   10	format(' ab','','cd')
-  libi77: lread.c and rsfe.c: adjust s_rsle and s_rsfe to check for
+  ```
+
+  libi77: lread.c and rsfe.c: adjust s\_rsle and s\_rsfe to check for
   end-of-file (to prevent infinite loops with empty read statements).
 
 ## Fri Feb 24 11:02:00 EST 1995
 
-- libi77: iio.c: z_getc: insert (unsigned char *) to allow internal
+- libi77: iio.c: z\_getc: insert (unsigned char \*) to allow internal
   reading of characters with high-bit set (on machines that sign-extend
   characters).
 
@@ -1450,51 +1615,66 @@
 
 - Complain about parameter statements that assign values to dummy
   arguments, as in
-  	subroutine foo(x)
-  	parameter(x = 3.4)
-  	end
+
+  ```text
+  subroutine foo(x)
+  parameter(x = 3.4)
+  end
+  ```
 
 ## Fri Jan 27 12:25:41 EST 1995
 
 - Under -C++ -ec (or -C++ -e1c), surround struct declarations with
-  	#ifdef __cplusplus
-  	extern "C" {
-  	#endif
+
+  ```text
+  #ifdef __cplusplus
+  extern "C" {
+  #endif
+  ```
+
   and
-  	#ifdef __cplusplus
-  	}
-  	#endif
+
+  ```text
+  #ifdef __cplusplus
+  }
+  #endif
+  ```
+
   (This isn't needed with cfront, but apparently is necessary with
   some other C++ compilers.)
-  libf77: minor tweak to s_copy.c: copy forward whenever possible
+  libf77: minor tweak to s\_copy.c: copy forward whenever possible
   (for better cache behavior).
 
 ## Thu Jan 26 14:21:19 EST 1995
 
-- libf77: roll s_catow.c and s_copyow.c into s_cat.c and s_copy.c,
+- libf77: roll s\_catow.c and s\_copyow.c into s\_cat.c and s\_copy.c,
   respectively, allowing the left-hand side of a character assignment
-  to appear on its right-hand side unless s_cat.c and s_copy.c are
-  compiled with -DNO_OVERWRITE (which is a bit more efficient).
+  to appear on its right-hand side unless s\_cat.c and s\_copy.c are
+  compiled with -DNO\_OVERWRITE (which is a bit more efficient).
   Fortran 77 forbids the left-hand side from participating in the
   right-hand side (of a character assignment), but Fortran 90 allows it.
   libi77: wref.c: fix glitch in printing the exponent of 0 when
-  GOOD_SPRINTF_EXPONENT is not #defined.
+  GOOD\_SPRINTF\_EXPONENT is not #defined.
 
 ## Wed Jan 25 00:14:42 EST 1995
 
 - Fix memory fault in handling overlapping initializations in
-  	block data
-  	common /zot/ d
-  	double precision d(3)
-  	character*6 v(4)
-  	real r(2)
-  	equivalence (d(3),r(1)), (d(1),v(1))
-  	data v/'abcdef', 'ghijkl', 'mnopqr', 'stuvwx'/
-  	data r/4.,5./
-  	end
-  names.c: add "far", "huge", "near" to c_keywords (causing them
-  to have __ appended when used as local variables).
-  libf77: add s_copyow.c, an alternative to s_copy.c for handling
+
+  ```text
+  block data
+  common /zot/ d
+  double precision d(3)
+  character*6 v(4)
+  real r(2)
+  equivalence (d(3),r(1)), (d(1),v(1))
+  data v/'abcdef', 'ghijkl', 'mnopqr', 'stuvwx'/
+  data r/4.,5./
+  end
+  ```
+
+  names.c: add "far", "huge", "near" to c\_keywords (causing them
+  to have \_\_ appended when used as local variables).
+  libf77: add s\_copyow.c, an alternative to s\_copy.c for handling
   (illegal) character assignments where the right- and left-hand
   sides overlap, as in a(2:4) = a(1:3).
 
@@ -1502,7 +1682,7 @@
 
 - Adjust -krd to use double temporaries in some calculations of
   type complex.
-  libf77: pow_[dhiqrz][hiq].c: adjust x**i to work on machines
+  libf77: pow\_[dhiqrz][hiq].c: adjust x\*\*i to work on machines
   that sign-extend right shifts when i is the most negative integer.
 
 ## Fri Jan  6 00:00:27 EST 1995
@@ -1516,30 +1696,41 @@
 
 - Retain casts for SNGL (or FLOAT) that were erroneously optimized
   away.  Example:
-  	subroutine foo(a,b)
-  	double precision a,b
-  	a = float(b)	! now rendered as *a = (real) (*b);
-  	end
+
+  ```text
+  subroutine foo(a,b)
+  double precision a,b
+  a = float(b)	! now rendered as *a = (real) (*b);
+  end
+  ```
+
   Use float (rather than double) temporaries in certain expressions
   of type complex.  Example: the temporary for sngl(b) in
-  	complex a
-  	double precision b
-  	a = sngl(b) - (3.,4.)
+
+  ```text
+  complex a
+  double precision b
+  a = sngl(b) - (3.,4.)
+  ```
+
   is now of type float.
 
 ## Thu Dec 29 09:48:03 EST 1994
 
 - Fix bug (e.g., addressing fault) in diagnosing inconsistency in
   the type of function eta in the following example:
-  	function foo(c1,c2)
-  	double complex foo,c1,c2
-  	double precision eta
-  	foo = eta(c1,c2)
-  	end
-  	function eta(c1,c2)
-  	double complex eta,c1,c2
-  	eta = c1*c2
-  	end
+
+  ```text
+  function foo(c1,c2)
+  double complex foo,c1,c2
+  double precision eta
+  foo = eta(c1,c2)
+  end
+  function eta(c1,c2)
+  double complex eta,c1,c2
+  eta = c1*c2
+  end
+  ```
 
 ## Thu Dec 15 14:33:55 EST 1994
 
@@ -1558,9 +1749,13 @@
 ## Sat Dec 10 16:31:40 EST 1994
 
 - Supply a better error message (than "Impossible type 14") for
-  	subroutine foo
-  	foo = 3
-  	end
+
+  ```text
+  subroutine foo
+  foo = 3
+  end
+  ```
+
   Under -g, convey name of included files to #line lines.
   Recant insertion of \ introduced (under -g) 2 Nov. 1994.
 
@@ -1568,14 +1763,25 @@
 
 - Turn off constant folding of integers used in floating-point
   expressions, so the assignment in
-  	subroutine foo(x)
-  	double precision x
-  	x = x*1000000*500000
-  	end
+
+  ```text
+  subroutine foo(x)
+  double precision x
+  x = x*1000000*500000
+  end
+  ```
+
   is rendered as
-  	*x = *x * 1000000 * 500000;
+
+  ```text
+  *x = *x * 1000000 * 500000;
+  ```
+
   rather than as
-  	*x *= 1783793664;
+
+  ```text
+  *x *= 1783793664;
+  ```
 
 ## Tue Nov  8 23:56:30 EST 1994
 
@@ -1587,22 +1793,25 @@
 - Fix bug in handling dimensions involving certain intrinsic
   functions of constant expressions: the expressions, rather than
   pointers to them, were passed.  Example:
+
+  ```text
         subroutine subtest(n,x)
         real x(2**n,n) ! pow_ii(2,n) was called; now it's pow_ii(&c__2,n)
         x(2,2)=3.
         end
+  ```
 
 ## Wed Nov  2 14:44:27 EST 1994
 
-- libi77: under compilation with -DALWAYS_FLUSH, flush buffers at
+- libi77: under compilation with -DALWAYS\_FLUSH, flush buffers at
   the end of each write statement, and test (via the return from
   fflush) for write failures, which can be caught with an ERR=
   specifier in the write statement.  This extra flushing slows
   execution, but can abort execution or alter the flow of control
   when a disk fills up.
-  f2c/src/io.c: Add ERR= test to e_wsle invocation (end of
+  f2c/src/io.c: Add ERR= test to e\_wsle invocation (end of
   list-directed external output) to catch write failures when libI77
-  is compiled with -DALWAYS_FLUSH.
+  is compiled with -DALWAYS\_FLUSH.
 
 ## Wed Nov  2 00:03:58 EST 1994
 
@@ -1615,43 +1824,47 @@
 
 ## Fri Oct 21 18:02:24 EDT 1994
 
-- libf77: add s_catow.c and adjust README to point out that changing
-  "s_cat.o" to "s_catow.o" in the makefile will permit the target of a
+- libf77: add s\_catow.c and adjust README to point out that changing
+  "s\_cat.o" to "s\_catow.o" in the makefile will permit the target of a
   concatenation to appear on its right-hand side (contrary to the
   Fortran 77 Standard and at the cost of some run-time efficiency).
 
 ## Thu Oct  6 09:46:53 EDT 1994
 
-- libi77: util.c: omit f__mvgbt (which is never used).
+- libi77: util.c: omit f\_\_mvgbt (which is never used).
   f2c.h: change "long" to "long int" to facilitate the adjustments
   by means of sed described above.  Comment out unused typedef of Long.
 
 ## Wed Sep 28 12:45:19 EDT 1994
 
-- libf77: s_cmp.c fix glitch in -DKR_headers version introduced
+- libf77: s\_cmp.c fix glitch in -DKR\_headers version introduced
   12 days ago.
 
 ## Tue Sep 27 23:47:34 EDT 1994
 
-- Fix bug introduced 16 Sept. 1994: don't add _a_ to C keywords
+- Fix bug introduced 16 Sept. 1994: don't add \_a\_ to C keywords
   used as external names.  In fact, return to earlier behavior of
-  appending __ to C keywords unless they are used as external names,
+  appending \_\_ to C keywords unless they are used as external names,
   in which case they get just one underscore appended.
   Adjust constant handling so integer and logical PARAMETERs retain
   type information, particularly under -I2.  Example:
-  	SUBROUTINE FOO
-  	INTEGER I
-  	INTEGER*1 I1
-  	INTEGER*2 I2
-  	INTEGER*4 I4
-  	LOGICAL L
-  	LOGICAL*1 L1
-  	LOGICAL*2 L2
-  	LOGICAL*4 L4
-  	PARAMETER (L=.FALSE., L1=.FALSE., L2=.FALSE., L4=.FALSE.)
-  	PARAMETER (I=0,I1=0,I2=0,I4=0)
-  	CALL DUMMY(I, I1, I2, I4, L, L1, L2, L4)
-  	END
+
+  ```text
+  SUBROUTINE FOO
+  INTEGER I
+  INTEGER*1 I1
+  INTEGER*2 I2
+  INTEGER*4 I4
+  LOGICAL L
+  LOGICAL*1 L1
+  LOGICAL*2 L2
+  LOGICAL*4 L4
+  PARAMETER (L=.FALSE., L1=.FALSE., L2=.FALSE., L4=.FALSE.)
+  PARAMETER (I=0,I1=0,I2=0,I4=0)
+  CALL DUMMY(I, I1, I2, I4, L, L1, L2, L4)
+  END
+  ```
+
   f2c.1t: Change f\^2c to f2c (omit half-narrow space) in line following
   ".SH NAME" for benefit of systems that cannot cope with troff commands
   in this context.
@@ -1661,18 +1874,21 @@
 - Fix bug in comparing identically named common blocks, in which
   all components have the same names and types, but at least one is
   dimensioned (1) and the other is not dimensioned.  Example:
-  	subroutine foo
-  	common /ab/ a
-  	a=1.	!!! translated correctly to ab_1.a = (float)1.;
-  	end
-  	subroutine goo
-  	common /ab/ a(1)
-  	a(1)=2.	!!! translated erroneously to ab_1.a[0] = (float)2.
-  	end
+
+  ```text
+  subroutine foo
+  common /ab/ a
+  a=1.	!!! translated correctly to ab_1.a = (float)1.;
+  end
+  subroutine goo
+  common /ab/ a(1)
+  a(1)=2.	!!! translated erroneously to ab_1.a[0] = (float)2.
+  end
+  ```
 
 ## Mon Sep 19 17:49:43 EDT 1994
 
-- libf77: s_paus.c: flush stderr after PAUSE; add #ifdef MSDOS stuff.
+- libf77: s\_paus.c: flush stderr after PAUSE; add #ifdef MSDOS stuff.
   libi77: README: point out general need for -DMSDOS under MS-DOS.
 
 ## Sat Sep 17 11:19:32 EDT 1994
@@ -1682,23 +1898,27 @@
 ## Fri Sep 16 17:50:18 EDT 1994
 
 - Change name adjustment for reserved words: instead of just appending
-  "_" (a single underscore), append "_a_" to local variable names to avoid
+  "\_" (a single underscore), append "\_a\_" to local variable names to avoid
   trouble when a common block is named a reserved word and the same
   reserved word is also a local variable name.  Example:
-  	common /const/ a,b,c
-  	real const(3)
-  	equivalence (const(1),a)
-  	a = 1.234
-  	end
+
+  ```text
+  common /const/ a,b,c
+  real const(3)
+  equivalence (const(1),a)
+  a = 1.234
+  end
+  ```
+
   Arrange for ichar() to treat characters as unsigned.
-  libf77: s_cmp.c: treat characters as unsigned in comparisons.
+  libf77: s\_cmp.c: treat characters as unsigned in comparisons.
   These changes for unsignedness only matter for strings that contain
   non-ASCII characters.  Now ichar() should always be >= 0.
 
 ## Wed Sep  7 22:13:20 EDT 1994
 
-- libi77: typesize.c: adjust to allow types LOGICAL*1, LOGICAL*2,
-  INTEGER*1, and (under -DAllow_TYQUAD) INTEGER*8 in NAMELISTs.
+- libi77: typesize.c: adjust to allow types LOGICAL\*1, LOGICAL\*2,
+  INTEGER\*1, and (under -DAllow\_TYQUAD) INTEGER\*8 in NAMELISTs.
 
 ## Thu Aug 25 13:58:26 EDT 1994
 
@@ -1713,9 +1933,9 @@
 
 ## Mon Aug  8 00:51:01 EDT 1994
 
-- Fix bug (introduced 3 Feb. 1993) that, under -i2, kept LOGICAL*2
+- Fix bug (introduced 3 Feb. 1993) that, under -i2, kept LOGICAL\*2
   variables from appearing in INQUIRE statements.  Under -I2, allow
-  LOGICAL*4 variables to appear in INQUIRE.  Fix intrinsic function
+  LOGICAL\*4 variables to appear in INQUIRE.  Fix intrinsic function
   LEN so it returns a short value under -i2, a long value otherwise.
   exec.c: fix obscure memory fault possible with bizarre (and highly
   erroneous) DO-loop syntax.
@@ -1728,17 +1948,20 @@
 ## Mon Aug  1 16:45:17 EDT 1994
 
 - libi77: lread.c rsne.c: for benefit of systems with a buggy stdio.h,
-  declare ungetc when neither KR_headers nor ungetc is #defined.
+  declare ungetc when neither KR\_headers nor ungetc is #defined.
   Version.c not changed.
 
 ## Thu Jul 14 17:55:46 EDT 1994
 
 - Fix glitch in changes of 6 July 1994 that could cause erroneous
   "division by zero" warnings (or worse).  Example:
-  	subroutine foo(a,b)
-  	y = b
-  	a = a / y	! erroneous warning of division by zero
-  	end
+
+  ```text
+  subroutine foo(a,b)
+  y = b
+  a = a / y	! erroneous warning of division by zero
+  end
+  ```
 
 ## Tue Jul 12 10:24:42 EDT 1994
 
@@ -1756,18 +1979,26 @@
   out at the first recursive statement function reference.
   Warn about but retain divisions by 0 (instead of calling them
   "compiler errors" and quiting).  On IEEE machines, this permits
-  	double precision nan, ninf, pinf
-  	nan = 0.d0/0.d0
-  	pinf = 1.d0/0.d0
-  	ninf = -1.d0/0.d0
-  	write(*,*) 'nan, pinf, ninf = ', nan, pinf, ninf
-  	end
+
+  ```text
+  double precision nan, ninf, pinf
+  nan = 0.d0/0.d0
+  pinf = 1.d0/0.d0
+  ninf = -1.d0/0.d0
+  write(*,*) 'nan, pinf, ninf = ', nan, pinf, ninf
+  end
+  ```
+
   to print
-  	nan, pinf, ninf =   NaN  Infinity -Infinity
-  libi77: wref.c: protect with #ifdef GOOD_SPRINTF_EXPONENT an
+
+  ```text
+  nan, pinf, ninf =   NaN  Infinity -Infinity
+  ```
+
+  libi77: wref.c: protect with #ifdef GOOD\_SPRINTF\_EXPONENT an
   optimization that requires exponents to have 2 digits when 2 digits
   suffice.  lwrite.c wsfe.c (list and formatted external output):
-  omit ' ' carriage-control when compiled with -DOMIT_BLANK_CC .
+  omit ' ' carriage-control when compiled with -DOMIT\_BLANK\_CC .
   Off-by-one bug fixed in character count for list output of character
   strings.  Omit '.' in list-directed printing of Nan, Infinity.
 
@@ -1775,40 +2006,56 @@
 
 - Fix glitch in handling erroneous statement function declarations.
   Example:
-  	a(j(i) - i) = a(j(i) - i) + 1	! bad statement function
-  	call foo(a(3))	! Said Impossible type 0 in routine mktmpn
-  	end		! Now warns that i and j are not used
+
+  ```text
+  a(j(i) - i) = a(j(i) - i) + 1	! bad statement function
+  call foo(a(3))	! Said Impossible type 0 in routine mktmpn
+  end		! Now warns that i and j are not used
+  ```
 
 ## Tue Jul  5 03:05:46 EDT 1994
 
 - Fix segmentation fault in
-  	subroutine foo(a,b,k)
-  	data i/1/
-  	double precision a(k,1)	! sequence error: must precede data
-  	b = a(i,1)
-  	end
+
+  ```text
+  subroutine foo(a,b,k)
+  data i/1/
+  double precision a(k,1)	! sequence error: must precede data
+  b = a(i,1)
+  end
+  ```
+
   libi77: Fix bug (introduced 6 June 1994?) in reopening files under
-  NON_UNIX_STDIO.
+  NON\_UNIX\_STDIO.
   Fix some error messages caused by illegal Fortran.  Examples:
-  * 1.
-  	x(i) = 0  !Missing declaration for array x
-  	call f(x) !Said Impossible storage class 8 in routine mkaddr
-  	end	  !Now says invalid use of statement function x
-  * 2.
-  	f = g	!No declaration for g; by default it's a real variable
-  	call g	!Said invalid class code 2 for function g
-  	end	!Now says g cannot be called
-  * 3.
-  	intrinsic foo	!Invalid intrinsic name
-  	a = foo(b)	!Said intrcall: bad intrgroup 0
-  	end		!Now just complains about line 1
+
+  1.
+     ```text
+     x(i) = 0  !Missing declaration for array x
+     call f(x) !Said Impossible storage class 8 in routine mkaddr
+     end	  !Now says invalid use of statement function x
+     ```
+
+  2.
+     ```text
+     f = g	!No declaration for g; by default it's a real variable
+     call g	!Said invalid class code 2 for function g
+     end	!Now says g cannot be called
+     ```
+
+  3.
+     ```text
+     intrinsic foo	!Invalid intrinsic name
+     a = foo(b)	!Said intrcall: bad intrgroup 0
+     end		!Now just complains about line 1
+     ```
 
 ## Fri Jul  1 23:54:00 EDT 1994
 
 - Minor adjustments to makefile (rule for f2c.1 commented out) and
-  sysdep.h (#undef KR_headers if __STDC__ is #defined, and base test
-  for ANSI_Libraries and ANSI_Prototypes on KR_headers rather than
-  __STDC__); version.c touched but not changed.
+  sysdep.h (#undef KR\_headers if \_\_STDC\_\_ is #defined, and base test
+  for ANSI\_Libraries and ANSI\_Prototypes on KR\_headers rather than
+  \_\_STDC\_\_); version.c touched but not changed.
   libi77: adjust fp.h so local.h is only needed under -DV10;
   Version.c not changed.
 
@@ -1821,18 +2068,21 @@
 
 - Fix bug under -A in handling unreferenced (and undeclared)
   external arguments in subroutines with multiple entry points.  Example:
-  	subroutine m(fcn,futil)
-  	external fcn,futil
-  	call fcn
-  	entry mintio(i1) ! (D_fp)0 rather than (U_fp)0 for futil
-  	end
+
+  ```text
+  subroutine m(fcn,futil)
+  external fcn,futil
+  call fcn
+  entry mintio(i1) ! (D_fp)0 rather than (U_fp)0 for futil
+  end
+  ```
 
 ## Mon Jun  6 15:52:57 EDT 1994
 
 - libf77: Avoid references to SIGABRT and SIGIOT if neither is defined;
   Version.c not changed.
   libi77: Add cast to definition of errfl() in fio.h; this only matters
-  on systems with sizeof(int) < sizeof(long).  Under -DNON_UNIX_STDIO,
+  on systems with sizeof(int) < sizeof(long).  Under -DNON\_UNIX\_STDIO,
   use binary mode for direct formatted files (to avoid any confusion
   connected with \n characters).
 
@@ -1841,23 +2091,31 @@
 - Fix bug in handling FORMAT statements that have adjacent character
   (or Hollerith) strings: an extraneous \002 appeared between the
   strings.
-  libf77: under -DNO_ONEXIT, arrange for f_exit to be called just
+  libf77: under -DNO\_ONEXIT, arrange for f\_exit to be called just
   once; previously, upon abnormal termination (including stop statements),
   it was called twice.
 
 ## Tue May 10 07:55:12 EDT 1994
 
-- Trivial changes to exec.c, p1output.c, parse_args.c, proc.c,
+- Trivial changes to exec.c, p1output.c, parse\_args.c, proc.c,
   and putpcc.c: change arguments from
-  	type foo[]
+
+  ```text
+  type foo[]
+  ```
+
   to
-  	type *foo
+
+  ```text
+  type *foo
+  ```
+
   for consistency with defs.h.  For most compilers, this makes no
   difference.
 
 ## Tue Mar 29 17:27:54 EST 1994
 
-- Adjust make_param so dimensions involving min, max, and other
+- Adjust make\_param so dimensions involving min, max, and other
   complicated constant expressions do not provoke error messages
   about adjustable dimensions on non-arguments.
   Fix botch introduced 19 Jan 1994: "adjustable dimension on non-
@@ -1865,19 +2123,21 @@
 
 ## Thu Mar 10 10:21:44 EST 1994
 
-- libf77: add #undef min and #undef max lines to s_paus.c s_stop.c
-  and system_.c; Version.c not changed.
-  libi77: add -DPad_UDread lines to uio.c and explanation to README:
-      Some buggy Fortran programs use unformatted direct I/O to write
-      an incomplete record and later read more from that record than
-      they have written.  For records other than the last, the unwritten
-      portion of the record reads as binary zeros.  The last record is
-      a special case: attempting to read more from it than was written
-      gives end-of-file -- which may help one find a bug.  Some other
-      Fortran I/O libraries treat the last record no differently than
-      others and thus give no help in finding the bug of reading more
-      than was written.  If you wish to have this behavior, compile
-      uio.c with -DPad_UDread .
+- libf77: add #undef min and #undef max lines to s\_paus.c s\_stop.c
+  and system\_.c; Version.c not changed.
+  libi77: add -DPad\_UDread lines to uio.c and explanation to README:
+
+  > Some buggy Fortran programs use unformatted direct I/O to write
+  > an incomplete record and later read more from that record than
+  > they have written.  For records other than the last, the unwritten
+  > portion of the record reads as binary zeros.  The last record is
+  > a special case: attempting to read more from it than was written
+  > gives end-of-file -- which may help one find a bug.  Some other
+  > Fortran I/O libraries treat the last record no differently than
+  > others and thus give no help in finding the bug of reading more
+  > than was written.  If you wish to have this behavior, compile
+  > uio.c with -DPad\_UDread .
+
   Version.c not changed.
 
 ## Sat Mar  5 09:41:52 EST 1994
@@ -1892,6 +2152,8 @@
 
 - README updated to reflect a modification just made to netlib's
   "dtoa.c from fp":
+
+  ```diff
   96a97,105
   > Also add the rule
   >
@@ -1902,24 +2164,28 @@
   > IEEE_MC68k, IEEE_8087, VAX, or IBM, depending on your machine's
   > arithmetic.  See the comments near the start of dtoa.c.
   >
+  ```
 
 ## Fri Feb 25 23:56:08 EST 1994
 
-- output.c, sysdep.h: arrange for -DUSE_DTOA to use dtoa.c and g_fmt.c
+- output.c, sysdep.h: arrange for -DUSE\_DTOA to use dtoa.c and g\_fmt.c
   for correctly rounded decimal values on IEEE-arithmetic machines
   (plus machines with VAX and IBM-mainframe arithmetic).  These
   routines are available from netlib's fp directory.
   msdos/f2cx.exe.Z and msdos/f2c.exe.Z updated (ftp access only); the
-  former uses -DUSE_DTOA to keep 12 from printing as 12.000000000000001.
+  former uses -DUSE\_DTOA to keep 12 from printing as 12.000000000000001.
   vax.c: fix wrong arguments to badtag and frchain introduced
   28 Nov. 1993.
   Source for f2c converted to ANSI/ISO format, with the K&R format
-  available by compilation with -DKR_headers .
+  available by compilation with -DKR\_headers .
   Arrange for (double precision expression) relop (single precision
   constant) to retain the single-precision nature of the constant.
   Example:
-  	double precision t
-  	if (t .eq. 0.3) ...
+
+  ```text
+  double precision t
+  if (t .eq. 0.3) ...
+  ```
 
 ## Tue Feb 22 20:50:08 EST 1994
 
@@ -1930,7 +2196,7 @@
 ## Sun Feb 20 17:04:58 EST 1994
 
 - Fix bugs reading .P files for routines with arguments of type
-  INTEGER*1, INTEGER*8, LOGICAL*2.
+  INTEGER\*1, INTEGER\*8, LOGICAL\*2.
   Fix glitch in reporting inconsistent arguments for routines involving
   character arguments:  "arg n" had n too large by the number of
   character arguments.
@@ -1938,10 +2204,13 @@
 ## Mon Feb  7 09:24:30 EST 1994
 
 - Remove artifact in "fc" script that caused -O to be ignored:
-  	87c87
-  	<		# lcc ignores -O...
-  	---
-  	>		CFLAGS="$CFLAGS $O"
+
+  ```text
+  87c87
+  <		# lcc ignores -O...
+  ---
+  >		CFLAGS="$CFLAGS $O"
+  ```
 
 ## Thu Jan 27 08:57:40 EST 1994
 
@@ -1952,16 +2221,20 @@
 ## Wed Jan 19 08:55:19 EST 1994
 
 - Arrange to accept
-  	integer	Nx, Ny, Nz
-  	parameter	(Nx = 10, Ny = 20)
-  	parameter	(Nz = max(Nx, Ny))
-  	integer	c(Nz)
-  	call foo(c)
-  	end
+
+  ```text
+  integer	Nx, Ny, Nz
+  parameter	(Nx = 10, Ny = 20)
+  parameter	(Nz = max(Nx, Ny))
+  integer	c(Nz)
+  call foo(c)
+  end
+  ```
+
   rather than complaining "Declaration error for c: adjustable dimension
   on non-argument".  The necessary changes cause some hitherto unfolded
   constant expressions to be folded.
-  Accept BYTE as a synonym for INTEGER*1.
+  Accept BYTE as a synonym for INTEGER\*1.
 
 ## Tue Jan  4 15:39:52 EST 1994
 
@@ -1986,8 +2259,12 @@
   than the line number of the END statement ending the main program.
   Adjust fc script to run files ending in .F through /lib/cpp.
   Fix bug ("Impossible tag 2") in
-  	if (t .eq. (0,2)) write(*,*) 'Bug!'
-  	end
+
+  ```text
+  if (t .eq. (0,2)) write(*,*) 'Bug!'
+  end
+  ```
+
   libi77: iio.c: adjust internal formatted reads to treat short records
   as though padded with blanks (rather than causing an "off end of record"
   error).
@@ -1998,37 +2275,56 @@
   Sort parameter adjustments (or complain of impossible dependencies)
   so that dummy arguments are referenced only after being adjusted.
   Example:
-  	subroutine foo(a,b)
-  	integer a(2)		! a must be adjusted before b
-  	double precision b(a(1),a(2))
-  	call goo(b(3,4))
-  	end
+
+  ```text
+  subroutine foo(a,b)
+  integer a(2)		! a must be adjusted before b
+  double precision b(a(1),a(2))
+  call goo(b(3,4))
+  end
+  ```
+
   Adjust structs for initialized common blocks and equivalence classes
   to omit the trailing struct component added to force alignment when
   padding already forces the desired alignment.  Example:
-  	PROGRAM TEST
-  	COMMON /Z/ A, CC
-  	CHARACTER*4 CC
-  	DATA cc /'a'/
-  	END
+
+  ```text
+  PROGRAM TEST
+  COMMON /Z/ A, CC
+  CHARACTER*4 CC
+  DATA cc /'a'/
+  END
+  ```
+
   now gives
-  	struct {
-  	    integer fill_1[1];
-  	    char e_2[4];
-  	    } z_ = { {0}, {'a', ' ', ' ', ' '} };
+
+  ```text
+  struct {
+      integer fill_1[1];
+      char e_2[4];
+      } z_ = { {0}, {'a', ' ', ' ', ' '} };
+  ```
+
   rather than
+
+  ```text
   struct {
       integer fill_1[1];
       char e_2[4];
       real e_3;
       } z_ = { {0}, {'a', ' ', ' ', ' '}, (float)0. };
+  ```
 
 ## Thu Nov 18 09:37:47 EST 1993
 
 - Give a better error (than "control stack empty") for an extraneous
   ENDDO.  Example:
-  	enddo
-  	end
+
+  ```text
+  enddo
+  end
+  ```
+
   Update comments about ftp in "readme from f2c".
 
 ## Wed Nov 10 15:01:05 EST 1993
@@ -2048,25 +2344,33 @@
 ## Fri Oct 15 15:37:26 EDT 1993
 
 - Fix rarely seen parsing bug illustrated by
-  	subroutine foo(xabcdefghij)
-  	character*(*) xabcdefghij
+
+  ```text
+  subroutine foo(xabcdefghij)
+  character*(*) xabcdefghij
                  IF (xabcdefghij.NE.'##') GOTO 40
   40	end
+  ```
+
   in which the spacing in the IF line is crucial.
 
 ## Mon Sep 27 08:55:09 EDT 1993
 
 - libi77: endfile.c: protect #include "sys/types.h" with
-  #ifndef NON_UNIX_STDIO; Version.c not changed.
+  #ifndef NON\_UNIX\_STDIO; Version.c not changed.
 
 ## Fri Sep 24 00:56:12 EDT 1993
 
 - Fix offset error resulting from repeating the same equivalence
   statement twice.  Example:
-  	real a(2), b(2)
-  	equivalence (a(2), b(2))
-  	equivalence (a(2), b(2))
-  	end
+
+  ```text
+  real a(2), b(2)
+  equivalence (a(2), b(2))
+  equivalence (a(2), b(2))
+  end
+  ```
+
   Increase MAXTOKENLEN (to roughly the largest allowed by ANSI C).
 
 ## Thu Sep  9 08:51:21 EDT 1993
@@ -2077,7 +2381,7 @@
 ## Wed Sep  8 12:24:26 EDT 1993
 
 - libi77: open.c: protect #include "sys/..." with
-  #ifndef NON_UNIX_STDIO; Version date not changed.
+  #ifndef NON\_UNIX\_STDIO; Version date not changed.
 
 ## Fri Aug 27 08:22:54 EDT 1993
 
@@ -2087,23 +2391,30 @@
 ## Fri Aug 20 13:22:10 EDT 1993
 
 - Fix bug in do while revealed by
-  	subroutine skdig (line, i)
-  	character line*(*), ch*1
-  	integer i
-  	logical isdigit
-  	isdigit(ch) = ch.ge.'0' .and. ch.le.'9'
-  	do while (isdigit(line(i:i)))	! ch__1[0] was set before
-  					! "while(...) {...}"
-  		i = i + 1
-  		enddo
-  	end
+
+  ```text
+  subroutine skdig (line, i)
+  character line*(*), ch*1
+  integer i
+  logical isdigit
+  isdigit(ch) = ch.ge.'0' .and. ch.le.'9'
+  do while (isdigit(line(i:i)))	! ch__1[0] was set before
+                  ! "while(...) {...}"
+      i = i + 1
+      enddo
+  end
+  ```
 
 ## Mon Aug  9 09:12:38 EDT 1993
 
 - Fix erroneous cast under -A in translating
-  	character*(*) function getc()
-  	getc(2:3)=' '		!wrong cast in first arg to s_copy
-  	end
+
+  ```text
+  character*(*) function getc()
+  getc(2:3)=' '		!wrong cast in first arg to s_copy
+  end
+  ```
+
   libi77: lread.c: fix bug in namelist reading of an incomplete array
   of numeric data followed by another namelist item whose name starts
   with 'd', 'D', 'e', or 'E'.
@@ -2118,18 +2429,22 @@
 ## Thu Aug  5 11:31:14 EDT 1993
 
 - libi77: lread.c: fix bug in handling repetition counts for logical
-  data (during list or namelist input).  Change struct f__syl to
+  data (during list or namelist input).  Change struct f\_\_syl to
   struct syl (for buggy compilers).
 
 ## Wed Jun 23 09:04:31 EDT 1993
 
 - libi77: fix bug in format reversions for internal writes.
   Example:
-  	character*60 lines(2)
-  	write(lines,"('n =',i3,2(' more text',i3))") 3, 4, 5, 6
-  	write(*,*) 'lines(1) = ', lines(1)
-  	write(*,*) 'lines(2) = ', lines(2)
-  	end
+
+  ```text
+  character*60 lines(2)
+  write(lines,"('n =',i3,2(' more text',i3))") 3, 4, 5, 6
+  write(*,*) 'lines(1) = ', lines(1)
+  write(*,*) 'lines(2) = ', lines(2)
+  end
+  ```
+
   gave an error message that began "iio: off end of record", rather
   than giving the correct output:
 
@@ -2140,12 +2455,12 @@
 
 - Update "fc" shell script, and bring f2c.1 and f2c.1t up to date:
   they're meant to be linked with (i.e., the same as) src/f2c.1 and
-  src/f2c.1t .  [In the last update of f2c.1* (2 Feb. 1993), only
+  src/f2c.1t .  [In the last update of f2c.1\* (2 Feb. 1993), only
   src/f2c.1 and src/f2c.1t got changed -- a mistake.]
 
 ## Fri Jun 18 13:55:51 EDT 1993
 
-- libi77: change type of signal_ in f2ch.add; change type of il in
+- libi77: change type of signal\_ in f2ch.add; change type of il in
   union Uint from long to integer (for machines like the DEC Alpha,
   where integer should be the same as int).  Version.c not changed.
   Tweak gram.dcl and gram.head: add semicolons after some rules that
@@ -2156,10 +2471,14 @@
 ## Mon Jun  7 12:00:47 EDT 1993
 
 - Fix memory fault in
-  	common /c/ m
-  	integer m(1)
-  	data m(1)/1/, m(2)/2/	! one too many initializers
-  	end
+
+  ```text
+  common /c/ m
+  integer m(1)
+  data m(1)/1/, m(2)/2/	! one too many initializers
+  end
+  ```
+
   msdos/f2cx.exe.Z and msdos/f2c.exe.Z updated (ftp access only).
 
 ## Tue Jun  1 23:11:15 EDT 1993
@@ -2173,7 +2492,7 @@
 
 - Fix bug introduced 3 Feb. 1993 in handling multiple entry
   points with differing return types -- the postfix array in proc.c
-  needed a new entry for integer*8 (which resulted in wrong
+  needed a new entry for integer\*8 (which resulted in wrong
   Multitype suffixes for non-integral types).
   For (default) K&R C, generate VOID rather than int functions for
   functions of Fortran type character, complex, and double complex.
@@ -2181,7 +2500,7 @@
 
 ## Tue May  4 23:48:20 EDT 1993
 
-- libf77: tweak signal_ line of f2ch.add .
+- libf77: tweak signal\_ line of f2ch.add .
 
 ## Tue Apr 27 16:08:28 EDT 1993
 
@@ -2190,24 +2509,29 @@
 ## Fri Apr 23 18:38:50 EDT 1993
 
 - Fix bug with -h revealed in
-  	CHARACTER*9 FOO
-  	WRITE(FOO,'(I6)') 1
-  	WRITE(FOO,'(I6)') 2	! struct icilist io___3 botched
-  	END
+
+  ```text
+  CHARACTER*9 FOO
+  WRITE(FOO,'(I6)') 1
+  WRITE(FOO,'(I6)') 2	! struct icilist io___3 botched
+  END
+  ```
 
 ## Wed Apr 21 17:39:46 EDT 1993
 
 - Fix bug revealed in
 
+  ```text
         ASSIGN 10 TO L1
         GO TO 20
   10   ASSIGN 30 TO L2
         STOP 10
 
   20   ASSIGN 10 TO L2	! Bug here because 10 had been assigned
-  			! to another label, then defined.
+          ! to another label, then defined.
         GO TO L2
   30   END
+  ```
 
 ## Sun Apr 18 19:55:26 EDT 1993
 
@@ -2221,12 +2545,15 @@
   routine with an external argument.  [See the just-added note about
   separating -P from -A in the changes above for 3 Feb. 1993.]
   Fix bug (type UNKNOWN for V in the example below) revealed by
-  	subroutine a()
-  	external c
-  	call b(c)
-  	end
-  	subroutine b(v)
-  	end
+
+  ```text
+  subroutine a()
+  external c
+  call b(c)
+  end
+  subroutine b(v)
+  end
+  ```
 
 ## Sat Apr 17 11:41:02 EDT 1993
 
@@ -2237,26 +2564,38 @@
   Append underscores to names that appear in EQUIVALENCE and are
   component names in a structure declared in f2c.h, thus avoiding a
   problem caused by the #defines emitted for equivalences.  Example:
-  	complex a
-  	equivalence (i,j)
-  	a = 1	! a.i went awry because of #define i
-  	j = 2
-  	write(*,*) a, i
-  	end
+
+  ```text
+  complex a
+  equivalence (i,j)
+  a = 1	! a.i went awry because of #define i
+  j = 2
+  write(*,*) a, i
+  end
+  ```
+
   Adjust line-breaking logic to avoid splitting very long constants
   (and names).  Example:
-  	! The next line starts with tab and thus is a free-format line.
-  	a=.012345689012345689012345689012345689012345689012345689012345689012345689
-  	end
+
+  ```text
+  ! The next line starts with tab and thus is a free-format line.
+  a=.012345689012345689012345689012345689012345689012345689012345689012345689
+  end
+  ```
+
   Omit extraneous "return 0;" from entry stubs emitted for multiple
   entry points of type character, complex, or double complex.
 
 ## Tue Apr  6 13:30:04 EDT 1993
 
 - Fix bug revealed in
-  	subroutine foo(i)
-  	call goo(int(i))
-  	end
+
+  ```text
+  subroutine foo(i)
+  call goo(int(i))
+  end
+  ```
+
   which now passes a copy of i, rather than i itself.
 
 ## Tue Apr  6 12:11:22 EDT 1993
@@ -2264,23 +2603,26 @@
 - libi77: adjust error returns for formatted inputs to flush the current
   input line when err= is specified.  To restore the old behavior (input
   left mid-line), either adjust the #definition of errfl in fio.h or omit
-  the invocation of f__doend in err__fl (in err.c).
+  the invocation of f\_\_doend in err\_\_fl (in err.c).
 
 ## Tue Mar 30 16:17:42 EST 1993
 
-- Fix bug with -s: (floating-point array item)*(complex item)
-  generates an _subscr() reference for the floating-point array,
-  but a #define for the _subscr() was omitted.
+- Fix bug with -s: (floating-point array item)\*(complex item)
+  generates an \_subscr() reference for the floating-point array,
+  but a #define for the \_subscr() was omitted.
 
 ## Tue Mar 30 07:17:15 EST 1993
 
 - Fix bug introduced 6 March 1993: possible memory corruption when
   loops in data statements involve constant subscripts, as in
-  	 DATA (GUNIT(1,I),I=0,14)/15*-1/
+
+  ```text
+   DATA (GUNIT(1,I),I=0,14)/15*-1/
+  ```
 
 ## Fri Mar 19 09:19:26 EST 1993
 
-- libi77: add (char *) casts to malloc and realloc invocations
+- libi77: add (char \*) casts to malloc and realloc invocations
   in err.c, open.c; Version.c not changed.
 
 ## Thu Mar 18 12:37:30 EST 1993
@@ -2288,7 +2630,7 @@
 - Flag -r (for discarding carriage-returns on systems that end lines
   with carriage-return/newline pairs, e.g. PCs) added to xsum, and
   xsum.c converted to ANSI/ISO syntax (with K&R syntax available with
-  -DKR_headers).  [When time permits, the f2c source will undergo a
+  -DKR\_headers).  [When time permits, the f2c source will undergo a
   similar conversion.]
   libi77: tweaks to #includes in endfile.c, err.c, open.c, rawio.h;
   Version.c not changed.
@@ -2296,7 +2638,7 @@
 
 ## Mon Mar 15 16:21:37 EST 1993
 
-- libi77: more minor tweaks (for -DKR_headers); Version.c not changed.
+- libi77: more minor tweaks (for -DKR\_headers); Version.c not changed.
 
 ## Fri Mar 12 17:16:16 EST 1993
 
@@ -2318,7 +2660,7 @@
 ## Mon Mar  8 09:35:38 EST 1993
 
 - "f2c.h from f2c" updated to add types logical1 and integer1 for
-  LOGICAL*1 and INTEGER*1.  ("f2c.h from f2c" is supposed to be the
+  LOGICAL\*1 and INTEGER\*1.  ("f2c.h from f2c" is supposed to be the
   same as "f2c.h from f2c/src", which was updated 3 Feb. 1993.)
 
 ## Sat Mar  6 16:12:47 EST 1993
@@ -2338,7 +2680,7 @@
   to 257, and allow -Nl1234 to specify this number.
   Tweak put.c to check p->tag == TADDR in realpart() and imagpart().
   Adjust fc script to allow .r (RATFOR) files and -C (check subscripts).
-  Avoid declaring strchr in niceprintf.c under -DANSI_Libraries .
+  Avoid declaring strchr in niceprintf.c under -DANSI\_Libraries .
   gram.c updated again.
   libi77: err.c, open.c: take declaration of fdopen from rawio.h.
 
@@ -2349,13 +2691,13 @@
 
 ## Tue Feb  9 17:12:49 EST 1993
 
-- libi77: more tweaks for NON_UNIX_STDIO: use stdio routines
-  rather than open, close, creat, seek, fdopen (except for f__isdev).
+- libi77: more tweaks for NON\_UNIX\_STDIO: use stdio routines
+  rather than open, close, creat, seek, fdopen (except for f\_\_isdev).
 
 ## Tue Feb  9 02:05:40 EST 1993
 
-- libi77: change some #ifdef MSDOS lines to #ifdef NON_UNIX_STDIO,
-  and, in err.c under NON_UNIX_STDIO, avoid close(creat(name,0666))
+- libi77: change some #ifdef MSDOS lines to #ifdef NON\_UNIX\_STDIO,
+  and, in err.c under NON\_UNIX\_STDIO, avoid close(creat(name,0666))
   when the unit has another file descriptor for name.
 
 ## Mon Feb  8 14:40:37 EST 1993
@@ -2371,19 +2713,20 @@
 
 - libi77: tweaks to NAMELIST and open (after comments by Harold
   Youngren):
+
   1. Reading a ? instead of &name (the start of a namelist) causes
-      the namelist being sought to be written to stdout (unit 6);
-      to omit this feature, compile rsne.c with -DNo_Namelist_Questions.
+     the namelist being sought to be written to stdout (unit 6);
+     to omit this feature, compile rsne.c with -DNo\_Namelist\_Questions.
   2. Reading the wrong namelist name now leads to an error message
-      and an attempt to skip input until the right namelist name is found;
-      to omit this feature, compile rsne.c with -DNo_Bad_Namelist_Skip.
+     and an attempt to skip input until the right namelist name is found;
+     to omit this feature, compile rsne.c with -DNo\_Bad\_Namelist\_Skip.
   3. Namelist writes now insert newlines before each variable; to omit
-      this feature, compile xwsne.c with -DNo_Extra_Namelist_Newlines.
+     this feature, compile xwsne.c with -DNo\_Extra\_Namelist\_Newlines.
   4. For OPEN of sequential files, ACCESS='APPEND' (or
-      access='anything else starting with "A" or "a"') causes the file to
-      be positioned at end-of-file, so a write will append to the file.
-      (This is nonstandard, but does not require modifying data
-      structures.)
+     access='anything else starting with "A" or "a"') causes the file to
+     be positioned at end-of-file, so a write will append to the file.
+     (This is nonstandard, but does not require modifying data
+     structures.)
 
 ## Fri Feb  5 01:40:38 EST 1993
 
@@ -2395,23 +2738,23 @@
 
 ## Wed Feb  3 02:05:16 EST 1993
 
-- Recognize types INTEGER*1, LOGICAL*1, LOGICAL*2, INTEGER*8.
-  INTEGER*8 is not well tested and will only work reasonably on
+- Recognize types INTEGER\*1, LOGICAL\*1, LOGICAL\*2, INTEGER\*8.
+  INTEGER\*8 is not well tested and will only work reasonably on
   systems where int = 4 bytes, long = 8 bytes; on such systems,
   you'll have to modify f2c.h appropriately, changing integer
   from long to int and adding typedef long longint.  You'll also
-  have to compile libI77 with Allow_TYQUAD #defined and adjust
-  libF77/makefile to compile pow_qq.c.  In the f2c source, changes
-  for INTEGER*8 are delimited by #ifdef TYQUAD ... #endif.  You
-  can omit the INTEGER*8 changes by compiling with NO_TYQUAD
+  have to compile libI77 with Allow\_TYQUAD #defined and adjust
+  libF77/makefile to compile pow\_qq.c.  In the f2c source, changes
+  for INTEGER\*8 are delimited by #ifdef TYQUAD ... #endif.  You
+  can omit the INTEGER\*8 changes by compiling with NO\_TYQUAD
   #defined.  Otherwise, the new command-line option -!i8
-  disables recognition of INTEGER*8.
-  libf77: add pow_qq.c
-  libi77: add #ifdef Allow_TYQUAD stuff.  Changes for INTEGER*1,
-  LOGICAL*1, and LOGICAL*2 came last 23 July 1992.  Fix bug in
+  disables recognition of INTEGER\*8.
+  libf77: add pow\_qq.c
+  libi77: add #ifdef Allow\_TYQUAD stuff.  Changes for INTEGER\*1,
+  LOGICAL\*1, and LOGICAL\*2 came last 23 July 1992.  Fix bug in
   backspace (that only bit when the last character of the second
   or subsequent buffer read was the previous newline).  Guard
-  against L_tmpnam being too small in endfile.c.  For MSDOS,
+  against L\_tmpnam being too small in endfile.c.  For MSDOS,
   close and reopen files when copying to truncate.  Lengthen
   LINTW (buffer size in lwrite.c).
   Add \ to the end of #define lines that get broken.
@@ -2423,15 +2766,23 @@
   Add command-line option -s, which instructs f2c preserve multi-
   dimensional subscripts (by emitting and using appropriate #defines).
   Fix glitch (with default type inferences) in examples like
-  	call foo('abc')
-  	end
-  	subroutine foo(goo)
-  	end
+
+  ```text
+  call foo('abc')
+  end
+  subroutine foo(goo)
+  end
+  ```
+
   This gave two warning messages:
-  	Warning on line 4 of y.f: inconsistent calling sequences for foo:
-  	        here 1, previously 2 args and string lengths.
-  	Warning on line 4 of y.f: inconsistent calling sequences for foo:
-  	        here 2, previously 1 args and string lengths.
+
+  ```text
+  Warning on line 4 of y.f: inconsistent calling sequences for foo:
+          here 1, previously 2 args and string lengths.
+  Warning on line 4 of y.f: inconsistent calling sequences for foo:
+          here 2, previously 1 args and string lengths.
+  ```
+
   Now the second Warning is suppressed.
   Complain about all inconsistent arguments, not just the first.
   Switch to automatic creation of "all from f2c/src".  For folks
@@ -2441,7 +2792,7 @@
 
 ## Thu Oct 29 12:37:18 EST 1992
 
-- libf77: Fix botch in signal_.c when KR_headers is #defined;
+- libf77: Fix botch in signal\_.c when KR\_headers is #defined;
   add CFLAGS to makefile.
   libi77: trivial change to makefile for consistency with
   libF77/makefile.
@@ -2449,12 +2800,13 @@
 ## Tue Oct 27 01:57:42 EST 1992
 
 - libf77, libi77:
-      1.  Fix botched indirection in signal_.c.
-      2.  Supply missing l_eof = 0 assignment to s_rsne() in rsne.c (so
-  end-of-file on other files won't confuse namelist reads of external
-  files).
-      3.  Prepend f__ to external names that are only of internal
-  interest to lib[FI]77.
+
+  1.  Fix botched indirection in signal\_.c.
+  2.  Supply missing l\_eof = 0 assignment to s\_rsne() in rsne.c (so
+      end-of-file on other files won't confuse namelist reads of external
+      files).
+  3.  Prepend f\_\_ to external names that are only of internal
+      interest to lib[FI]77.
 
 ## Mon Aug 24 18:37:59 EDT 1992
 
@@ -2469,11 +2821,11 @@
 
 ## Fri Aug 14 08:07:09 EDT 1992
 
-- libi77: tweak wrt_E in wref.c to avoid signing NaNs.
+- libi77: tweak wrt\_E in wref.c to avoid signing NaNs.
 
 ## Tue Jul 28 15:18:33 EDT 1992
 
-- libi77: insert missed "#ifdef KR_headers" lines around getnum
+- libi77: insert missed "#ifdef KR\_headers" lines around getnum
   header in rsne.c.  Version not updated.
 
   NOTE: "index from f2c" now ends with current timestamps of files in
@@ -2483,7 +2835,7 @@
 
 ## Thu Jul 23 11:20:55 EDT 1992
 
-- libf77, libi77 updated to assume ANSI prototypes unless KR_headers
+- libf77, libi77 updated to assume ANSI prototypes unless KR\_headers
   is #defined.
   libi77 now recognizes a Z format item as in Fortran 90;
   the implementation assumes 8-bit bytes and botches character strings
@@ -2503,12 +2855,12 @@
 ## Sat Jul 18 07:36:58 EDT 1992
 
 - Fix buglet with -e1c (invisible on most systems) temporary file
-  f2c_functions was unlinked before being closed.
-  libf77: fix bugs in evaluating m**n for integer n < 0 and m an
+  f2c\_functions was unlinked before being closed.
+  libf77: fix bugs in evaluating m\*\*n for integer n < 0 and m an
   integer different from 1 or a real or double precision 0.
   Catch SIGTRAP (to print "Trace trap" before aborting).  Programs
-  that previously erroneously computed 1 for 0**-1 may now fault.
-  Relevant routines: main.c pow_di.c pow_hh.c pow_ii.c pow_ri.c .
+  that previously erroneously computed 1 for 0\*\*-1 may now fault.
+  Relevant routines: main.c pow\_di.c pow\_hh.c pow\_ii.c pow\_ri.c .
 
 ## Sat Jun 27 17:30:59 EDT 1992
 
@@ -2532,10 +2884,13 @@
 ## Fri May 29 01:17:15 EDT 1992
 
 - Complain about externals used as variables.  Example
-  	subroutine foo(a,b)
-  	external b
-  	a = a*b		! illegal use of b; perhaps should be b()
-  	end
+
+  ```text
+  subroutine foo(a,b)
+  external b
+  a = a*b		! illegal use of b; perhaps should be b()
+  end
+  ```
 
 ## Sun May 24 09:45:37 EDT 1992
 
@@ -2544,15 +2899,18 @@
 ## Sat May 23 18:17:42 EDT 1992
 
 - Under -A and -C++, supply "return 0;" after the code generated for
-  a STOP statement -- the C compiler doesn't know that s_stop won't
+  a STOP statement -- the C compiler doesn't know that s\_stop won't
   return.
   New (mutually exclusive) options:
-  	-f	treats all input lines as free-format lines,
-  		honoring text that appears after column 72
-  		and not padding lines shorter than 72 characters
-  		with blanks (which matters if a character string
-  		is continued across 2 or more lines).
-  	-72	treats text appearing after column 72 as an error.
+
+  ```text
+  -f	treats all input lines as free-format lines,
+      honoring text that appears after column 72
+      and not padding lines shorter than 72 characters
+      with blanks (which matters if a character string
+      is continued across 2 or more lines).
+  -72	treats text appearing after column 72 as an error.
+  ```
 
 ## Tue May 19 09:03:05 EDT 1992
 
@@ -2561,18 +2919,18 @@
 ## Wed May  6 23:49:07 EDT 1992
 
 - Under -A and -C++, have subroutines return 0 (even if they have
-  no * arguments).
+  no \* arguments).
   Adjust libi77 (rsne.c and lread.c) for systems where ungetc is
   a macro.  Tweak lib[FI]77/makefile to use unique intermediate file
   names (for parallel makes).
 
 ## Tue May  5 09:53:55 EDT 1992
 
-- Tweaks to README; e.g., ANSI_LIbraries changed to ANSI_Libraries .
+- Tweaks to README; e.g., ANSI\_LIbraries changed to ANSI\_Libraries .
 
 ## Wed Mar 25 13:31:05 EST 1992
 
-- Fix bug with IMPLICIT INTEGER*4(...): under -i2 or -I2, the *4 was
+- Fix bug with IMPLICIT INTEGER\*4(...): under -i2 or -I2, the \*4 was
   ignored.
 
 ## Sat Mar 21 01:27:09 EST 1992
@@ -2587,18 +2945,22 @@
   of differing types (with implicitly typed entries appearing after
   the first executable statement).
   Fix memory fault in the following illegal Fortran:
+
+  ```text
           double precision foo(i)
   *	illegal: above should be "double precision function foo(i)"
           foo = i * 3.2
           entry moo(i)
           end
-  Note about ANSI_Libraries (relevant, e.g., to IRIX 4.0.1 and AIX)
+  ```
+
+  Note about ANSI\_Libraries (relevant, e.g., to IRIX 4.0.1 and AIX)
   added to README.
   Abort zero divides during constant simplification.
 
 ## Fri Feb 28 01:04:26 EST 1992
 
-- libf77:  fix buggy z_sqrt.c (double precision square root), which
+- libf77:  fix buggy z\_sqrt.c (double precision square root), which
   misbehaved for arguments in the southwest quadrant.
 
 ## Mon Feb  3 11:57:53 EST 1992
@@ -2620,25 +2982,29 @@
 
 - Diagnose some illegal uses of main program name (rather than
   memory faulting).
-  libi77:  (1) In list and namelist input, treat "r* ," and "r*,"
+  libi77:  (1) In list and namelist input, treat "r\* ," and "r\*,"
   alike (where r is a positive integer constant), and fix a bug in
   handling null values following items with repeat counts (e.g.,
-  2*1,,3).  (2) For namelist reading of a numeric array, allow a new
+  2\*1,,3).  (2) For namelist reading of a numeric array, allow a new
   name-value subsequence to terminate the current one (as though the
   current one ended with the right number of null values).
   (3) [lio.h, lwrite.c]:  omit insignificant zeros in list and namelist
-  output.  (Compile with -DOld_list_output to get the old behavior.)
+  output.  (Compile with -DOld\_list\_output to get the old behavior.)
 
 ## Tue Dec 31 13:53:47 EST 1991
 
-- Fix bug in handling dimension a(n**3,2) -- pow_ii was called
+- Fix bug in handling dimension a(n\*\*3,2) -- pow\_ii was called
   incorrectly.
   Fix bug in translating
-  	subroutine x(abc,n)
-  	character abc(n)
-  	write(abc,'(i10)') 123
-  	end
-  (omitted declaration and initialiation of abc_dim1).
+
+  ```text
+  subroutine x(abc,n)
+  character abc(n)
+  write(abc,'(i10)') 123
+  end
+  ```
+
+  (omitted declaration and initialiation of abc\_dim1).
   Complain about dimension expressions of such invalid types
   as complex and logical.
 
@@ -2651,9 +3017,9 @@
 - Fix bug in translating nonsensical ichar invocations involving
   concatenations.
   Fix bug in passing intrinsics lle, llt, lge, lgt as arguments;
-  hl_le was being passed rather than l_le, etc.
+  hl\_le was being passed rather than l\_le, etc.
   libf77: adjust length parameters from long to ftnlen, for
-  compiling with f2c_i2 defined.
+  compiling with f2c\_i2 defined.
 
 ## Thu Dec 12 11:24:41 EST 1991
 
@@ -2664,7 +3030,7 @@
 
 ## Tue Dec 10 17:42:28 EST 1991
 
-- Add tests to prevent memory faults with bad uses of character*(*).
+- Add tests to prevent memory faults with bad uses of character\*(\*).
 
 ## Sun Dec  1 19:29:24 EST 1991
 
@@ -2686,10 +3052,10 @@
 
 ## Tue Oct 22 18:12:56 EDT 1991
 
-- Fix memory fault when a character*(*) argument is used (illegally)
+- Fix memory fault when a character\*(\*) argument is used (illegally)
   as a dummy variable in the definition of a statement function.  (The
   memory fault occurred when the statement function was invoked.)
-  Complain about implicit character*(*).
+  Complain about implicit character\*(\*).
 
 ## Fri Oct 18 15:16:00 EDT 1991
 
@@ -2704,7 +3070,7 @@
 
 - libi77: README, fio.h, sue.c, uio.c changed so the length field
   in unformatted sequential records has type long rather than int
-  (unless UIOLEN_int is #defined).  This is for systems where sizeof(int)
+  (unless UIOLEN\_int is #defined).  This is for systems where sizeof(int)
   can vary, depending on the compiler or compiler options.
 
 ## Tue Oct 15 10:25:49 EDT 1991
@@ -2748,53 +3114,72 @@
 
 ## Fri Jul 12 07:41:30 EDT 1991
 
-- Note added to README about erroneous definitions of __STDC__ .
+- Note added to README about erroneous definitions of \_\_STDC\_\_ .
 
 ## Mon Jul  8 21:49:20 EDT 1991
 
 - Issue a warning about things like
-  	integer i
-  	i = 'abc'
+
+  ```text
+  integer i
+  i = 'abc'
+  ```
+
   (which is treated as i = ichar('a')).  [It might be nice to treat 'abc'
   as an integer initialized (in a DATA statement) with 'abc', but
   other matters have higher priority.]
   Render
-  	i = ichar('A')
+
+  ```text
+  i = ichar('A')
+  ```
+
   as
-  	i = 'A';
+
+  ```text
+  i = 'A';
+  ```
+
   rather than
-  	i = 65;
+
+  ```text
+  i = 65;
+  ```
+
   (which assumes ASCII).
 
 ## Mon Jul  1 00:28:13 EDT 1991
 
 - Add test and error message for illegal use of subroutine names, e.g.
+
+  ```text
         SUBROUTINE ZAP(A)
         ZAP = A
         END
+  ```
 
 ## Mon Jun 17 16:52:53 EDT 1991
 
 - Minor tweaks: omit unnecessary declaration of strcmp (that caused
   trouble on a system where strcmp was a macro) from misc.c; add
   SHELL = /bin/sh to makefiles.
-  Fix a dereference of null when a CHARACTER*(*) declaration appears
+  Fix a dereference of null when a CHARACTER\*(\*) declaration appears
   (illegally) after DATA.  Complain only once per subroutine about
   declarations appearing after DATA.
 
 ## Fri May 31 07:51:50 EDT 1991
 
-- libf77: system_: officially return status.
+- libf77: system\_: officially return status.
 
 ## Sat May 25 11:44:25 EDT 1991
 
-- libf77: s_rnge: declare line long int rather than int.
+- libf77: s\_rnge: declare line long int rather than int.
 
 ## Thu May 16 13:14:59 EDT 1991
 
 - Libi77: increase LEFBL in lio.h to overcome a NeXT bug.
   Tweak for compilers that recognize "nested" comments: inside comments,
-  turn /* into /+ (as well as */ into +/).
+  turn /\* into /+ (as well as \*/ into +/).
 
 ## Thu May  9 02:13:51 EDT 1991
 
@@ -2820,28 +3205,35 @@
 
 ## Mon Apr  8 13:47:06 EDT 1991
 
-- Arrange for s_rnge to have the right prototype under -A -C .
+- Arrange for s\_rnge to have the right prototype under -A -C .
 
 ## Fri Apr  5 12:44:02 EST 1991
 
-- Try again to omit extraneous ret_val declarations -- this morning's
+- Try again to omit extraneous ret\_val declarations -- this morning's
   fix was sometimes wrong.
 
 ## Fri Apr  5 08:30:31 EST 1991
 
 - Fix loss of % in some format expressions, e.g.
-  	write(*,'(1h%)')
+
+  ```text
+  write(*,'(1h%)')
+  ```
+
   Fix botch introduced 27 March 1991 that caused subroutines with
-  multiple entry points to have extraneous declarations of ret_val.
+  multiple entry points to have extraneous declarations of ret\_val.
 
 ## Wed Mar 27 00:42:19 EST 1991
 
 - Fix a memory fault caused by such illegal Fortran as
+
+  ```text
          function foo
          x = 3
          logical foo	! declaration among executables
          foo=.false.	! used to suffer memory fault
          end
+  ```
 
 ## Wed Mar 13 11:47:42 EST 1991
 
@@ -2849,7 +3241,7 @@
 
 ## Wed Mar 13 02:27:23 EST 1991
 
-- Initialize firstmemblock->next in mem_init in mem.c .  [On most
+- Initialize firstmemblock->next in mem\_init in mem.c .  [On most
   systems it was fortuituously 0, but with System V, -lmalloc could
   trip on this missed initialization.]
 
@@ -2863,10 +3255,13 @@
 - Fix bug in passing the real part of a complex argument to an intrinsic
   function.  Omit unneeded parentheses in nested calls to intrinsics.
   Example:
-  	subroutine foo(x, y)
-  	complex y
-  	x = exp(sin(real(y))) + exp(imag(y))
-  	end
+
+  ```text
+  subroutine foo(x, y)
+  complex y
+  x = exp(sin(real(y))) + exp(imag(y))
+  end
+  ```
 
 ## Sat Feb 16 00:42:32 EST 1991
 
@@ -2893,9 +3288,13 @@
 
 - New option -r casts values of REAL functions, including intrinsics,
   to REAL.  This only matters for unportable code like
-  	real r
-  	r = asin(1.)
-  	if (r .eq. asin(1.)) ...
+
+  ```text
+  real r
+  r = asin(1.)
+  if (r .eq. asin(1.)) ...
+  ```
+
   [The behavior of such code varies with the Fortran compiler used --
   and sometimes is affected by compiler options.]  For now, the man page
   at the end of f2c.ps is the only part of f2c.ps that reflects this new
@@ -2923,7 +3322,7 @@
 
 ## Wed Jan 30 09:49:36 EST 1991
 
-- Fix p1_head to avoid printing (char *)0 with %s.
+- Fix p1\_head to avoid printing (char \*)0 with %s.
 
 ## Wed Jan 30 07:05:32 EST 1991
 
@@ -2945,7 +3344,7 @@
 ## Fri Jan 18 22:56:15 EST 1991
 
 - Add comment to README about needing to comment out the typedef of
-  size_t in sysdep.h on some systems, e.g. Sun 4.1.
+  size\_t in sysdep.h on some systems, e.g. Sun 4.1.
   Fix misspelling of "statement" in an error message in lex.c
 
 ## Tue Jan 15 12:00:24 EST 1991
@@ -2953,10 +3352,14 @@
 - Fix bug when two equivalence groups are merged, the second with
   nonzero offset, and the result is then merged into a common block.
   Example:
+
+  ```text
         INTEGER W(3), X(3), Y(3), Z(3)
         COMMON /ZOT/ Z
         EQUIVALENCE (W(1),X(1)), (X(2),Y(1)), (Z(3),X(1))
-  ***** W WAS GIVEN THE WRONG OFFSET
+  ```
+
+  \*\*\*\*\* W WAS GIVEN THE WRONG OFFSET
   Recognize Fortran 90's optional NML= in NAMELIST READs and WRITEs.
   (Currently NML= and FMT= are treated as synonyms -- there's no
   error message if, e.g., NML= specifies a format.)
@@ -2967,18 +3370,24 @@
 
 - Fix bug under -p with formats and internal I/O "units" in COMMON,
   as in
+
+  ```text
         COMMON /FIGLEA/F
         CHARACTER*20 F
         F = '(A)'
         WRITE (*,FMT=F) 'Hello, world!'
         END
+  ```
 
 ## Wed Dec 19 17:19:26 EST 1990
 
 - Allow generation of C despite error messages about bad alignment
   forced by equivalence.
   Allow variable-length concatenations in I/O statements, such as
-  	open(3, file=bletch(1:n) // '.xyz')
+
+  ```text
+  open(3, file=bletch(1:n) // '.xyz')
+  ```
 
 ## Mon Dec 17 12:26:40 EST 1990
 
@@ -2988,12 +3397,16 @@
 ## Sun Dec 16 23:03:16 EST 1990
 
 - Fix null dereference caused by unusual erroneous input, e.g.
-  	call foo('abc')
-  	end
-  	subroutine foo(msg)
-  	data n/3/
-  	character*(*) msg
-  	end
+
+  ```text
+  call foo('abc')
+  end
+  subroutine foo(msg)
+  data n/3/
+  character*(*) msg
+  end
+  ```
+
   (Subroutine foo is illegal because the character statement comes after a
   data statement.)
   Use decimal rather than hex constants in xsum.c (to prevent
@@ -3007,16 +3420,16 @@
 
 ## Fri Dec  7 18:05:00 EST 1990
 
-- Add more names from f2c.h (e.g. integer, real) to the c_keywords
+- Add more names from f2c.h (e.g. integer, real) to the c\_keywords
   list of names to which an underscore is appended to avoid confusion.
 
 ## Thu Dec  6 08:33:24 EST 1990
 
-- Under -U, render label nnn as L_nnn rather than Lnnn.
+- Under -U, render label nnn as L\_nnn rather than Lnnn.
 
 ## Tue Dec  4 09:48:56 EST 1990
 
-- Remark about link_msg and libf2c added to f2c/README.
+- Remark about link\_msg and libf2c added to f2c/README.
 
 ## Mon Dec  3 07:36:20 EST 1990
 
@@ -3050,14 +3463,14 @@
 
 ## Mon Oct 22 16:11:27 EDT 1990
 
-- libf77: separate sig_die from main (for folks who don't want to use
+- libf77: separate sig\_die from main (for folks who don't want to use
   the main in libF77).
   libi77: minor tweak to comments in README.
 
 ## Wed Oct 17 16:40:37 EDT 1990
 
-- libf77, libi77: minor cleanups: _cleanup() and abort() invocations
-  replaced by invocations of sig_die in main.c; some error messages
+- libf77, libi77: minor cleanups: \_cleanup() and abort() invocations
+  replaced by invocations of sig\_die in main.c; some error messages
   previously lost in buffers will now appear.
 
 ## Mon Oct 15 20:02:11 EDT 1990
@@ -3068,12 +3481,12 @@
 ## Thu Oct 11 18:00:14 EDT 1990
 
 - libi77: minor cleanups: add #include "fcntl.h" to endfile.c, err.c,
-  open.c; adjust g_char in util.c for segmented memories; in f_inqu
+  open.c; adjust g\_char in util.c for segmented memories; in f\_inqu
   (inquire.c), define x appropriately when MSDOS is defined.
 
 ## Tue Oct  2 22:58:09 EDT 1990
 
-- libf77: test signal(...) == SIG_IGN rather than & 01 in main().
+- libf77: test signal(...) == SIG\_IGN rather than & 01 in main().
   libi77: adjust rewind.c so two successive rewinds after a write
   don't clobber the file.
 
@@ -3084,19 +3497,20 @@
 
 ## Tue Sep 18 23:50:01 EDT 1990
 
-- Fix null dereference (and, on some systems, writing of bogus *_com.c
-  files) under -ec or -e1c when a prototype file (*.p or *.P) describes
+- Fix null dereference (and, on some systems, writing of bogus \*\_com.c
+  files) under -ec or -e1c when a prototype file (\*.p or \*.P) describes
   COMMON blocks that do not appear in the Fortran source.
   libi77:
-      Add some #ifdef lines (#ifdef MSDOS, #ifndef MSDOS) to avoid
-  references to stat and fstat on non-UNIX systems.
-      On UNIX systems, add component udev to unit; decide that old
-  and new files are the same iff both the uinode and udev components
-  of unit agree.
-      When an open stmt specifies STATUS='OLD', use stat rather than
-  access (on UNIX systems) to check the existence of the file (in case
-  directories leading to the file have funny permissions and this is
-  a setuid or setgid program).
+
+  - Add some #ifdef lines (#ifdef MSDOS, #ifndef MSDOS) to avoid
+    references to stat and fstat on non-UNIX systems.
+  - On UNIX systems, add component udev to unit; decide that old
+    and new files are the same iff both the uinode and udev components
+    of unit agree.
+  - When an open stmt specifies STATUS='OLD', use stat rather than
+    access (on UNIX systems) to check the existence of the file (in case
+    directories leading to the file have funny permissions and this is
+    a setuid or setgid program).
 
 ## Fri Sep  7 13:55:34 EDT 1990
 
@@ -3104,7 +3518,7 @@
 
 ## Tue Sep  4 12:30:57 EDT 1990
 
-- Fix bug in C emitted under -I2 or -i2 for INTEGER*4 FUNCTION.
+- Fix bug in C emitted under -I2 or -i2 for INTEGER\*4 FUNCTION.
   Warn of missing final END even if there are previous errors.
 
 ## Thu Aug 30 09:46:12 EDT 1990
@@ -3134,15 +3548,22 @@
 ## Thu Aug  2 02:07:58 EDT 1990
 
 - f2c.ps: change the first line of page 5 from
-  	include stuff
+
+  ```text
+  include stuff
+  ```
+
   to
-  	include 'stuff'
+
+  ```text
+  include 'stuff'
+  ```
 
 ## Thu Jul 26 11:09:39 EDT 1990
 
 - Remarks about VOID and binread,binwrite added to README.
-  Tweaks to parse_args: should be invisible unless your compiler
-  complained at (short)*store.
+  Tweaks to parse\_args: should be invisible unless your compiler
+  complained at (short)\*store.
 
 ## Fri Jul 20 09:17:30 EDT 1990
 
@@ -3179,7 +3600,7 @@
 
 ## Wed Jun 13 12:43:17 EDT 1990
 
-- Under -A, supply a missing "[1]" for CHARACTER*1 variables that appear
+- Under -A, supply a missing "[1]" for CHARACTER\*1 variables that appear
   both in a DATA statement and in either COMMON or EQUIVALENCE.
 
 ## Mon Jun  4 12:53:08 EDT 1990
@@ -3202,6 +3623,8 @@
 - Fix further obscure bug with (default) -it: inconsistent calling
   sequences and I/O statements could interact to cause a memory fault.
   Example:
+
+  ```text
         SUBROUTINE FOO
         CALL GOO(' Something') ! Forgot integer first arg
         END
@@ -3209,6 +3632,7 @@
         CHARACTER*(*)MSG
         WRITE(IUNIT,'(1X,A)') MSG
         END
+  ```
 
 ## Sun May  6 01:29:07 EDT 1990
 
@@ -3218,12 +3642,16 @@
 ## Sat May  5 01:45:18 EDT 1990
 
 - Fix type inference bug in
-  	subroutine foo(x)
-  	call goo(x)
-  	end
-  	subroutine goo(i)
-  	i = 3
-  	end
+
+  ```text
+  subroutine foo(x)
+  call goo(x)
+  end
+  subroutine goo(i)
+  i = 3
+  end
+  ```
+
   Instead of warning of inconsistent calling sequences for goo,
   f2c was simply making i a real variable; now i is correctly
   typed as an integer variable, and f2c issues an error message.
@@ -3245,12 +3673,16 @@
 ## Sat Apr 28 23:20:16 EDT 1990
 
 - Fix control-stack bug in
-  	if(...) then
-  	else if (complicated condition)
-  	else
-  	endif
+
+  ```text
+  if(...) then
+  else if (complicated condition)
+  else
+  endif
+  ```
+
   (where the complicated condition causes assignment to an auxiliary
-  variable, e.g., max(a*b,c)).
+  variable, e.g., max(a\*b,c)).
 
 ## Fri Apr 27 13:11:52 EDT 1990
 
@@ -3266,7 +3698,7 @@
 
 - When producing default-style C (no -A or -C++), cast switch
   expressions to (int).
-  Move "-lF77 -lI77 -lm -lc" to link_msg, defined in sysdep.c .
+  Move "-lF77 -lI77 -lm -lc" to link\_msg, defined in sysdep.c .
   Add #define scrub(x) to sysdep.h, with invocations in format.c and
   formatdata.c, so that people who have systems like VMS that would
   otherwise create multiple versions of intermediate files can
@@ -3285,7 +3717,7 @@
   New option -!bs turns off recognition of escapes in character strings
   (\0, \\, \b, \f, \n, \r, \t, \v).
   Move to sysdep.c initialization of some arrays whose initialization
-  assumed ASCII; #define Table_size in sysdep.h rather than using
+  assumed ASCII; #define Table\_size in sysdep.h rather than using
   hard-coded 256 in allocating arrays of size 1 << (bits/byte).
 
 ## Wed Apr 18 00:56:37 EDT 1990
@@ -3316,13 +3748,24 @@
   characters in character and string constants.
   Fix bug (when neither -A nor -C++ was specified) in typing of
   external arguments of type complex, double complex, or character:
-  	subroutine foo(c)
-  	external c
-  	complex c
+
+  ```text
+  subroutine foo(c)
+  external c
+  complex c
+  ```
+
   now results in
-  	/* Complex */ int (*c) ();
+
+  ```text
+  /* Complex */ int (*c) ();
+  ```
+
   (as, indeed, it once did) rather than
-  	complex (*c) ();
+
+  ```text
+  complex (*c) ();
+  ```
 
 ## Wed Apr 11 18:27:12 EDT 1990
 
@@ -3352,26 +3795,33 @@
   boundaries where possible.
   Repair a bug that could cause improper splitting of strings.
   Fix bug (cast of c to doublereal) in
-  	subroutine foo(c,r)
-  	double complex c
-  	double precision r
-  	c = cmplx(r,real(c))
-  	end
+
+  ```text
+  subroutine foo(c,r)
+  double complex c
+  double precision r
+  c = cmplx(r,real(c))
+  end
+  ```
+
   New include file "sysdep.h" has some things from defs.h (and
   elsewhere) that one may need to modify on some systems.
   Some large arrays that were previously statically allocated are now
   dynamically allocated when f2c starts running.
   f2c/src files changed:
-  	README cds.c defs.h f2c.1 f2c.1t format.c formatdata.c init.c
-  	io.c lex.c main.c makefile mem.c misc.c names.c niceprintf.c
-  	output.c parse_args.c pread.c put.c putpcc.c sysdep.h
-  	version.c xsum0.out
+
+  ```text
+  README cds.c defs.h f2c.1 f2c.1t format.c formatdata.c init.c
+  io.c lex.c main.c makefile mem.c misc.c names.c niceprintf.c
+  output.c parse_args.c pread.c put.c putpcc.c sysdep.h
+  version.c xsum0.out
+  ```
 
 ## Fri Apr  6 08:29:49 EDT 1990
 
 - Calls involving alternate return specifiers omitted processing
   needed for things like min, max, abs, and // (concatenation).
-  INTEGER*2 PARAMETERs were treated as INTEGER*4.
+  INTEGER\*2 PARAMETERs were treated as INTEGER\*4.
   Convert some O(n^2) parsing to O(n).
 
 ## Sun Apr  1 16:20:58 EDT 1990
@@ -3385,17 +3835,23 @@
 ## Wed Mar 28 01:43:06 EST 1990
 
 - libI77:
+
   1. Repair nasty I/O bug: opening two files and closing the first
-  (after possibly reading or writing it), then writing the second caused
-  the last buffer of the second to be lost.
+     (after possibly reading or writing it), then writing the second caused
+     the last buffer of the second to be lost.
   2. Formatted reads of logical values treated all letters other than
-  t or T as f (false).
+     t or T as f (false).
+
   libI77 files changed: err.c rdfmt.c Version.c
   (Request "libi77 from f2c" -- you can't get these files individually.)
 
   f2c itself:
   Repair nasty bug in translation of
-  	ELSE IF (condition involving complicated abs, min, or max)
+
+  ```text
+  ELSE IF (condition involving complicated abs, min, or max)
+  ```
+
   -- auxiliary statements were emitted at the wrong place.
   Supply semicolon previously omitted from the translation of a label
   (of a CONTINUE) immediately preceding an ELSE IF or an ELSE.  This
@@ -3405,7 +3861,7 @@
   Minor tweaks to remove some harmless warnings by overly chatty C
   compilers.
   Argument arays having constant dimensions but a variable lower bound
-  (e.g., x(n+1:n+3)) had a * omitted from scalar arguments involved in
+  (e.g., x(n+1:n+3)) had a \* omitted from scalar arguments involved in
   the array offset computation.
 
 ## Mon Feb 26 17:45:10 EST 1990
@@ -3432,15 +3888,23 @@
   parameter adjustments with if's (for the case that an array is not
   an argument to all entrypoints).
   Under -u, allow
-  	subroutine foo(x,n)
-  	real x(n)
-  	integer n
+
+  ```text
+  subroutine foo(x,n)
+  real x(n)
+  integer n
+  ```
+
   Compute intermediate variables used to evaluate dimension expressions
   at the right time.  Example previously mistranslated:
-  	subroutine foo(x,k,m,n)
-  	real x(min(k,m,n))
-  	...
-  	write(*,*) x
+
+  ```text
+  subroutine foo(x,k,m,n)
+  real x(min(k,m,n))
+  ...
+  write(*,*) x
+  ```
+
   Detect duplicate arguments.  (The error msg points to the first
   executable stmt -- not wonderful, but not worth fixing.)
   Minor cleanup of min/max computation (sometimes slightly simpler).
@@ -3454,7 +3918,7 @@
 
 - Minor cleanups for the benefit of EBCDIC machines -- try to remove
   the assumption that 'a' through 'z' are contiguous.  (Thanks again to
-  Gary Word.)  Also, change log2 to log_2 (shouldn't be necessary).
+  Gary Word.)  Also, change log2 to log\_2 (shouldn't be necessary).
 
 ## Tue Feb 20 16:10:35 EST 1990
 
@@ -3468,12 +3932,12 @@
 
 - Detect overlapping initializations of arrays and scalar variables
   in previously missed cases.
-  Treat logical*2 as logical (after issuing a warning).
-  Don't pass string literals to p1_comment().
+  Treat logical\*2 as logical (after issuing a warning).
+  Don't pass string literals to p1\_comment().
   Correct a cast (introduced 16 Feb.) in gram.expr; this matters e.g.
   on a Cray.
   Attempt to isolate UNIX-specific things in sysdep.c (a new source
-  file).  Unless sysdep.c is compiled with SYSTEM_SORT defined, the
+  file).  Unless sysdep.c is compiled with SYSTEM\_SORT defined, the
   intermediate files created for DATA statements are now sorted in-core
   without invoking system().
 
@@ -3481,7 +3945,7 @@
 
 - Fix infinite loop clf -> Fatal -> done -> clf after I/O error.
   Change "if (addrp->vclass = CLPROC)" to "if (addrp->vclass == CLPROC)"
-  in p1_addr (in p1output.c); this was probably harmless.
+  in p1\_addr (in p1output.c); this was probably harmless.
   Move a misplaced } in lex.c (which slowed initkey()).
   Thanks to Gary Word for pointing these things out.
 
@@ -3525,17 +3989,21 @@
 ## Feb 9 01:35:43 EST 1990
 
 - Fix erroneous error msg about bad types in
-  	subroutine foo(a,adim)
-  	dimension a(adim)
-  	integer adim
+
+  ```text
+  subroutine foo(a,adim)
+  dimension a(adim)
+  integer adim
+  ```
+
   Fix improper passing of character args (and possible memory fault)
   in the expression part of a computed goto.
   Fix botched calling sequences in array references involving
   functions having character args.
   Fix memory fault caused by invocation of character-valued functions
   of no arguments.
-  Fix botched calling sequence of a character*1-valued function
-  assigned to a character*1 variable.
+  Fix botched calling sequence of a character\*1-valued function
+  assigned to a character\*1 variable.
   Fix bug in error msg for inconsistent number of args in prototypes.
   Allow generation of C output despite inconsistencies in prototypes,
   but give exit code 8.
@@ -3547,7 +4015,7 @@
 ## Feb 3 03:49:00 EST 1990
 
 - Repair memory fault that arose from use (in an assignment or
-  call) of a non-argument variable declared CHARACTER*(*).
+  call) of a non-argument variable declared CHARACTER\*(\*).
 
 ## Feb 3 01:40:00 EST 1990
 
@@ -3581,9 +4049,17 @@
 ## Jan 29 14:17:00 EST 1990
 
 - Incorrect handling of
-  	open(n,'filename')
+
+  ```text
+  open(n,'filename')
+  ```
+
   repaired -- now treated as
-  	open(n,file='filename')
+
+  ```text
+  open(n,file='filename')
+  ```
+
   (and, under -ext, given an error message).
   New optional source file memset.c for people whose systems don't
   provide memset, memcmp, and memcpy; #include <string.h> in mem.c
@@ -3601,8 +4077,9 @@
   -it now also applies to all untyped EXTERNAL procedures, not just
   arguments.
 
-  23 Jan. 01:34:00 EST 1990:
-  Bug fixes: under -A and -C++, incorrect C was generated for
+### 23 Jan. 01:34:00 EST 1990:
+
+- Bug fixes: under -A and -C++, incorrect C was generated for
   subroutines having multiple entries but no arguments.
   Under -A -P, subroutines of no arguments were given prototype
   calling sequence () rather than (void).
@@ -3615,16 +4092,18 @@
   -man lacks it.  (For a while after yesterday's fixes were posted,
   f2c.1t was out of date.  Sorry!)
 
-  23 Jan. 9:53:24 EST 1990:
-  Character substring expressions involving function calls having
+### 23 Jan. 9:53:24 EST 1990:
+
+- Character substring expressions involving function calls having
   character arguments (including the intrinsic len function) yielded
   incorrect C.
   Procedures defined after invocation (in the same file) with
   conflicting argument types also got an erroneous message about
   the wrong number of arguments.
 
-  24 Jan. 11:44:00 EST 1990:
-  Bug fixes: -p omitted #undefs; COMMON block names containing
+### 24 Jan. 11:44:00 EST 1990:
+
+- Bug fixes: -p omitted #undefs; COMMON block names containing
   underscores had their C names incorrectly computed; a COMMON block
   having the name of a previously defined procedure wreaked havoc;
   if all arguments were .P files, f2c tried reading the second as a
@@ -3632,14 +4111,15 @@
   New feature: -P emits comments showing COMMON block lengths, so one
   can get warnings of incompatible COMMON block lengths by having f2c
   read .P (or .p) files.  Now by running f2c twice, first with -P -!c
-  (or -P!c),  then with *.P among the arguments, you can be warned of
+  (or -P!c),  then with \*.P among the arguments, you can be warned of
   inconsistent COMMON usage, and COMMON blocks having inconsistent
   lengths will be given the maximum length.  (The latter always did
   happen within each input file; now -P lets you extend this behavior
   across files.)
 
-  26 Jan. 16:44:00 EST 1990:
-  Option -it made less aggressive: untyped external procedures that
+### 26 Jan. 16:44:00 EST 1990:
+
+- Option -it made less aggressive: untyped external procedures that
   are invoked are now typed by the rules of Fortran, rather than by
   previous use of procedures to which they are passed as arguments
   before being invoked.
@@ -3648,32 +4128,36 @@
   This allows iterative invocations of f2c to infer more about untyped
   external names, particularly when multiple Fortran files are involved.
   As usual, there are some obscure bug fixes:
-  1.  Repair of erroneous warning messages about inconsistent number of
-  arguments that arose when a character dummy parameter was discovered
-  to be a function or when multiple entry points involved character
-  variables appearing in a previous entry point.
-  2.  Repair of memory fault after error msg about "adjustable character
-  function".
-  3.  Under -U, allow MAIN_ as a subroutine name (in the same file as a
-  main program).
-  4.  Change for consistency: a known function invoked as a subroutine,
-  then as a function elicits a warning rather than an error.
 
-  26 Jan. 22:32:00 EST 1990:
-  Fixed two bugs that resulted in incorrect C for substrings, within
+  1.  Repair of erroneous warning messages about inconsistent number of
+      arguments that arose when a character dummy parameter was discovered
+      to be a function or when multiple entry points involved character
+      variables appearing in a previous entry point.
+  2.  Repair of memory fault after error msg about "adjustable character
+      function".
+  3.  Under -U, allow MAIN\_ as a subroutine name (in the same file as a
+      main program).
+  4.  Change for consistency: a known function invoked as a subroutine,
+      then as a function elicits a warning rather than an error.
+
+### 26 Jan. 22:32:00 EST 1990:
+
+- Fixed two bugs that resulted in incorrect C for substrings, within
   the body of a character-valued function, of the function's name, when
   those substrings were arguments to another function (even implicitly,
   as in character-string assignment).
 
-  28 Jan. 18:32:00 EST 1990:
-  libf77, libi77: checksum files added; "make check" looks for
+### 28 Jan. 18:32:00 EST 1990:
+
+- libf77, libi77: checksum files added; "make check" looks for
   transmission errors.  NAMELIST read modified to allow $ rather than &
   to precede a namelist name, to allow $ rather than / to terminate
   input where the name of another variable would otherwise be expected,
   and to regard all nonprinting ASCII characters <= ' ' as spaces.
 
-  29 Jan. 02:11:00 EST 1990:
-  "fc from f2c" added.
+### 29 Jan. 02:11:00 EST 1990:
+
+- "fc from f2c" added.
   -it option made the default; -!it turns it off.  Type information is
   now updated in a previously missed case.
   -P option tweaked again; message about when rerunning f2c may change
@@ -3682,14 +4166,16 @@
   f2c -P with prototype inputs might change prototypes or declarations.
   Now you can execute a crude script like
 
-  	cat *.f >zap.F
-  	rm -f zap.P
-  	while :; do
-  		f2c -Ps -!c zap.[FP]
-  		case $? in 4) ;; *) break;; esac
-  		done
+  ```text
+  cat *.f >zap.F
+  rm -f zap.P
+  while :; do
+      f2c -Ps -!c zap.[FP]
+      case $? in 4) ;; *) break;; esac
+      done
+  ```
 
-  to get a file zap.P of the best prototypes f2c can determine for *.f .
+  to get a file zap.P of the best prototypes f2c can determine for \*.f .
 
 ## 21 Jan. 1990
 
@@ -3711,8 +4197,12 @@
   now f2c.1t; "f2c.1t from f2c" and "f2c.1t from f2c/src" are now the
   same, as are "f2c.1 from f2c" and "f2c.1 from f2c/src".  People who
   do not obtain a new copy of "all from f2c/src" should at least add
-  	fclose(sortfp);
-  after the call on do_init_data(outfile, sortfp) in format_data.c .
+
+  ```text
+  fclose(sortfp);
+  ```
+
+  after the call on do\_init\_data(outfile, sortfp) in format\_data.c .
 
 ## 17 Jan. 1990
 
@@ -3747,8 +4237,12 @@
   that it makes automatic.  (As before, it also excludes variables
   that appear in a common, data, equivalence, or save statement.)
   The syntactically correct Fortran
-  	read(*,i) x
-  	end
+
+  ```text
+  read(*,i) x
+  end
+  ```
+
   now yields syntactically correct C (even though both the Fortran
   and C are buggy -- no FORMAT has not been ASSIGNed to i).
 
@@ -3782,7 +4276,7 @@
 
 - f2c.h libf77 libi77: adjusted so #undefs in f2c.h should not foil
   compilation of libF77 and libI77.
-  libf77: getenv_ adjusted to work with unsorted environments.
+  libf77: getenv\_ adjusted to work with unsorted environments.
   libi77: the iostat= specifier should now work right with internal I/O.
 
 ## 15 Dec. 1989
@@ -3866,8 +4360,9 @@
 ## 28 Nov. 1989
 
 - libi77 updated:
-  	1. Allow 3 (or, on Crays, 4) digit exponents under format Ew.d .
-  	2. Try to get things right on machines where ints have 16 bits.
+
+  1. Allow 3 (or, on Crays, 4) digit exponents under format Ew.d .
+  2. Try to get things right on machines where ints have 16 bits.
 
 ## 26 Nov. 1989
 
@@ -3879,13 +4374,21 @@
 
 - Workarounds for glitches on some Sun systems...
   libf77: libF77/makefile modified to point out possible need
-  to compile libF77/main.c with -Donexit=on_exit .
+  to compile libF77/main.c with -Donexit=on\_exit .
   libi77: libI77/wref.c (and libI77/README) modified so non-ANSI
-  systems can compile with USE_STRLEN defined, which will cause
-  	sprintf(b = buf, "%#.*f", d, x);
-  	n = strlen(b) + d1;
+  systems can compile with USE\_STRLEN defined, which will cause
+
+  ```text
+  sprintf(b = buf, "%#.*f", d, x);
+  n = strlen(b) + d1;
+  ```
+
   rather than
-  	n = sprintf(b = buf, "%#.*f", d, x) + d1;
+
+  ```text
+  n = sprintf(b = buf, "%#.*f", d, x) + d1;
+  ```
+
   to be compiled.
 
 ## 19 Nov. 1989
@@ -3897,45 +4400,55 @@
   large as long int allows on the machine on which f2c runs).
   Thus, for example, the body of
 
-  	subroutine zot(x)
-  	double precision x(6), pi
-  	parameter (pi=3.1415926535897932384626433832795028841972)
-  	x(1) = pi
-  	x(2) = pi+1
-  	x(3) = 9287349823749272.7429874923740978492734D-298374
-  	x(4) = .89
-  	x(5) = 4.0005
-  	x(6) = 10D7
-  	end
+  ```text
+  subroutine zot(x)
+  double precision x(6), pi
+  parameter (pi=3.1415926535897932384626433832795028841972)
+  x(1) = pi
+  x(2) = pi+1
+  x(3) = 9287349823749272.7429874923740978492734D-298374
+  x(4) = .89
+  x(5) = 4.0005
+  x(6) = 10D7
+  end
+  ```
 
   now gets translated into
 
+  ```text
       x[1] = 3.1415926535897932384626433832795028841972;
       x[2] = 4.1415926535897931;
       x[3] = 9.2873498237492727429874923740978492734e-298359;
       x[4] = (float).89;
       x[5] = (float)4.0005;
       x[6] = 1e8;
+  ```
 
   rather than the former
 
+  ```text
       x[1] = 3.1415926535897931;
       x[2] = 4.1415926535897931;
       x[3] = 0.;
       x[4] = (float)0.89000000000000003;
       x[5] = (float)4.0004999999999997;
       x[6] = 100000000.;
+  ```
 
   Recognition of f77 machine-constant intrinsics deleted, i.e.,
   epbase, epprec, epemin, epemax, eptiny, ephuge, epmrsp.
 
 ## 13 Nov. 1989
 
-- Name integer constants (passed as arguments) c__... rather
-  than c_... so
-  	common /c/stuff
-  	call foo(1)
-  	...
+- Name integer constants (passed as arguments) c\_\_... rather
+  than c\_... so
+
+  ```text
+  common /c/stuff
+  call foo(1)
+  ...
+  ```
+
   is translated correctly.
 
 ## 28 Oct. 1989
@@ -3950,15 +4463,15 @@
   -E causes uninitialized COMMON blocks to be declared Extern;
   if Extern is undefined, f2c.h #defines it to be extern.
   -ec causes a separate .c file to be emitted for each
-  uninitialized COMMON block: COMMON /ABC/ yields abc_com.c;
-  thus one can compile *_com.c into a library to ensure
+  uninitialized COMMON block: COMMON /ABC/ yields abc\_com.c;
+  thus one can compile \*\_com.c into a library to ensure
   precisely one definition.
   -e1c is similar to -ec, except that everything goes into
   one file, along with comments that give a sed script for
   splitting the file into the pieces that -ec would give.
   This is for use with netlib's "execute f2c" service (for which
   -ec is coerced into -e1c, and the sed script will put everything
-  but the COMMON definitions into f2c_out.c ).
+  but the COMMON definitions into f2c\_out.c ).
 
 ## 10 Oct. 1989
 
@@ -4030,11 +4543,13 @@
   (in violation of the Fortran 77 standard) before it is invoked.
   Example:
 
-  	subroutine foo(a,b)
-  	character*10 a,b
-  	call goo(a,b)
-  	b = a(3)
-  	end
+  ```text
+  subroutine foo(a,b)
+  character*10 a,b
+  call goo(a,b)
+  b = a(3)
+  end
+  ```
 
 ## 5 Sept. 1989
 
@@ -4043,11 +4558,11 @@
 
 ## 31 Aug. 1989
 
-- 1. A(min(i,j)) now is translated correctly (where A is an array).
-  2. 7 and 8 character variable names are allowed (but elicit a
-        complaint under -ext).
-  3. LOGICAL*1 is treated as LOGICAL, with just one error message
-        per LOGICAL*1 statement (rather than one per variable declared
-        in that statement).  [Note that LOGICAL*1 is not in Fortran 77.]
-        Like f77, f2c now allows the format in a read or write statement
-        to be an integer array.
+1. A(min(i,j)) now is translated correctly (where A is an array).
+2. 7 and 8 character variable names are allowed (but elicit a
+   complaint under -ext).
+3. LOGICAL\*1 is treated as LOGICAL, with just one error message
+   per LOGICAL\*1 statement (rather than one per variable declared
+   in that statement).  [Note that LOGICAL\*1 is not in Fortran 77.]
+   Like f77, f2c now allows the format in a read or write statement
+   to be an integer array.
