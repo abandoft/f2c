@@ -704,29 +704,50 @@ if(NOT deferred_generated_output STREQUAL "5 65 69 0 3 1 1 1 5 0 1 0 0 1 11 55 7
             "generated deferred CHARACTER semantics are incorrect: '${deferred_generated_output}'")
 endif()
 if(F2C_GFORTRAN)
-    set(deferred_native_executable "${BINARY_DIR}/native_deferred_character_test")
+    set(move_alloc_probe "${BINARY_DIR}/move_alloc_stat_probe.f90")
+    set(move_alloc_probe_object "${BINARY_DIR}/move_alloc_stat_probe.o")
+    file(WRITE "${move_alloc_probe}"
+         "program move_alloc_stat_probe\n"
+         "  integer, allocatable :: from(:), to(:)\n"
+         "  integer :: status\n"
+         "  character(len=32) :: message\n"
+         "  allocate(from(1))\n"
+         "  call move_alloc(from, to, stat=status, errmsg=message)\n"
+         "end program move_alloc_stat_probe\n")
     execute_process(
         COMMAND "${F2C_GFORTRAN}" -std=f2018 -Wall -Wextra -Werror
+                -c "${move_alloc_probe}" -o "${move_alloc_probe_object}"
+        RESULT_VARIABLE move_alloc_probe_status
+        OUTPUT_VARIABLE move_alloc_probe_output
+        ERROR_VARIABLE move_alloc_probe_error)
+    if(move_alloc_probe_status EQUAL 0)
+        set(deferred_native_executable "${BINARY_DIR}/native_deferred_character_test")
+        execute_process(
+            COMMAND "${F2C_GFORTRAN}" -std=f2018 -Wall -Wextra -Werror
                 "${SOURCE_DIR}/test/fixtures/deferred_character.f90"
                 "${SOURCE_DIR}/test/fixtures/deferred_character_driver.f90"
                 -o "${deferred_native_executable}"
-        RESULT_VARIABLE deferred_native_compile_status
-        OUTPUT_VARIABLE deferred_native_compile_output
-        ERROR_VARIABLE deferred_native_compile_error)
-    if(NOT deferred_native_compile_status EQUAL 0)
-        message(FATAL_ERROR
-                "native deferred CHARACTER oracle did not compile: ${deferred_native_compile_error}${deferred_native_compile_output}")
-    endif()
-    execute_process(
-        COMMAND "${deferred_native_executable}"
-        RESULT_VARIABLE deferred_native_run_status
-        OUTPUT_VARIABLE deferred_native_output)
-    if(NOT deferred_native_run_status EQUAL 0)
-        message(FATAL_ERROR "native deferred CHARACTER oracle failed")
-    endif()
-    if(NOT deferred_generated_output STREQUAL deferred_native_output)
-        message(FATAL_ERROR
-                "generated/native deferred CHARACTER differential mismatch: generated='${deferred_generated_output}' native='${deferred_native_output}'")
+            RESULT_VARIABLE deferred_native_compile_status
+            OUTPUT_VARIABLE deferred_native_compile_output
+            ERROR_VARIABLE deferred_native_compile_error)
+        if(NOT deferred_native_compile_status EQUAL 0)
+            message(FATAL_ERROR
+                    "native deferred CHARACTER oracle did not compile: ${deferred_native_compile_error}${deferred_native_compile_output}")
+        endif()
+        execute_process(
+            COMMAND "${deferred_native_executable}"
+            RESULT_VARIABLE deferred_native_run_status
+            OUTPUT_VARIABLE deferred_native_output)
+        if(NOT deferred_native_run_status EQUAL 0)
+            message(FATAL_ERROR "native deferred CHARACTER oracle failed")
+        endif()
+        if(NOT deferred_generated_output STREQUAL deferred_native_output)
+            message(FATAL_ERROR
+                    "generated/native deferred CHARACTER differential mismatch: generated='${deferred_generated_output}' native='${deferred_native_output}'")
+        endif()
+    else()
+        message(STATUS
+                "Skipping native deferred CHARACTER oracle: ${F2C_GFORTRAN} lacks MOVE_ALLOC STAT=/ERRMSG= support")
     endif()
 endif()
 

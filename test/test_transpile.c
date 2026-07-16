@@ -89,8 +89,8 @@ static void test_blas_style_subroutine(void) {
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "BLAS-style subroutine translates without errors");
     expect_contains(result.code, "void daxpy(", "SUBROUTINE maps to a void function");
-    expect_contains(result.code, "const int32_t *F2C_RESTRICT n",
-                    "INTENT(IN) scalar uses a const, non-aliasing reference");
+    expect_contains(result.code, "const int32_t *n",
+                    "INTENT(IN) scalar uses a const, alias-safe reference");
     expect_contains(result.code, "const double *F2C_RESTRICT dx",
                     "input array uses a qualified pointer");
     expect_contains(result.code, "dy[(((int32_t)(iy)) - (1))]",
@@ -180,7 +180,7 @@ static void test_function_result_and_power(void) {
     F2cOptions options = {"function.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "typed function translates without errors");
-    expect_contains(result.code, "double square_plus(const double *F2C_RESTRICT x)",
+    expect_contains(result.code, "double square_plus(const double *x)",
                     "typed function signature is retained");
     expect_contains(result.code, "f2c_result =", "RESULT variable maps to a clear C name");
     expect_contains(result.code, "f2c_square_d((*x))",
@@ -225,14 +225,14 @@ static void test_character_and_external_interface(void) {
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "character arguments and external function translate");
     expect_contains(result.code,
-                    "int32_t same_letter(char *F2C_RESTRICT left, char *F2C_RESTRICT right, "
+                    "int32_t same_letter(char *left, char *right, "
                     "size_t f2c_len_left, size_t f2c_len_right)",
                     "assumed-length CHARACTER arguments expose explicit trailing lengths");
     expect_contains(result.code, "extern int32_t lsame(char *, char *, size_t, size_t);",
                     "external character interface includes strict hidden-length parameters");
     expect_contains(result.code, "lsame(left, right, f2c_len_left, f2c_len_right)",
                     "spaced assumed-length CHARACTER propagates actual lengths");
-    expect_contains(result.code, "void forward_fixed(char *F2C_RESTRICT name, size_t f2c_len_name)",
+    expect_contains(result.code, "void forward_fixed(char *name, size_t f2c_len_name)",
                     "fixed-length character dummies retain ABI actual-length parameters");
     expect_contains(result.code, "char path[(3) + 1]",
                     "spaced CHARACTER(LEN=...) selector retains its explicit length");
@@ -324,7 +324,7 @@ static void test_preprocessed_lapack_isnan_module(void) {
     F2cOptions options = {"la_xisnan.F90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "LAPACK preprocessed module function translates");
-    expect_contains(result.code, "int32_t sisnan(float *F2C_RESTRICT x)",
+    expect_contains(result.code, "int32_t sisnan(float *x)",
                     "module-contained function becomes a C function");
     expect_contains(result.code, "isnan((*x))",
                     "upper-case LAPACK feature macro selects the supported intrinsic branch");
@@ -429,7 +429,7 @@ static void test_allocatable_dummy_descriptor_abi(void) {
            "ALLOCATABLE dummy arguments translate through a descriptor ABI");
     expect_contains(result.code,
                     "void resize(f2c_descriptor *f2c_descriptor_values, "
-                    "const int32_t *F2C_RESTRICT n)",
+                    "const int32_t *n)",
                     "ALLOCATABLE dummy signature carries data, rank, bounds, and extents");
     expect_contains(result.code, "f2c_descriptor_values->data = values;",
                     "callee writes allocation state back to its caller descriptor");
@@ -461,7 +461,7 @@ static void test_allocatable_function_result_descriptor(void) {
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
     expect(result.error_count == 0U,
            "ALLOCATABLE function results translate as owned descriptor values");
-    expect_contains(result.code, "f2c_descriptor make_values(const int32_t *F2C_RESTRICT n)",
+    expect_contains(result.code, "f2c_descriptor make_values(const int32_t *n)",
                     "ALLOCATABLE result ABI returns ownership and shape in one C value");
     expect_contains(result.code, "f2c_result_descriptor.data = f2c_result;",
                     "function commits its allocated result storage into the result descriptor");
@@ -738,15 +738,15 @@ static void test_project_procedure_registry(void) {
         {definition, sizeof(definition) - 1U, {"definition.f90", F2C_SOURCE_FREE, 0}}};
     F2cResult result = f2c_transpile_project(inputs, 2U);
     expect(result.error_count == 0U, "project inputs share a resolved procedure registry");
-    expect_contains(result.code, "double resolved(const double *F2C_RESTRICT value);",
+    expect_contains(result.code, "double resolved(const double *value);",
                     "project registry emits the definition's exact interface before callers");
     expect_contains(result.code, "= resolved(value);",
                     "cross-file function calls retain the resolved return type");
     expect_contains(result.header, "#ifndef F2C_GENERATED_INTERFACE_",
                     "project translation emits a guarded shared interface header");
-    expect_contains(result.header, "void invoke(double *F2C_RESTRICT value);",
+    expect_contains(result.header, "void invoke(double *value);",
                     "shared interface header declares project subroutines");
-    expect_contains(result.header, "double resolved(const double *F2C_RESTRICT value);",
+    expect_contains(result.header, "double resolved(const double *value);",
                     "shared interface header preserves resolved const-qualified signatures");
     f2c_result_free(&result);
 
@@ -807,8 +807,7 @@ static void test_project_interface_semantics(void) {
         expect(result.error_count == 0U,
                "project interface validation accepts matching type, rank, and spaced INTENT");
         expect_contains(result.header,
-                        "void update(float *F2C_RESTRICT values, "
-                        "const int32_t *F2C_RESTRICT count);",
+                        "void update(float *F2C_RESTRICT values, const int32_t *count);",
                         "resolved project interface preserves rank and INTENT(IN) ABI metadata");
         f2c_result_free(&result);
     }
@@ -1675,7 +1674,7 @@ static void test_local_kind_parameter_semantics(void) {
     F2cOptions options = {"kind_parameter.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "local KIND parameter expressions translate");
-    expect_contains(result.code, "double scaled_norm(double *F2C_RESTRICT x)",
+    expect_contains(result.code, "double scaled_norm(double *x)",
                     "REAL(wp) declarations inherit the KIND expression precision");
     expect_contains(result.code, "DBL_MIN_EXP",
                     "kind-suffixed model arguments select double-precision limits");
@@ -1685,13 +1684,13 @@ static void test_local_kind_parameter_semantics(void) {
            "double KIND parameters never use a float model argument");
     expect(result.code == NULL || strstr(result.code, "powf(") == NULL,
            "double KIND parameters never select single-precision libm calls");
-    expect_contains(result.code, "float narrow_to_default(double *F2C_RESTRICT x)",
+    expect_contains(result.code, "float narrow_to_default(double *x)",
                     "REAL without a KIND argument returns default REAL");
     expect_contains(result.code, "f2c_result = ((float)((*x)))",
                     "REAL without KIND explicitly narrows double precision");
-    expect_contains(result.code, "void iso_kind_value(double *F2C_RESTRICT x)",
+    expect_contains(result.code, "void iso_kind_value(double *x)",
                     "ISO_FORTRAN_ENV kind aliases retain double precision");
-    expect_contains(result.code, "double double_complex_part(double complex *F2C_RESTRICT z)",
+    expect_contains(result.code, "double double_complex_part(double complex *z)",
                     "REAL preserves a double-complex component kind");
     expect_contains(result.code, "((double)creal((*z)))",
                     "REAL extracts a double-complex component without narrowing");
@@ -2027,8 +2026,8 @@ static void test_implicit_mapping_semantics(void) {
     expect(result.error_count == 0U,
            "explicit IMPLICIT maps and untyped function results translate");
     expect_contains(result.header,
-                    "void mapped_types(double *F2C_RESTRICT alpha, "
-                    "int32_t *F2C_RESTRICT index, char *F2C_RESTRICT cword, "
+                    "void mapped_types(double *alpha, "
+                    "int32_t *index, char *cword, "
                     "size_t f2c_len_cword);",
                     "IMPLICIT kind, integer, and CHARACTER mappings define the public ABI");
     expect_contains(result.header, "int32_t mapped_result(void);",
@@ -2158,6 +2157,26 @@ static void test_expression_shape_semantics(void) {
     f2c_result_free(&result);
 }
 
+static void test_local_array_bounds_contract(void) {
+    static const char source[] = "subroutine select_local(index, result)\n"
+                                 "  implicit none\n"
+                                 "  integer, intent(in) :: index\n"
+                                 "  integer, intent(out) :: result\n"
+                                 "  integer :: values(2)\n"
+                                 "  values(1) = 11\n"
+                                 "  values(2) = 22\n"
+                                 "  result = values(index)\n"
+                                 "end subroutine select_local\n";
+    F2cOptions options = {"local_bounds.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, strlen(source), &options);
+    expect(result.error_count == 0U, "explicit-shape local array access translates");
+    expect_contains(result.code, "static inline F2C_UNUSED size_t f2c_array_offset(",
+                    "generated C exposes a checked local-array offset contract");
+    expect_contains(result.code, "values[f2c_array_offset(",
+                    "local explicit-shape indexing enforces the declared bounds");
+    f2c_result_free(&result);
+}
+
 static void test_type_identifier_assignment(void) {
     static const char source[] = "subroutine assign_type(type)\n"
                                  "  implicit none\n"
@@ -2216,6 +2235,7 @@ int main(void) {
     test_malformed_expression_diagnostics();
     test_array_constructor_diagnostics();
     test_expression_shape_semantics();
+    test_local_array_bounds_contract();
     test_type_identifier_assignment();
     test_implicit_mapping_semantics();
     test_control_flow_semantics();

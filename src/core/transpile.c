@@ -345,6 +345,11 @@ F2cResult f2c_transpile_project(const F2cInput *inputs, size_t input_count) {
                                            "    int64_t extent[15];\n"
                                            "    size_t character_length;\n"
                                            "} f2c_descriptor;\n");
+        f2c_buffer_append(&context.output,
+                          "static inline F2C_UNUSED size_t f2c_array_offset(int64_t subscript, "
+                          "int64_t lower, size_t extent) { uint64_t offset; if (subscript < lower) "
+                          "abort(); offset = (uint64_t)(subscript - lower); if (offset >= "
+                          "(uint64_t)extent) abort(); return (size_t)offset; }\n");
         f2c_buffer_append(
             &context.output,
             "static inline F2C_UNUSED int f2c_character_compare(const char *left, size_t "

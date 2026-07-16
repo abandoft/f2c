@@ -443,6 +443,9 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
     for (i = 0U; i < count; ++i) {
         char *lower =
             i < symbol->rank ? f2c_symbol_dimension_lower(unit, symbol, i) : f2c_strdup("1");
+        char *extent = i < symbol->rank ? f2c_symbol_dimension_extent(unit, symbol, i) : NULL;
+        const int checked =
+            !symbol->argument && !symbol->allocatable && !symbol->pointer && extent != NULL;
         if (i != 0U) {
             size_t j;
             f2c_buffer_append(&result, " + (");
@@ -464,9 +467,15 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
             }
             f2c_buffer_append(&result, ") * ");
         }
-        {
+        if (checked) {
+            f2c_buffer_printf(&result,
+                              "f2c_array_offset((int64_t)((int32_t)(%s)), "
+                              "(int64_t)(%s), (size_t)(%s))",
+                              indices[i], lower, extent);
+        } else {
             f2c_buffer_printf(&result, "(((int32_t)(%s)) - (%s))", indices[i], lower);
         }
+        free(extent);
         free(lower);
     }
     if (character_length != NULL)

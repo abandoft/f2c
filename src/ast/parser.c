@@ -222,8 +222,8 @@ static void set_array_reference_shape(AstParser *parser, F2cExpr *expression, Sy
             const F2cExpr *lower_expression = selector->children[0];
             const F2cExpr *upper_expression = selector->children[1];
             const F2cExpr *stride_expression = selector->children[2];
-            int64_t lower;
-            int64_t upper;
+            int64_t lower = 0;
+            int64_t upper = 0;
             int64_t stride = 1;
             const int lower_known =
                 lower_expression->kind != F2C_EXPR_INVALID

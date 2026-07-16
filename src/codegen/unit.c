@@ -112,7 +112,7 @@ static void emit_signature(Buffer *output, Unit *unit, int prototype) {
         } else {
             f2c_buffer_printf(output, "%s%s *%s%s", qualifier,
                               symbol != NULL ? f2c_symbol_c_type(symbol) : f2c_c_type(TYPE_REAL),
-                              symbol != NULL ? "F2C_RESTRICT " : "",
+                              symbol != NULL && symbol->rank != 0U ? "F2C_RESTRICT " : "",
                               symbol != NULL ? f2c_symbol_c_name(unit, symbol)
                                              : unit->arguments[i]);
         }

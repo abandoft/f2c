@@ -326,7 +326,7 @@ static void emit_io_item(Context *context, Unit *unit, const char *file, const F
             if (value == NULL)
                 return;
             indent(&context->output, depth);
-            f2c_buffer_append(&context->output, "{ bool f2c_io_logical; ");
+            f2c_buffer_append(&context->output, "{ bool f2c_io_logical = false; ");
             if (status != NULL)
                 f2c_buffer_printf(&context->output,
                                   "%s = f2c_read_bool(%s, &f2c_io_logical); if (%s > 0) %s = "
@@ -729,23 +729,53 @@ static void emit_namelist_autoallocation(Context *context, Unit *unit, const cha
                           (size_t)depth, symbol->rank, (size_t)depth);
         for (dimension = 0U; dimension < symbol->rank; ++dimension) {
             indent(&context->output, depth + 2);
-            f2c_buffer_printf(
-                &context->output,
-                "if (f2c_namelist_upper_%zu[%zu] < f2c_namelist_lower_%zu[%zu]) abort(); "
-                "if (f2c_namelist_lower_%zu[%zu] < INT32_MIN || "
-                "f2c_namelist_upper_%zu[%zu] > INT32_MAX) abort(); "
-                "{ uint64_t f2c_namelist_span = "
-                "(uint64_t)f2c_namelist_upper_%zu[%zu] - "
-                "(uint64_t)f2c_namelist_lower_%zu[%zu] + UINT64_C(1); "
-                "if (f2c_namelist_span > (uint64_t)INT32_MAX || "
-                "f2c_namelist_span > SIZE_MAX || "
-                "(f2c_namelist_span != 0U && f2c_namelist_elements_%zu > "
-                "SIZE_MAX / (size_t)f2c_namelist_span)) abort(); "
-                "f2c_namelist_extents_%zu[%zu] = (size_t)f2c_namelist_span; "
-                "f2c_namelist_elements_%zu *= (size_t)f2c_namelist_span; }\n",
-                (size_t)depth, dimension, (size_t)depth, dimension, (size_t)depth, dimension,
-                (size_t)depth, dimension, (size_t)depth, dimension, (size_t)depth, dimension,
-                (size_t)depth, (size_t)depth, dimension, (size_t)depth);
+            f2c_buffer_printf(&context->output,
+                              "if (f2c_namelist_upper_%zu[%zu] < f2c_namelist_lower_%zu[%zu]) {\n",
+                              (size_t)depth, dimension, (size_t)depth, dimension);
+            indent(&context->output, depth + 3);
+            f2c_buffer_append(&context->output, "abort();\n");
+            indent(&context->output, depth + 2);
+            f2c_buffer_append(&context->output, "}\n");
+            indent(&context->output, depth + 2);
+            f2c_buffer_printf(&context->output,
+                              "if (f2c_namelist_lower_%zu[%zu] < INT32_MIN || "
+                              "f2c_namelist_upper_%zu[%zu] > INT32_MAX) {\n",
+                              (size_t)depth, dimension, (size_t)depth, dimension);
+            indent(&context->output, depth + 3);
+            f2c_buffer_append(&context->output, "abort();\n");
+            indent(&context->output, depth + 2);
+            f2c_buffer_append(&context->output, "}\n");
+            indent(&context->output, depth + 2);
+            f2c_buffer_append(&context->output, "{\n");
+            indent(&context->output, depth + 3);
+            f2c_buffer_printf(&context->output,
+                              "const uint64_t f2c_namelist_span = "
+                              "(uint64_t)f2c_namelist_upper_%zu[%zu] - "
+                              "(uint64_t)f2c_namelist_lower_%zu[%zu] + UINT64_C(1);\n",
+                              (size_t)depth, dimension, (size_t)depth, dimension);
+            indent(&context->output, depth + 3);
+            f2c_buffer_printf(&context->output,
+                              "if (f2c_namelist_span > (uint64_t)INT32_MAX || "
+                              "f2c_namelist_span > SIZE_MAX || "
+                              "(f2c_namelist_span != 0U && f2c_namelist_elements_%zu > "
+                              "SIZE_MAX / (size_t)f2c_namelist_span)) {\n",
+                              (size_t)depth);
+            indent(&context->output, depth + 4);
+            f2c_buffer_append(&context->output, "abort();\n");
+            indent(&context->output, depth + 3);
+            f2c_buffer_append(&context->output, "}\n");
+            indent(&context->output, depth + 3);
+            f2c_buffer_printf(&context->output,
+                              "f2c_namelist_extents_%zu[%zu] = "
+                              "(size_t)f2c_namelist_span;\n",
+                              (size_t)depth, dimension);
+            indent(&context->output, depth + 3);
+            f2c_buffer_printf(&context->output,
+                              "f2c_namelist_elements_%zu *= "
+                              "(size_t)f2c_namelist_span;\n",
+                              (size_t)depth);
+            indent(&context->output, depth + 2);
+            f2c_buffer_append(&context->output, "}\n");
         }
     } else {
         indent(&context->output, depth + 1);
