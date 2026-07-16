@@ -1,0 +1,55 @@
+name: Reproducible generated output
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reproducibility-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-compiler:
+    name: GCC and Clang byte-for-byte comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build strict GCC translator
+        env:
+          CC: gcc
+        run: >-
+          cmake -S . -B build/reproducible-gcc
+          -DCMAKE_BUILD_TYPE=Release
+          -DF2C_BUILD_TESTING=OFF
+          -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
+          && cmake --build build/reproducible-gcc --parallel
+      - name: Build strict Clang translator
+        env:
+          CC: clang
+        run: >-
+          cmake -S . -B build/reproducible-clang
+          -DCMAKE_BUILD_TYPE=Release
+          -DF2C_BUILD_TESTING=OFF
+          -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
+          && cmake --build build/reproducible-clang --parallel
+      - name: Compare generated implementation and interface outputs
+        run: >-
+          sh test/cross_toolchain_reproducible.sh
+          build/reproducible-gcc/f2c
+          build/reproducible-clang/f2c
+      - name: Upload reproducibility manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: f2c-reproducible-output
+          path: build/reproducible-toolchains/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14

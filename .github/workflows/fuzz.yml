@@ -1,0 +1,81 @@
+name: Coverage-guided fuzzing
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  libfuzzer:
+    name: Clang libFuzzer with ASan/UBSan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Configure Clang libFuzzer build
+        env:
+          CC: clang
+        run: >-
+          cmake -S . -B build/fuzz
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          -DF2C_BUILD_TESTING=OFF
+          -DF2C_ENABLE_SANITIZERS=ON
+          -DF2C_BUILD_LIBFUZZER=ON
+      - name: Build fuzzer
+        run: cmake --build build/fuzz --target f2c_libfuzzer --parallel
+      - name: Prepare persistent corpus
+        run: mkdir -p build/fuzz-artifacts build/fuzz-corpus
+      - name: Restore evolving corpus
+        uses: actions/cache@v5
+        with:
+          path: build/fuzz-corpus
+          key: f2c-libfuzzer-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            f2c-libfuzzer-${{ runner.os }}-
+      - name: Add versioned seed corpus
+        run: cp -n test/fuzz_corpus/* build/fuzz-corpus/
+      - name: Run coverage-guided campaign
+        run: |
+          build/fuzz/f2c_libfuzzer build/fuzz-corpus \
+            -artifact_prefix=build/fuzz-artifacts/ \
+            -max_total_time=600 \
+            -timeout=10 \
+            -rss_limit_mb=2048 \
+            -print_final_stats=1
+      - name: Minimize crashing inputs
+        if: failure()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for artifact in \
+            build/fuzz-artifacts/crash-* \
+            build/fuzz-artifacts/timeout-* \
+            build/fuzz-artifacts/oom-* \
+            build/fuzz-artifacts/leak-*; do
+            timeout 120s build/fuzz/f2c_libfuzzer \
+              -minimize_crash=1 \
+              -timeout=10 \
+              -rss_limit_mb=2048 \
+              -exact_artifact_path="$artifact.minimized" \
+              "$artifact" || true
+          done
+      - name: Upload corpus and crash artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: f2c-libfuzzer-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/fuzz-corpus/
+            build/fuzz-artifacts/
+          if-no-files-found: warn
+          retention-days: 30

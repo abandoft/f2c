@@ -1,0 +1,90 @@
+name: BLAS and LAPACK numerical validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: numerical-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reference-lapack:
+    name: Reference BLAS/LAPACK correctness
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      F2C_JOBS: 8
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Verify numerical toolchain
+        run: |
+          cmake --version
+          cc --version
+          gfortran --version
+          python3 --version
+      - name: Build strict release translator
+        run: >-
+          cmake -S . -B build/numerical
+          -DCMAKE_BUILD_TYPE=Release
+          -DF2C_BUILD_TESTING=OFF
+          -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
+          && cmake --build build/numerical --parallel
+      - name: Differential-test deterministic expressions
+        run: sh test/expression_differential.sh build/numerical/f2c
+      - name: Run Reference BLAS/LAPACK smoke test
+        run: sh test/reference_lapack_smoke.sh build/numerical/f2c
+      - name: Strict-compile all Reference BLAS sources
+        run: sh test/reference_blas_compile.sh build/numerical/f2c
+      - name: Strict-compile Reference LAPACK and build native baseline
+        run: sh test/reference_lapack_core_compile.sh build/numerical/f2c
+      - name: Differential-test official Reference BLAS suites
+        run: sh test/reference_blas_tests.sh build/numerical/f2c
+      - name: Differential-test Reference LAPACK LIN suites
+        run: sh test/reference_lapack_lin.sh build/numerical/f2c
+      - name: Differential-test Reference LAPACK EIG suites
+        run: sh test/reference_lapack_eig.sh build/numerical/f2c
+      - name: Validate official differential manifest
+        run: >-
+          python3 test/differential_manifest.py
+          build/reference-lapack-core/differential-reports
+      - name: Trace and compare every internal BLAS result
+        run: sh test/reference_blas_exhaustive.sh build/numerical/f2c
+      - name: Trace and compare every internal LAPACK result
+        run: sh test/reference_lapack_exhaustive.sh build/numerical/f2c
+      - name: Audit every official numerical record
+        run: |
+          python3 test/official_numerical_audit.py \
+            build/reference-lapack-core/differential-reports \
+            build/reference-lapack-core/blas-exhaustive/report \
+            build/reference-lapack-core/exhaustive/report \
+            --output build/reference-lapack-core/official-numerical-audit/manifest.json \
+            --summary build/reference-lapack-core/official-numerical-audit/summary.md
+      - name: Upload numerical reports and transcripts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: f2c-numerical-validation
+          path: |
+            build/reference-lapack-core/native-results/
+            build/reference-lapack-core/differential-reports/
+            build/reference-lapack-core/xlintst*.out
+            build/reference-lapack-core/xlintstr*.out
+            build/reference-lapack-core/xdblat2rfp.out
+            build/reference-lapack-core/eig-*.out
+            build/reference-lapack-core/blas-testing/
+            build/reference-lapack-core/blas-exhaustive/report/
+            build/reference-lapack-core/blas-exhaustive/transcript/
+            build/reference-lapack-core/exhaustive/report/
+            build/reference-lapack-core/exhaustive/transcript/
+            build/reference-lapack-core/official-numerical-audit/
+          if-no-files-found: warn
+          retention-days: 14

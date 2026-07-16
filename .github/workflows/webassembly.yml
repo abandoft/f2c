@@ -1,0 +1,45 @@
+name: WebAssembly portability
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webassembly-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emscripten:
+    name: Emscripten build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Set up Emscripten
+        uses: emscripten-core/setup-emsdk@v16
+        with:
+          version: 5.0.1
+          actions-cache-folder: build/emsdk-cache
+      - name: Configure
+        run: >-
+          emcmake cmake -S . -B build/wasm
+          -DCMAKE_BUILD_TYPE=Release
+          -DF2C_BUILD_TESTING=OFF
+          -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build/wasm --parallel
+      - name: Upload WebAssembly validation artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: f2c-webassembly
+          path: build/wasm/f2c*
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,48 @@
+name: Sanitizers
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sanitizers-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  address-undefined:
+    name: AddressSanitizer and UndefinedBehaviorSanitizer
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CC: clang
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Configure instrumented build
+        run: >-
+          cmake -S . -B build/sanitizers
+          -DCMAKE_BUILD_TYPE=Debug
+          -DF2C_BUILD_TESTING=ON
+          -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
+          -DF2C_ENABLE_SANITIZERS=ON
+      - name: Build
+        run: cmake --build build/sanitizers --parallel
+      - name: Test
+        run: ctest --test-dir build/sanitizers --output-on-failure
+      - name: Upload failing sanitizer diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sanitizer-diagnostics
+          path: build/sanitizers/Testing/Temporary/
+          if-no-files-found: ignore
+          retention-days: 14

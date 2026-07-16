@@ -1,0 +1,87 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: ${{ matrix.os }} / ${{ matrix.build_type }} / ${{ matrix.linkage }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            build_type: Debug
+            linkage: static
+            shared: "OFF"
+          - os: ubuntu-latest
+            build_type: Release
+            linkage: static
+            shared: "OFF"
+          - os: ubuntu-latest
+            build_type: Release
+            linkage: shared
+            shared: "ON"
+          - os: macos-latest
+            build_type: Debug
+            linkage: static
+            shared: "OFF"
+          - os: macos-latest
+            build_type: Release
+            linkage: static
+            shared: "OFF"
+          - os: macos-latest
+            build_type: Release
+            linkage: shared
+            shared: "ON"
+          - os: windows-latest
+            build_type: Debug
+            linkage: static
+            shared: "OFF"
+          - os: windows-latest
+            build_type: Release
+            linkage: static
+            shared: "OFF"
+          - os: windows-latest
+            build_type: Release
+            linkage: shared
+            shared: "ON"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Configure
+        run: >-
+          cmake -S . -B build/native
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DBUILD_SHARED_LIBS=${{ matrix.shared }}
+          -DF2C_BUILD_TESTING=ON
+          -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build build/native --config ${{ matrix.build_type }} --parallel
+      - name: Test
+        run: >-
+          ctest --test-dir build/native
+          -C ${{ matrix.build_type }}
+          --output-on-failure
+      - name: Upload failing test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-diagnostics-${{ matrix.os }}-${{ matrix.build_type }}-${{ matrix.linkage }}
+          path: build/native/Testing/Temporary/
+          if-no-files-found: ignore
+          retention-days: 7

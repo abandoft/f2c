@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} release artifact
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x86_64
+            binary: build/f2c
+            packaged_binary: f2c
+            archive_extension: tar.gz
+          - os: macos-latest
+            platform: macos-arm64
+            binary: build/f2c
+            packaged_binary: f2c
+            archive_extension: tar.gz
+          - os: windows-latest
+            platform: windows-x86_64
+            binary: build/Release/f2c.exe
+            packaged_binary: f2c.exe
+            archive_extension: zip
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Configure strict release build
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DF2C_BUILD_TESTING=ON
+          -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
+      - name: Build and test
+        run: >-
+          cmake --build build --config Release --parallel &&
+          ctest --test-dir build -C Release --output-on-failure
+      - name: Verify tag matches binary version
+        shell: bash
+        run: |
+          actual="$("${{ matrix.binary }}" --version | awk '{print $NF}')"
+          expected="${GITHUB_REF_NAME#v}"
+          test "$actual" = "$expected" || {
+            echo "tag $GITHUB_REF_NAME does not match f2c version $actual" >&2
+            exit 1
+          }
+      - name: Stage portable release contents
+        shell: bash
+        run: |
+          archive="f2c-${GITHUB_REF_NAME}-${{ matrix.platform }}.${{ matrix.archive_extension }}"
+          cmake -E make_directory build/release/stage/bin build/release/stage/include/f2c
+          cmake -E copy "${{ matrix.binary }}" "build/release/stage/bin/${{ matrix.packaged_binary }}"
+          cmake -E copy include/f2c/f2c.h build/release/stage/include/f2c/f2c.h
+          cmake -E copy README.md README-ZH.md CHANGELOG.md CHANGELOG-ZH.md build/release/stage
+          printf '%s\n' "$archive" > build/release/archive-name.txt
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: build/release/stage
+          format: spdx-json
+          output-file: build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.spdx.json
+          upload-artifact: false
+      - name: Create archive and SHA-256 checksum
+        shell: bash
+        run: |
+          archive=$(cat build/release/archive-name.txt)
+          if [ "${{ matrix.archive_extension }}" = zip ]; then
+            (cd build/release && cmake -E tar cf "$archive" --format=zip -- stage)
+          else
+            (cd build/release && cmake -E tar czf "$archive" --format=gnutar -- stage)
+          fi
+          (cd build/release && cmake -E sha256sum "$archive" > "$archive.sha256")
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.${{ matrix.archive_extension }}
+      - name: Attest SPDX SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.${{ matrix.archive_extension }}
+          sbom-path: build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.spdx.json
+      - name: Upload release inputs
+        uses: actions/upload-artifact@v7
+        with:
+          name: f2c-${{ github.ref_name }}-${{ matrix.platform }}
+          path: |
+            build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.${{ matrix.archive_extension }}
+            build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.${{ matrix.archive_extension }}.sha256
+            build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.spdx.json
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Extract English release notes
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cmake -E make_directory build/release
+          awk -v heading="## $version" '
+            $0 == heading {
+              found = 1
+              next
+            }
+            found && /^## / {
+              exit
+            }
+            found {
+              if ($0 == "" && count == 0) {
+                next
+              }
+              lines[++count] = $0
+              if ($0 != "") {
+                last = count
+              }
+            }
+            END {
+              if (!found || last == 0) {
+                exit 1
+              }
+              for (line_number = 1; line_number <= last; ++line_number) {
+                print lines[line_number]
+              }
+            }
+          ' CHANGELOG.md > build/release/release-notes.md
+      - name: Download release assets
+        uses: actions/download-artifact@v7
+        with:
+          pattern: f2c-${{ github.ref_name }}-*
+          path: build/release-assets
+          merge-multiple: true
+      - name: Publish immutable tag assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            build/release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --notes-file build/release/release-notes.md \
+            --title "$version"

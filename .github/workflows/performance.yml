@@ -1,0 +1,49 @@
+name: Performance parity
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * 3"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generated-versus-fortran:
+    name: Generated C versus native Fortran
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Verify benchmark toolchain
+        run: |
+          cmake --version
+          cc --version
+          gfortran --version
+          python3 --version
+      - name: Build release translator
+        run: >-
+          cmake -S . -B build/performance
+          -DCMAKE_BUILD_TYPE=Release
+          -DF2C_BUILD_TESTING=OFF
+          -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
+          && cmake --build build/performance --parallel
+      - name: Run the generated C versus Fortran matrix
+        run: sh test/reference_performance_matrix.sh build/performance/f2c
+      - name: Upload performance reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: f2c-performance-matrix
+          path: build/benchmarks/performance-matrix/
+          if-no-files-found: warn
+          retention-days: 30
