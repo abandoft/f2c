@@ -167,7 +167,7 @@ run_precision() {
 
     printf '%s\n' "$expected" | while IFS=' ' read -r suffix count; do
         path=$prefix$suffix
-        if ! grep -Eq "^  *${path}  *${count} *$" "$output"; then
+        if ! grep -Eq "^  *All tests for ${path} .*\\( *${count} tests run\\) *$" "$output"; then
             echo "Reference LAPACK LIN count mismatch: $path $count" >&2
             tail -n 80 "$output" >&2
             exit 1

@@ -261,9 +261,22 @@ def compare_balance(generated: str, native: str) -> list[ResultRecord]:
     reject_failures("generated C", generated)
     reject_failures("native Fortran", native)
     fields = native_numeric_fields(native)
-    values = generated_numeric_values(generated)
     if not fields:
         raise Difference("native balance output has no labeled numerical records")
+    generated_fields = native_numeric_fields(generated)
+    if generated_fields:
+        generated_names = [field.name for field in generated_fields]
+        native_names = [field.name for field in fields]
+        if generated_names != native_names:
+            raise Difference(
+                "generated and native balance field labels differ: "
+                f"generated={generated_names}, native={native_names}"
+            )
+        values = [field.value for field in generated_fields]
+    else:
+        # Older generated drivers emitted FORMAT values without their labels.
+        # Retain that representation as an explicitly positional fallback.
+        values = generated_numeric_values(generated)
     if len(values) < len(fields):
         raise Difference(
             f"generated balance output has {len(values)} values; expected {len(fields)}"
@@ -287,6 +300,13 @@ def compare_balance(generated: str, native: str) -> list[ResultRecord]:
         and all(math.isfinite(value) for value in error_pair)
         and min(error_pair) >= 0.0
         and max(error_pair) <= 1.0
+        and not close_float(error_pair[0], error_pair[1], 5.0e-3)
+    )
+    error_nonregression = (
+        error_pair is not None
+        and all(math.isfinite(value) for value in error_pair)
+        and min(error_pair) >= 0.0
+        and error_pair[0] < error_pair[1]
         and not close_float(error_pair[0], error_pair[1], 5.0e-3)
     )
     records: list[ResultRecord] = []
@@ -316,6 +336,10 @@ def compare_balance(generated: str, native: str) -> list[ResultRecord]:
                 comparison = "roundoff_bound"
                 tolerance = None
                 absolute_limit = 1.0
+            elif error_nonregression and field.name == error_name:
+                comparison = "no_regression"
+                tolerance = None
+                absolute_limit = field.value
             else:
                 raise Difference(
                     f"balance record {index} ({field.name}) differs: "
@@ -452,6 +476,30 @@ def self_test() -> None:
     balance_records = compare_balance(generated_balance, native_balance)
     assert len(balance_records) == 5
     assert balance_records[-1].name == "total number of examples tested"
+
+    labeled_balance_records = compare_balance(
+        "value of largest test error = INF\n"
+        "example number where info is not zero = 0\n"
+        "example number having largest error = 11\n"
+        "total number of examples tested = 13\n",
+        "value of largest test error = Infinity\n"
+        "example number where info is not zero = 0\n"
+        "example number having largest error = 11\n"
+        "total number of examples tested = 13\n",
+    )
+    assert len(labeled_balance_records) == 4
+    assert math.isinf(labeled_balance_records[0].generated)
+
+    improved_balance_records = compare_balance(
+        "value of largest test error = 0.7415\n"
+        "example number having largest error = 6\n"
+        "total number of examples tested = 10\n",
+        "value of largest test error = 1.48\n"
+        "example number having largest error = 6\n"
+        "total number of examples tested = 10\n",
+    )
+    assert improved_balance_records[0].comparison == "no_regression"
+    assert improved_balance_records[0].absolute_limit == 1.48
 
     bounded_records = compare_balance(
         "\n 0.524287999\n 0\n 5\n 0\n 8\n\n 0\n",

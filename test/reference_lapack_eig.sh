@@ -108,12 +108,22 @@ run_balance_cases() {
     run_case "$precision" "${prefix}bak"
     run_case "$precision" "${prefix}gbal"
     run_case "$precision" "${prefix}gbak"
-    grep -Eq '^[[:space:]]*13[[:space:]]*$' "$work/eig-$precision-${prefix}bal.out"
-    grep -Eq '^[[:space:]]*7[[:space:]]*$' "$work/eig-$precision-${prefix}bak.out"
-    grep -Eq "^[[:space:]]*${generalized_total}[[:space:]]*\$" \
-        "$work/eig-$precision-${prefix}gbal.out"
-    grep -Eq "^[[:space:]]*${generalized_total}[[:space:]]*\$" \
-        "$work/eig-$precision-${prefix}gbak.out"
+    require_balance_count "$work/eig-$precision-${prefix}bal.out" 13
+    require_balance_count "$work/eig-$precision-${prefix}bak.out" 7
+    require_balance_count "$work/eig-$precision-${prefix}gbal.out" "$generalized_total"
+    require_balance_count "$work/eig-$precision-${prefix}gbak.out" "$generalized_total"
+}
+
+require_balance_count() {
+    output=$1
+    count=$2
+    if grep -Eqi "total number of examples tested[[:space:]]*=[[:space:]]*${count}[[:space:]]*\$" \
+        "$output" || grep -Eq "^[[:space:]]*${count}[[:space:]]*\$" "$output"; then
+        return
+    fi
+    echo "Reference LAPACK balance count mismatch: expected $count" >&2
+    tail -n 40 "$output" >&2
+    exit 1
 }
 
 run_real_precision() {

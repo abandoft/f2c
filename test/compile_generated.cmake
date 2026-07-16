@@ -56,6 +56,7 @@ foreach(
     io_fixture
     IN ITEMS
        formatted_internal
+       formatted_record_input
        namelist_internal
        pointer_semantics
        pointer_dummy
