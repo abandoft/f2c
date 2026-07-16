@@ -62,10 +62,28 @@ static void test_program_and_control_flow(void) {
     expect_contains(result.code, "const int32_t f2c_do_limit_",
                     "DO limit is evaluated exactly once");
     expect_contains(result.code, "const int32_t f2c_do_step_", "DO step is evaluated exactly once");
+    expect_contains(result.code, "int32_t f2c_do_count_",
+                    "canonical default-integer DO uses a native-width trip counter");
     expect(result.code == NULL || strstr(result.code, "F2C_LOOP_UNROLL\n    for (;") == NULL,
            "isolated DO loops avoid forced unrolling");
     expect_contains(result.code, "F2C_MOD(i, 2)", "MOD intrinsic is preserved without a runtime");
     expect_contains(result.code, "return EXIT_FAILURE", "ERROR STOP maps to a failure exit");
+    f2c_result_free(&result);
+}
+
+static void test_wide_do_trip_count(void) {
+    static const char source[] = "subroutine wide_do(n, observed)\n"
+                                 "  integer :: n, observed, i\n"
+                                 "  observed = 0\n"
+                                 "  do i = -2147483647, n\n"
+                                 "    observed = observed + 1\n"
+                                 "  end do\n"
+                                 "end subroutine wide_do\n";
+    F2cOptions options = {"wide_do.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, strlen(source), &options);
+    expect(result.error_count == 0U, "wide-trip-count DO translates without errors");
+    expect_contains(result.code, "int64_t f2c_do_count_",
+                    "DO ranges spanning the default-integer domain retain a wide trip counter");
     f2c_result_free(&result);
 }
 
@@ -322,12 +340,25 @@ static void test_preprocessed_lapack_isnan_module(void) {
                                  "sisnan = x /= x\n"
                                  "#endif\n"
                                  "end function sisnan\n"
-                                 "end module la_xisnan\n";
+                                 "logical function disnan(x)\n"
+                                 "use la_constants, only: wp=>dp\n"
+                                 "real(wp) :: x\n"
+                                 "disnan = x /= x\n"
+                                 "end function disnan\n"
+                                 "end module la_xisnan\n"
+                                 "logical function disnan(x)\n"
+                                 "double precision :: x\n"
+                                 "disnan = x /= x\n"
+                                 "end function disnan\n";
     F2cOptions options = {"la_xisnan.F90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "LAPACK preprocessed module function translates");
-    expect_contains(result.code, "int32_t sisnan(float *x)",
-                    "module-contained function becomes a C function");
+    expect_contains(result.code, "int32_t f2c_module_la_xisnan_sisnan(float *x)",
+                    "module-contained function receives a collision-free C symbol");
+    expect_contains(result.code, "int32_t f2c_module_la_xisnan_disnan(double *x)",
+                    "each module procedure is scoped to its owning module");
+    expect_contains(result.code, "int32_t disnan(double *x)",
+                    "an external procedure may retain the same Fortran name");
     expect_contains(result.code, "isnan((*x))",
                     "upper-case LAPACK feature macro selects the supported intrinsic branch");
     expect(result.code == NULL || strstr(result.code, "x /= x") == NULL,
@@ -2207,6 +2238,7 @@ int main(void) {
     test_version_contract();
     test_empty_source();
     test_program_and_control_flow();
+    test_wide_do_trip_count();
     test_blas_style_subroutine();
     test_nested_loop_optimization_hints();
     test_fixed_form_continuation();

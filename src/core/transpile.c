@@ -315,6 +315,9 @@ F2cResult f2c_transpile_project(const F2cInput *inputs, size_t input_count) {
             f2c_buffer_append(&context.output, "#include <complex.h>\n");
         }
         f2c_buffer_append(&context.output, "#if defined(__clang__)\n"
+                                           "#if __has_warning(\"-Wpass-failed\")\n"
+                                           "#pragma clang diagnostic ignored \"-Wpass-failed\"\n"
+                                           "#endif\n"
                                            "#if defined(F2C_FP_CONTRACT)\n"
                                            "#pragma STDC FP_CONTRACT ON\n"
                                            "#else\n"

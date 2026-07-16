@@ -15,6 +15,16 @@ static int is_numeric_type(Type type) {
            type == TYPE_COMPLEX || type == TYPE_DOUBLE_COMPLEX;
 }
 
+static int do_count_fits_default_integer(const F2cStatement *statement) {
+    return statement != NULL && statement->right != NULL && statement->step != NULL &&
+           statement->left != NULL &&
+           statement->left->type_kind == f2c_default_kind(TYPE_INTEGER) &&
+           statement->right->kind == F2C_EXPR_INTEGER_LITERAL &&
+           statement->step->kind == F2C_EXPR_INTEGER_LITERAL && statement->right->text != NULL &&
+           statement->step->text != NULL && strcmp(statement->right->text, "1") == 0 &&
+           strcmp(statement->step->text, "1") == 0;
+}
+
 static void emit_condition(Buffer *output, const char *condition) {
     const size_t length = strlen(condition);
     if (length >= 2U && condition[0] == '(' && condition[length - 1U] == ')') {
@@ -393,6 +403,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             char *step = emit_statement_expression(unit, statement->step);
             const size_t loop_id = (size_t)(statement - unit->statements);
             if (statement->left->type == TYPE_INTEGER) {
+                const int narrow_count = do_count_fits_default_integer(statement);
                 indent(&context->output, *depth);
                 f2c_buffer_printf(&context->output,
                                   "const int32_t f2c_do_start_%zu = (int32_t)(%s);\n", loop_id,
@@ -406,21 +417,26 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                                   "const int32_t f2c_do_step_%zu = (int32_t)(%s);\n", loop_id,
                                   step);
                 indent(&context->output, *depth);
-                f2c_buffer_printf(&context->output, "int64_t f2c_do_count_%zu = 0;\n", loop_id);
+                f2c_buffer_printf(&context->output, "%s f2c_do_count_%zu = 0;\n",
+                                  narrow_count ? "int32_t" : "int64_t", loop_id);
                 indent(&context->output, *depth);
                 f2c_buffer_printf(&context->output, "%s = f2c_do_start_%zu;\n", variable, loop_id);
                 indent(&context->output, *depth);
-                f2c_buffer_printf(&context->output,
-                                  "if (f2c_do_step_%zu > 0 && %s <= f2c_do_limit_%zu) "
-                                  "f2c_do_count_%zu = ((int64_t)f2c_do_limit_%zu - (int64_t)%s) / "
-                                  "(int64_t)f2c_do_step_%zu + 1;\n",
-                                  loop_id, variable, loop_id, loop_id, loop_id, variable, loop_id);
+                f2c_buffer_printf(
+                    &context->output,
+                    "if (f2c_do_step_%zu > 0 && %s <= f2c_do_limit_%zu) "
+                    "f2c_do_count_%zu = %s((int64_t)f2c_do_limit_%zu - (int64_t)%s) / "
+                    "(int64_t)f2c_do_step_%zu + 1%s;\n",
+                    loop_id, variable, loop_id, loop_id, narrow_count ? "(int32_t)(" : "", loop_id,
+                    variable, loop_id, narrow_count ? ")" : "");
                 indent(&context->output, *depth);
-                f2c_buffer_printf(&context->output,
-                                  "else if (f2c_do_step_%zu < 0 && %s >= f2c_do_limit_%zu) "
-                                  "f2c_do_count_%zu = ((int64_t)%s - (int64_t)f2c_do_limit_%zu) / "
-                                  "-(int64_t)f2c_do_step_%zu + 1;\n",
-                                  loop_id, variable, loop_id, loop_id, variable, loop_id, loop_id);
+                f2c_buffer_printf(
+                    &context->output,
+                    "else if (f2c_do_step_%zu < 0 && %s >= f2c_do_limit_%zu) "
+                    "f2c_do_count_%zu = %s((int64_t)%s - (int64_t)f2c_do_limit_%zu) / "
+                    "-(int64_t)f2c_do_step_%zu + 1%s;\n",
+                    loop_id, variable, loop_id, loop_id, narrow_count ? "(int32_t)(" : "", variable,
+                    loop_id, loop_id, narrow_count ? ")" : "");
             }
             if (statement->unroll_hint) {
                 indent(&context->output, *depth);

@@ -179,11 +179,12 @@ static int register_procedure(Context *context, Unit *unit) {
 static void bind_external(Context *context, Unit *caller, Symbol *external) {
     Unit *interface =
         external->external_signature_explicit ? find_explicit_interface(caller, external) : NULL;
-    Procedure *procedure = find_procedure(context, external->name);
+    Procedure *procedure = external->c_name != NULL ? find_procedure(context, external->c_name)
+                                                    : find_procedure(context, external->name);
     Unit *definition;
     size_t i;
     if (procedure == NULL && external->c_name != NULL)
-        procedure = find_procedure(context, external->c_name);
+        procedure = find_procedure(context, external->name);
     if (interface != NULL && procedure != NULL && procedure->definition != caller)
         validate_interface_definition(context, caller, external, interface, procedure->definition);
     if (interface != NULL)

@@ -465,15 +465,41 @@ int f2c_discover_units(Context *context) {
             continue;
         }
         if (f2c_parse_unit_header(line, &unit)) {
+            size_t module_index;
+            Unit *containing_module = NULL;
+            for (module_index = 0U; module_index < context->modules.count; ++module_index) {
+                Unit *module = &context->modules.items[module_index];
+                if (i > module->end && i < module->container_end) {
+                    containing_module = module;
+                    break;
+                }
+            }
+            if (containing_module != NULL) {
+                Buffer mangled = {0};
+                char *source_name = unit.name;
+                f2c_buffer_printf(&mangled, "f2c_module_%s_%s", containing_module->name,
+                                  source_name);
+                unit.name = f2c_buffer_take(&mangled);
+                unit.fortran_name = source_name;
+                if (unit.name == NULL) {
+                    free(unit.fortran_name);
+                    return 0;
+                }
+            }
             unit.begin = i;
             unit.end = context->lines.count;
             unit.host_index = (size_t)-1;
             unit.options.source_name = f2c_strdup(context->lines.items[i].source_name);
             unit.options.source_form = F2C_SOURCE_AUTO;
             unit.options.emit_source_comments = context->lines.items[i].emit_source_comments;
-            if (unit.options.source_name == NULL)
+            if (unit.options.source_name == NULL) {
+                free(unit.name);
+                free(unit.fortran_name);
                 return 0;
+            }
             if (!units_push(&context->units, unit)) {
+                free(unit.name);
+                free(unit.fortran_name);
                 free((char *)unit.options.source_name);
                 return 0;
             }

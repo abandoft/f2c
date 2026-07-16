@@ -15,3 +15,9 @@ program module_procedure
   call set_shared(37)
   if (shared_value /= 37) stop 1
 end program module_procedure
+
+subroutine set_shared(value)
+  implicit none
+  integer, intent(out) :: value
+  value = -1
+end subroutine set_shared

@@ -649,6 +649,19 @@ static Unit *find_procedure_definition(Context *context, Unit *caller, const cha
              (!caller->internal && procedure->definition->host_index < context->units.count &&
               &context->units.items[procedure->definition->host_index] == caller)))
             return procedure->definition;
+        if (procedure->definition != NULL && procedure->definition->fortran_name != NULL &&
+            strcmp(procedure->definition->fortran_name, name) == 0) {
+            size_t module_index;
+            for (module_index = 0U; module_index < context->modules.count; ++module_index) {
+                Unit *module = &context->modules.items[module_index];
+                const int owns_definition = procedure->definition->begin > module->end &&
+                                            procedure->definition->begin < module->container_end;
+                const int owns_caller = caller == module || (caller->begin > module->end &&
+                                                             caller->begin < module->container_end);
+                if (owns_definition && owns_caller)
+                    return procedure->definition;
+            }
+        }
     }
     return NULL;
 }
