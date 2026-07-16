@@ -33,5 +33,11 @@ program formatted_internal
   if (record(1:5) /= '2,3,5') stop 3
   write(record, '(*I0)', iostat=status) first
   if (status == 0) stop 4
+  scale = 1.1920929e-7
+  write(record, '(1P,E9.1)') scale
+  if (record(1:9) /= '  1.2E-07') stop 5
+  scale = 0.0
+  read(record, '(1P,E9.1)') scale
+  if (abs(scale - 1.2e-7) > 1.0e-12) stop 6
 100 format(i5, 1x, f8.2, 1x, l1, 1x, a2)
 end program formatted_internal

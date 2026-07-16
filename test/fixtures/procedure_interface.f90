@@ -62,6 +62,7 @@ subroutine procedure_interface_matrix(results)
     results(9) = 0
   end if
 
+  call compare_readonly(values, values, results(10))
   call dispatch(apply_scalar, add_bias, 3, results(10), 2)
 
 contains
@@ -118,6 +119,13 @@ contains
 
     call operation(values, factor)
   end subroutine apply_vector
+
+  subroutine compare_readonly(left, right, output)
+    integer, intent(in) :: left(3), right(3)
+    integer, intent(out) :: output
+
+    if (left(1) == right(1)) output = 1
+  end subroutine compare_readonly
 
   subroutine rewrite_text(text)
     character(*), intent(inout) :: text

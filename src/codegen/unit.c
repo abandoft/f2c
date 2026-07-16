@@ -79,13 +79,14 @@ void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, co
     f2c_buffer_append(output, ")");
 }
 
-static void emit_signature(Buffer *output, Unit *unit, int prototype) {
+static void emit_named_signature(Buffer *output, Unit *unit, const char *name,
+                                 int restricted_arguments) {
     size_t i;
     const int allocatable_result = f2c_unit_has_allocatable_result(unit);
     const int character_result =
         !allocatable_result && unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER;
     if (unit->kind == UNIT_PROGRAM) {
-        f2c_buffer_append(output, prototype ? "" : "int main(void)");
+        f2c_buffer_append(output, "int main(void)");
         return;
     }
     f2c_buffer_printf(output, "%s %s(",
@@ -93,9 +94,10 @@ static void emit_signature(Buffer *output, Unit *unit, int prototype) {
                       : unit->kind == UNIT_SUBROUTINE || character_result
                           ? "void"
                           : function_return_c_type(unit),
-                      unit->name);
+                      name);
     if (character_result)
-        f2c_buffer_append(output, "char *f2c_result, size_t f2c_result_len");
+        f2c_buffer_printf(output, "char *%sf2c_result, size_t f2c_result_len",
+                          restricted_arguments ? "F2C_RESTRICT " : "");
     if (unit->argument_count == 0U && !character_result) {
         f2c_buffer_append(output, "void");
     }
@@ -112,7 +114,7 @@ static void emit_signature(Buffer *output, Unit *unit, int prototype) {
         } else {
             f2c_buffer_printf(output, "%s%s *%s%s", qualifier,
                               symbol != NULL ? f2c_symbol_c_type(symbol) : f2c_c_type(TYPE_REAL),
-                              symbol != NULL && symbol->rank != 0U ? "F2C_RESTRICT " : "",
+                              restricted_arguments && symbol != NULL ? "F2C_RESTRICT " : "",
                               symbol != NULL ? f2c_symbol_c_name(unit, symbol)
                                              : unit->arguments[i]);
         }
@@ -126,10 +128,14 @@ static void emit_signature(Buffer *output, Unit *unit, int prototype) {
     f2c_buffer_append(output, ")");
 }
 
+static void emit_signature(Buffer *output, Unit *unit) {
+    emit_named_signature(output, unit, unit->name, 0);
+}
+
 void f2c_emit_procedure_prototype(Buffer *output, Unit *unit) {
     if (unit == NULL || unit->kind == UNIT_PROGRAM)
         return;
-    emit_signature(output, unit, 1);
+    emit_signature(output, unit);
     f2c_buffer_append(output, ";\n");
 }
 
@@ -249,28 +255,14 @@ void f2c_emit_interface_header(Context *context) {
                               "    int64_t extent[15];\n"
                               "    size_t character_length;\n"
                               "} f2c_descriptor;\n\n"
-                              "#if !defined(F2C_RESTRICT)\n"
-                              "#if defined(__cplusplus)\n"
-                              "#define F2C_RESTRICT\n"
-                              "#elif defined(_MSC_VER)\n"
-                              "#define F2C_RESTRICT __restrict\n"
-                              "#else\n"
-                              "#define F2C_RESTRICT restrict\n"
-                              "#endif\n"
-                              "#define F2C_INTERFACE_DEFINED_RESTRICT 1\n"
-                              "#endif\n\n"
                               "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
     for (i = 0U; i < context->units.count; ++i) {
         if (context->units.items[i].kind != UNIT_PROGRAM) {
-            emit_signature(output, &context->units.items[i], 1);
+            emit_signature(output, &context->units.items[i]);
             f2c_buffer_append(output, ";\n");
         }
     }
-    f2c_buffer_append(output, "\n#ifdef __cplusplus\n}\n#endif\n\n"
-                              "#if defined(F2C_INTERFACE_DEFINED_RESTRICT)\n"
-                              "#undef F2C_INTERFACE_DEFINED_RESTRICT\n"
-                              "#undef F2C_RESTRICT\n"
-                              "#endif\n\n");
+    f2c_buffer_append(output, "\n#ifdef __cplusplus\n}\n#endif\n\n");
     f2c_buffer_printf(output, "#endif /* %s */\n", guard);
 }
 
@@ -1012,11 +1004,73 @@ static void emit_unused_suppression(Buffer *output, Unit *unit) {
     }
 }
 
+static char *restricted_body_name(const Unit *unit) {
+    Buffer result = {0};
+    f2c_buffer_printf(&result, "f2c_restricted_body_%s", unit->name);
+    return f2c_buffer_take(&result);
+}
+
+static void emit_wrapper_arguments(Buffer *output, Unit *unit) {
+    const int character_result = unit->kind == UNIT_FUNCTION &&
+                                 unit->return_type == TYPE_CHARACTER &&
+                                 !f2c_unit_has_allocatable_result(unit);
+    size_t i;
+    int emitted = 0;
+    if (character_result) {
+        f2c_buffer_append(output, "f2c_result, f2c_result_len");
+        emitted = 1;
+    }
+    for (i = 0U; i < unit->argument_count; ++i) {
+        Symbol *symbol = f2c_find_symbol(unit, unit->arguments[i]);
+        if (emitted)
+            f2c_buffer_append(output, ", ");
+        if (symbol != NULL && (symbol->allocatable || symbol->pointer))
+            f2c_buffer_printf(output, "f2c_descriptor_%s", f2c_symbol_c_name(unit, symbol));
+        else
+            f2c_buffer_append(output, symbol != NULL ? f2c_symbol_c_name(unit, symbol)
+                                                     : unit->arguments[i]);
+        emitted = 1;
+    }
+    for (i = 0U; i < unit->argument_count; ++i) {
+        Symbol *symbol = f2c_find_symbol(unit, unit->arguments[i]);
+        if (symbol == NULL || symbol->external || symbol->type != TYPE_CHARACTER ||
+            symbol->allocatable || symbol->pointer)
+            continue;
+        if (emitted)
+            f2c_buffer_append(output, ", ");
+        f2c_buffer_printf(output, "f2c_len_%s", f2c_symbol_c_name(unit, symbol));
+        emitted = 1;
+    }
+}
+
+static void emit_restricted_wrapper(Buffer *output, Unit *unit, const char *body_name) {
+    const int returns_value = f2c_unit_has_allocatable_result(unit) ||
+                              (unit->kind == UNIT_FUNCTION && unit->return_type != TYPE_CHARACTER);
+    f2c_buffer_append(output, "static ");
+    emit_named_signature(output, unit, body_name, 1);
+    f2c_buffer_append(output, ";\n");
+    emit_signature(output, unit);
+    f2c_buffer_append(output, " {\n    ");
+    if (returns_value)
+        f2c_buffer_append(output, "return ");
+    f2c_buffer_printf(output, "%s(", body_name);
+    emit_wrapper_arguments(output, unit);
+    f2c_buffer_append(output, ");\n}\n");
+}
+
 void f2c_emit_unit(Context *context, Unit *unit) {
     size_t i;
     int depth = 1;
+    char *body_name = NULL;
     prepare_character_temporaries(unit);
-    emit_signature(&context->output, unit, 0);
+    if (unit->kind == UNIT_PROGRAM) {
+        emit_signature(&context->output, unit);
+    } else {
+        body_name = restricted_body_name(unit);
+        emit_restricted_wrapper(&context->output, unit, body_name);
+        f2c_buffer_append(&context->output, "static ");
+        emit_named_signature(&context->output, unit, body_name, 1);
+    }
     f2c_buffer_append(&context->output, " {\n");
     emit_declarations(context, unit);
     emit_character_temporaries(&context->output, unit);
@@ -1049,4 +1103,5 @@ void f2c_emit_unit(Context *context, Unit *unit) {
         f2c_buffer_append(&context->output, "    return f2c_result;\n");
     }
     f2c_buffer_append(&context->output, "}\n\n");
+    free(body_name);
 }

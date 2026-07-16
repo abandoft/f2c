@@ -66,7 +66,26 @@ def reject_failure_markers(label: str, text: str) -> None:
         raise Difference(f"{label} reports {marker!r}")
 
 
+def parse_detailed_level1(label: str, text: str) -> list[tuple[int, str]]:
+    matches = list(NATIVE_LEVEL1_HEADER.finditer(text))
+    if not matches:
+        return []
+    records: list[tuple[int, str]] = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        result = text[match.end() : end].upper()
+        if "FAIL" in result or "PASS" not in result:
+            raise Difference(
+                f"{label} Level 1 routine {match.group(2).upper()} did not report PASS"
+            )
+        records.append((int(match.group(1)), canonical_name(match.group(2))))
+    return records
+
+
 def parse_generated_level1(text: str) -> list[tuple[int, str]]:
+    detailed = parse_detailed_level1("generated", text)
+    if detailed:
+        return detailed
     records: list[tuple[int, str]] = []
     for line in text.splitlines():
         if not line.strip():
@@ -81,18 +100,9 @@ def parse_generated_level1(text: str) -> list[tuple[int, str]]:
 
 
 def parse_native_level1(text: str) -> list[tuple[int, str]]:
-    matches = list(NATIVE_LEVEL1_HEADER.finditer(text))
-    if not matches:
+    records = parse_detailed_level1("native", text)
+    if not records:
         raise Difference("native Level 1 output has no routine records")
-    records: list[tuple[int, str]] = []
-    for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
-        result = text[match.end() : end].upper()
-        if "FAIL" in result or "PASS" not in result:
-            raise Difference(
-                f"native Level 1 routine {match.group(2).upper()} did not report PASS"
-            )
-        records.append((int(match.group(1)), canonical_name(match.group(2))))
     return records
 
 
@@ -135,8 +145,15 @@ def compare_level23(
     generated_records = [
         (canonical_name(match.group(1)), int(match.group(2)))
         for line in generated.splitlines()
-        if (match := GENERATED_SUMMARY.fullmatch(line)) is not None
+        if (match := NATIVE_SUMMARY.match(line)) is not None
     ]
+    generated_is_detailed = bool(generated_records)
+    if not generated_records:
+        generated_records = [
+            (canonical_name(match.group(1)), int(match.group(2)))
+            for line in generated.splitlines()
+            if (match := GENERATED_SUMMARY.fullmatch(line)) is not None
+        ]
     native_records = [
         (canonical_name(match.group(1)), int(match.group(2)))
         for line in native.splitlines()
@@ -156,11 +173,18 @@ def compare_level23(
             f"generated={generated_item}, native={native_item}"
         )
 
-    generated_headers = [
-        canonical_name(line.strip())
-        for line in generated.splitlines()
-        if re.fullmatch(r"\s*[A-Z][A-Z0-9]*\s*", line)
-    ]
+    if generated_is_detailed:
+        generated_headers = [
+            canonical_name(match.group(1))
+            for line in generated.splitlines()
+            if (match := NATIVE_ERROR_EXIT.match(line)) is not None
+        ]
+    else:
+        generated_headers = [
+            canonical_name(line.strip())
+            for line in generated.splitlines()
+            if re.fullmatch(r"\s*[A-Z][A-Z0-9]*\s*", line)
+        ]
     expected_names = [name for name, _ in generated_records]
     if generated_headers != expected_names:
         raise Difference(
@@ -177,12 +201,22 @@ def compare_level23(
             f"native={native_error_exits}"
         )
 
-    scalars = generated_scalars(generated)
-    if len(scalars) != 2:
-        raise Difference(
-            f"generated output has {len(scalars)} standalone threshold/precision values; expected 2"
+    if generated_is_detailed:
+        generated_threshold = native_scalar(
+            generated, r"TEST RATIO IS LESS THAN\s+([0-9.EeDd+-]+)", "generated test threshold"
         )
-    generated_threshold, generated_precision = scalars
+        generated_precision = native_scalar(
+            generated,
+            r"MACHINE PRECISION IS TAKEN TO BE\s+([0-9.EeDd+-]+)",
+            "generated machine precision",
+        )
+    else:
+        scalars = generated_scalars(generated)
+        if len(scalars) != 2:
+            raise Difference(
+                f"generated output has {len(scalars)} standalone threshold/precision values; expected 2"
+            )
+        generated_threshold, generated_precision = scalars
     native_threshold = native_scalar(
         native, r"TEST RATIO IS LESS THAN\s+([0-9.EeDd+-]+)", "test threshold"
     )
@@ -304,6 +338,14 @@ def self_test() -> None:
     )
     results, _ = compare_level1(generated1, native1)
     assert [item.routine for item in results] == ["SDOT", "SAXPY"]
+    results, _ = compare_level1(native1, native1)
+    assert [item.routine for item in results] == ["SDOT", "SAXPY"]
+    try:
+        compare_level1(native1.replace("----- PASS -----", "----- FAIL -----", 1), native1)
+    except Difference:
+        pass
+    else:
+        raise AssertionError("detailed generated Level 1 failures must be rejected")
 
     generated23 = "0 1 2\n\n16\n\n1.1920929e-07\n\nSGEMV\n\nSGEMV 3461\n"
     native23 = (
@@ -315,6 +357,9 @@ def self_test() -> None:
     results, scalars = compare_level23(generated23, native23)
     assert results == [RoutineResult("SGEMV", 3461, 3461)]
     assert scalars["generated_threshold"] == 16.0
+    results, scalars = compare_level23(native23, native23)
+    assert results == [RoutineResult("SGEMV", 3461, 3461)]
+    assert scalars["generated_machine_precision"] == 1.2e-7
 
     report = Path("blas-result-diff-self-test.json")
     try:

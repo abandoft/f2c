@@ -91,8 +91,10 @@ static void test_blas_style_subroutine(void) {
     expect_contains(result.code, "void daxpy(", "SUBROUTINE maps to a void function");
     expect_contains(result.code, "const int32_t *n",
                     "INTENT(IN) scalar uses a const, alias-safe reference");
+    expect_contains(result.code, "void daxpy(const int32_t *n",
+                    "the public C ABI does not expose optimizer-only alias contracts");
     expect_contains(result.code, "const double *F2C_RESTRICT dx",
-                    "input array uses a qualified pointer");
+                    "the internal implementation preserves Fortran alias optimization");
     expect_contains(result.code, "dy[(((int32_t)(iy)) - (1))]",
                     "Fortran one-based array is rebased with an integer subscript");
     f2c_result_free(&result);
@@ -811,9 +813,9 @@ static void test_project_interface_semantics(void) {
         F2cResult result = f2c_transpile_project(inputs, 2U);
         expect(result.error_count == 0U,
                "project interface validation accepts matching type, rank, and spaced INTENT");
-        expect_contains(result.header,
-                        "void update(float *F2C_RESTRICT values, const int32_t *count);",
-                        "resolved project interface preserves rank and INTENT(IN) ABI metadata");
+        expect_contains(result.header, "void update(float *values, const int32_t *count);",
+                        "resolved project interface preserves rank and INTENT without imposing "
+                        "optimizer-only alias contracts on callers");
         f2c_result_free(&result);
     }
     {
@@ -1487,6 +1489,8 @@ static void test_internal_procedure_and_file_units(void) {
                     "OPEN/REWIND/CLOSE preserve ERR= control flow");
     expect_contains(result.code, "F2C_RANDOM_NUMBER",
                     "RANDOM_NUMBER uses the self-contained generated PRNG");
+    expect_contains(result.code, "(float)(f2c_random_bits() >> 40) * 0x1p-24f",
+                    "single-precision RANDOM_NUMBER converts integer bits explicitly");
     expect_contains(result.code, "return EXIT_SUCCESS", "plain STOP terminates successfully");
     f2c_result_free(&result);
 }

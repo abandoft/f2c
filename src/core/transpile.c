@@ -583,7 +583,7 @@ F2cResult f2c_transpile_project(const F2cInput *inputs, size_t input_count) {
                 "f2c_random_state; x ^= x >> 12; x ^= x << 25; x ^= x >> 27; "
                 "f2c_random_state = x; return x * UINT64_C(2685821657736338717); }\n"
                 "static inline F2C_UNUSED void f2c_random_float(float *v) { *v = "
-                "(float)((f2c_random_bits() >> 40) * 0x1p-24); }\n"
+                "(float)(f2c_random_bits() >> 40) * 0x1p-24f; }\n"
                 "static inline F2C_UNUSED void f2c_random_double(double *v) { *v = "
                 "(double)(f2c_random_bits() >> 11) * 0x1p-53; }\n"
                 "#define F2C_RANDOM_NUMBER(v) _Generic((v), float *: f2c_random_float, "
