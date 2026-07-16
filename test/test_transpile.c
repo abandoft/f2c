@@ -387,6 +387,8 @@ static void test_standalone_lapack_constants_module(void) {
                     "standalone module exports namespaced C constants");
     expect_contains(result.code, "const f2c_complex_double f2c_la_constants_zone",
                     "standalone module preserves double-complex constants");
+    expect_contains(result.code, "const char f2c_la_constants_sprefix = 'S'",
+                    "standalone module emits portable character constant initializers");
     f2c_result_free(&result);
 }
 

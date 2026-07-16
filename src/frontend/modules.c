@@ -580,9 +580,17 @@ void f2c_emit_supported_modules(Context *context) {
         f2c_buffer_printf(&context->output, "const %s f2c_la_constants_%s = ",
                           f2c_c_type_kind(constant->type, f2c_default_kind(constant->type)),
                           constant->name);
-        if (constant->type == TYPE_CHARACTER)
-            f2c_buffer_printf(&context->output, "%s[0]", initializer);
-        else if (constant->type == TYPE_COMPLEX || constant->type == TYPE_DOUBLE_COMPLEX)
+        if (constant->type == TYPE_CHARACTER) {
+            const char value = constant->initializer != NULL && constant->initializer[0] != '\0'
+                                   ? constant->initializer[1]
+                                   : '\0';
+            if (value == '\'' || value == '\\')
+                f2c_buffer_append(&context->output, "'\\");
+            else
+                f2c_buffer_append(&context->output, "'");
+            f2c_buffer_append_n(&context->output, &value, 1U);
+            f2c_buffer_append(&context->output, "'");
+        } else if (constant->type == TYPE_COMPLEX || constant->type == TYPE_DOUBLE_COMPLEX)
             f2c_buffer_append(&context->output, initializer);
         else
             f2c_buffer_printf(&context->output, "(%s)(%s)",
