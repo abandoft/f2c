@@ -64,8 +64,8 @@ static void test_program_and_control_flow(void) {
     expect_contains(result.code, "const int32_t f2c_do_step_", "DO step is evaluated exactly once");
     expect_contains(result.code, "int32_t f2c_do_count_",
                     "canonical default-integer DO uses a native-width trip counter");
-    expect(result.code == NULL || strstr(result.code, "F2C_LOOP_UNROLL\n    for (;") == NULL,
-           "isolated DO loops avoid forced unrolling");
+    expect_contains(result.code, "F2C_LOOP_UNROLL\n    for (;",
+                    "isolated counted loops receive the portable optimization hint");
     expect_contains(result.code, "F2C_MOD(i, 2)", "MOD intrinsic is preserved without a runtime");
     expect_contains(result.code, "return EXIT_FAILURE", "ERROR STOP maps to a failure exit");
     f2c_result_free(&result);
@@ -85,6 +85,22 @@ static void test_wide_do_trip_count(void) {
     expect_contains(result.code, "int64_t f2c_do_count_",
                     "DO ranges spanning the default-integer domain retain a wide trip counter");
     f2c_result_free(&result);
+
+    {
+        static const char stride_source[] = "subroutine stride_do(first, last, observed)\n"
+                                            "  integer :: first, last, observed, i\n"
+                                            "  observed = 0\n"
+                                            "  do i = first, last, 4\n"
+                                            "    observed = observed + 1\n"
+                                            "  end do\n"
+                                            "end subroutine stride_do\n";
+        F2cOptions stride_options = {"stride_do.f90", F2C_SOURCE_FREE, 0};
+        F2cResult stride = f2c_transpile(stride_source, strlen(stride_source), &stride_options);
+        expect(stride.error_count == 0U, "wide-stride default-integer DO translates");
+        expect_contains(stride.code, "int32_t f2c_do_count_",
+                        "a constant stride of four has a provably native-width trip count");
+        f2c_result_free(&stride);
+    }
 }
 
 static void test_blas_style_subroutine(void) {

@@ -39,7 +39,8 @@ else
     c_compiler=${CC:-cc}
 fi
 for name in dgetf2 dlamch idamax dswap dscal dger lsame xerbla; do
-    "$c_compiler" -std=c17 -O3 -flto -ffp-contract=fast -DNDEBUG -c "$work/$name.c" \
+    "$c_compiler" -std=c17 -O3 -flto -ffp-contract=fast -DF2C_FP_CONTRACT=1 -DNDEBUG \
+        -c "$work/$name.c" \
         -o "$work/$name-c.o"
     gfortran -O3 -flto -c "$work/$name.f" -o "$work/$name-fortran.o"
 done

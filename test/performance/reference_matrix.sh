@@ -54,7 +54,8 @@ sources='ddot dnrm2 dscal dger dtrsm dsyrk dgemm lsame xerbla idamax dgetrf dget
 for name in $sources; do
     extension=f
     [ "$name" = dnrm2 ] && extension=f90
-    "$c_compiler" -std=c17 -O3 -flto -ffp-contract=fast -DNDEBUG -c "$work/$name.c" \
+    "$c_compiler" -std=c17 -O3 -flto -ffp-contract=fast -DF2C_FP_CONTRACT=1 -DNDEBUG \
+        -c "$work/$name.c" \
         -o "$work/$name-c.o"
     gfortran -O3 -flto -c "$work/$name.$extension" -o "$work/$name-fortran.o"
 done
