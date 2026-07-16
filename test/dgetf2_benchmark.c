@@ -83,12 +83,24 @@ static int run_case(const Dgetf2Case *test, double *input, double *work, double 
     }
     initialize(input, test->n);
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
-        const double generated_first = measure(dgetf2, test, input, work, pivots);
-        const double fortran_first = measure(dgetf2_, test, input, reference, reference_pivots);
-        const double fortran_second = measure(dgetf2_, test, input, reference, reference_pivots);
-        const double generated_second = measure(dgetf2, test, input, work, pivots);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
-                                                   generated_second);
+        const int generated_outer = f2c_benchmark_generated_is_outer(round);
+        double generated_first;
+        double generated_second;
+        double fortran_first;
+        double fortran_second;
+        if (generated_outer) {
+            generated_first = measure(dgetf2, test, input, work, pivots);
+            fortran_first = measure(dgetf2_, test, input, reference, reference_pivots);
+            fortran_second = measure(dgetf2_, test, input, reference, reference_pivots);
+            generated_second = measure(dgetf2, test, input, work, pivots);
+        } else {
+            fortran_first = measure(dgetf2_, test, input, reference, reference_pivots);
+            generated_first = measure(dgetf2, test, input, work, pivots);
+            generated_second = measure(dgetf2, test, input, work, pivots);
+            fortran_second = measure(dgetf2_, test, input, reference, reference_pivots);
+        }
+        samples[round] = f2c_benchmark_paired_sample(
+            round, generated_first, fortran_first, fortran_second, generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
     printf("DGETF2 n=%d: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", test->n,

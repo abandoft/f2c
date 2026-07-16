@@ -33,15 +33,17 @@ static inline F2cBenchmarkSample f2c_benchmark_symmetric_sample(size_t round, do
     return sample;
 }
 
-static inline F2cBenchmarkSample f2c_benchmark_abba_sample(double generated_first,
-                                                           double fortran_first,
-                                                           double fortran_second,
-                                                           double generated_second) {
-    F2cBenchmarkSample sample;
-    sample.generated_seconds = generated_first + generated_second;
-    sample.fortran_seconds = fortran_first + fortran_second;
-    sample.ratio = sample.generated_seconds / sample.fortran_seconds;
-    return sample;
+/* Collect implementation-specific timings after the caller has executed the
+ * ABBA or BAAB order selected by f2c_benchmark_generated_is_outer(). */
+static inline F2cBenchmarkSample f2c_benchmark_paired_sample(
+    size_t round, double generated_first, double fortran_first, double fortran_second,
+    double generated_second) {
+    const int generated_outer = f2c_benchmark_generated_is_outer(round);
+    return f2c_benchmark_symmetric_sample(
+        round, generated_outer ? generated_first : fortran_first,
+        generated_outer ? fortran_first : generated_first,
+        generated_outer ? fortran_second : generated_second,
+        generated_outer ? generated_second : fortran_second);
 }
 
 /* Process CPU time keeps paired single-threaded measurements stable when CI

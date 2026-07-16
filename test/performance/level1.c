@@ -113,44 +113,82 @@ static int run_case(const Level1Case *test, double *x, double *y, double *native
         if (kernel == 2U && test->stride < 0)
             continue;
         for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
+            const int generated_outer = f2c_benchmark_generated_is_outer(round);
             double generated_first;
             double generated_second;
             double fortran_first;
             double fortran_second;
             if (kernel == 0U) {
-                initialize(x, count, 7);
-                initialize(y, count, 31);
-                generated_first = measure_ddot(ddot, test, x, y);
-                initialize(native, count, 7);
-                initialize(y, count, 31);
-                fortran_first = measure_ddot(ddot_, test, native, y);
-                initialize(native, count, 7);
-                initialize(y, count, 31);
-                fortran_second = measure_ddot(ddot_, test, native, y);
-                initialize(x, count, 7);
-                initialize(y, count, 31);
-                generated_second = measure_ddot(ddot, test, x, y);
+                if (generated_outer) {
+                    initialize(x, count, 7);
+                    initialize(y, count, 31);
+                    generated_first = measure_ddot(ddot, test, x, y);
+                    initialize(native, count, 7);
+                    initialize(y, count, 31);
+                    fortran_first = measure_ddot(ddot_, test, native, y);
+                    initialize(native, count, 7);
+                    initialize(y, count, 31);
+                    fortran_second = measure_ddot(ddot_, test, native, y);
+                    initialize(x, count, 7);
+                    initialize(y, count, 31);
+                    generated_second = measure_ddot(ddot, test, x, y);
+                } else {
+                    initialize(native, count, 7);
+                    initialize(y, count, 31);
+                    fortran_first = measure_ddot(ddot_, test, native, y);
+                    initialize(x, count, 7);
+                    initialize(y, count, 31);
+                    generated_first = measure_ddot(ddot, test, x, y);
+                    initialize(x, count, 7);
+                    initialize(y, count, 31);
+                    generated_second = measure_ddot(ddot, test, x, y);
+                    initialize(native, count, 7);
+                    initialize(y, count, 31);
+                    fortran_second = measure_ddot(ddot_, test, native, y);
+                }
             } else if (kernel == 1U) {
-                initialize(x, count, 7);
-                generated_first = measure_dnrm2(dnrm2, test, x);
-                initialize(native, count, 7);
-                fortran_first = measure_dnrm2(dnrm2_, test, native);
-                initialize(native, count, 7);
-                fortran_second = measure_dnrm2(dnrm2_, test, native);
-                initialize(x, count, 7);
-                generated_second = measure_dnrm2(dnrm2, test, x);
+                if (generated_outer) {
+                    initialize(x, count, 7);
+                    generated_first = measure_dnrm2(dnrm2, test, x);
+                    initialize(native, count, 7);
+                    fortran_first = measure_dnrm2(dnrm2_, test, native);
+                    initialize(native, count, 7);
+                    fortran_second = measure_dnrm2(dnrm2_, test, native);
+                    initialize(x, count, 7);
+                    generated_second = measure_dnrm2(dnrm2, test, x);
+                } else {
+                    initialize(native, count, 7);
+                    fortran_first = measure_dnrm2(dnrm2_, test, native);
+                    initialize(x, count, 7);
+                    generated_first = measure_dnrm2(dnrm2, test, x);
+                    initialize(x, count, 7);
+                    generated_second = measure_dnrm2(dnrm2, test, x);
+                    initialize(native, count, 7);
+                    fortran_second = measure_dnrm2(dnrm2_, test, native);
+                }
             } else {
-                initialize(x, count, 7);
-                generated_first = measure_dscal(dscal, test, x);
-                initialize(native, count, 7);
-                fortran_first = measure_dscal(dscal_, test, native);
-                initialize(native, count, 7);
-                fortran_second = measure_dscal(dscal_, test, native);
-                initialize(x, count, 7);
-                generated_second = measure_dscal(dscal, test, x);
+                if (generated_outer) {
+                    initialize(x, count, 7);
+                    generated_first = measure_dscal(dscal, test, x);
+                    initialize(native, count, 7);
+                    fortran_first = measure_dscal(dscal_, test, native);
+                    initialize(native, count, 7);
+                    fortran_second = measure_dscal(dscal_, test, native);
+                    initialize(x, count, 7);
+                    generated_second = measure_dscal(dscal, test, x);
+                } else {
+                    initialize(native, count, 7);
+                    fortran_first = measure_dscal(dscal_, test, native);
+                    initialize(x, count, 7);
+                    generated_first = measure_dscal(dscal, test, x);
+                    initialize(x, count, 7);
+                    generated_second = measure_dscal(dscal, test, x);
+                    initialize(native, count, 7);
+                    fortran_second = measure_dscal(dscal_, test, native);
+                }
             }
-            samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first,
-                                                       fortran_second, generated_second);
+            samples[round] = f2c_benchmark_paired_sample(
+                round, generated_first, fortran_first, fortran_second, generated_second);
         }
         passed = f2c_benchmark_report(kernels[kernel], description, samples,
                                       sizeof(samples) / sizeof(samples[0])) &&

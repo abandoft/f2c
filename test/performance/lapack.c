@@ -125,14 +125,24 @@ static int run_dgetrf(const LapackCase *test, double *input, double *generated, 
     initialize_general(input, test->n);
     (void)snprintf(description, sizeof(description), "n=%d;nb=%d", test->n, fixed_block_size());
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
-        const double generated_first =
-            measure_dgetrf(dgetrf, test, input, generated, generated_pivots);
-        const double fortran_first = measure_dgetrf(dgetrf_, test, input, native, native_pivots);
-        const double fortran_second = measure_dgetrf(dgetrf_, test, input, native, native_pivots);
-        const double generated_second =
-            measure_dgetrf(dgetrf, test, input, generated, generated_pivots);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
-                                                   generated_second);
+        const int generated_outer = f2c_benchmark_generated_is_outer(round);
+        double generated_first;
+        double generated_second;
+        double fortran_first;
+        double fortran_second;
+        if (generated_outer) {
+            generated_first = measure_dgetrf(dgetrf, test, input, generated, generated_pivots);
+            fortran_first = measure_dgetrf(dgetrf_, test, input, native, native_pivots);
+            fortran_second = measure_dgetrf(dgetrf_, test, input, native, native_pivots);
+            generated_second = measure_dgetrf(dgetrf, test, input, generated, generated_pivots);
+        } else {
+            fortran_first = measure_dgetrf(dgetrf_, test, input, native, native_pivots);
+            generated_first = measure_dgetrf(dgetrf, test, input, generated, generated_pivots);
+            generated_second = measure_dgetrf(dgetrf, test, input, generated, generated_pivots);
+            fortran_second = measure_dgetrf(dgetrf_, test, input, native, native_pivots);
+        }
+        samples[round] = f2c_benchmark_paired_sample(
+            round, generated_first, fortran_first, fortran_second, generated_second);
     }
     return f2c_benchmark_report("DGETRF", description, samples,
                                 sizeof(samples) / sizeof(samples[0]));
@@ -197,12 +207,24 @@ static int run_dpotrf(const LapackCase *test, char uplo, double *input, double *
     (void)snprintf(description, sizeof(description), "n=%d;uplo=%c;nb=%d", test->n, uplo,
                    fixed_block_size());
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
-        const double generated_first = measure_dpotrf(dpotrf, test, uplo, input, generated);
-        const double fortran_first = measure_dpotrf(dpotrf_, test, uplo, input, native);
-        const double fortran_second = measure_dpotrf(dpotrf_, test, uplo, input, native);
-        const double generated_second = measure_dpotrf(dpotrf, test, uplo, input, generated);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
-                                                   generated_second);
+        const int generated_outer = f2c_benchmark_generated_is_outer(round);
+        double generated_first;
+        double generated_second;
+        double fortran_first;
+        double fortran_second;
+        if (generated_outer) {
+            generated_first = measure_dpotrf(dpotrf, test, uplo, input, generated);
+            fortran_first = measure_dpotrf(dpotrf_, test, uplo, input, native);
+            fortran_second = measure_dpotrf(dpotrf_, test, uplo, input, native);
+            generated_second = measure_dpotrf(dpotrf, test, uplo, input, generated);
+        } else {
+            fortran_first = measure_dpotrf(dpotrf_, test, uplo, input, native);
+            generated_first = measure_dpotrf(dpotrf, test, uplo, input, generated);
+            generated_second = measure_dpotrf(dpotrf, test, uplo, input, generated);
+            fortran_second = measure_dpotrf(dpotrf_, test, uplo, input, native);
+        }
+        samples[round] = f2c_benchmark_paired_sample(
+            round, generated_first, fortran_first, fortran_second, generated_second);
     }
     return f2c_benchmark_report("DPOTRF", description, samples,
                                 sizeof(samples) / sizeof(samples[0]));

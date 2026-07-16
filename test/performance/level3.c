@@ -114,12 +114,24 @@ static int run_dtrsm(const Level3Case *test, double *a, double *input, double *g
     (void)snprintf(description, sizeof(description), "n=%d;side=%c;trans=%c", test->n,
                    test->option_a, test->option_b);
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
-        const double generated_first = measure_dtrsm(dtrsm, test, a, input, generated);
-        const double fortran_first = measure_dtrsm(dtrsm_, test, a, input, native);
-        const double fortran_second = measure_dtrsm(dtrsm_, test, a, input, native);
-        const double generated_second = measure_dtrsm(dtrsm, test, a, input, generated);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
-                                                   generated_second);
+        const int generated_outer = f2c_benchmark_generated_is_outer(round);
+        double generated_first;
+        double generated_second;
+        double fortran_first;
+        double fortran_second;
+        if (generated_outer) {
+            generated_first = measure_dtrsm(dtrsm, test, a, input, generated);
+            fortran_first = measure_dtrsm(dtrsm_, test, a, input, native);
+            fortran_second = measure_dtrsm(dtrsm_, test, a, input, native);
+            generated_second = measure_dtrsm(dtrsm, test, a, input, generated);
+        } else {
+            fortran_first = measure_dtrsm(dtrsm_, test, a, input, native);
+            generated_first = measure_dtrsm(dtrsm, test, a, input, generated);
+            generated_second = measure_dtrsm(dtrsm, test, a, input, generated);
+            fortran_second = measure_dtrsm(dtrsm_, test, a, input, native);
+        }
+        samples[round] = f2c_benchmark_paired_sample(
+            round, generated_first, fortran_first, fortran_second, generated_second);
     }
     return f2c_benchmark_report("DTRSM", description, samples,
                                 sizeof(samples) / sizeof(samples[0]));
@@ -172,20 +184,32 @@ static int run_dsyrk(const Level3Case *test, double *a, double *generated, doubl
     }
     (void)snprintf(description, sizeof(description), "n=%d;trans=%c", test->n, test->option_a);
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
+        const int generated_outer = f2c_benchmark_generated_is_outer(round);
         double generated_first;
         double generated_second;
         double fortran_first;
         double fortran_second;
-        initialize_dense(generated, test->n, 43);
-        generated_first = measure_dsyrk(dsyrk, test, a, generated);
-        initialize_dense(native, test->n, 43);
-        fortran_first = measure_dsyrk(dsyrk_, test, a, native);
-        initialize_dense(native, test->n, 43);
-        fortran_second = measure_dsyrk(dsyrk_, test, a, native);
-        initialize_dense(generated, test->n, 43);
-        generated_second = measure_dsyrk(dsyrk, test, a, generated);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
-                                                   generated_second);
+        if (generated_outer) {
+            initialize_dense(generated, test->n, 43);
+            generated_first = measure_dsyrk(dsyrk, test, a, generated);
+            initialize_dense(native, test->n, 43);
+            fortran_first = measure_dsyrk(dsyrk_, test, a, native);
+            initialize_dense(native, test->n, 43);
+            fortran_second = measure_dsyrk(dsyrk_, test, a, native);
+            initialize_dense(generated, test->n, 43);
+            generated_second = measure_dsyrk(dsyrk, test, a, generated);
+        } else {
+            initialize_dense(native, test->n, 43);
+            fortran_first = measure_dsyrk(dsyrk_, test, a, native);
+            initialize_dense(generated, test->n, 43);
+            generated_first = measure_dsyrk(dsyrk, test, a, generated);
+            initialize_dense(generated, test->n, 43);
+            generated_second = measure_dsyrk(dsyrk, test, a, generated);
+            initialize_dense(native, test->n, 43);
+            fortran_second = measure_dsyrk(dsyrk_, test, a, native);
+        }
+        samples[round] = f2c_benchmark_paired_sample(
+            round, generated_first, fortran_first, fortran_second, generated_second);
     }
     return f2c_benchmark_report("DSYRK", description, samples,
                                 sizeof(samples) / sizeof(samples[0]));

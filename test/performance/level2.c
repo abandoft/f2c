@@ -70,20 +70,32 @@ static int run_case(const DgerCase *test, double *x, double *y, double *generate
     }
     (void)snprintf(description, sizeof(description), "n=%d;inc=%d", test->n, test->stride);
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
+        const int generated_outer = f2c_benchmark_generated_is_outer(round);
         double generated_first;
         double generated_second;
         double fortran_first;
         double fortran_second;
-        initialize(generated, matrix_count, 19);
-        generated_first = measure(dger, test, x, y, generated);
-        initialize(native, matrix_count, 19);
-        fortran_first = measure(dger_, test, x, y, native);
-        initialize(native, matrix_count, 19);
-        fortran_second = measure(dger_, test, x, y, native);
-        initialize(generated, matrix_count, 19);
-        generated_second = measure(dger, test, x, y, generated);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
-                                                   generated_second);
+        if (generated_outer) {
+            initialize(generated, matrix_count, 19);
+            generated_first = measure(dger, test, x, y, generated);
+            initialize(native, matrix_count, 19);
+            fortran_first = measure(dger_, test, x, y, native);
+            initialize(native, matrix_count, 19);
+            fortran_second = measure(dger_, test, x, y, native);
+            initialize(generated, matrix_count, 19);
+            generated_second = measure(dger, test, x, y, generated);
+        } else {
+            initialize(native, matrix_count, 19);
+            fortran_first = measure(dger_, test, x, y, native);
+            initialize(generated, matrix_count, 19);
+            generated_first = measure(dger, test, x, y, generated);
+            initialize(generated, matrix_count, 19);
+            generated_second = measure(dger, test, x, y, generated);
+            initialize(native, matrix_count, 19);
+            fortran_second = measure(dger_, test, x, y, native);
+        }
+        samples[round] = f2c_benchmark_paired_sample(
+            round, generated_first, fortran_first, fortran_second, generated_second);
     }
     return f2c_benchmark_report("DGER", description, samples, sizeof(samples) / sizeof(samples[0]));
 }

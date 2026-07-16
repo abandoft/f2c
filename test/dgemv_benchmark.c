@@ -82,20 +82,32 @@ static int run_case(const DgemvCase *test, double *a, double *x, double *y, doub
         return 0;
     }
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
+        const int generated_outer = f2c_benchmark_generated_is_outer(round);
         double generated_first;
         double generated_second;
         double fortran_first;
         double fortran_second;
-        initialize(y, (size_t)test->n, 19);
-        generated_first = measure(dgemv_generated, test, a, x, y);
-        initialize(y, (size_t)test->n, 19);
-        fortran_first = measure(dgemv_fortran, test, a, x, y);
-        initialize(y, (size_t)test->n, 19);
-        fortran_second = measure(dgemv_fortran, test, a, x, y);
-        initialize(y, (size_t)test->n, 19);
-        generated_second = measure(dgemv_generated, test, a, x, y);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
-                                                   generated_second);
+        if (generated_outer) {
+            initialize(y, (size_t)test->n, 19);
+            generated_first = measure(dgemv_generated, test, a, x, y);
+            initialize(y, (size_t)test->n, 19);
+            fortran_first = measure(dgemv_fortran, test, a, x, y);
+            initialize(y, (size_t)test->n, 19);
+            fortran_second = measure(dgemv_fortran, test, a, x, y);
+            initialize(y, (size_t)test->n, 19);
+            generated_second = measure(dgemv_generated, test, a, x, y);
+        } else {
+            initialize(y, (size_t)test->n, 19);
+            fortran_first = measure(dgemv_fortran, test, a, x, y);
+            initialize(y, (size_t)test->n, 19);
+            generated_first = measure(dgemv_generated, test, a, x, y);
+            initialize(y, (size_t)test->n, 19);
+            generated_second = measure(dgemv_generated, test, a, x, y);
+            initialize(y, (size_t)test->n, 19);
+            fortran_second = measure(dgemv_fortran, test, a, x, y);
+        }
+        samples[round] = f2c_benchmark_paired_sample(
+            round, generated_first, fortran_first, fortran_second, generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
     printf("DGEMV n=%d trans=%c: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", test->n,
