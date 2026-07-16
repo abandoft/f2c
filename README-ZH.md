@@ -1,6 +1,6 @@
 # F2C
 
-[English](README.md) · [中文文档](README-ZH.md)
+[English](https://github.com/abandoft/f2c) · [中文文档](https://github.com/abandoft/f2c/blob/main/README-ZH.md)
 
 现代化、高性能的 Fortran 到 C17 转译器，目标是生成可移植的商业级 C 代码。使用 C17 编写，不依赖额外的生成代码运行时。
 
@@ -177,4 +177,6 @@ macOS 可使用 `shasum -a 256 -c` 校验相同的 checksum 文件。
 
 ## 许可证
 
-f2c 使用 [MIT 许可证](LICENSE)。
+- [f2c](https://github.com/abandoft/f2c) 的代码使用 [MIT 许可证](LICENSE)。
+- [netlib-f2c](https://www.netlib.org/f2c) 的代码遵循原项目许可证。
+> **注：**`f2c`是重构的新项目，并不依赖`netlib-f2c`。
