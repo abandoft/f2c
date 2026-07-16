@@ -1,6 +1,6 @@
 # F2C
 
-[English](README.md) · [中文文档](README-ZH.md)
+[English](https://github.com/abandoft/f2c) · [中文文档](https://github.com/abandoft/f2c/blob/main/README-ZH.md)
 
 A modern, high-performance Fortran-to-C17 transpiler designed to generate portable,
 production-grade C code. It is written in C17 and requires no additional generated-code runtime.
@@ -192,4 +192,7 @@ On macOS, use `shasum -a 256 -c` for the checksum file.
 
 ## License
 
-f2c is available under the [MIT License](LICENSE).
+* The code in [f2c](https://github.com/abandoft/f2c) is licensed under the [MIT License](LICENSE).
+* The code in [netlib-f2c](https://www.netlib.org/f2c) remains subject to the original project’s license.
+
+> **Note:** `f2c` is a newly refactored project and does not depend on `netlib-f2c`.
