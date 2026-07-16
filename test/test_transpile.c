@@ -276,6 +276,8 @@ static void test_character_and_external_interface(void) {
                     "spaced CHARACTER(LEN=...) selector retains its explicit length");
     expect_contains(result.code, "consume_text(name, \"XY\", 4, 2U)",
                     "fixed dummies forward declared length while literals use static length");
+    expect_contains(result.code, "extern void consume_text(char *, char *, size_t, size_t);",
+                    "implicit external prototypes do not infer dummy constness from actuals");
     f2c_result_free(&result);
 }
 

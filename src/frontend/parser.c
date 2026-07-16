@@ -2137,9 +2137,15 @@ static void infer_external_signature(Unit *unit, Symbol *external, const char *l
             if (actual != NULL && actual->external && actual->external_declared &&
                 actual_text[consumed] == '\0')
                 external->external_parameter_procedures[i] = actual;
-            external->external_parameter_const[i] |=
-                (actual != NULL && (actual->intent == F2C_INTENT_IN || actual->parameter)) ||
-                actual_text[0] == '\'' || actual_text[0] == '"';
+            /* An implicit external interface describes the callee, not the
+             * particular actual argument observed at this call site.  In
+             * particular, a literal or an INTENT(IN) actual does not prove
+             * that the external dummy has INTENT(IN).  Inferring const here
+             * produces a C function type that is incompatible with a
+             * separately translated legacy procedure whose dummy has no
+             * explicit INTENT, and can consequently disable LTO or diagnose
+             * a type mismatch.  Exact const qualification is retained when
+             * an explicit interface is available. */
             f2c_expr_free(actual_expression);
             free(actual_name);
             free(arguments[i]);
