@@ -78,15 +78,8 @@ jobs:
           cmake -E make_directory build/release/stage/bin build/release/stage/include/f2c
           cmake -E copy "${{ matrix.binary }}" "build/release/stage/bin/${{ matrix.packaged_binary }}"
           cmake -E copy include/f2c/f2c.h build/release/stage/include/f2c/f2c.h
-          cmake -E copy README.md README-ZH.md CHANGELOG.md CHANGELOG-ZH.md build/release/stage
+          cmake -E copy README.md README-ZH.md CHANGELOG.md CHANGELOG-ZH.md LICENSE build/release/stage
           printf '%s\n' "$archive" > build/release/archive-name.txt
-      - name: Generate SPDX SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          path: build/release/stage
-          format: spdx-json
-          output-file: build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.spdx.json
-          upload-artifact: false
       - name: Create archive and SHA-256 checksum
         shell: bash
         run: |
@@ -101,11 +94,6 @@ jobs:
         uses: actions/attest@v4
         with:
           subject-path: build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.${{ matrix.archive_extension }}
-      - name: Attest SPDX SBOM
-        uses: actions/attest@v4
-        with:
-          subject-path: build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.${{ matrix.archive_extension }}
-          sbom-path: build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.spdx.json
       - name: Upload release inputs
         uses: actions/upload-artifact@v7
         with:
@@ -113,7 +101,6 @@ jobs:
           path: |
             build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.${{ matrix.archive_extension }}
             build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.${{ matrix.archive_extension }}.sha256
-            build/release/f2c-${{ github.ref_name }}-${{ matrix.platform }}.spdx.json
           if-no-files-found: error
 
   publish:

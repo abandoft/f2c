@@ -181,7 +181,7 @@ Generated-code memory safety, parser resource exhaustion, path handling, release
 unexpected access outside the requested inputs are treated as security issues. Maintainers will
 acknowledge, reproduce, assess, and coordinate disclosure through the private report.
 
-Tagged release assets include SHA-256 checksums, SPDX JSON SBOMs, and GitHub artifact attestations:
+Tagged release assets include SHA-256 checksums and GitHub artifact attestations:
 
 ```sh
 sha256sum -c f2c-<version>-<platform>.<archive>.sha256
@@ -189,3 +189,7 @@ gh attestation verify f2c-<version>-<platform>.<archive> --repo abandoft/f2c
 ```
 
 On macOS, use `shasum -a 256 -c` for the checksum file.
+
+## License
+
+f2c is available under the [MIT License](LICENSE).

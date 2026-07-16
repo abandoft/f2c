@@ -4,6 +4,7 @@
 - Generated self-contained C17 without requiring an additional runtime library.
 - Added cross-platform testing, sanitizers, fuzzing, reproducible builds, and release verification.
 - Added complete pinned BLAS/LAPACK compilation, correctness, differential, and performance gates.
+- Released under the MIT License.
 
 ## 20250303
 

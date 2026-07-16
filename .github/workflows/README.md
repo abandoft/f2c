@@ -13,7 +13,7 @@ flat and descriptive rather than grouped into nested folders.
 | `numerical-validation.yml` | Yes | Yes | Manual | Complete BLAS/LAPACK compilation, native differential, and numerical audit |
 | `performance.yml` | No | Yes | Weekly/manual | Generated C versus native Fortran performance parity |
 | `fuzz.yml` | No | No | Weekly/manual | Coverage-guided libFuzzer campaign with ASan/UBSan |
-| `release.yml` | No | Tagged release | Plain semantic-version tag such as `1.0.0` | Tested packages, checksums, SBOM, provenance, and GitHub release publication |
+| `release.yml` | No | Tagged release | Plain semantic-version tag such as `1.0.0` | Tested packages, checksums, provenance, and GitHub release publication |
 
 The first five workflows are the stable correctness and portability checks intended for branch
 protection. Performance is isolated because timing on shared runners is operationally different

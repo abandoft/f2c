@@ -166,7 +166,7 @@ CMake/CTest 命令；较大的转译器变更还应运行受影响的 BLAS/LAPAC
 生成代码内存安全、解析器资源耗尽、路径处理、发布来源证明，以及意外访问请求输入之外的内容，
 均按安全问题处理。维护者会通过私有报告确认、复现、评估并协调修复和披露。
 
-标签发布产物包含 SHA-256 校验和、SPDX JSON SBOM 和 GitHub artifact attestation：
+标签发布产物包含 SHA-256 校验和及 GitHub artifact attestation：
 
 ```sh
 sha256sum -c f2c-<version>-<platform>.<archive>.sha256
@@ -174,3 +174,7 @@ gh attestation verify f2c-<version>-<platform>.<archive> --repo abandoft/f2c
 ```
 
 macOS 可使用 `shasum -a 256 -c` 校验相同的 checksum 文件。
+
+## 许可证
+
+f2c 使用 [MIT 许可证](LICENSE)。
