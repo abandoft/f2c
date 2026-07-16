@@ -22,8 +22,8 @@ option(
 )
 option(F2C_BUILD_LIBFUZZER "Build the coverage-guided libFuzzer target" OFF)
 
-add_library(
-    f2c_core
+set(
+    F2C_CORE_SOURCES
     src/core/support.c
     src/core/transpile.c
     src/frontend/interface.c
@@ -61,62 +61,72 @@ add_library(
     src/codegen/unit.c
     src/internal/f2c.h
 )
-add_library(f2c::core ALIAS f2c_core)
 
-target_compile_features(f2c_core PUBLIC c_std_17)
-target_compile_definitions(
-    f2c_core
-    PRIVATE
-        F2C_BUILDING_LIBRARY
-        F2C_VERSION="${PROJECT_VERSION}"
-)
-if(BUILD_SHARED_LIBS)
-    target_compile_definitions(f2c_core PUBLIC F2C_SHARED)
-endif()
-target_include_directories(
-    f2c_core
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
-    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
+function(f2c_configure_core_target target)
+    target_compile_features(${target} PUBLIC c_std_17)
+    target_compile_definitions(
+        ${target}
+        PRIVATE
+            F2C_BUILDING_LIBRARY
+            F2C_VERSION="${PROJECT_VERSION}"
+    )
+    target_include_directories(
+        ${target}
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    set_target_properties(
+        ${target}
+        PROPERTIES
+            C_STANDARD 17
+            C_STANDARD_REQUIRED YES
+            C_EXTENSIONS NO
+            POSITION_INDEPENDENT_CODE YES
+    )
+
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8)
+        if(F2C_ENABLE_WARNINGS_AS_ERRORS)
+            target_compile_options(${target} PRIVATE /WX)
+        endif()
+    else()
+        target_compile_options(
+            ${target}
+            PRIVATE
+                -Wall
+                -Wextra
+                -Wpedantic
+                -Wconversion
+                -Wshadow
+                -Wstrict-prototypes
+                -Wmissing-prototypes
+        )
+        if(F2C_ENABLE_WARNINGS_AS_ERRORS)
+            target_compile_options(${target} PRIVATE -Werror)
+        endif()
+        if(F2C_ENABLE_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+            target_compile_options(
+                ${target}
+                PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer
+            )
+            # PUBLIC is required because a static library has no link step of its own.
+            target_link_options(${target} PUBLIC -fsanitize=address,undefined)
+        endif()
+    endif()
+endfunction()
+
+add_library(f2c_core ${F2C_CORE_SOURCES})
+add_library(f2c::core ALIAS f2c_core)
+f2c_configure_core_target(f2c_core)
 set_target_properties(
     f2c_core
     PROPERTIES
-        C_STANDARD 17
-        C_STANDARD_REQUIRED YES
-        C_EXTENSIONS NO
-        POSITION_INDEPENDENT_CODE YES
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR}
+        C_VISIBILITY_PRESET hidden
 )
-
-if(MSVC)
-    target_compile_options(f2c_core PRIVATE /W4 /permissive- /utf-8)
-    if(F2C_ENABLE_WARNINGS_AS_ERRORS)
-        target_compile_options(f2c_core PRIVATE /WX)
-    endif()
-else()
-    target_compile_options(
-        f2c_core
-        PRIVATE
-            -Wall
-            -Wextra
-            -Wpedantic
-            -Wconversion
-            -Wshadow
-            -Wstrict-prototypes
-            -Wmissing-prototypes
-    )
-    if(F2C_ENABLE_WARNINGS_AS_ERRORS)
-        target_compile_options(f2c_core PRIVATE -Werror)
-    endif()
-    if(F2C_ENABLE_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
-        target_compile_options(
-            f2c_core
-            PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer
-        )
-        # PUBLIC is required because a static library has no link step of its own.
-        target_link_options(f2c_core PUBLIC -fsanitize=address,undefined)
-    endif()
+if(BUILD_SHARED_LIBS)
+    target_compile_definitions(f2c_core PUBLIC F2C_SHARED)
 endif()
 
 add_executable(f2c src/cli/main.c)
@@ -145,9 +155,15 @@ else()
 endif()
 
 if(F2C_BUILD_TESTING)
-    function(f2c_configure_test_target target)
+    if(BUILD_SHARED_LIBS)
+        # White-box tests use private compiler APIs without making them part of
+        # the shared-library ABI. Public API tests still link against f2c_core.
+        add_library(f2c_internal_test_core STATIC ${F2C_CORE_SOURCES})
+        f2c_configure_core_target(f2c_internal_test_core)
+    endif()
+
+    function(f2c_configure_test_compilation target)
         target_compile_features(${target} PRIVATE c_std_17)
-        target_link_libraries(${target} PRIVATE f2c::core)
         if(MSVC)
             target_compile_options(${target} PRIVATE /W4 /utf-8)
             if(F2C_ENABLE_WARNINGS_AS_ERRORS)
@@ -158,6 +174,20 @@ if(F2C_BUILD_TESTING)
             if(F2C_ENABLE_WARNINGS_AS_ERRORS)
                 target_compile_options(${target} PRIVATE -Werror)
             endif()
+        endif()
+    endfunction()
+
+    function(f2c_configure_test_target target)
+        f2c_configure_test_compilation(${target})
+        target_link_libraries(${target} PRIVATE f2c::core)
+    endfunction()
+
+    function(f2c_configure_internal_test_target target)
+        f2c_configure_test_compilation(${target})
+        if(BUILD_SHARED_LIBS)
+            target_link_libraries(${target} PRIVATE f2c_internal_test_core)
+        else()
+            target_link_libraries(${target} PRIVATE f2c::core)
         endif()
     endfunction()
 
@@ -186,12 +216,12 @@ if(F2C_BUILD_TESTING)
 
     add_executable(f2c_ast_tests test/test_ast.c)
     target_include_directories(f2c_ast_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    f2c_configure_test_target(f2c_ast_tests)
+    f2c_configure_internal_test_target(f2c_ast_tests)
     add_test(NAME ast COMMAND f2c_ast_tests)
 
     add_executable(f2c_lexer_tests test/test_lexer.c)
     target_include_directories(f2c_lexer_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    f2c_configure_test_target(f2c_lexer_tests)
+    f2c_configure_internal_test_target(f2c_lexer_tests)
     add_test(NAME lexer COMMAND f2c_lexer_tests)
 
     add_executable(f2c_statement_ast_tests test/test_statement_ast.c)
@@ -199,12 +229,12 @@ if(F2C_BUILD_TESTING)
         f2c_statement_ast_tests
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    f2c_configure_test_target(f2c_statement_ast_tests)
+    f2c_configure_internal_test_target(f2c_statement_ast_tests)
     add_test(NAME statement_ast COMMAND f2c_statement_ast_tests)
 
     add_executable(f2c_constant_tests test/test_constant.c)
     target_include_directories(f2c_constant_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    f2c_configure_test_target(f2c_constant_tests)
+    f2c_configure_internal_test_target(f2c_constant_tests)
     add_test(NAME constant COMMAND f2c_constant_tests)
 
     add_executable(f2c_fuzz_tests test/test_fuzz.c)
@@ -216,7 +246,7 @@ if(F2C_BUILD_TESTING)
         f2c_benchmark_statistics_tests
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test
     )
-    f2c_configure_test_target(f2c_benchmark_statistics_tests)
+    f2c_configure_test_compilation(f2c_benchmark_statistics_tests)
     add_test(NAME benchmark_statistics COMMAND f2c_benchmark_statistics_tests)
 
     add_test(
@@ -225,8 +255,11 @@ if(F2C_BUILD_TESTING)
             ${CMAKE_COMMAND}
             -DF2C=$<TARGET_FILE:f2c>
             -DCC=${CMAKE_C_COMPILER}
-            "-DCC_INCLUDE_DIRECTORIES=${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES}"
-            "-DCC_LINK_DIRECTORIES=${CMAKE_C_IMPLICIT_LINK_DIRECTORIES}"
+            -DCC_ID=${CMAKE_C_COMPILER_ID}
+            -DCC_FRONTEND_VARIANT=${CMAKE_C_COMPILER_FRONTEND_VARIANT}
+            "-DVS_INSTALLATION=${CMAKE_GENERATOR_INSTANCE}"
+            -DVS_TARGET_ARCHITECTURE=${CMAKE_VS_PLATFORM_NAME}
+            -DVS_HOST_ARCHITECTURE=${CMAKE_VS_PLATFORM_TOOLSET_HOST_ARCHITECTURE}
             -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/test/compile_generated.cmake

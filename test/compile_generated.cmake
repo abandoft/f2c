@@ -1,18 +1,43 @@
-if(WIN32)
-    if(NOT DEFINED CC_INCLUDE_DIRECTORIES OR CC_INCLUDE_DIRECTORIES STREQUAL "")
+set(F2C_MSVC_FRONTEND FALSE)
+if(CC_ID STREQUAL "MSVC" OR CC_FRONTEND_VARIANT STREQUAL "MSVC")
+    set(F2C_MSVC_FRONTEND TRUE)
+endif()
+
+set(CC_COMMAND "${CC}")
+if(F2C_MSVC_FRONTEND AND
+   ("$ENV{INCLUDE}" STREQUAL "" OR "$ENV{LIB}" STREQUAL ""))
+    string(REGEX REPLACE ",.*$" "" visual_studio_root "${VS_INSTALLATION}")
+    set(visual_studio_environment
+        "${visual_studio_root}/Common7/Tools/VsDevCmd.bat")
+    if(NOT EXISTS "${visual_studio_environment}")
         message(FATAL_ERROR
-                "the Windows C compiler's standard include directories were not provided")
-    endif()
-    if(NOT DEFINED CC_LINK_DIRECTORIES OR CC_LINK_DIRECTORIES STREQUAL "")
-        message(FATAL_ERROR
-                "the Windows C compiler's standard library directories were not provided")
+                "Visual Studio development environment not found: ${visual_studio_environment}")
     endif()
 
-    # Visual Studio generators can discover cl.exe without modifying the parent
-    # process environment.  Generated-source checks invoke the compiler directly,
-    # so preserve CMake's discovered SDK and toolchain search paths explicitly.
-    set(ENV{INCLUDE} "${CC_INCLUDE_DIRECTORIES}")
-    set(ENV{LIB} "${CC_LINK_DIRECTORIES}")
+    set(target_architecture "${VS_TARGET_ARCHITECTURE}")
+    if(target_architecture STREQUAL "Win32")
+        set(target_architecture x86)
+    elseif(target_architecture STREQUAL "ARM64")
+        set(target_architecture arm64)
+    endif()
+    if(target_architecture STREQUAL "")
+        message(FATAL_ERROR "the Visual Studio target architecture was not provided")
+    endif()
+
+    set(host_option "")
+    if(NOT VS_HOST_ARCHITECTURE STREQUAL "")
+        string(TOLOWER "${VS_HOST_ARCHITECTURE}" host_architecture)
+        set(host_option "-host_arch=${host_architecture}")
+    endif()
+
+    file(TO_NATIVE_PATH "${visual_studio_environment}" visual_studio_environment_native)
+    file(TO_NATIVE_PATH "${CC}" compiler_native)
+    set(compiler_wrapper "${BINARY_DIR}/f2c-msvc-compiler.cmd")
+    file(
+        WRITE "${compiler_wrapper}"
+        "@echo off\r\ncall \"${visual_studio_environment_native}\" -no_logo -arch=${target_architecture} ${host_option} >nul\r\nif errorlevel 1 exit /b %errorlevel%\r\n\"${compiler_native}\" %*\r\n"
+    )
+    set(CC_COMMAND cmd.exe /d /c call "${compiler_wrapper}")
 endif()
 
 set(generated "${BINARY_DIR}/generated_daxpy.c")
@@ -74,9 +99,9 @@ foreach(
         message(FATAL_ERROR
                 "${io_fixture} translation failed: ${io_translate_error}${io_translate_output}")
     endif()
-    if(WIN32)
+    if(F2C_MSVC_FRONTEND)
         execute_process(
-            COMMAND "${CC}" /std:c17 /W4 "${io_generated}"
+            COMMAND ${CC_COMMAND} /std:c17 /W4 "${io_generated}"
                     "/Fe${io_executable}.exe"
             RESULT_VARIABLE io_compile_status
             OUTPUT_VARIABLE io_compile_output
@@ -84,7 +109,7 @@ foreach(
         set(io_executable "${io_executable}.exe")
     else()
         execute_process(
-            COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+            COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
                     -Wstrict-prototypes -Wmissing-prototypes -Werror "${io_generated}"
                     -lm -o "${io_executable}"
             RESULT_VARIABLE io_compile_status
@@ -101,15 +126,15 @@ foreach(
     endif()
 endforeach()
 
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c11 /c "${generated}"
+        COMMAND ${CC_COMMAND} /std:c11 /c "${generated}"
                 "/Fo${BINARY_DIR}/generated_pre_c17_reject.obj"
         RESULT_VARIABLE pre_c17_status
         OUTPUT_QUIET
         ERROR_QUIET)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${generated}"
                 "${SOURCE_DIR}/test/fixtures/daxpy_harness.c" "/Fe${executable}.exe"
         RESULT_VARIABLE compile_status
         OUTPUT_VARIABLE compile_output
@@ -117,13 +142,13 @@ if(WIN32)
     set(executable "${executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c11 -c "${generated}"
+        COMMAND ${CC_COMMAND} -std=c11 -c "${generated}"
                 -o "${BINARY_DIR}/generated_pre_c17_reject.o"
         RESULT_VARIABLE pre_c17_status
         OUTPUT_QUIET
         ERROR_QUIET)
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic "${generated}"
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic "${generated}"
                 "${SOURCE_DIR}/test/fixtures/daxpy_harness.c" -lm -o "${executable}"
         RESULT_VARIABLE compile_status
         OUTPUT_VARIABLE compile_output
@@ -155,9 +180,9 @@ if(NOT project_translate_status EQUAL 0)
     message(FATAL_ERROR
             "project translation failed: ${project_translate_error}${project_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${project_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${project_generated}"
                 "${SOURCE_DIR}/test/fixtures/project_harness.c" "/I${BINARY_DIR}"
                 "/Fe${project_executable}.exe"
         RESULT_VARIABLE project_compile_status
@@ -166,7 +191,7 @@ if(WIN32)
     set(project_executable "${project_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic "${project_generated}"
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic "${project_generated}"
                 "${SOURCE_DIR}/test/fixtures/project_harness.c" -I "${BINARY_DIR}"
                 -lm -o "${project_executable}"
         RESULT_VARIABLE project_compile_status
@@ -194,9 +219,9 @@ if(NOT section_translate_status EQUAL 0)
     message(FATAL_ERROR
             "rank-three section translation failed: ${section_translate_error}${section_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${section_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${section_generated}"
                 "${SOURCE_DIR}/test/fixtures/reverse_cube_harness.c"
                 "/Fe${section_executable}.exe"
         RESULT_VARIABLE section_compile_status
@@ -205,7 +230,7 @@ if(WIN32)
     set(section_executable "${section_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic "${section_generated}"
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic "${section_generated}"
                 "${SOURCE_DIR}/test/fixtures/reverse_cube_harness.c" -lm
                 -o "${section_executable}"
         RESULT_VARIABLE section_compile_status
@@ -233,9 +258,9 @@ if(NOT arithmetic_if_translate_status EQUAL 0)
     message(FATAL_ERROR
             "arithmetic IF translation failed: ${arithmetic_if_translate_error}${arithmetic_if_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${arithmetic_if_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${arithmetic_if_generated}"
                 "${SOURCE_DIR}/test/fixtures/arithmetic_if_harness.c"
                 "/Fe${arithmetic_if_executable}.exe"
         RESULT_VARIABLE arithmetic_if_compile_status
@@ -244,7 +269,7 @@ if(WIN32)
     set(arithmetic_if_executable "${arithmetic_if_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic "${arithmetic_if_generated}"
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic "${arithmetic_if_generated}"
                 "${SOURCE_DIR}/test/fixtures/arithmetic_if_harness.c" -lm
                 -o "${arithmetic_if_executable}"
         RESULT_VARIABLE arithmetic_if_compile_status
@@ -273,9 +298,9 @@ if(NOT assigned_goto_translate_status EQUAL 0)
     message(FATAL_ERROR
             "assigned GOTO translation failed: ${assigned_goto_translate_error}${assigned_goto_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${assigned_goto_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${assigned_goto_generated}"
                 "/Fe${assigned_goto_executable}.exe"
         RESULT_VARIABLE assigned_goto_compile_status
         OUTPUT_VARIABLE assigned_goto_compile_output
@@ -283,7 +308,7 @@ if(WIN32)
     set(assigned_goto_executable "${assigned_goto_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic "${assigned_goto_generated}" -lm
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic "${assigned_goto_generated}" -lm
                 -o "${assigned_goto_executable}"
         RESULT_VARIABLE assigned_goto_compile_status
         OUTPUT_VARIABLE assigned_goto_compile_output
@@ -312,9 +337,9 @@ if(NOT character_abi_translate_status EQUAL 0)
     message(FATAL_ERROR
             "character ABI translation failed: ${character_abi_translate_error}${character_abi_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${character_abi_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${character_abi_generated}"
                 "${SOURCE_DIR}/test/fixtures/character_abi_harness.c"
                 "/I${BINARY_DIR}"
                 "/Fe${character_abi_executable}.exe"
@@ -324,7 +349,7 @@ if(WIN32)
     set(character_abi_executable "${character_abi_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic "${character_abi_generated}"
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic "${character_abi_generated}"
                 "${SOURCE_DIR}/test/fixtures/character_abi_harness.c" -I "${BINARY_DIR}" -lm
                 -o "${character_abi_executable}"
         RESULT_VARIABLE character_abi_compile_status
@@ -353,16 +378,16 @@ if(NOT input_translate_status EQUAL 0)
     message(FATAL_ERROR
             "numeric-input translation failed: ${input_translate_error}${input_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${input_generated}" "/Fe${input_executable}.exe"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${input_generated}" "/Fe${input_executable}.exe"
         RESULT_VARIABLE input_compile_status
         OUTPUT_VARIABLE input_compile_output
         ERROR_VARIABLE input_compile_error)
     set(input_executable "${input_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic "${input_generated}" -lm
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic "${input_generated}" -lm
                 -o "${input_executable}"
         RESULT_VARIABLE input_compile_status
         OUTPUT_VARIABLE input_compile_output
@@ -393,9 +418,9 @@ if(NOT implicit_translate_status EQUAL 0)
     message(FATAL_ERROR
             "IMPLICIT mapping translation failed: ${implicit_translate_error}${implicit_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${implicit_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${implicit_generated}"
                 "${SOURCE_DIR}/test/fixtures/implicit_mapping_harness.c"
                 "/I${BINARY_DIR}" "/Fe${implicit_executable}.exe"
         RESULT_VARIABLE implicit_compile_status
@@ -404,7 +429,7 @@ if(WIN32)
     set(implicit_executable "${implicit_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
                 -Wstrict-prototypes -Wmissing-prototypes -Werror "${implicit_generated}"
                 "${SOURCE_DIR}/test/fixtures/implicit_mapping_harness.c"
                 -I "${BINARY_DIR}" -lm -o "${implicit_executable}"
@@ -463,9 +488,9 @@ if(NOT optional_translate_status EQUAL 0)
     message(FATAL_ERROR
             "OPTIONAL translation failed: ${optional_translate_error}${optional_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${optional_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${optional_generated}"
                 "${SOURCE_DIR}/test/fixtures/optional_arguments_harness.c"
                 "/I${BINARY_DIR}" "/Fe${optional_executable}.exe"
         RESULT_VARIABLE optional_compile_status
@@ -474,7 +499,7 @@ if(WIN32)
     set(optional_executable "${optional_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
                 -Wstrict-prototypes -Wmissing-prototypes -Werror "${optional_generated}"
                 "${SOURCE_DIR}/test/fixtures/optional_arguments_harness.c"
                 -I "${BINARY_DIR}" -lm -o "${optional_executable}"
@@ -537,9 +562,9 @@ if(NOT interface_translate_status EQUAL 0)
     message(FATAL_ERROR
             "explicit-INTERFACE translation failed: ${interface_translate_error}${interface_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${interface_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${interface_generated}"
                 "${SOURCE_DIR}/test/fixtures/explicit_interface_harness.c"
                 "/I${BINARY_DIR}" "/Fe${interface_executable}.exe"
         RESULT_VARIABLE interface_compile_status
@@ -548,7 +573,7 @@ if(WIN32)
     set(interface_executable "${interface_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
                 -Wstrict-prototypes -Wmissing-prototypes -Werror "${interface_generated}"
                 "${SOURCE_DIR}/test/fixtures/explicit_interface_harness.c"
                 -I "${BINARY_DIR}" -lm -o "${interface_executable}"
@@ -612,9 +637,9 @@ if(NOT procedure_translate_status EQUAL 0)
     message(FATAL_ERROR
             "ABSTRACT INTERFACE/PROCEDURE translation failed: ${procedure_translate_error}${procedure_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${procedure_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${procedure_generated}"
                 "${SOURCE_DIR}/test/fixtures/procedure_interface_harness.c"
                 "/I${BINARY_DIR}" "/Fe${procedure_executable}.exe"
         RESULT_VARIABLE procedure_compile_status
@@ -623,7 +648,7 @@ if(WIN32)
     set(procedure_executable "${procedure_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
                 -Wstrict-prototypes -Wmissing-prototypes -Werror "${procedure_generated}"
                 "${SOURCE_DIR}/test/fixtures/procedure_interface_harness.c"
                 -I "${BINARY_DIR}" -lm -o "${procedure_executable}"
@@ -686,9 +711,9 @@ if(NOT deferred_translate_status EQUAL 0)
     message(FATAL_ERROR
             "deferred CHARACTER translation failed: ${deferred_translate_error}${deferred_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${deferred_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${deferred_generated}"
                 "${SOURCE_DIR}/test/fixtures/deferred_character_harness.c"
                 "/I${BINARY_DIR}" "/Fe${deferred_executable}.exe"
         RESULT_VARIABLE deferred_compile_status
@@ -697,7 +722,7 @@ if(WIN32)
     set(deferred_executable "${deferred_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
                 -Wstrict-prototypes -Wmissing-prototypes -Werror "${deferred_generated}"
                 "${SOURCE_DIR}/test/fixtures/deferred_character_harness.c"
                 -I "${BINARY_DIR}" -lm -o "${deferred_executable}"
@@ -781,9 +806,9 @@ if(NOT constructor_translate_status EQUAL 0)
     message(FATAL_ERROR
             "array-constructor translation failed: ${constructor_translate_error}${constructor_translate_output}")
 endif()
-if(WIN32)
+if(F2C_MSVC_FRONTEND)
     execute_process(
-        COMMAND "${CC}" /std:c17 /W4 "${constructor_generated}"
+        COMMAND ${CC_COMMAND} /std:c17 /W4 "${constructor_generated}"
                 "${SOURCE_DIR}/test/fixtures/array_constructor_harness.c"
                 "/I${BINARY_DIR}" "/Fe${constructor_executable}.exe"
         RESULT_VARIABLE constructor_compile_status
@@ -792,7 +817,7 @@ if(WIN32)
     set(constructor_executable "${constructor_executable}.exe")
 else()
     execute_process(
-        COMMAND "${CC}" -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+        COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
                 -Wstrict-prototypes -Wmissing-prototypes -Werror "${constructor_generated}"
                 "${SOURCE_DIR}/test/fixtures/array_constructor_harness.c"
                 -I "${BINARY_DIR}" -lm -o "${constructor_executable}"

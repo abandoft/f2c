@@ -422,8 +422,9 @@
 ## 测试架构与发布质量
 
 - [x] 测试公共 API 并编译有代表性的生成 C17 程序。
-- [x] 为公共库符号增加 Windows DLL 导入/导出和 ELF/Mach-O 默认可见性声明，并在
-      Linux、macOS、Windows CI 中构建和测试共享库配置。
+- [x] 为公共库符号增加 Windows DLL 导入/导出和 ELF/Mach-O 默认可见性声明，生产共享库
+      默认隐藏内部符号且仅导出四项公共 API；白盒测试通过专用静态核心访问内部接口，公共
+      API 测试仍链接真实共享库，并在 Linux、macOS、Windows CI 中构建和测试共享配置。
 - [x] 在 GitHub Actions 中对固定版本 Reference LAPACK 执行转译门禁。
 - [x] 增加与项目版本严格匹配的 tag 发布流水线：三平台产物重新构建并测试，直接从
       `build/` 打包而不引入 CMake 安装规则，生成 SHA-256、SPDX JSON SBOM 及 GitHub
