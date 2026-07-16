@@ -11,9 +11,9 @@ const char *f2c_c_type(Type type) {
     case TYPE_DOUBLE:
         return "double";
     case TYPE_COMPLEX:
-        return "float complex";
+        return "f2c_complex_float";
     case TYPE_DOUBLE_COMPLEX:
-        return "double complex";
+        return "f2c_complex_double";
     case TYPE_LOGICAL:
         return "bool";
     case TYPE_CHARACTER:
@@ -70,10 +70,10 @@ const char *f2c_c_type_kind(Type type, int kind) {
     }
     if (type == TYPE_COMPLEX || type == TYPE_DOUBLE_COMPLEX) {
         if (resolved == 4)
-            return "float complex";
+            return "f2c_complex_float";
         if (resolved == 8)
-            return "double complex";
-        return "long double complex";
+            return "f2c_complex_double";
+        return "f2c_complex_long_double";
     }
     if (type == TYPE_CHARACTER)
         return resolved == 1 ? "char" : "uint32_t";

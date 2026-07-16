@@ -926,8 +926,9 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             f2c_buffer_printf(&context->output, "%s = %s[0];\n", left, right);
         } else if (left_symbol != NULL && is_numeric_type(left_symbol->type) &&
                    is_numeric_type(right_type) && left_symbol->type != right_type) {
-            f2c_buffer_printf(&context->output, "%s = ((%s)(%s));\n", left,
-                              f2c_symbol_c_type(left_symbol), right);
+            char *converted = f2c_emit_numeric_conversion(right, right_type, left_symbol->type);
+            f2c_buffer_printf(&context->output, "%s = %s;\n", left, converted);
+            free(converted);
         } else {
             f2c_buffer_printf(&context->output, "%s = %s;\n", left, right);
         }

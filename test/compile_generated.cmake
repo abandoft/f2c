@@ -86,6 +86,7 @@ foreach(
        module_procedure
        module_allocatable
        allocatable_scope
+       complex_arithmetic
 )
     set(io_generated "${BINARY_DIR}/generated_${io_fixture}.c")
     set(io_executable "${BINARY_DIR}/generated_${io_fixture}_test")

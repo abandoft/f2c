@@ -634,6 +634,8 @@ Type f2c_resolve_intrinsic_type(const char *name, const Type *arguments, size_t 
 size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, size_t count);
 char *f2c_emit_intrinsic(const char *name, char **arguments, const Type *argument_types,
                          size_t count, Type result_type);
+char *f2c_emit_numeric_conversion(const char *operand, Type actual, Type target);
+char *f2c_emit_scalar_temporary_address(const char *c_type, Type type, const char *value);
 char *f2c_emit_binary(Unit *unit, const char *left, Type left_type, const char *operator_text,
                       const char *right, Type right_type, Type *result_type);
 char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count);

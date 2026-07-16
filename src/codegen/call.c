@@ -60,7 +60,8 @@ static char *lower_scalar_actual(Unit *unit, const char *text, const F2cExpr *as
                 if (ast_symbol->type == TYPE_CHARACTER)
                     result = f2c_strdup(code);
                 else
-                    f2c_buffer_printf(&lowered, "&(%s){%s}", f2c_symbol_c_type(ast_symbol), code);
+                    result = f2c_emit_scalar_temporary_address(f2c_symbol_c_type(ast_symbol),
+                                                               ast_symbol->type, code);
             } else if (ast_symbol->argument || ast_symbol->rank != 0U ||
                        (ast_symbol->type == TYPE_CHARACTER &&
                         ast_symbol->character_length != NULL)) {
@@ -76,10 +77,9 @@ static char *lower_scalar_actual(Unit *unit, const char *text, const F2cExpr *as
         } else if (ast->type == TYPE_CHARACTER) {
             result = f2c_strdup(code);
         } else {
-            f2c_buffer_printf(&lowered, "&(%s){%s}",
-                              ast->type != TYPE_UNKNOWN ? f2c_expression_c_type(ast)
-                                                        : f2c_c_type(TYPE_REAL),
-                              code);
+            result = f2c_emit_scalar_temporary_address(
+                ast->type != TYPE_UNKNOWN ? f2c_expression_c_type(ast) : f2c_c_type(TYPE_REAL),
+                ast->type != TYPE_UNKNOWN ? ast->type : TYPE_REAL, code);
         }
         if (result == NULL)
             result = f2c_buffer_take(&lowered);
@@ -98,10 +98,9 @@ static char *lower_scalar_actual(Unit *unit, const char *text, const F2cExpr *as
             if (symbol->type == TYPE_CHARACTER) {
                 result = value;
             } else {
-                Buffer temporary = {0};
-                f2c_buffer_printf(&temporary, "&(%s){%s}", f2c_symbol_c_type(symbol), value);
+                result = f2c_emit_scalar_temporary_address(f2c_symbol_c_type(symbol), symbol->type,
+                                                           value);
                 free(value);
-                result = f2c_buffer_take(&temporary);
             }
         } else if (symbol->argument || symbol->rank != 0U ||
                    (symbol->type == TYPE_CHARACTER && symbol->character_length != NULL)) {
@@ -148,10 +147,14 @@ static char *lower_scalar_actual(Unit *unit, const char *text, const F2cExpr *as
                 type = strpbrk(clean, ".eEdD") != NULL ? TYPE_DOUBLE : TYPE_INTEGER;
             if (array_element)
                 f2c_buffer_printf(&temporary, "&%s", expression);
-            else
-                f2c_buffer_printf(&temporary, "&(%s){%s}", f2c_c_type(type), expression);
+            else {
+                result = f2c_emit_scalar_temporary_address(f2c_c_type(type), type, expression);
+            }
             free(expression);
-            result = f2c_buffer_take(&temporary);
+            if (result == NULL)
+                result = f2c_buffer_take(&temporary);
+            else
+                free(f2c_buffer_take(&temporary));
         }
     }
 

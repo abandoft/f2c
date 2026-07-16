@@ -555,8 +555,10 @@ static char *module_complex_initializer(Unit *unit, const ModuleConstant *consta
     real_c = f2c_translate_expression(unit, real_part);
     imaginary_c = f2c_translate_expression(unit, imaginary_part);
     if (real_c != NULL && imaginary_c != NULL)
-        f2c_buffer_printf(&result, "((%s)(%s) + (%s)(%s) * I)", real_type, real_c, real_type,
-                          imaginary_c);
+        f2c_buffer_printf(&result, "%s((%s)(%s), (%s)(%s))",
+                          constant->type == TYPE_DOUBLE_COMPLEX ? "F2C_COMPLEX_DOUBLE_INITIALIZER"
+                                                                : "F2C_COMPLEX_FLOAT_INITIALIZER",
+                          real_type, real_c, real_type, imaginary_c);
     free(real_c);
     free(imaginary_c);
     free(copy);
@@ -580,6 +582,8 @@ void f2c_emit_supported_modules(Context *context) {
                           constant->name);
         if (constant->type == TYPE_CHARACTER)
             f2c_buffer_printf(&context->output, "%s[0]", initializer);
+        else if (constant->type == TYPE_COMPLEX || constant->type == TYPE_DOUBLE_COMPLEX)
+            f2c_buffer_append(&context->output, initializer);
         else
             f2c_buffer_printf(&context->output, "(%s)(%s)",
                               f2c_c_type_kind(constant->type, f2c_default_kind(constant->type)),

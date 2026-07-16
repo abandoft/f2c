@@ -75,12 +75,36 @@ static void append_character_elements(Buffer *output, const char *value, size_t 
     }
 }
 
-static char *convert_binary_operand(const char *operand, Type actual, Type common) {
+char *f2c_emit_numeric_conversion(const char *operand, Type actual, Type target) {
     Buffer converted = {0};
-    if (actual == common || !f2c_type_is_numeric(actual) || !f2c_type_is_numeric(common))
+    if (actual == target || !f2c_type_is_numeric(actual) || !f2c_type_is_numeric(target))
         return f2c_strdup(operand);
-    f2c_buffer_printf(&converted, "((%s)(%s))", f2c_c_type(common), operand);
+    if (target == TYPE_COMPLEX || target == TYPE_DOUBLE_COMPLEX) {
+        const int double_precision = target == TYPE_DOUBLE_COMPLEX;
+        if (actual == TYPE_COMPLEX || actual == TYPE_DOUBLE_COMPLEX) {
+            f2c_buffer_printf(&converted, "%s(%s)", double_precision ? "f2c_c_to_z" : "f2c_z_to_c",
+                              operand);
+        } else {
+            f2c_buffer_printf(
+                &converted, "%s((%s)(%s), %s)", double_precision ? "f2c_make_z" : "f2c_make_c",
+                double_precision ? "double" : "float", operand, double_precision ? "0.0" : "0.0f");
+        }
+    } else if (actual == TYPE_COMPLEX || actual == TYPE_DOUBLE_COMPLEX) {
+        f2c_buffer_printf(&converted, "((%s)%s(%s))", f2c_c_type(target),
+                          actual == TYPE_COMPLEX ? "crealf" : "creal", operand);
+    } else {
+        f2c_buffer_printf(&converted, "((%s)(%s))", f2c_c_type(target), operand);
+    }
     return f2c_buffer_take(&converted);
+}
+
+char *f2c_emit_scalar_temporary_address(const char *c_type, Type type, const char *value) {
+    Buffer result = {0};
+    if (type == TYPE_COMPLEX || type == TYPE_DOUBLE_COMPLEX)
+        f2c_buffer_printf(&result, "&((%s[]){%s})[0]", c_type, value);
+    else
+        f2c_buffer_printf(&result, "&(%s){%s}", c_type, value);
+    return f2c_buffer_take(&result);
 }
 
 char *f2c_emit_binary(Unit *unit, const char *left, Type left_type, const char *op,
@@ -114,20 +138,35 @@ char *f2c_emit_binary(Unit *unit, const char *left, Type left_type, const char *
             f2c_buffer_printf(&result, "((int32_t)pow((double)(%s), (double)(%s)))", left, right);
         else if (left_type == TYPE_REAL)
             f2c_buffer_printf(&result, "powf((float)(%s), (float)(%s))", left, right);
-        else if (left_type == TYPE_COMPLEX)
-            f2c_buffer_printf(&result, "cpowf((float complex)(%s), (float complex)(%s))", left,
-                              right);
-        else if (left_type == TYPE_DOUBLE_COMPLEX)
-            f2c_buffer_printf(&result, "cpow((double complex)(%s), (double complex)(%s))", left,
-                              right);
-        else
+        else if (left_type == TYPE_COMPLEX || left_type == TYPE_DOUBLE_COMPLEX) {
+            char *converted_right = f2c_emit_numeric_conversion(right, right_type, left_type);
+            f2c_buffer_printf(&result, "%s(%s, %s)", left_type == TYPE_COMPLEX ? "cpowf" : "cpow",
+                              left, converted_right);
+            free(converted_right);
+        } else
             f2c_buffer_printf(&result, "pow((double)(%s), (double)(%s))", left, right);
-    } else if (strcmp(op, "/") == 0 &&
-               (left_type == TYPE_COMPLEX || left_type == TYPE_DOUBLE_COMPLEX ||
-                right_type == TYPE_COMPLEX || right_type == TYPE_DOUBLE_COMPLEX)) {
-        f2c_buffer_printf(&result, "%s((%s), (%s))",
-                          *result_type == TYPE_DOUBLE_COMPLEX ? "f2c_zdiv" : "f2c_cdiv", left,
-                          right);
+    } else if (left_type == TYPE_COMPLEX || left_type == TYPE_DOUBLE_COMPLEX ||
+               right_type == TYPE_COMPLEX || right_type == TYPE_DOUBLE_COMPLEX) {
+        const Type common_type = f2c_common_numeric_type(left_type, right_type);
+        const int double_precision = common_type == TYPE_DOUBLE_COMPLEX;
+        const char *c_operator = operator_c(op);
+        char *converted_left = f2c_emit_numeric_conversion(left, left_type, common_type);
+        char *converted_right = f2c_emit_numeric_conversion(right, right_type, common_type);
+        if (strcmp(c_operator, "==") == 0 || strcmp(c_operator, "!=") == 0) {
+            f2c_buffer_printf(&result, "%s%s(%s, %s)", strcmp(c_operator, "!=") == 0 ? "!" : "",
+                              double_precision ? "f2c_zeq" : "f2c_ceq", converted_left,
+                              converted_right);
+            *result_type = TYPE_LOGICAL;
+        } else {
+            const char *helper =
+                strcmp(c_operator, "+") == 0   ? (double_precision ? "f2c_zadd" : "f2c_cadd")
+                : strcmp(c_operator, "-") == 0 ? (double_precision ? "f2c_zsub" : "f2c_csub")
+                : strcmp(c_operator, "*") == 0 ? (double_precision ? "f2c_zmul" : "f2c_cmul")
+                                               : (double_precision ? "f2c_zdiv" : "f2c_cdiv");
+            f2c_buffer_printf(&result, "%s(%s, %s)", helper, converted_left, converted_right);
+        }
+        free(converted_left);
+        free(converted_right);
     } else if (strcmp(op, "//") == 0) {
         Buffer elements = {0};
         size_t element_count = 0U;
@@ -144,8 +183,8 @@ char *f2c_emit_binary(Unit *unit, const char *left, Type left_type, const char *
             logical_operator ? TYPE_UNKNOWN : f2c_common_numeric_type(left_type, right_type);
         if (logical_operator)
             *result_type = TYPE_LOGICAL;
-        char *converted_left = convert_binary_operand(left, left_type, common_type);
-        char *converted_right = convert_binary_operand(right, right_type, common_type);
+        char *converted_left = f2c_emit_numeric_conversion(left, left_type, common_type);
+        char *converted_right = f2c_emit_numeric_conversion(right, right_type, common_type);
         f2c_buffer_printf(&result, "(%s %s %s)", converted_left, operator_c(op), converted_right);
         free(converted_left);
         free(converted_right);
@@ -260,8 +299,11 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
                               double_precision ? "double" : "float", args[0],
                               double_precision ? "double" : "float", args[1]);
         } else {
-            f2c_buffer_printf(&result, "((%s complex)(%s))", double_precision ? "double" : "float",
-                              count != 0U ? args[0] : "0");
+            char *converted = f2c_emit_numeric_conversion(
+                count != 0U ? args[0] : "0", count != 0U ? argument_types[0] : TYPE_INTEGER,
+                double_precision ? TYPE_DOUBLE_COMPLEX : TYPE_COMPLEX);
+            f2c_buffer_append(&result, converted);
+            free(converted);
         }
     } else if (strcmp(name, "ichar") == 0) {
         const char *value = count != 0U ? args[0] : "0";
@@ -328,8 +370,8 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
                           count != 0U ? args[0] : "0.0f");
     } else if (strcmp(name, "kind") == 0) {
         f2c_buffer_printf(&result,
-                          "_Generic((%s), float: 4, double: 8, float complex: 4, "
-                          "double complex: 8, default: 4)",
+                          "_Generic((%s), float: 4, double: 8, f2c_complex_float: 4, "
+                          "f2c_complex_double: 8, default: 4)",
                           count != 0U ? args[0] : "0.0f");
     } else if (strcmp(name, "alog") == 0) {
         f2c_buffer_printf(&result, "logf(%s)", count != 0U ? args[0] : "0");

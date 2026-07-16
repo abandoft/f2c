@@ -246,7 +246,8 @@ static char *emit_name(Unit *unit, const F2cExpr *expression, int *supported) {
             *supported = 0;
             return NULL;
         }
-        if (symbol->type == TYPE_CHARACTER)
+        if (symbol->type == TYPE_CHARACTER || symbol->type == TYPE_COMPLEX ||
+            symbol->type == TYPE_DOUBLE_COMPLEX)
             f2c_buffer_printf(&constant, "(%s)", value);
         else
             f2c_buffer_printf(&constant, "((%s)(%s))", f2c_symbol_c_type(symbol), value);
@@ -327,8 +328,7 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
         if (symbol->parameter) {
             if (symbol->type == TYPE_CHARACTER)
                 return f2c_strdup(code);
-            f2c_buffer_printf(&result, "&(%s){%s}", f2c_symbol_c_type(symbol), code);
-            return f2c_buffer_take(&result);
+            return f2c_emit_scalar_temporary_address(f2c_symbol_c_type(symbol), symbol->type, code);
         }
         if (symbol->external && symbol->external_declared)
             return f2c_strdup(f2c_symbol_c_name(unit, symbol));
@@ -350,10 +350,9 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
     }
     if (actual->type == TYPE_CHARACTER)
         return f2c_strdup(code);
-    f2c_buffer_printf(
-        &result, "&(%s){%s}",
-        actual->type != TYPE_UNKNOWN ? f2c_expression_c_type(actual) : f2c_c_type(TYPE_REAL), code);
-    return f2c_buffer_take(&result);
+    return f2c_emit_scalar_temporary_address(
+        actual->type != TYPE_UNKNOWN ? f2c_expression_c_type(actual) : f2c_c_type(TYPE_REAL),
+        actual->type != TYPE_UNKNOWN ? actual->type : TYPE_REAL, code);
 }
 
 static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *supported) {
@@ -1126,8 +1125,15 @@ static char *emit_expression(Unit *unit, const F2cExpr *expression, int *support
         left = emit_expression(unit, expression->children[0], supported);
         if (!*supported || left == NULL)
             return NULL;
-        f2c_buffer_printf(&result, "(%s%s)",
-                          strcmp(expression->text, ".not.") == 0 ? "!" : expression->text, left);
+        if ((expression->type == TYPE_COMPLEX || expression->type == TYPE_DOUBLE_COMPLEX) &&
+            strcmp(expression->text, "-") == 0) {
+            f2c_buffer_printf(&result, "%s(%s)",
+                              expression->type == TYPE_COMPLEX ? "f2c_cneg" : "f2c_zneg", left);
+        } else {
+            f2c_buffer_printf(&result, "(%s%s)",
+                              strcmp(expression->text, ".not.") == 0 ? "!" : expression->text,
+                              left);
+        }
         free(left);
         return f2c_buffer_take(&result);
     case F2C_EXPR_BINARY:

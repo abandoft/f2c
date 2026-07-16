@@ -252,11 +252,11 @@ static void test_complex_temporary_arguments(void) {
     F2cOptions options = {"complex_argument.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "complex temporary argument translates");
-    expect_contains(result.code, "&(float complex){",
+    expect_contains(result.code, "&((f2c_complex_float[]){",
                     "CMPLX actual argument retains its complex storage type");
     expect_contains(result.code, "f2c_make_c(",
                     "CMPLX constructs infinite components without algebraic contamination");
-    expect(result.code == NULL || strstr(result.code, "&(float){(-((float complex)") == NULL,
+    expect(result.code == NULL || strstr(result.code, "&(float){f2c_cneg(") == NULL,
            "complex actual argument is never narrowed to a real temporary");
     f2c_result_free(&result);
 }
@@ -385,7 +385,7 @@ static void test_standalone_lapack_constants_module(void) {
     expect(result.error_count == 0U, "standalone LA_CONSTANTS module translates");
     expect_contains(result.code, "const float f2c_la_constants_szero",
                     "standalone module exports namespaced C constants");
-    expect_contains(result.code, "const double complex f2c_la_constants_zone",
+    expect_contains(result.code, "const f2c_complex_double f2c_la_constants_zone",
                     "standalone module preserves double-complex constants");
     f2c_result_free(&result);
 }
@@ -1699,7 +1699,7 @@ static void test_local_kind_parameter_semantics(void) {
                     "REAL without KIND explicitly narrows double precision");
     expect_contains(result.code, "void iso_kind_value(double *x)",
                     "ISO_FORTRAN_ENV kind aliases retain double precision");
-    expect_contains(result.code, "double double_complex_part(double complex *z)",
+    expect_contains(result.code, "double double_complex_part(f2c_complex_double *z)",
                     "REAL preserves a double-complex component kind");
     expect_contains(result.code, "((double)creal((*z)))",
                     "REAL extracts a double-complex component without narrowing");
