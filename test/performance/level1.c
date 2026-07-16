@@ -112,37 +112,44 @@ static int run_case(const Level1Case *test, double *x, double *y, double *native
         if (kernel == 2U && test->stride < 0)
             continue;
         for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
-            double generated_seconds;
-            double native_seconds;
-            initialize(x, count, 7);
-            initialize(y, count, 31);
-            initialize(native, count, 7);
+            double generated_first;
+            double generated_second;
+            double fortran_first;
+            double fortran_second;
             if (kernel == 0U) {
-                if ((round & 1U) == 0U) {
-                    generated_seconds = measure_ddot(ddot, test, x, y);
-                    native_seconds = measure_ddot(ddot_, test, native, y);
-                } else {
-                    native_seconds = measure_ddot(ddot_, test, native, y);
-                    generated_seconds = measure_ddot(ddot, test, x, y);
-                }
+                initialize(x, count, 7);
+                initialize(y, count, 31);
+                generated_first = measure_ddot(ddot, test, x, y);
+                initialize(native, count, 7);
+                initialize(y, count, 31);
+                fortran_second = measure_ddot(ddot_, test, native, y);
+                initialize(native, count, 7);
+                initialize(y, count, 31);
+                fortran_first = measure_ddot(ddot_, test, native, y);
+                initialize(x, count, 7);
+                initialize(y, count, 31);
+                generated_second = measure_ddot(ddot, test, x, y);
             } else if (kernel == 1U) {
-                if ((round & 1U) == 0U) {
-                    generated_seconds = measure_dnrm2(dnrm2, test, x);
-                    native_seconds = measure_dnrm2(dnrm2_, test, native);
-                } else {
-                    native_seconds = measure_dnrm2(dnrm2_, test, native);
-                    generated_seconds = measure_dnrm2(dnrm2, test, x);
-                }
-            } else if ((round & 1U) == 0U) {
-                generated_seconds = measure_dscal(dscal, test, x);
-                native_seconds = measure_dscal(dscal_, test, native);
+                initialize(x, count, 7);
+                generated_first = measure_dnrm2(dnrm2, test, x);
+                initialize(native, count, 7);
+                fortran_second = measure_dnrm2(dnrm2_, test, native);
+                initialize(native, count, 7);
+                fortran_first = measure_dnrm2(dnrm2_, test, native);
+                initialize(x, count, 7);
+                generated_second = measure_dnrm2(dnrm2, test, x);
             } else {
-                native_seconds = measure_dscal(dscal_, test, native);
-                generated_seconds = measure_dscal(dscal, test, x);
+                initialize(x, count, 7);
+                generated_first = measure_dscal(dscal, test, x);
+                initialize(native, count, 7);
+                fortran_second = measure_dscal(dscal_, test, native);
+                initialize(native, count, 7);
+                fortran_first = measure_dscal(dscal_, test, native);
+                initialize(x, count, 7);
+                generated_second = measure_dscal(dscal, test, x);
             }
-            samples[round].generated_seconds = generated_seconds;
-            samples[round].fortran_seconds = native_seconds;
-            samples[round].ratio = generated_seconds / native_seconds;
+            samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second,
+                                                       fortran_first, generated_second);
         }
         passed = f2c_benchmark_report(kernels[kernel], description, samples,
                                       sizeof(samples) / sizeof(samples[0])) &&

@@ -13,6 +13,17 @@ typedef struct F2cBenchmarkSample {
     double ratio;
 } F2cBenchmarkSample;
 
+/* An ABBA pair cancels first/second-order effects such as frequency ramping
+ * without selecting a favorable run from either implementation. */
+static F2cBenchmarkSample f2c_benchmark_abba_sample(double generated_first, double fortran_second,
+                                                    double fortran_first, double generated_second) {
+    F2cBenchmarkSample sample;
+    sample.generated_seconds = generated_first + generated_second;
+    sample.fortran_seconds = fortran_first + fortran_second;
+    sample.ratio = sample.generated_seconds / sample.fortran_seconds;
+    return sample;
+}
+
 /* Process CPU time keeps paired single-threaded measurements stable when CI
  * runners are preempted by unrelated workloads. */
 static double f2c_benchmark_seconds(void) {

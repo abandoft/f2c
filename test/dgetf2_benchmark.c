@@ -83,18 +83,12 @@ static int run_case(const Dgetf2Case *test, double *input, double *work, double 
     }
     initialize(input, test->n);
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
-        double c_time;
-        double fortran_time;
-        if ((round & 1) == 0) {
-            c_time = measure(dgetf2, test, input, work, pivots);
-            fortran_time = measure(dgetf2_, test, input, work, pivots);
-        } else {
-            fortran_time = measure(dgetf2_, test, input, work, pivots);
-            c_time = measure(dgetf2, test, input, work, pivots);
-        }
-        samples[round].generated_seconds = c_time;
-        samples[round].fortran_seconds = fortran_time;
-        samples[round].ratio = c_time / fortran_time;
+        const double generated_first = measure(dgetf2, test, input, work, pivots);
+        const double fortran_second = measure(dgetf2_, test, input, reference, reference_pivots);
+        const double fortran_first = measure(dgetf2_, test, input, reference, reference_pivots);
+        const double generated_second = measure(dgetf2, test, input, work, pivots);
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+                                                   generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
     printf("DGETF2 n=%d: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", test->n,

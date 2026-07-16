@@ -82,22 +82,20 @@ static int run_case(const DgemvCase *test, double *a, double *x, double *y, doub
         return 0;
     }
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
-        double c_time;
-        double fortran_time;
-        if ((round & 1) == 0) {
-            initialize(y, (size_t)test->n, 19);
-            c_time = measure(dgemv_generated, test, a, x, y);
-            initialize(y, (size_t)test->n, 19);
-            fortran_time = measure(dgemv_fortran, test, a, x, y);
-        } else {
-            initialize(y, (size_t)test->n, 19);
-            fortran_time = measure(dgemv_fortran, test, a, x, y);
-            initialize(y, (size_t)test->n, 19);
-            c_time = measure(dgemv_generated, test, a, x, y);
-        }
-        samples[round].generated_seconds = c_time;
-        samples[round].fortran_seconds = fortran_time;
-        samples[round].ratio = c_time / fortran_time;
+        double generated_first;
+        double generated_second;
+        double fortran_first;
+        double fortran_second;
+        initialize(y, (size_t)test->n, 19);
+        generated_first = measure(dgemv_generated, test, a, x, y);
+        initialize(y, (size_t)test->n, 19);
+        fortran_second = measure(dgemv_fortran, test, a, x, y);
+        initialize(y, (size_t)test->n, 19);
+        fortran_first = measure(dgemv_fortran, test, a, x, y);
+        initialize(y, (size_t)test->n, 19);
+        generated_second = measure(dgemv_generated, test, a, x, y);
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+                                                   generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
     printf("DGEMV n=%d trans=%c: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", test->n,

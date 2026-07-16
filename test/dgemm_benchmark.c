@@ -85,18 +85,20 @@ static int run_case(const DgemmCase *test, double *a, double *b, double *c, doub
         return 0;
     }
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
-        double c_time;
-        double fortran_time;
-        if ((round & 1) == 0) {
-            c_time = measure(dgemm_generated, test, a, b, c);
-            fortran_time = measure(dgemm_fortran, test, a, b, reference);
-        } else {
-            fortran_time = measure(dgemm_fortran, test, a, b, reference);
-            c_time = measure(dgemm_generated, test, a, b, c);
-        }
-        samples[round].generated_seconds = c_time;
-        samples[round].fortran_seconds = fortran_time;
-        samples[round].ratio = c_time / fortran_time;
+        double generated_first;
+        double generated_second;
+        double fortran_first;
+        double fortran_second;
+        initialize(c, test->n, 43);
+        generated_first = measure(dgemm_generated, test, a, b, c);
+        initialize(reference, test->n, 43);
+        fortran_second = measure(dgemm_fortran, test, a, b, reference);
+        initialize(reference, test->n, 43);
+        fortran_first = measure(dgemm_fortran, test, a, b, reference);
+        initialize(c, test->n, 43);
+        generated_second = measure(dgemm_generated, test, a, b, c);
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+                                                   generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
     printf("DGEMM n=%d trans=%c%c: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", test->n,

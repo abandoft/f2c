@@ -68,20 +68,20 @@ static int run_case(const DgerCase *test, double *x, double *y, double *generate
     }
     (void)snprintf(description, sizeof(description), "n=%d;inc=%d", test->n, test->stride);
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
-        double generated_seconds;
-        double native_seconds;
+        double generated_first;
+        double generated_second;
+        double fortran_first;
+        double fortran_second;
         initialize(generated, matrix_count, 19);
-        memcpy(native, generated, matrix_count * sizeof(*native));
-        if ((round & 1U) == 0U) {
-            generated_seconds = measure(dger, test, x, y, generated);
-            native_seconds = measure(dger_, test, x, y, native);
-        } else {
-            native_seconds = measure(dger_, test, x, y, native);
-            generated_seconds = measure(dger, test, x, y, generated);
-        }
-        samples[round].generated_seconds = generated_seconds;
-        samples[round].fortran_seconds = native_seconds;
-        samples[round].ratio = generated_seconds / native_seconds;
+        generated_first = measure(dger, test, x, y, generated);
+        initialize(native, matrix_count, 19);
+        fortran_second = measure(dger_, test, x, y, native);
+        initialize(native, matrix_count, 19);
+        fortran_first = measure(dger_, test, x, y, native);
+        initialize(generated, matrix_count, 19);
+        generated_second = measure(dger, test, x, y, generated);
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+                                                   generated_second);
     }
     return f2c_benchmark_report("DGER", description, samples, sizeof(samples) / sizeof(samples[0]));
 }

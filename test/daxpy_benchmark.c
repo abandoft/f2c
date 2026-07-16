@@ -64,22 +64,20 @@ static int run_case(const DaxpyCase *test, double *x, double *c_y, double *fortr
         }
     }
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
-        double c_time;
-        double fortran_time;
-        if ((round & 1) == 0) {
-            initialize(x, c_y, count);
-            c_time = measure(daxpy, x, c_y, test);
-            initialize(x, c_y, count);
-            fortran_time = measure(daxpy_, x, c_y, test);
-        } else {
-            initialize(x, c_y, count);
-            fortran_time = measure(daxpy_, x, c_y, test);
-            initialize(x, c_y, count);
-            c_time = measure(daxpy, x, c_y, test);
-        }
-        samples[round].generated_seconds = c_time;
-        samples[round].fortran_seconds = fortran_time;
-        samples[round].ratio = c_time / fortran_time;
+        double generated_first;
+        double generated_second;
+        double fortran_first;
+        double fortran_second;
+        initialize(x, c_y, count);
+        generated_first = measure(daxpy, x, c_y, test);
+        initialize(x, c_y, count);
+        fortran_second = measure(daxpy_, x, c_y, test);
+        initialize(x, c_y, count);
+        fortran_first = measure(daxpy_, x, c_y, test);
+        initialize(x, c_y, count);
+        generated_second = measure(daxpy, x, c_y, test);
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+                                                   generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
     printf("DAXPY n=%d inc=%d: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", test->n,
