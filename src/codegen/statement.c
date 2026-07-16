@@ -23,7 +23,9 @@ static int do_count_fits_default_integer(const F2cStatement *statement) {
         statement->step->kind != F2C_EXPR_INTEGER_LITERAL || statement->step->text == NULL)
         return 0;
     if (statement->right->kind == F2C_EXPR_INTEGER_LITERAL && statement->right->text != NULL &&
-        strcmp(statement->right->text, "1") == 0 && strcmp(statement->step->text, "1") == 0)
+        statement->limit != NULL && statement->limit->kind == F2C_EXPR_INTEGER_LITERAL &&
+        statement->limit->text != NULL && strcmp(statement->right->text, "1") == 0 &&
+        strcmp(statement->step->text, "1") == 0)
         return 1;
     step = strtoll(statement->step->text, &end, 10);
     return end != statement->step->text && *end == '\0' && (step <= -3 || step >= 3);
