@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "observable": {
+    "suite_count": 104,
+    "numerical_records": 900,
+    "status_records": 46,
+    "observable_records": 946
+  },
+  "internal": {
+    "blas": {
+      "suites": 12,
+      "records": 303096,
+      "generated_records": 303096,
+      "native_records": 303096,
+      "generated_only_records": 0,
+      "native_only_records": 0
+    },
+    "lapack": {
+      "suites": 88,
+      "records": 5504702,
+      "generated_records": 5504162,
+      "native_records": 5504162,
+      "generated_only_records": 540,
+      "native_only_records": 540
+    }
+  }
+}

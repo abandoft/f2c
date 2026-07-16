@@ -36,32 +36,12 @@ from exhaustive_result_diff import (
     passes_threshold,
     printed_rounding_tolerance,
 )
+from numerical_coverage import load_baseline
 
 
-EXPECTED_OBSERVABLE = {
-    "suite_count": 104,
-    "numerical_records": 900,
-    "status_records": 46,
-    "observable_records": 946,
-}
-EXPECTED_INTERNAL = {
-    "blas": {
-        "suites": 12,
-        "records": 303_096,
-        "generated_records": 303_096,
-        "native_records": 303_096,
-        "generated_only_records": 0,
-        "native_only_records": 0,
-    },
-    "lapack": {
-        "suites": 88,
-        "records": 5_504_845,
-        "generated_records": 5_504_162,
-        "native_records": 5_504_279,
-        "generated_only_records": 566,
-        "native_only_records": 683,
-    },
-}
+COVERAGE_BASELINE = load_baseline()
+EXPECTED_OBSERVABLE = COVERAGE_BASELINE["observable"]
+EXPECTED_INTERNAL = COVERAGE_BASELINE["internal"]
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 

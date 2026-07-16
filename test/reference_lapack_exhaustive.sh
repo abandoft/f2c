@@ -18,6 +18,7 @@ objects=$work/objects
 trace=$work/exhaustive
 instrument=$root/test/lapack_trace_instrument.py
 compare=$root/test/exhaustive_result_diff.py
+coverage=$root/test/numerical_coverage.py
 cc=${CC:-cc}
 fc=${FC:-gfortran}
 strict_cflags='-std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Werror'
@@ -583,8 +584,7 @@ if ! python3 "$compare" manifest "$trace/report" \
     --fail-on regression --report "$trace/report/manifest.json"; then
     differential_failures=$((differential_failures + 1))
 fi
-python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); ok=(r["suites"] == 88 and r["records"] == 5504845 and r["generated_records"] == 5504162 and r["native_records"] == 5504279 and r["generated_only_records"] == 566 and r["native_only_records"] == 683); sys.exit(0 if ok else 1)' \
-    "$trace/report/manifest.json"
+python3 "$coverage" lapack "$trace/report/manifest.json"
 if [ "$differential_failures" -ne 0 ]; then
     echo "exhaustive LAPACK differential found differences in $differential_failures checks" >&2
     exit 1

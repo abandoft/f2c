@@ -297,6 +297,10 @@ if(F2C_BUILD_TESTING)
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/official_numerical_audit.py --self-test
         )
         add_test(
+            NAME numerical_coverage_self_test
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/numerical_coverage.py --self-test
+        )
+        add_test(
             NAME lapack_trace_instrument_self_test
             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/lapack_trace_instrument.py self-test
         )

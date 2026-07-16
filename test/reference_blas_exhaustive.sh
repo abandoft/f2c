@@ -18,6 +18,7 @@ work=$core/blas-exhaustive
 instrument=$root/test/blas_trace_instrument.py
 relink=$root/test/lapack_trace_instrument.py
 compare=$root/test/exhaustive_result_diff.py
+coverage=$root/test/numerical_coverage.py
 cc=${CC:-cc}
 fc=${FC:-gfortran}
 strict_cflags='-std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Werror'
@@ -147,8 +148,7 @@ if ! python3 "$compare" manifest "$work/report" \
     --fail-on regression --report "$work/report/manifest.json"; then
     differential_failures=$((differential_failures + 1))
 fi
-python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); sys.exit(0 if r["suites"] == 12 and r["records"] == 303096 else 1)' \
-    "$work/report/manifest.json"
+python3 "$coverage" blas "$work/report/manifest.json"
 if [ "$differential_failures" -ne 0 ]; then
     echo "exhaustive BLAS differential found differences in $differential_failures checks" >&2
     exit 1
