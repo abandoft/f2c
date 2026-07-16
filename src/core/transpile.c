@@ -365,6 +365,16 @@ F2cResult f2c_transpile_project(const F2cInput *inputs, size_t input_count) {
             "return length; }\n");
         f2c_buffer_append(
             &context.output,
+            "static inline F2C_UNUSED char *f2c_character_temporary_resize(char *storage, "
+            "size_t length) { char *replacement; if (length == SIZE_MAX) abort(); replacement = "
+            "(char *)realloc(storage, length + 1U); if (replacement == NULL) abort(); return "
+            "replacement; }\n"
+            "static inline F2C_UNUSED char *f2c_character_concatenation_resize(char *storage, "
+            "size_t left_length, size_t right_length) { if (left_length > SIZE_MAX - "
+            "right_length) abort(); return f2c_character_temporary_resize(storage, left_length + "
+            "right_length); }\n");
+        f2c_buffer_append(
+            &context.output,
             "static inline F2C_UNUSED size_t f2c_substring_offset(size_t length, int64_t lower, "
             "int64_t upper) { if (lower < 1 || (upper > 0 && (uint64_t)upper > "
             "(uint64_t)length) || (lower > upper && lower - 1 != upper)) abort(); return "

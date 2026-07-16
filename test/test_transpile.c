@@ -478,7 +478,8 @@ static void test_deferred_character_allocation(void) {
                                  "  integer :: n, status\n"
                                  "  character(:), allocatable :: text\n"
                                  "  character(:), allocatable :: values(:)\n"
-                                 "  text = 'AB' // 'C'\n"
+                                 "  text = 'AB'\n"
+                                 "  text = text // 'C'\n"
                                  "  allocate(character(len=n) :: values(0:2), stat=status)\n"
                                  "  values(0) = text\n"
                                  "  deallocate(values, stat=status)\n"
@@ -578,6 +579,10 @@ static void test_deferred_character_allocation(void) {
     expect(result.error_count == 0U, "deferred-length CHARACTER allocation translates");
     expect_contains(result.code, "size_t f2c_char_len_text = 0U",
                     "deferred CHARACTER owns a runtime length descriptor");
+    expect_contains(result.code, "char *f2c_character_result_0 = NULL",
+                    "dynamic CHARACTER temporaries are not sized before runtime values exist");
+    expect_contains(result.code, "f2c_character_concatenation_resize(",
+                    "CHARACTER concatenation resizes its temporary at each evaluation");
     expect_contains(result.code, "values_lower_1 = (int32_t)f2c_alloc_lower_1",
                     "ALLOCATE preserves a non-default runtime lower bound");
     expect_contains(result.code, "f2c_char_len_values = f2c_alloc_char_len",

@@ -713,32 +713,13 @@ static void assign_character_temporary(F2cExpr *expression, void *state) {
         expression->temporary_index = (*next)++;
 }
 
-typedef struct CharacterTemporaryEmitter {
-    Buffer *output;
-    Unit *unit;
-} CharacterTemporaryEmitter;
-
 static void emit_character_temporary(F2cExpr *expression, void *state) {
-    CharacterTemporaryEmitter *emitter = (CharacterTemporaryEmitter *)state;
-    char *length;
+    Buffer *output = (Buffer *)state;
     if (!is_character_temporary(expression))
         return;
-    length = f2c_character_length_expression(emitter->unit, expression);
-    indent(emitter->output, 1);
-    f2c_buffer_printf(emitter->output, "size_t f2c_character_result_len_%zu = (size_t)(%s);\n",
-                      expression->temporary_index, length != NULL ? length : "1U");
-    indent(emitter->output, 1);
-    f2c_buffer_printf(emitter->output, "if (f2c_character_result_len_%zu == SIZE_MAX) abort();\n",
+    indent(output, 1);
+    f2c_buffer_printf(output, "char *f2c_character_result_%zu = NULL;\n",
                       expression->temporary_index);
-    indent(emitter->output, 1);
-    f2c_buffer_printf(emitter->output,
-                      "char *f2c_character_result_%zu = (char *)malloc("
-                      "f2c_character_result_len_%zu + 1U);\n",
-                      expression->temporary_index, expression->temporary_index);
-    indent(emitter->output, 1);
-    f2c_buffer_printf(emitter->output, "if (f2c_character_result_%zu == NULL) abort();\n",
-                      expression->temporary_index);
-    free(length);
 }
 
 static void prepare_character_temporaries(Unit *unit) {
@@ -750,9 +731,8 @@ static void prepare_character_temporaries(Unit *unit) {
 
 static void emit_character_temporaries(Buffer *output, Unit *unit) {
     size_t i;
-    CharacterTemporaryEmitter emitter = {output, unit};
     for (i = 0U; i < unit->statement_count; ++i)
-        f2c_visit_statement_expressions(&unit->statements[i], emit_character_temporary, &emitter);
+        f2c_visit_statement_expressions(&unit->statements[i], emit_character_temporary, output);
 }
 
 typedef struct CharacterTemporaryCleanupEmitter {

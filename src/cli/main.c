@@ -7,6 +7,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+static const char *system_error_message(int error, char *buffer, size_t capacity) {
+#if defined(_MSC_VER)
+    if (strerror_s(buffer, capacity, error) == 0)
+        return buffer;
+#else
+    const char *message = strerror(error);
+    if (message != NULL)
+        return message;
+#endif
+    (void)snprintf(buffer, capacity, "system error %d", error);
+    return buffer;
+}
+
 static void usage(FILE *stream) {
     fputs("usage: f2c [options] INPUT...\n"
           "Translate Fortran source to portable, runtime-free C17.\n\n"
@@ -78,6 +91,7 @@ int main(int argc, char **argv) {
     char **sources = NULL;
     F2cInput *inputs = NULL;
     F2cResult result;
+    char error_message[256];
     int i;
     int status = EXIT_SUCCESS;
 
@@ -158,7 +172,8 @@ int main(int argc, char **argv) {
     for (i = 0; (size_t)i < input_count; ++i) {
         sources[i] = read_file(input_paths[i], &inputs[i].length);
         if (sources[i] == NULL) {
-            fprintf(stderr, "f2c: cannot read '%s': %s\n", input_paths[i], strerror(errno));
+            fprintf(stderr, "f2c: cannot read '%s': %s\n", input_paths[i],
+                    system_error_message(errno, error_message, sizeof(error_message)));
             status = EXIT_FAILURE;
             goto cleanup;
         }
@@ -174,10 +189,12 @@ int main(int argc, char **argv) {
     if (result.error_count != 0U || result.code == NULL) {
         status = EXIT_FAILURE;
     } else if (write_file(output, result.code) != 0) {
-        fprintf(stderr, "f2c: cannot write output: %s\n", strerror(errno));
+        fprintf(stderr, "f2c: cannot write output: %s\n",
+                system_error_message(errno, error_message, sizeof(error_message)));
         status = EXIT_FAILURE;
     } else if (header_output != NULL && write_file(header_output, result.header) != 0) {
-        fprintf(stderr, "f2c: cannot write interface header: %s\n", strerror(errno));
+        fprintf(stderr, "f2c: cannot write interface header: %s\n",
+                system_error_message(errno, error_message, sizeof(error_message)));
         status = EXIT_FAILURE;
     }
     f2c_result_free(&result);

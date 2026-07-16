@@ -489,11 +489,14 @@ char *f2c_emit_character_concatenation(Unit *unit, const F2cExpr *expression, co
         return NULL;
     }
     f2c_buffer_printf(&result,
-                      "(memmove(f2c_character_result_%zu, %s, (size_t)(%s)), "
+                      "(f2c_character_result_%zu = f2c_character_concatenation_resize("
+                      "f2c_character_result_%zu, (size_t)(%s), (size_t)(%s)), "
+                      "memmove(f2c_character_result_%zu, %s, (size_t)(%s)), "
                       "memmove(f2c_character_result_%zu + (size_t)(%s), %s, (size_t)(%s)), "
                       "f2c_character_result_%zu[(size_t)(%s) + (size_t)(%s)] = '\\0', "
                       "f2c_character_result_%zu)",
-                      expression->temporary_index, left_pointer, left_length,
+                      expression->temporary_index, expression->temporary_index, left_length,
+                      right_length, expression->temporary_index, left_pointer, left_length,
                       expression->temporary_index, left_length, right_pointer, right_length,
                       expression->temporary_index, left_length, right_length,
                       expression->temporary_index);

@@ -12,11 +12,15 @@ subroutine deferred_character_matrix(output)
   integer :: numbers(-2:2), short_values(4:5)
   integer :: status, index
   character(len=16) :: message
+  character(len=4) :: suffixes
 
   output = 0
 
-  text = 'AB'
-  text = text // 'CDE'
+  suffixes = 'BCDE'
+  text = 'A'
+  do index = 1, 4
+    text = text // suffixes(index:index)
+  end do
   output(1) = len(text)
   output(2) = ichar(text(1:1))
   output(3) = ichar(text(5:5))

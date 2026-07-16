@@ -390,7 +390,12 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
             return NULL;
         }
         result_length = f2c_character_length_expression(unit, expression);
-        f2c_buffer_printf(&result, "(%s(f2c_character_result_%zu, (size_t)(%s)", callee,
+        f2c_buffer_printf(&result,
+                          "(f2c_character_result_%zu = f2c_character_temporary_resize("
+                          "f2c_character_result_%zu, (size_t)(%s)), "
+                          "%s(f2c_character_result_%zu, (size_t)(%s)",
+                          expression->temporary_index, expression->temporary_index,
+                          result_length != NULL ? result_length : "1U", callee,
                           expression->temporary_index,
                           result_length != NULL ? result_length : "1U");
         free(result_length);
@@ -739,7 +744,12 @@ static char *emit_call(Unit *unit, const F2cExpr *expression, int *supported) {
             return NULL;
         }
         result_length = f2c_character_length_expression(unit, expression);
-        f2c_buffer_printf(&result, "(%s(f2c_character_result_%zu, (size_t)(%s)",
+        f2c_buffer_printf(&result,
+                          "(f2c_character_result_%zu = f2c_character_temporary_resize("
+                          "f2c_character_result_%zu, (size_t)(%s)), "
+                          "%s(f2c_character_result_%zu, (size_t)(%s)",
+                          expression->temporary_index, expression->temporary_index,
+                          result_length != NULL ? result_length : "1U",
                           callee != NULL ? callee : "", expression->temporary_index,
                           result_length != NULL ? result_length : "1U");
         free(result_length);
