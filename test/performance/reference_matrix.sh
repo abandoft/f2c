@@ -54,13 +54,13 @@ sources='ddot dnrm2 dscal dger dtrsm dsyrk dgemm lsame xerbla idamax dgetrf dget
 for name in $sources; do
     extension=f
     [ "$name" = dnrm2 ] && extension=f90
-    "$c_compiler" -std=c17 -O3 -ffp-contract=fast -DNDEBUG -c "$work/$name.c" \
+    "$c_compiler" -std=c17 -O3 -flto -ffp-contract=fast -DNDEBUG -c "$work/$name.c" \
         -o "$work/$name-c.o"
-    gfortran -O3 -c "$work/$name.$extension" -o "$work/$name-fortran.o"
+    gfortran -O3 -flto -c "$work/$name.$extension" -o "$work/$name-fortran.o"
 done
 
 for name in matrix level1 level2 level3 lapack; do
-    "$c_compiler" -std=c17 -O3 -DNDEBUG -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+    "$c_compiler" -std=c17 -O3 -flto -DNDEBUG -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
         -Wstrict-prototypes -Wmissing-prototypes -Werror \
         -c "$root/test/performance/$name.c" -o "$work/$name.o"
 done
@@ -73,5 +73,5 @@ done
 for name in $sources; do
     set -- "$@" "$work/$name-fortran.o"
 done
-gfortran "$@" -lm -o "$work/benchmark"
+gfortran -flto "$@" -lm -o "$work/benchmark"
 "$work/benchmark"

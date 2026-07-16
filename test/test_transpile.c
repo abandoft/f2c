@@ -117,8 +117,8 @@ static void test_nested_loop_optimization_hints(void) {
     expect(result.error_count == 0U, "nested counted loops translate without errors");
     expect(result.code == NULL || strstr(result.code, "F2C_LOOP_UNROLL\n    for (;") == NULL,
            "three-level loop nests do not force-unroll the outermost loop");
-    expect_contains(result.code, "F2C_LOOP_UNROLL\n        for (;",
-                    "the direct parent of an innermost loop receives an unroll hint");
+    expect(result.code == NULL || strstr(result.code, "F2C_LOOP_UNROLL\n        for (;") == NULL,
+           "nested loop parents are left to the compiler cost model");
     expect_contains(result.code, "F2C_LOOP_UNROLL\n            for (;",
                     "the innermost counted loop receives an unroll hint");
     f2c_result_free(&result);

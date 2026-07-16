@@ -127,11 +127,11 @@ static int run_dgetrf(const LapackCase *test, double *input, double *generated, 
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
         const double generated_first =
             measure_dgetrf(dgetrf, test, input, generated, generated_pivots);
-        const double fortran_second = measure_dgetrf(dgetrf_, test, input, native, native_pivots);
         const double fortran_first = measure_dgetrf(dgetrf_, test, input, native, native_pivots);
+        const double fortran_second = measure_dgetrf(dgetrf_, test, input, native, native_pivots);
         const double generated_second =
             measure_dgetrf(dgetrf, test, input, generated, generated_pivots);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
                                                    generated_second);
     }
     return f2c_benchmark_report("DGETRF", description, samples,
@@ -198,10 +198,10 @@ static int run_dpotrf(const LapackCase *test, char uplo, double *input, double *
                    fixed_block_size());
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
         const double generated_first = measure_dpotrf(dpotrf, test, uplo, input, generated);
-        const double fortran_second = measure_dpotrf(dpotrf_, test, uplo, input, native);
         const double fortran_first = measure_dpotrf(dpotrf_, test, uplo, input, native);
+        const double fortran_second = measure_dpotrf(dpotrf_, test, uplo, input, native);
         const double generated_second = measure_dpotrf(dpotrf, test, uplo, input, generated);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
                                                    generated_second);
     }
     return f2c_benchmark_report("DPOTRF", description, samples,
@@ -209,7 +209,7 @@ static int run_dpotrf(const LapackCase *test, char uplo, double *input, double *
 }
 
 int f2c_benchmark_lapack(void) {
-    static const LapackCase cases[] = {{128, 128}, {384, 4}, {768, 1}};
+    static const LapackCase cases[] = {{128, 512}, {384, 16}, {768, 4}};
     const size_t matrix_maximum = 768U * 768U;
     double *input = (double *)malloc(matrix_maximum * sizeof(*input));
     double *generated = (double *)malloc(matrix_maximum * sizeof(*generated));

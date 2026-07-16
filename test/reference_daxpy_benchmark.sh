@@ -27,9 +27,9 @@ if command -v "gcc-$gcc_major" >/dev/null 2>&1; then
 else
     c_compiler=${CC:-cc}
 fi
-"$c_compiler" -std=c17 -O3 -ffp-contract=fast -DNDEBUG \
+"$c_compiler" -std=c17 -O3 -flto -ffp-contract=fast -DNDEBUG \
     -c "$work/daxpy.c" -o "$work/daxpy-c.o"
-gfortran -O3 -c "$work/daxpy.f" -o "$work/daxpy-fortran.o"
-"$c_compiler" -std=c17 -O3 -DNDEBUG "$root/test/daxpy_benchmark.c" \
+gfortran -O3 -flto -c "$work/daxpy.f" -o "$work/daxpy-fortran.o"
+"$c_compiler" -std=c17 -O3 -flto -DNDEBUG "$root/test/daxpy_benchmark.c" \
     "$work/daxpy-c.o" "$work/daxpy-fortran.o" -lm -o "$work/benchmark"
 "$work/benchmark"

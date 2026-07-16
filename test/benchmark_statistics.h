@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <time.h>
 
-enum { F2C_BENCHMARK_SAMPLE_COUNT = 11 };
+enum { F2C_BENCHMARK_SAMPLE_COUNT = 12 };
 
 typedef struct F2cBenchmarkSample {
     double generated_seconds;
@@ -13,10 +13,30 @@ typedef struct F2cBenchmarkSample {
     double ratio;
 } F2cBenchmarkSample;
 
-/* An ABBA pair cancels first/second-order effects such as frequency ramping
- * without selecting a favorable run from either implementation. */
-static F2cBenchmarkSample f2c_benchmark_abba_sample(double generated_first, double fortran_second,
-                                                    double fortran_first, double generated_second) {
+/* Alternating ABBA and BAAB pairs balance nonlinear frequency and thermal
+ * effects without selecting a favorable run from either implementation. */
+static inline int f2c_benchmark_generated_is_outer(size_t round) { return (round & 1U) == 0U; }
+
+static inline F2cBenchmarkSample f2c_benchmark_symmetric_sample(size_t round, double outer_first,
+                                                                double inner_first,
+                                                                double inner_second,
+                                                                double outer_second) {
+    F2cBenchmarkSample sample;
+    if (f2c_benchmark_generated_is_outer(round)) {
+        sample.generated_seconds = outer_first + outer_second;
+        sample.fortran_seconds = inner_first + inner_second;
+    } else {
+        sample.generated_seconds = inner_first + inner_second;
+        sample.fortran_seconds = outer_first + outer_second;
+    }
+    sample.ratio = sample.generated_seconds / sample.fortran_seconds;
+    return sample;
+}
+
+static inline F2cBenchmarkSample f2c_benchmark_abba_sample(double generated_first,
+                                                           double fortran_first,
+                                                           double fortran_second,
+                                                           double generated_second) {
     F2cBenchmarkSample sample;
     sample.generated_seconds = generated_first + generated_second;
     sample.fortran_seconds = fortran_first + fortran_second;
@@ -38,6 +58,7 @@ static int f2c_benchmark_sample_valid(const F2cBenchmarkSample *sample) {
 }
 
 static F2cBenchmarkSample f2c_benchmark_median(F2cBenchmarkSample *samples, size_t count) {
+    F2cBenchmarkSample result;
     size_t i;
     for (i = 1U; i < count; ++i) {
         F2cBenchmarkSample value = samples[i];
@@ -48,7 +69,14 @@ static F2cBenchmarkSample f2c_benchmark_median(F2cBenchmarkSample *samples, size
         }
         samples[position] = value;
     }
-    return samples[count / 2U];
+    if ((count & 1U) != 0U)
+        return samples[count / 2U];
+    result.generated_seconds =
+        (samples[count / 2U - 1U].generated_seconds + samples[count / 2U].generated_seconds) / 2.0;
+    result.fortran_seconds =
+        (samples[count / 2U - 1U].fortran_seconds + samples[count / 2U].fortran_seconds) / 2.0;
+    result.ratio = result.generated_seconds / result.fortran_seconds;
+    return result;
 }
 
 #endif

@@ -10,6 +10,9 @@ typedef struct DgerCase {
     int repetitions;
 } DgerCase;
 
+typedef void (*dger_function)(int32_t *, int32_t *, double *, double *, int32_t *, double *,
+                              int32_t *, double *, int32_t *);
+
 void dger(int32_t *, int32_t *, double *, double *, int32_t *, double *, int32_t *, double *,
           int32_t *);
 void dger_(int32_t *, int32_t *, double *, double *, int32_t *, double *, int32_t *, double *,
@@ -25,9 +28,8 @@ static void initialize(double *values, size_t count, int offset) {
         values[i] = f2c_benchmark_value(i, offset);
 }
 
-static double measure(void (*function)(int32_t *, int32_t *, double *, double *, int32_t *,
-                                       double *, int32_t *, double *, int32_t *),
-                      const DgerCase *test, double *x, double *y, double *matrix) {
+static double measure(dger_function function, const DgerCase *test, double *x, double *y,
+                      double *matrix) {
     int32_t n = test->n;
     int32_t stride = test->stride;
     double alpha = 1.0e-6;
@@ -75,12 +77,12 @@ static int run_case(const DgerCase *test, double *x, double *y, double *generate
         initialize(generated, matrix_count, 19);
         generated_first = measure(dger, test, x, y, generated);
         initialize(native, matrix_count, 19);
-        fortran_second = measure(dger_, test, x, y, native);
-        initialize(native, matrix_count, 19);
         fortran_first = measure(dger_, test, x, y, native);
+        initialize(native, matrix_count, 19);
+        fortran_second = measure(dger_, test, x, y, native);
         initialize(generated, matrix_count, 19);
         generated_second = measure(dger, test, x, y, generated);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
                                                    generated_second);
     }
     return f2c_benchmark_report("DGER", description, samples, sizeof(samples) / sizeof(samples[0]));

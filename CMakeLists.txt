@@ -211,12 +211,22 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_fuzz_tests)
     add_test(NAME mutation_fuzz COMMAND f2c_fuzz_tests)
 
+    add_executable(f2c_benchmark_statistics_tests test/test_benchmark_statistics.c)
+    target_include_directories(
+        f2c_benchmark_statistics_tests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test
+    )
+    f2c_configure_test_target(f2c_benchmark_statistics_tests)
+    add_test(NAME benchmark_statistics COMMAND f2c_benchmark_statistics_tests)
+
     add_test(
         NAME generated_c17
         COMMAND
             ${CMAKE_COMMAND}
             -DF2C=$<TARGET_FILE:f2c>
             -DCC=${CMAKE_C_COMPILER}
+            "-DCC_INCLUDE_DIRECTORIES=${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES}"
+            "-DCC_LINK_DIRECTORIES=${CMAKE_C_IMPLICIT_LINK_DIRECTORIES}"
             -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/test/compile_generated.cmake

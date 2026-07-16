@@ -2407,13 +2407,10 @@ static void annotate_loop_hints(Unit *unit) {
         F2cStatement *statement = &unit->statements[i];
         if (statement_begins_loop(statement)) {
             size_t ancestor;
-            for (ancestor = 0U; ancestor + 1U < loop_count; ++ancestor)
+            for (ancestor = 0U; ancestor < loop_count; ++ancestor)
                 unit->statements[loops[ancestor]].unroll_hint = 0;
-            if (loop_count != 0U) {
-                F2cStatement *parent = &unit->statements[loops[loop_count - 1U]];
-                parent->unroll_hint = parent->kind == F2C_STMT_DO;
+            if (loop_count != 0U)
                 statement->unroll_hint = statement->kind == F2C_STMT_DO;
-            }
             loops[loop_count++] = i;
         }
         if (statement_begins_block(statement)) {

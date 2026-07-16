@@ -31,13 +31,13 @@ else
     c_compiler=${CC:-cc}
 fi
 for name in dgemm lsame xerbla; do
-    "$c_compiler" -std=c17 -O3 -ffp-contract=fast -DNDEBUG -c "$work/$name.c" \
+    "$c_compiler" -std=c17 -O3 -flto -ffp-contract=fast -DNDEBUG -c "$work/$name.c" \
         -o "$work/$name-c.o"
-    gfortran -O3 -c "$work/$name.f" -o "$work/$name-fortran.o"
+    gfortran -O3 -flto -c "$work/$name.f" -o "$work/$name-fortran.o"
 done
-"$c_compiler" -std=c17 -O3 -DNDEBUG -c "$root/test/dgemm_benchmark.c" \
+"$c_compiler" -std=c17 -O3 -flto -DNDEBUG -c "$root/test/dgemm_benchmark.c" \
     -o "$work/benchmark.o"
-gfortran "$work/benchmark.o" "$work/dgemm-c.o" "$work/lsame-c.o" "$work/xerbla-c.o" \
+gfortran -flto "$work/benchmark.o" "$work/dgemm-c.o" "$work/lsame-c.o" "$work/xerbla-c.o" \
     "$work/dgemm-fortran.o" "$work/lsame-fortran.o" "$work/xerbla-fortran.o" -lm \
     -o "$work/benchmark"
 "$work/benchmark"

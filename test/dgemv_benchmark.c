@@ -89,12 +89,12 @@ static int run_case(const DgemvCase *test, double *a, double *x, double *y, doub
         initialize(y, (size_t)test->n, 19);
         generated_first = measure(dgemv_generated, test, a, x, y);
         initialize(y, (size_t)test->n, 19);
-        fortran_second = measure(dgemv_fortran, test, a, x, y);
-        initialize(y, (size_t)test->n, 19);
         fortran_first = measure(dgemv_fortran, test, a, x, y);
         initialize(y, (size_t)test->n, 19);
+        fortran_second = measure(dgemv_fortran, test, a, x, y);
+        initialize(y, (size_t)test->n, 19);
         generated_second = measure(dgemv_generated, test, a, x, y);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
                                                    generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));

@@ -84,10 +84,10 @@ static int run_case(const Dgetf2Case *test, double *input, double *work, double 
     initialize(input, test->n);
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
         const double generated_first = measure(dgetf2, test, input, work, pivots);
-        const double fortran_second = measure(dgetf2_, test, input, reference, reference_pivots);
         const double fortran_first = measure(dgetf2_, test, input, reference, reference_pivots);
+        const double fortran_second = measure(dgetf2_, test, input, reference, reference_pivots);
         const double generated_second = measure(dgetf2, test, input, work, pivots);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
                                                    generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));

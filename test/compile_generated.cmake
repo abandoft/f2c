@@ -1,3 +1,20 @@
+if(WIN32)
+    if(NOT DEFINED CC_INCLUDE_DIRECTORIES OR CC_INCLUDE_DIRECTORIES STREQUAL "")
+        message(FATAL_ERROR
+                "the Windows C compiler's standard include directories were not provided")
+    endif()
+    if(NOT DEFINED CC_LINK_DIRECTORIES OR CC_LINK_DIRECTORIES STREQUAL "")
+        message(FATAL_ERROR
+                "the Windows C compiler's standard library directories were not provided")
+    endif()
+
+    # Visual Studio generators can discover cl.exe without modifying the parent
+    # process environment.  Generated-source checks invoke the compiler directly,
+    # so preserve CMake's discovered SDK and toolchain search paths explicitly.
+    set(ENV{INCLUDE} "${CC_INCLUDE_DIRECTORIES}")
+    set(ENV{LIB} "${CC_LINK_DIRECTORIES}")
+endif()
+
 set(generated "${BINARY_DIR}/generated_daxpy.c")
 set(executable "${BINARY_DIR}/generated_daxpy_test")
 

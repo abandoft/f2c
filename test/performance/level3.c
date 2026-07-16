@@ -115,10 +115,10 @@ static int run_dtrsm(const Level3Case *test, double *a, double *input, double *g
                    test->option_a, test->option_b);
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
         const double generated_first = measure_dtrsm(dtrsm, test, a, input, generated);
-        const double fortran_second = measure_dtrsm(dtrsm_, test, a, input, native);
         const double fortran_first = measure_dtrsm(dtrsm_, test, a, input, native);
+        const double fortran_second = measure_dtrsm(dtrsm_, test, a, input, native);
         const double generated_second = measure_dtrsm(dtrsm, test, a, input, generated);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
                                                    generated_second);
     }
     return f2c_benchmark_report("DTRSM", description, samples,
@@ -179,12 +179,12 @@ static int run_dsyrk(const Level3Case *test, double *a, double *generated, doubl
         initialize_dense(generated, test->n, 43);
         generated_first = measure_dsyrk(dsyrk, test, a, generated);
         initialize_dense(native, test->n, 43);
-        fortran_second = measure_dsyrk(dsyrk_, test, a, native);
-        initialize_dense(native, test->n, 43);
         fortran_first = measure_dsyrk(dsyrk_, test, a, native);
+        initialize_dense(native, test->n, 43);
+        fortran_second = measure_dsyrk(dsyrk_, test, a, native);
         initialize_dense(generated, test->n, 43);
         generated_second = measure_dsyrk(dsyrk, test, a, generated);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
                                                    generated_second);
     }
     return f2c_benchmark_report("DSYRK", description, samples,
@@ -193,12 +193,12 @@ static int run_dsyrk(const Level3Case *test, double *a, double *generated, doubl
 
 int f2c_benchmark_level3(void) {
     static const Level3Case dtrsm_cases[] = {
-        {32, 'L', 'N', 4096}, {32, 'L', 'T', 4096}, {32, 'R', 'N', 4096}, {32, 'R', 'T', 4096},
-        {96, 'L', 'N', 256},  {96, 'L', 'T', 256},  {96, 'R', 'N', 256},  {96, 'R', 'T', 256},
-        {192, 'L', 'N', 32},  {192, 'L', 'T', 32},  {192, 'R', 'N', 32},  {192, 'R', 'T', 32}};
-    static const Level3Case dsyrk_cases[] = {{32, 'N', 0, 4096}, {32, 'T', 0, 4096},
-                                             {96, 'N', 0, 256},  {96, 'T', 0, 256},
-                                             {192, 'N', 0, 32},  {192, 'T', 0, 32}};
+        {32, 'L', 'N', 16384}, {32, 'L', 'T', 16384}, {32, 'R', 'N', 16384}, {32, 'R', 'T', 16384},
+        {96, 'L', 'N', 1024},  {96, 'L', 'T', 1024},  {96, 'R', 'N', 1024},  {96, 'R', 'T', 1024},
+        {192, 'L', 'N', 128},  {192, 'L', 'T', 128},  {192, 'R', 'N', 128},  {192, 'R', 'T', 128}};
+    static const Level3Case dsyrk_cases[] = {{32, 'N', 0, 16384}, {32, 'T', 0, 16384},
+                                             {96, 'N', 0, 1024},  {96, 'T', 0, 1024},
+                                             {192, 'N', 0, 128},  {192, 'T', 0, 128}};
     const size_t maximum = 192U * 192U;
     double *a = (double *)malloc(maximum * sizeof(*a));
     double *input = (double *)malloc(maximum * sizeof(*input));

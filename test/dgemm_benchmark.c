@@ -92,12 +92,12 @@ static int run_case(const DgemmCase *test, double *a, double *b, double *c, doub
         initialize(c, test->n, 43);
         generated_first = measure(dgemm_generated, test, a, b, c);
         initialize(reference, test->n, 43);
-        fortran_second = measure(dgemm_fortran, test, a, b, reference);
-        initialize(reference, test->n, 43);
         fortran_first = measure(dgemm_fortran, test, a, b, reference);
+        initialize(reference, test->n, 43);
+        fortran_second = measure(dgemm_fortran, test, a, b, reference);
         initialize(c, test->n, 43);
         generated_second = measure(dgemm_generated, test, a, b, c);
-        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second, fortran_first,
+        samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first, fortran_second,
                                                    generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
@@ -113,7 +113,7 @@ int main(void) {
     static const DgemmCase cases[] = {
         {32, 'N', 'N', 16384}, {32, 'N', 'T', 16384}, {32, 'T', 'N', 16384},
         {96, 'N', 'N', 768},   {96, 'N', 'T', 768},   {96, 'T', 'N', 768},
-        {192, 'N', 'N', 72},   {192, 'N', 'T', 72},   {192, 'T', 'N', 72}};
+        {192, 'N', 'N', 288},  {192, 'N', 'T', 288},  {192, 'T', 'N', 288}};
     const int32_t maximum_n = 192;
     const size_t count = (size_t)maximum_n * (size_t)maximum_n;
     double *a = (double *)malloc(count * sizeof(*a));

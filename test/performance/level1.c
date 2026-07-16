@@ -10,6 +10,10 @@ typedef struct Level1Case {
     int repetitions;
 } Level1Case;
 
+typedef double (*ddot_function)(int32_t *, double *, int32_t *, double *, int32_t *);
+typedef double (*dnrm2_function)(int32_t *, double *, int32_t *);
+typedef void (*dscal_function)(int32_t *, double *, double *, int32_t *);
+
 double ddot(int32_t *, double *, int32_t *, double *, int32_t *);
 double ddot_(int32_t *, double *, int32_t *, double *, int32_t *);
 double dnrm2(int32_t *, double *, int32_t *);
@@ -29,8 +33,7 @@ static void initialize(double *values, size_t count, int offset) {
         values[i] = f2c_benchmark_value(i, offset);
 }
 
-static double measure_ddot(double (*function)(int32_t *, double *, int32_t *, double *, int32_t *),
-                           const Level1Case *test, double *x, double *y) {
+static double measure_ddot(ddot_function function, const Level1Case *test, double *x, double *y) {
     int repeat;
     double begin = f2c_benchmark_seconds();
     for (repeat = 0; repeat < test->repetitions; ++repeat) {
@@ -41,8 +44,7 @@ static double measure_ddot(double (*function)(int32_t *, double *, int32_t *, do
     return f2c_benchmark_seconds() - begin;
 }
 
-static double measure_dnrm2(double (*function)(int32_t *, double *, int32_t *),
-                            const Level1Case *test, double *x) {
+static double measure_dnrm2(dnrm2_function function, const Level1Case *test, double *x) {
     int repeat;
     double begin = f2c_benchmark_seconds();
     for (repeat = 0; repeat < test->repetitions; ++repeat) {
@@ -53,8 +55,7 @@ static double measure_dnrm2(double (*function)(int32_t *, double *, int32_t *),
     return f2c_benchmark_seconds() - begin;
 }
 
-static double measure_dscal(void (*function)(int32_t *, double *, double *, int32_t *),
-                            const Level1Case *test, double *x) {
+static double measure_dscal(dscal_function function, const Level1Case *test, double *x) {
     int32_t n = test->n;
     int32_t stride = test->stride;
     double alpha = 0.999999;
@@ -122,10 +123,10 @@ static int run_case(const Level1Case *test, double *x, double *y, double *native
                 generated_first = measure_ddot(ddot, test, x, y);
                 initialize(native, count, 7);
                 initialize(y, count, 31);
-                fortran_second = measure_ddot(ddot_, test, native, y);
+                fortran_first = measure_ddot(ddot_, test, native, y);
                 initialize(native, count, 7);
                 initialize(y, count, 31);
-                fortran_first = measure_ddot(ddot_, test, native, y);
+                fortran_second = measure_ddot(ddot_, test, native, y);
                 initialize(x, count, 7);
                 initialize(y, count, 31);
                 generated_second = measure_ddot(ddot, test, x, y);
@@ -133,23 +134,23 @@ static int run_case(const Level1Case *test, double *x, double *y, double *native
                 initialize(x, count, 7);
                 generated_first = measure_dnrm2(dnrm2, test, x);
                 initialize(native, count, 7);
-                fortran_second = measure_dnrm2(dnrm2_, test, native);
-                initialize(native, count, 7);
                 fortran_first = measure_dnrm2(dnrm2_, test, native);
+                initialize(native, count, 7);
+                fortran_second = measure_dnrm2(dnrm2_, test, native);
                 initialize(x, count, 7);
                 generated_second = measure_dnrm2(dnrm2, test, x);
             } else {
                 initialize(x, count, 7);
                 generated_first = measure_dscal(dscal, test, x);
                 initialize(native, count, 7);
-                fortran_second = measure_dscal(dscal_, test, native);
-                initialize(native, count, 7);
                 fortran_first = measure_dscal(dscal_, test, native);
+                initialize(native, count, 7);
+                fortran_second = measure_dscal(dscal_, test, native);
                 initialize(x, count, 7);
                 generated_second = measure_dscal(dscal, test, x);
             }
-            samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_second,
-                                                       fortran_first, generated_second);
+            samples[round] = f2c_benchmark_abba_sample(generated_first, fortran_first,
+                                                       fortran_second, generated_second);
         }
         passed = f2c_benchmark_report(kernels[kernel], description, samples,
                                       sizeof(samples) / sizeof(samples[0])) &&
