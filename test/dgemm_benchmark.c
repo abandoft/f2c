@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "benchmark_statistics.h"
 
@@ -34,12 +33,6 @@ static void dgemm_generated(char *transpose_a, char *transpose_b, int32_t *m, in
     dgemm(transpose_a, transpose_b, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc, 1U, 1U);
 }
 
-static double seconds(void) {
-    struct timespec now;
-    (void)timespec_get(&now, TIME_UTC);
-    return (double)now.tv_sec + (double)now.tv_nsec * 1.0e-9;
-}
-
 static void initialize(double *matrix, int32_t n, int offset) {
     int32_t i;
     for (i = 0; i < n * n; ++i)
@@ -53,11 +46,11 @@ static double measure(dgemm_function function, const DgemmCase *test, double *a,
     char transpose_b = test->transpose_b;
     double alpha = 0.75;
     double beta = 0.0;
-    double begin = seconds();
+    double begin = f2c_benchmark_seconds();
     int repeat;
     for (repeat = 0; repeat < test->repetitions; ++repeat)
         function(&transpose_a, &transpose_b, &n, &n, &n, &alpha, a, &n, b, &n, &beta, c, &n);
-    return seconds() - begin;
+    return f2c_benchmark_seconds() - begin;
 }
 
 static int verify(const DgemmCase *test, double *a, double *b, double *c, double *reference) {
@@ -111,7 +104,7 @@ static int run_case(const DgemmCase *test, double *a, double *b, double *c, doub
            result.ratio);
     printf("F2C_PERF,DGEMM,n=%d;trans=%c%c,%.9f,%.9f,%.6f\n", test->n, test->transpose_a,
            test->transpose_b, result.generated_seconds, result.fortran_seconds, result.ratio);
-    return result.ratio <= 1.05;
+    return f2c_benchmark_sample_valid(&result);
 }
 
 int main(void) {

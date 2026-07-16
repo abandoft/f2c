@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "benchmark_statistics.h"
 
@@ -16,12 +15,6 @@ typedef struct Dgetf2Case {
 
 void dgetf2(int32_t *, int32_t *, double *, int32_t *, int32_t *, int32_t *);
 void dgetf2_(int32_t *, int32_t *, double *, int32_t *, int32_t *, int32_t *);
-
-static double seconds(void) {
-    struct timespec now;
-    (void)timespec_get(&now, TIME_UTC);
-    return (double)now.tv_sec + (double)now.tv_nsec * 1.0e-9;
-}
 
 static void initialize(double *matrix, int32_t n) {
     int32_t column;
@@ -70,9 +63,9 @@ static double measure(dgetf2_function function, const Dgetf2Case *test, const do
         int32_t info = -1;
         double begin;
         memcpy(work, input, bytes);
-        begin = seconds();
+        begin = f2c_benchmark_seconds();
         function(&n, &n, work, &n, pivots, &info);
-        elapsed += seconds() - begin;
+        elapsed += f2c_benchmark_seconds() - begin;
         if (info != 0)
             return HUGE_VAL;
     }
@@ -108,7 +101,7 @@ static int run_case(const Dgetf2Case *test, double *input, double *work, double 
            result.generated_seconds, result.fortran_seconds, result.ratio);
     printf("F2C_PERF,DGETF2,n=%d,%.9f,%.9f,%.6f\n", test->n, result.generated_seconds,
            result.fortran_seconds, result.ratio);
-    return result.ratio <= 1.05;
+    return f2c_benchmark_sample_valid(&result);
 }
 
 int main(void) {

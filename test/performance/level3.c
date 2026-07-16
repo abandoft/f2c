@@ -11,6 +11,8 @@ typedef struct Level3Case {
     int repetitions;
 } Level3Case;
 
+enum { F2C_DTRSM_BATCH_SIZE = 8 };
+
 typedef void (*dtrsm_function)(char *, char *, char *, char *, int32_t *, int32_t *, double *,
                                double *, int32_t *, double *, int32_t *, size_t, size_t, size_t,
                                size_t);
@@ -49,7 +51,8 @@ static void initialize_triangular(double *matrix, int32_t n) {
 
 static double measure_dtrsm(dtrsm_function function, const Level3Case *test, double *a,
                             const double *input, double *work) {
-    const size_t bytes = (size_t)test->n * (size_t)test->n * sizeof(*work);
+    const size_t elements = (size_t)test->n * (size_t)test->n;
+    const size_t bytes = elements * sizeof(*work);
     char side = test->option_a;
     char uplo = 'U';
     char trans = test->option_b;
@@ -57,13 +60,21 @@ static double measure_dtrsm(dtrsm_function function, const Level3Case *test, dou
     int32_t n = test->n;
     double alpha = 0.75;
     double elapsed = 0.0;
-    int repeat;
-    for (repeat = 0; repeat < test->repetitions; ++repeat) {
+    int completed = 0;
+    while (completed < test->repetitions) {
+        const int remaining = test->repetitions - completed;
+        const int active = remaining < F2C_DTRSM_BATCH_SIZE ? remaining : F2C_DTRSM_BATCH_SIZE;
         double begin;
-        memcpy(work, input, bytes);
+        int lane;
+        for (lane = 0; lane < active; ++lane)
+            memcpy(work + (size_t)lane * elements, input, bytes);
         begin = f2c_benchmark_seconds();
-        function(&side, &uplo, &trans, &diag, &n, &n, &alpha, a, &n, work, &n, 1U, 1U, 1U, 1U);
+        for (lane = 0; lane < active; ++lane) {
+            function(&side, &uplo, &trans, &diag, &n, &n, &alpha, a, &n,
+                     work + (size_t)lane * elements, &n, 1U, 1U, 1U, 1U);
+        }
         elapsed += f2c_benchmark_seconds() - begin;
+        completed += active;
     }
     return elapsed;
 }
@@ -197,8 +208,8 @@ int f2c_benchmark_level3(void) {
     const size_t maximum = 192U * 192U;
     double *a = (double *)malloc(maximum * sizeof(*a));
     double *input = (double *)malloc(maximum * sizeof(*input));
-    double *generated = (double *)malloc(maximum * sizeof(*generated));
-    double *native = (double *)malloc(maximum * sizeof(*native));
+    double *generated = (double *)malloc(maximum * F2C_DTRSM_BATCH_SIZE * sizeof(*generated));
+    double *native = (double *)malloc(maximum * F2C_DTRSM_BATCH_SIZE * sizeof(*native));
     size_t i;
     int passed = 1;
     if (a == NULL || input == NULL || generated == NULL || native == NULL) {

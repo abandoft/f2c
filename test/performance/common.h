@@ -6,13 +6,6 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <time.h>
-
-static inline double f2c_benchmark_seconds(void) {
-    struct timespec now;
-    (void)timespec_get(&now, TIME_UTC);
-    return (double)now.tv_sec + (double)now.tv_nsec * 1.0e-9;
-}
 
 static inline double f2c_benchmark_value(size_t index, int offset) {
     return (double)(((int32_t)((index + (size_t)offset) % 251U)) - 125) / 251.0;
@@ -30,7 +23,7 @@ static inline int f2c_benchmark_report(const char *kernel, const char *descripti
            result.generated_seconds, result.fortran_seconds, result.ratio);
     printf("F2C_PERF,%s,%s,%.9f,%.9f,%.6f\n", kernel, description, result.generated_seconds,
            result.fortran_seconds, result.ratio);
-    return result.ratio <= 1.05;
+    return f2c_benchmark_sample_valid(&result);
 }
 
 #endif

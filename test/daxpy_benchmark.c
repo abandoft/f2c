@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "benchmark_statistics.h"
 
@@ -17,12 +16,6 @@ typedef struct DaxpyCase {
 
 void daxpy(int32_t *n, double *alpha, double *x, int32_t *incx, double *y, int32_t *incy);
 void daxpy_(int32_t *n, double *alpha, double *x, int32_t *incx, double *y, int32_t *incy);
-
-static double seconds(void) {
-    struct timespec now;
-    (void)timespec_get(&now, TIME_UTC);
-    return (double)now.tv_sec + (double)now.tv_nsec * 1.0e-9;
-}
 
 static size_t storage_count(int32_t n, int32_t stride) {
     const int32_t magnitude = stride < 0 ? -stride : stride;
@@ -41,12 +34,12 @@ static double measure(daxpy_function function, double *x, double *y, const Daxpy
     int32_t n = test->n;
     int32_t stride = test->stride;
     double alpha = 0.75;
-    double begin = seconds();
+    double begin = f2c_benchmark_seconds();
     int repeat;
     for (repeat = 0; repeat < test->repetitions; ++repeat) {
         function(&n, &alpha, x, &stride, y, &stride);
     }
-    return seconds() - begin;
+    return f2c_benchmark_seconds() - begin;
 }
 
 static int run_case(const DaxpyCase *test, double *x, double *c_y, double *fortran_y) {
@@ -93,7 +86,7 @@ static int run_case(const DaxpyCase *test, double *x, double *c_y, double *fortr
            test->stride, result.generated_seconds, result.fortran_seconds, result.ratio);
     printf("F2C_PERF,DAXPY,n=%d;inc=%d,%.9f,%.9f,%.6f\n", test->n, test->stride,
            result.generated_seconds, result.fortran_seconds, result.ratio);
-    return result.ratio <= 1.05;
+    return f2c_benchmark_sample_valid(&result);
 }
 
 int main(void) {

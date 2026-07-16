@@ -46,14 +46,6 @@ if [ "$count" -ne 71 ]; then
 fi
 
 awk -F, '
-    NR > 1 {
-        ratio = $5 + 0.0
-        if (ratio > 1.05) failed = 1
-    }
-    END { exit failed }
-' "$csv"
-
-awk -F, '
     BEGIN { print "[" }
     NR > 1 {
         gsub(/^"|"$/, "", $2)
@@ -87,5 +79,18 @@ awk -F, '
     }
 ' "$csv" >"$summary"
 
+status=0
+awk -F, '
+    NR > 1 {
+        ratio = $5 + 0.0
+        if (ratio > 1.05) {
+            printf "performance regression: %s %s ratio %.3f exceeds 1.050\n", $1, $2, ratio > "/dev/stderr"
+            failed = 1
+        }
+    }
+    END { exit failed }
+' "$csv" || status=$?
+
 cat "$summary"
 echo "performance reports: $csv $json $summary"
+exit "$status"
