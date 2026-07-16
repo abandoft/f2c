@@ -280,7 +280,7 @@ def build_manifest(root: Path) -> dict[str, object]:
             f"groups={result_groups}, calls={computational_calls}"
         )
     if numerical_by_category != Counter(
-        {"blas": 116, "install": 4, "rfp": 32, "lin": 212, "eig": 532}
+        {"blas": 116, "install": 4, "rfp": 32, "lin": 212, "eig": 536}
     ):
         raise ManifestError(
             f"official numerical-record coverage differs: {dict(numerical_by_category)}"

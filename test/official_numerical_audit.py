@@ -40,9 +40,9 @@ from exhaustive_result_diff import (
 
 EXPECTED_OBSERVABLE = {
     "suite_count": 104,
-    "numerical_records": 896,
+    "numerical_records": 900,
     "status_records": 46,
-    "observable_records": 942,
+    "observable_records": 946,
 }
 EXPECTED_INTERNAL = {
     "blas": {
