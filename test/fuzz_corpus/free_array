@@ -1,0 +1,5 @@
+0subroutine reverse(a, n)
+integer n
+real a(n)
+a(1:n) = a(n:1:-1)
+end subroutine reverse

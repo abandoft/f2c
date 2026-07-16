@@ -1,0 +1,84 @@
+From b5b4661ba83a52ab74b2b98f6264ed985d772954 Mon Sep 17 00:00:00 2001
+From: Angelika Schwarz <angies@cs.umu.se>
+Date: Tue, 10 Jun 2025 01:32:17 +0200
+Subject: [PATCH] Fix uninitialized MAXC2NRM in complex GEQP3RK
+
+Backport the exact two-line upstream fix to the pinned Reference LAPACK
+3.12.1 differential fixture.  Without it the native Fortran oracle reads
+an uninitialized local and skips a compiler-dependent number of CQK/ZQK
+tests.  Upstream commit:
+b5b4661ba83a52ab74b2b98f6264ed985d772954.
+---
+ SRC/cgeqp3rk.f | 1 +
+ SRC/zgeqp3rk.f | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/SRC/cgeqp3rk.f b/SRC/cgeqp3rk.f
+index 4622c22..2fda980 100644
+--- a/SRC/cgeqp3rk.f
++++ b/SRC/cgeqp3rk.f
+@@ -751,6 +751,7 @@
+ *     for the whole original matrix stored in A(1:M,1:N).
+ *
+       KP1 = ISAMAX( N, RWORK( 1 ), 1 )
++      MAXC2NRM = RWORK( KP1 )
+ *
+ *     ==================================================================.
+ *
+diff --git a/SRC/zgeqp3rk.f b/SRC/zgeqp3rk.f
+index c84225c..989ce69 100644
+--- a/SRC/zgeqp3rk.f
++++ b/SRC/zgeqp3rk.f
+@@ -750,6 +750,7 @@
+ *     for the whole original matrix stored in A(1:M,1:N).
+ *
+       KP1 = IDAMAX( N, RWORK( 1 ), 1 )
++      MAXC2NRM = RWORK( KP1 )
+ *
+ *     ==================================================================.
+ *
+-- 
+2.50.1
+
+From 6af853258b93599744092557ba5e4fd89461e652 Mon Sep 17 00:00:00 2001
+From: Aymen Qader <aymen.qader@arm.com>
+Date: Wed, 6 May 2026 11:29:34 +0100
+Subject: [PATCH] Fix complex NRM2 tests for matching infinite results
+
+Backport the upstream comparison fix to the pinned Reference LAPACK 3.12.1
+fixture. Equal infinite norms otherwise enter the relative-error expression,
+where infinity minus infinity produces a spurious NaN failure. Upstream
+commit: 6af853258b93599744092557ba5e4fd89461e652.
+---
+ BLAS/TESTING/cblat1.f | 2 ++
+ BLAS/TESTING/zblat1.f | 2 ++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/BLAS/TESTING/cblat1.f b/BLAS/TESTING/cblat1.f
+index 1f44448..83b107d 100644
+--- a/BLAS/TESTING/cblat1.f
++++ b/BLAS/TESTING/cblat1.f
+@@ -963,6 +963,8 @@
+                ELSE
+                   TRAT = ZERO
+                END IF
++            ELSE IF (SNRM == ZNRM) THEN
++               TRAT = ZERO
+             ELSE IF (ZNRM == ZERO) THEN
+                TRAT = SNRM / ULP
+             ELSE
+diff --git a/BLAS/TESTING/zblat1.f b/BLAS/TESTING/zblat1.f
+index 90b1f83..d68dd9d 100644
+--- a/BLAS/TESTING/zblat1.f
++++ b/BLAS/TESTING/zblat1.f
+@@ -963,6 +963,8 @@
+                ELSE
+                   TRAT = ZERO
+                END IF
++            ELSE IF (SNRM == ZNRM) THEN
++               TRAT = ZERO
+             ELSE IF (ZNRM == ZERO) THEN
+                TRAT = SNRM / ULP
+             ELSE
+-- 
+2.50.1

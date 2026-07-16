@@ -1,0 +1,5 @@
+0subroutine s(output, left, right)
+character*8 output
+character*(*) left, right
+output = left // right
+end subroutine s

@@ -1,0 +1,10 @@
+subroutine apply(operation, value)
+  abstract interface
+    integer function integer_operation(item) result(answer)
+      integer, intent(in) :: item
+    end function integer_operation
+  end interface
+  procedure(integer_operation), optional :: operation
+  integer, intent(inout) :: value
+  if (present(operation)) value = operation(value)
+end subroutine apply

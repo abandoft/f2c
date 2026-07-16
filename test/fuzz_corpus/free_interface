@@ -1,0 +1,14 @@
+subroutine interface_seed(value)
+  implicit none(type, external)
+  real :: value
+  interface select_value
+    real function select_integer(item)
+      integer, intent(in) :: item
+    end function select_integer
+    real function select_real(item, offset)
+      real, intent(in) :: item
+      real, intent(in), optional :: offset
+    end function select_real
+  end interface select_value
+  value = select_value(value)
+end subroutine interface_seed
