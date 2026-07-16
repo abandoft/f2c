@@ -1137,7 +1137,8 @@ static int emit_allocatable_numeric_constructor_assignment(Context *context, Uni
     indent(&context->output, depth + 2);
     f2c_buffer_append(&context->output, "if (f2c_constructor_values == NULL) {\n");
     indent(&context->output, depth + 3);
-    f2c_buffer_append(&context->output, "f2c_constructor_values = malloc(1U);\n");
+    f2c_buffer_append(&context->output,
+                      "f2c_constructor_values = malloc(sizeof(*f2c_constructor_values));\n");
     indent(&context->output, depth + 3);
     f2c_buffer_append(&context->output, "if (f2c_constructor_values == NULL) abort();\n");
     indent(&context->output, depth + 2);

@@ -125,8 +125,8 @@ void f2c_shape_from_symbol(Unit *unit, F2cShape *shape, const Symbol *symbol) {
     for (dimension = 0U; dimension < shape->rank; ++dimension) {
         const Dimension *source = &symbol->dimensions[dimension];
         F2cShapeDimension *target = &shape->dimensions[dimension];
-        int64_t lower;
-        int64_t upper;
+        int64_t lower = 0;
+        int64_t upper = 0;
         const F2cShapeKind dimension_shape = shape_kind_for_dimension(source->kind);
         target->kind = source->kind;
         if (dimension_shape > shape->kind)

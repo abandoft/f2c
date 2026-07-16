@@ -1955,8 +1955,8 @@ static void mark_call_targets(Unit *unit, const char *line) {
                 symbol->external = 1;
                 symbol->external_subroutine = 1;
             }
-            free(name);
         }
+        free(name);
         match = cursor + consumed;
     }
 }

@@ -1585,8 +1585,8 @@ static void validate_substring_semantics(Context *context, Unit *unit, size_t li
     const F2cExpr *upper = NULL;
     const F2cExpr *stride = NULL;
     int64_t lower_value = 1;
-    int64_t upper_value;
-    int64_t length_value;
+    int64_t upper_value = 0;
+    int64_t length_value = 0;
     int lower_known = 1;
     int upper_known = 0;
     int length_known = 0;

@@ -203,8 +203,8 @@ static int symbol_element_count(Unit *unit, const Symbol *symbol, size_t *count)
     for (dimension = 0U; dimension < symbol->rank; ++dimension) {
         F2cExpr *lower = f2c_parse_expression_ast(unit, symbol->dimensions[dimension].lower, NULL);
         F2cExpr *upper = f2c_parse_expression_ast(unit, symbol->dimensions[dimension].upper, NULL);
-        int32_t lower_value;
-        int32_t upper_value;
+        int32_t lower_value = 0;
+        int32_t upper_value = 0;
         size_t extent;
         const int valid = evaluate_integer(unit, lower, &lower_value) &&
                           evaluate_integer(unit, upper, &upper_value) && upper_value >= lower_value;

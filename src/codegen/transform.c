@@ -192,15 +192,22 @@ static void emit_result_commit(Context *context, Unit *unit, Symbol *target, siz
         indent(&context->output, depth);
         if (target->type == TYPE_DERIVED && target->derived_type != NULL) {
             char *old_count = f2c_symbol_element_count(unit, target);
-            f2c_buffer_printf(&context->output,
-                              "if (%s != NULL) f2c_destroy_array_%s(%s, (size_t)(%s), %zuU); "
-                              "free(%s); %s = f2c_transform_result;\n",
-                              name, target->derived_type->c_name, name,
-                              old_count != NULL ? old_count : "0U", rank, name, name);
+            f2c_buffer_printf(&context->output, "if (%s != NULL) {\n", name);
+            indent(&context->output, depth + 1);
+            f2c_buffer_printf(&context->output, "f2c_destroy_array_%s(%s, (size_t)(%s), %zuU);\n",
+                              target->derived_type->c_name, name,
+                              old_count != NULL ? old_count : "0U", rank);
+            indent(&context->output, depth);
+            f2c_buffer_append(&context->output, "}\n");
+            indent(&context->output, depth);
+            f2c_buffer_printf(&context->output, "free(%s);\n", name);
+            indent(&context->output, depth);
+            f2c_buffer_printf(&context->output, "%s = f2c_transform_result;\n", name);
             free(old_count);
         } else {
-            f2c_buffer_printf(&context->output, "free(%s); %s = f2c_transform_result;\n", name,
-                              name);
+            f2c_buffer_printf(&context->output, "free(%s);\n", name);
+            indent(&context->output, depth);
+            f2c_buffer_printf(&context->output, "%s = f2c_transform_result;\n", name);
         }
         if (target->type == TYPE_CHARACTER && target->deferred_character) {
             indent(&context->output, depth);
