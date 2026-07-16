@@ -101,6 +101,22 @@ static void test_wide_do_trip_count(void) {
                         "a constant stride of four has a provably native-width trip count");
         f2c_result_free(&stride);
     }
+    {
+        static const char positive_source[] = "subroutine positive_do(last, observed)\n"
+                                              "  integer :: last, observed, i\n"
+                                              "  observed = 0\n"
+                                              "  do i = 2, last\n"
+                                              "    observed = observed + 1\n"
+                                              "  end do\n"
+                                              "end subroutine positive_do\n";
+        F2cOptions positive_options = {"positive_do.f90", F2C_SOURCE_FREE, 0};
+        F2cResult positive =
+            f2c_transpile(positive_source, strlen(positive_source), &positive_options);
+        expect(positive.error_count == 0U, "positive-start default-integer DO translates");
+        expect_contains(positive.code, "int32_t f2c_do_count_",
+                        "a unit-stride range starting at two has a proven native-width count");
+        f2c_result_free(&positive);
+    }
 }
 
 static void test_blas_style_subroutine(void) {

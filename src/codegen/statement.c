@@ -17,6 +17,7 @@ static int is_numeric_type(Type type) {
 
 static int do_count_fits_default_integer(const F2cStatement *statement) {
     char *end = NULL;
+    long long start;
     long long step;
     if (statement == NULL || statement->right == NULL || statement->step == NULL ||
         statement->left == NULL || statement->left->type_kind != f2c_default_kind(TYPE_INTEGER) ||
@@ -28,7 +29,16 @@ static int do_count_fits_default_integer(const F2cStatement *statement) {
         strcmp(statement->step->text, "1") == 0)
         return 1;
     step = strtoll(statement->step->text, &end, 10);
-    return end != statement->step->text && *end == '\0' && (step <= -3 || step >= 3);
+    if (end == statement->step->text || *end != '\0')
+        return 0;
+    if (step == 1 && statement->right->kind == F2C_EXPR_INTEGER_LITERAL &&
+        statement->right->text != NULL) {
+        start = strtoll(statement->right->text, &end, 10);
+        if (end != statement->right->text && *end == '\0' && start >= 2 &&
+            start <= INT32_MAX)
+            return 1;
+    }
+    return step <= -3 || step >= 3;
 }
 
 static void emit_condition(Buffer *output, const char *condition) {
