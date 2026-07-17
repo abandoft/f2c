@@ -1,31 +1,41 @@
-# The only supported location for generated files.  Do not add build-*, out/,
-# object/module files, or in-source CMake output here: those violate the project
-# layout and must remain visible in `git status`.
+# Repository policy: build/ is the only supported location for generated files.
+# Do not ignore build-*, out/, object/module files, coverage data, or in-source
+# CMake output: those violate the project layout and must remain visible.
 /build/
 
-# Local CMake configuration must not change the repository-wide build contract.
+# User-local CMake configuration must not change the repository build contract.
 /CMakeUserPresets.json
 
 # Operating-system metadata.
 .DS_Store
 ._*
 Thumbs.db
+ehthumbs.db
 Desktop.ini
 
-# Editors and IDEs.
-/.idea/
-/.vscode/
-/.vs/
+# Repository-local editor and language-server state.
+/.cache/clangd/
 /.clangd/
+/.idea/
+/.vs/
+/.vscode/
+
+# Editor and IDE files that may appear beside source files.
 *.code-workspace
 *.suo
 *.user
+*.userosscache
+*.sln.docstates
 *.VC.db
 *.VC.opendb
 *.swp
 *.swo
+*.swn
+*.un~
 *.xcuserstate
 *~
+.\#*
+\#*\#
 xcuserdata/
 
 # Python tooling used by numerical-report scripts.
@@ -47,6 +57,7 @@ __pycache__/
 /core
 /core.*
 /vgcore.*
+/*.dmp
 /*.stackdump
 *.bak
 *.orig
