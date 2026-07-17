@@ -11,7 +11,6 @@ program transform_character_derived
   character(len=3) :: reversed_words(4)
   character(len=3) :: indexed_words(4)
   character(len=4) :: expression_words(2), expression_transposed(2, 2), nested_transposed(2, 2)
-  character(len=:), allocatable :: dynamic_words(:)
   integer :: location(1)
   integer :: word_order(4), item_order(3)
   logical :: word_mask(4), item_mask(3)
@@ -40,7 +39,12 @@ program transform_character_derived
   ended_words = eoshift(words, 1, boundary='end')
   expanded = spread(words, 1, 2)
   location = findloc(words, 'ccc')
-  dynamic_words = pack(words, word_mask)
+  block
+    character(len=:), allocatable :: dynamic_words(:)
+
+    dynamic_words = pack(words, word_mask)
+    if (dynamic_words(1) /= 'aa ' .or. dynamic_words(2) /= 'ccc') stop 15
+  end block
   expression_words = pack(words // 'x', word_mask)
   reversed_words = cshift(words(4:1:-1), 1)
   expression_transposed = transpose(matrix // 'x')
@@ -54,7 +58,6 @@ program transform_character_derived
   if (ended_words(1) /= 'b  ' .or. ended_words(4) /= 'end') stop 5
   if (expanded(1, 3) /= 'ccc' .or. expanded(2, 4) /= 'dd ') stop 6
   if (location(1) /= 3) stop 7
-  if (dynamic_words(1) /= 'aa ' .or. dynamic_words(2) /= 'ccc') stop 15
   if (expression_words(1) /= 'aa x' .or. expression_words(2) /= 'cccx') stop 18
   if (reversed_words(1) /= 'ccc' .or. reversed_words(4) /= 'dd ') stop 19
   if (expression_transposed(1, 2) /= 'b  x' .or. &
