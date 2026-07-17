@@ -61,6 +61,7 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
     ELEMENTAL("int", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
     ELEMENTAL("isnan", 1U, 1U, F2C_INTRINSIC_TYPE_LOGICAL),
     SCALAR("kind", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER),
+    SCALAR("lbound", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER),
     ELEMENTAL("la_isnan", 1U, 1U, F2C_INTRINSIC_TYPE_LOGICAL),
     FIRST_RANK("len", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
     ELEMENTAL("len_trim", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
@@ -87,16 +88,19 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
     SCALAR("random_number", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("real", 1U, 2U, F2C_INTRINSIC_TYPE_REAL),
     SCALAR("reshape", 2U, 4U, F2C_INTRINSIC_TYPE_FIRST),
+    SCALAR("shape", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
     ELEMENTAL("sign", 2U, 2U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("sin", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("sqrt", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     SCALAR("spread", 3U, 3U, F2C_INTRINSIC_TYPE_FIRST),
+    SCALAR("size", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER),
     SCALAR("sum", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("tan", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     SCALAR("tiny", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     SCALAR("transpose", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     {"transfer", 2U, 3U, F2C_INTRINSIC_TYPE_MOLD, F2C_INTRINSIC_RANK_MOLD},
     SCALAR("unpack", 3U, 3U, F2C_INTRINSIC_TYPE_FIRST),
+    SCALAR("ubound", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER),
     FIRST_RANK("eoshift", 2U, 4U, F2C_INTRINSIC_TYPE_FIRST),
 };
 
@@ -233,10 +237,18 @@ size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, s
         const F2cExpr *right = count >= 2U ? argument_value(arguments[1]) : NULL;
         if (left == NULL || right == NULL)
             return 0U;
-        return left->rank == 1U && right->rank == 1U ? 0U : 2U;
+        if (left->rank == 1U && right->rank == 1U)
+            return 0U;
+        if (left->rank == 2U && right->rank == 2U)
+            return 2U;
+        return 1U;
     }
     if (strcmp(name, "pack") == 0)
         return 1U;
+    if (strcmp(name, "shape") == 0)
+        return 1U;
+    if (strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0)
+        return intrinsic_argument(arguments, count, "dim", 1U) != NULL ? 0U : 1U;
     if (strcmp(name, "unpack") == 0) {
         const F2cExpr *mask = intrinsic_argument(arguments, count, "mask", 1U);
         return mask != NULL ? mask->rank : 0U;

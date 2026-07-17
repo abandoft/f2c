@@ -4,172 +4,131 @@
 #include <stdlib.h>
 #include <string.h>
 
-static F2cStatementKind classify(const char *text) {
-    if (*text == '\0')
-        return F2C_STMT_EMPTY;
-    if (f2c_starts_word(text, "type is") || f2c_starts_word(text, "class is") ||
-        f2c_starts_word(text, "class default"))
-        return F2C_STMT_TYPE_GUARD;
-    if (f2c_declaration_line(text) || f2c_starts_word(text, "contains") ||
-        f2c_starts_word(text, "use"))
-        return F2C_STMT_DECLARATION;
-    if (f2c_starts_word(text, "end select"))
-        return F2C_STMT_END_SELECT;
-    if (f2c_starts_word(text, "case"))
-        return F2C_STMT_CASE;
-    if (f2c_starts_word(text, "select case"))
-        return F2C_STMT_SELECT_CASE;
-    if (f2c_starts_word(text, "select type"))
-        return F2C_STMT_SELECT_TYPE;
-    if (f2c_starts_word(text, "end block"))
-        return F2C_STMT_END_BLOCK_SCOPE;
-    if (strcmp(text, "block") == 0)
-        return F2C_STMT_BLOCK_SCOPE;
-    if (f2c_starts_word(text, "end if") || f2c_starts_word(text, "endif") ||
-        f2c_starts_word(text, "end do") || f2c_starts_word(text, "enddo"))
-        return F2C_STMT_END_BLOCK;
-    if (f2c_starts_word(text, "else if") || f2c_starts_word(text, "elseif"))
-        return F2C_STMT_ELSE_IF;
-    if (f2c_starts_word(text, "else"))
-        return F2C_STMT_ELSE;
-    if (f2c_starts_word(text, "if") && strchr(text, '(') != NULL)
-        return F2C_STMT_IF;
-    if (f2c_starts_word(text, "do while"))
-        return F2C_STMT_DO_WHILE;
-    if (f2c_starts_word(text, "do"))
-        return F2C_STMT_DO;
-    if (f2c_starts_word(text, "write"))
-        return F2C_STMT_WRITE;
-    if (f2c_starts_word(text, "read"))
-        return F2C_STMT_READ;
-    if (f2c_starts_word(text, "print"))
-        return F2C_STMT_PRINT;
-    if (f2c_starts_word(text, "open"))
-        return F2C_STMT_OPEN;
-    if (f2c_starts_word(text, "rewind"))
-        return F2C_STMT_REWIND;
-    if (f2c_starts_word(text, "close"))
-        return F2C_STMT_CLOSE;
-    if (f2c_starts_word(text, "allocate"))
-        return F2C_STMT_ALLOCATE;
-    if (f2c_starts_word(text, "deallocate"))
-        return F2C_STMT_DEALLOCATE;
-    if (f2c_starts_word(text, "nullify"))
-        return F2C_STMT_NULLIFY;
-    if (f2c_starts_word(text, "data"))
-        return F2C_STMT_DATA;
-    if (f2c_starts_word(text, "call"))
-        return F2C_STMT_CALL;
-    if (f2c_starts_word(text, "return"))
-        return F2C_STMT_RETURN;
-    if (f2c_starts_word(text, "stop") || f2c_starts_word(text, "error stop"))
-        return F2C_STMT_STOP;
-    if (f2c_starts_word(text, "cycle"))
-        return F2C_STMT_CYCLE;
-    if (f2c_starts_word(text, "exit"))
-        return F2C_STMT_EXIT;
-    if (f2c_starts_word(text, "continue"))
-        return F2C_STMT_CONTINUE;
-    if (f2c_starts_word(text, "assign"))
-        return F2C_STMT_ASSIGN_LABEL;
-    if (f2c_starts_word(text, "goto") || f2c_starts_word(text, "go to"))
-        return F2C_STMT_GOTO;
-    if (isdigit((unsigned char)text[0]))
-        return F2C_STMT_LABEL;
-    return F2C_STMT_UNSUPPORTED;
-}
-
 static int token_word(const Line *line, size_t index, const char *word) {
     return index < line->token_count && line->tokens[index].kind == F2C_TOKEN_IDENTIFIER &&
            f2c_token_equals(&line->tokens[index], word);
 }
 
-static int token_words(const Line *line, const char *first, const char *second) {
-    return token_word(line, 0U, first) && token_word(line, 1U, second);
+static int token_words(const Line *line, size_t begin, const char *first, const char *second) {
+    return token_word(line, begin, first) && token_word(line, begin + 1U, second);
 }
 
-static F2cStatementKind classify_tokens(const Line *line) {
+static size_t statement_body_start(const Line *line) {
+    return line->token_count >= 3U && line->tokens[0].kind == F2C_TOKEN_IDENTIFIER &&
+                   line->tokens[1].kind == F2C_TOKEN_COLON
+               ? 2U
+               : 0U;
+}
+
+static void set_statement_span(const Line *line, F2cStatement *statement) {
+    if (line->token_count != 0U) {
+        const F2cToken *first = &line->tokens[0];
+        const F2cToken *last = &line->tokens[line->token_count - 1U];
+        statement->span.begin = first->span.begin;
+        statement->span.end = last->span.end;
+        if (statement->span.begin.source_name == NULL)
+            statement->span.begin.source_name = line->source_name;
+        if (statement->span.end.source_name == NULL)
+            statement->span.end.source_name = line->source_name;
+        return;
+    }
+    statement->span.begin.source_name = line->source_name;
+    statement->span.end.source_name = line->source_name;
+    statement->span.begin.line = line->number;
+    statement->span.end.line = line->number;
+    statement->span.begin.column = 1U;
+    statement->span.end.column = 1U;
+}
+
+static F2cStatementKind classify_tokens(const Line *line, size_t begin) {
     size_t index;
-    if (line->token_count == 0U)
+    if (begin >= line->token_count)
         return F2C_STMT_EMPTY;
-    if (line->tokens[0].kind == F2C_TOKEN_NUMBER)
-        return F2C_STMT_LABEL;
-    if (token_words(line, "type", "is") || token_words(line, "class", "is") ||
-        token_words(line, "class", "default"))
+    if (line->tokens[begin].kind == F2C_TOKEN_NUMBER)
+        return begin == 0U ? F2C_STMT_LABEL : F2C_STMT_INVALID;
+    if (token_words(line, begin, "type", "is") || token_words(line, begin, "class", "is") ||
+        token_words(line, begin, "class", "default"))
         return F2C_STMT_TYPE_GUARD;
-    if (f2c_declaration_tokens(line) || token_word(line, 0U, "contains") ||
-        token_word(line, 0U, "use"))
+    if (begin == 0U && (f2c_declaration_tokens(line) || token_word(line, 0U, "contains") ||
+                        token_word(line, 0U, "use")))
         return F2C_STMT_DECLARATION;
-    if (token_words(line, "end", "select") || token_word(line, 0U, "endselect"))
+    if (token_words(line, begin, "end", "select") || token_word(line, begin, "endselect"))
         return F2C_STMT_END_SELECT;
-    if (token_word(line, 0U, "case"))
+    if (token_words(line, begin, "end", "where") || token_word(line, begin, "endwhere"))
+        return F2C_STMT_END_WHERE;
+    if (token_word(line, begin, "elsewhere"))
+        return F2C_STMT_ELSEWHERE;
+    if (token_word(line, begin, "where"))
+        return F2C_STMT_WHERE;
+    if (token_word(line, begin, "case"))
         return F2C_STMT_CASE;
-    if (token_words(line, "select", "case"))
+    if (token_words(line, begin, "select", "case"))
         return F2C_STMT_SELECT_CASE;
-    if (token_words(line, "select", "type"))
+    if (token_words(line, begin, "select", "type"))
         return F2C_STMT_SELECT_TYPE;
-    if (token_words(line, "end", "block"))
+    if (token_words(line, begin, "end", "block"))
         return F2C_STMT_END_BLOCK_SCOPE;
-    if (line->token_count == 1U && token_word(line, 0U, "block"))
+    if (line->token_count == begin + 1U && token_word(line, begin, "block"))
         return F2C_STMT_BLOCK_SCOPE;
-    if (token_words(line, "end", "if") || token_word(line, 0U, "endif") ||
-        token_words(line, "end", "do") || token_word(line, 0U, "enddo"))
-        return F2C_STMT_END_BLOCK;
-    if (token_words(line, "else", "if") || token_word(line, 0U, "elseif"))
+    if (token_words(line, begin, "end", "if") || token_word(line, begin, "endif"))
+        return F2C_STMT_END_IF;
+    if (token_words(line, begin, "end", "do") || token_word(line, begin, "enddo"))
+        return F2C_STMT_END_DO;
+    if (token_words(line, begin, "else", "if") || token_word(line, begin, "elseif"))
         return F2C_STMT_ELSE_IF;
-    if (token_word(line, 0U, "else"))
+    if (token_word(line, begin, "else"))
         return F2C_STMT_ELSE;
-    if (token_word(line, 0U, "if")) {
-        for (index = 1U; index < line->token_count; ++index) {
+    if (token_word(line, begin, "if")) {
+        for (index = begin + 1U; index < line->token_count; ++index) {
             if (line->tokens[index].kind == F2C_TOKEN_LEFT_PAREN)
                 return F2C_STMT_IF;
         }
     }
-    if (token_words(line, "do", "while"))
+    if (token_words(line, begin, "do", "while"))
         return F2C_STMT_DO_WHILE;
-    if (token_word(line, 0U, "do"))
+    if (token_word(line, begin, "do"))
         return F2C_STMT_DO;
-    if (token_word(line, 0U, "write"))
+    if (token_word(line, begin, "write"))
         return F2C_STMT_WRITE;
-    if (token_word(line, 0U, "read"))
+    if (token_word(line, begin, "read"))
         return F2C_STMT_READ;
-    if (token_word(line, 0U, "print"))
+    if (token_word(line, begin, "print"))
         return F2C_STMT_PRINT;
-    if (token_word(line, 0U, "open"))
+    if (token_word(line, begin, "open"))
         return F2C_STMT_OPEN;
-    if (token_word(line, 0U, "rewind"))
+    if (token_word(line, begin, "rewind"))
         return F2C_STMT_REWIND;
-    if (token_word(line, 0U, "close"))
+    if (token_word(line, begin, "close"))
         return F2C_STMT_CLOSE;
-    if (token_word(line, 0U, "allocate"))
+    if (token_word(line, begin, "allocate"))
         return F2C_STMT_ALLOCATE;
-    if (token_word(line, 0U, "deallocate"))
+    if (token_word(line, begin, "deallocate"))
         return F2C_STMT_DEALLOCATE;
-    if (token_word(line, 0U, "nullify"))
+    if (token_word(line, begin, "nullify"))
         return F2C_STMT_NULLIFY;
-    if (token_word(line, 0U, "data"))
+    if (token_word(line, begin, "data"))
         return F2C_STMT_DATA;
-    if (token_word(line, 0U, "call"))
+    if (token_word(line, begin, "call"))
         return F2C_STMT_CALL;
-    if (token_word(line, 0U, "return"))
+    if (token_word(line, begin, "return"))
         return F2C_STMT_RETURN;
-    if (token_word(line, 0U, "stop") || token_words(line, "error", "stop"))
+    if (token_word(line, begin, "stop") || token_words(line, begin, "error", "stop"))
         return F2C_STMT_STOP;
-    if (token_word(line, 0U, "cycle"))
+    if (token_word(line, begin, "cycle"))
         return F2C_STMT_CYCLE;
-    if (token_word(line, 0U, "exit"))
+    if (token_word(line, begin, "exit"))
         return F2C_STMT_EXIT;
-    if (token_word(line, 0U, "continue"))
+    if (token_word(line, begin, "continue"))
         return F2C_STMT_CONTINUE;
-    if (token_word(line, 0U, "assign"))
+    if (token_word(line, begin, "assign"))
         return F2C_STMT_ASSIGN_LABEL;
-    if (token_word(line, 0U, "goto") || token_words(line, "go", "to"))
+    if (token_word(line, begin, "goto") || token_words(line, begin, "go", "to"))
         return F2C_STMT_GOTO;
-    return F2C_STMT_UNSUPPORTED;
+    return F2C_STMT_INVALID;
 }
 
-static void parse_counted_do(Unit *unit, F2cStatement *statement) {
-    char *control = f2c_strdup(f2c_trim(statement->text + 2));
+static void parse_counted_do(Unit *unit, F2cStatement *statement, char *syntax_text) {
+    char *control = f2c_strdup(f2c_trim(syntax_text + 2));
     char *equals = control != NULL ? strchr(control, '=') : NULL;
     char **bounds = NULL;
     size_t count = 0U;
@@ -738,8 +697,12 @@ static char *find_pointer_assignment(char *text) {
 }
 
 static int parse_statement(Unit *unit, const char *text, size_t line, F2cStatement *statement,
-                           F2cStatementKind classified_kind, int use_classified_kind) {
+                           F2cStatementKind classified_kind, const Line *token_line,
+                           size_t body_start) {
     char *equals;
+    char *owned_syntax_text = NULL;
+    char *syntax_text;
+    Line syntax_line;
     memset(statement, 0, sizeof(*statement));
     statement->state = F2C_IR_SYNTAX;
     statement->line = line;
@@ -751,14 +714,25 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         if (trimmed != statement->text)
             memmove(statement->text, trimmed, strlen(trimmed) + 1U);
     }
-    statement->kind = use_classified_kind ? classified_kind : classify(statement->text);
+    statement->kind = classified_kind;
+    syntax_text = statement->text;
+    if (body_start < token_line->token_count && body_start != 0U) {
+        owned_syntax_text = f2c_strdup(token_line->tokens[body_start].begin);
+        if (owned_syntax_text == NULL)
+            return 0;
+        syntax_text = f2c_trim(owned_syntax_text);
+    }
     if (statement->kind == F2C_STMT_IF || statement->kind == F2C_STMT_ELSE_IF ||
         statement->kind == F2C_STMT_DO_WHILE || statement->kind == F2C_STMT_SELECT_CASE ||
-        statement->kind == F2C_STMT_CASE || statement->kind == F2C_STMT_SELECT_TYPE) {
-        statement->expression = f2c_statement_parse_parenthesized(
-            unit, statement->text,
-            statement->kind == F2C_STMT_IF || statement->kind == F2C_STMT_ELSE_IF ? &statement->tail
-                                                                                  : NULL);
+        statement->kind == F2C_STMT_SELECT_TYPE || statement->kind == F2C_STMT_WHERE ||
+        (statement->kind == F2C_STMT_ELSEWHERE && body_start + 1U < token_line->token_count &&
+         token_line->tokens[body_start + 1U].kind == F2C_TOKEN_LEFT_PAREN)) {
+        statement->expression = f2c_statement_parse_parenthesized_tokens(
+            unit, token_line, body_start,
+            statement->kind == F2C_STMT_IF || statement->kind == F2C_STMT_ELSE_IF ||
+                    statement->kind == F2C_STMT_WHERE
+                ? &statement->tail
+                : NULL);
     }
     if (statement->kind == F2C_STMT_TYPE_GUARD) {
         if (f2c_starts_word(statement->text, "class default")) {
@@ -766,7 +740,8 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         } else {
             statement->name =
                 f2c_strdup(f2c_starts_word(statement->text, "type is") ? "type" : "class");
-            statement->expression = f2c_statement_parse_parenthesized(unit, statement->text, NULL);
+            statement->expression =
+                f2c_statement_parse_parenthesized_tokens(unit, token_line, body_start, NULL);
             if (statement->expression != NULL && statement->expression->kind == F2C_EXPR_NAME &&
                 statement->expression->text != NULL)
                 statement->guard_type = f2c_find_derived_type(unit, statement->expression->text);
@@ -787,8 +762,19 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
     } else if (statement->kind == F2C_STMT_ELSE_IF) {
         statement->block = 1;
     }
+    if (statement->kind == F2C_STMT_WHERE && statement->tail != NULL) {
+        statement->block = statement->tail[0] == '\0';
+        if (!statement->block) {
+            statement->nested = (F2cStatement *)calloc(1U, sizeof(*statement->nested));
+            if (statement->nested != NULL &&
+                !f2c_parse_statement(unit, statement->tail, line, statement->nested)) {
+                free(statement->nested);
+                statement->nested = NULL;
+            }
+        }
+    }
     if (statement->kind == F2C_STMT_DO)
-        parse_counted_do(unit, statement);
+        parse_counted_do(unit, statement, syntax_text);
     if (statement->kind == F2C_STMT_ASSIGN_LABEL)
         parse_assign_label(unit, statement);
     if (statement->kind == F2C_STMT_GOTO)
@@ -820,6 +806,14 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         build_io_item_ir(unit, statement);
     if (statement->kind == F2C_STMT_DATA)
         f2c_statement_parse_data(unit, statement);
+    syntax_line = *token_line;
+    syntax_line.tokens += body_start;
+    syntax_line.token_count -= body_start;
+    if (statement->kind == F2C_STMT_CASE &&
+        !f2c_statement_parse_case(unit, &syntax_line, statement)) {
+        free(owned_syntax_text);
+        return 0;
+    }
     if (statement->kind == F2C_STMT_REWIND) {
         char *unit_text = f2c_trim(statement->text + strlen("rewind"));
         if (*unit_text == '(') {
@@ -836,12 +830,11 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
     }
     if (statement->kind == F2C_STMT_LABEL)
         f2c_statement_parse_label(unit, statement);
-    if (statement->kind == F2C_STMT_END_BLOCK && f2c_starts_word(statement->text, "end do")) {
-        const char *label = f2c_trim(statement->text + strlen("end do"));
-        if (*label != '\0')
-            statement->name = f2c_strdup(label);
+    if (!f2c_statement_parse_construct_syntax(token_line, body_start, statement)) {
+        free(owned_syntax_text);
+        return 0;
     }
-    if (statement->kind == F2C_STMT_UNSUPPORTED &&
+    if (body_start == 0U && statement->kind == F2C_STMT_INVALID &&
         (equals = find_pointer_assignment(statement->text)) != NULL) {
         char *left = f2c_strdup_n(statement->text, (size_t)(equals - statement->text));
         char *right = f2c_strdup(equals + 2);
@@ -858,7 +851,7 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         }
         free(left);
         free(right);
-    } else if (statement->kind == F2C_STMT_UNSUPPORTED &&
+    } else if (body_start == 0U && statement->kind == F2C_STMT_INVALID &&
                (equals = f2c_find_assignment(statement->text)) != NULL) {
         char *left = f2c_strdup_n(statement->text, (size_t)(equals - statement->text));
         char *right = f2c_strdup(equals + 1);
@@ -876,40 +869,39 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         free(left);
         free(right);
     }
+    free(owned_syntax_text);
     return 1;
 }
 
 int f2c_parse_statement(Unit *unit, const char *text, size_t line, F2cStatement *statement) {
-    return parse_statement(unit, text, line, statement, F2C_STMT_UNSUPPORTED, 0);
+    Line token_line;
+    int result;
+    size_t body_start;
+    if (!f2c_statement_tokenize_transient(text != NULL ? text : "", line, &token_line))
+        return 0;
+    body_start = statement_body_start(&token_line);
+    result = parse_statement(unit, text, line, statement, classify_tokens(&token_line, body_start),
+                             &token_line, body_start);
+    if (result)
+        set_statement_span(&token_line, statement);
+    f2c_statement_release_transient(&token_line);
+    return result;
 }
 
 int f2c_parse_statement_tokens(Unit *unit, const Line *line, F2cStatement *statement) {
     size_t index;
+    size_t body_start;
     if (line == NULL || statement == NULL)
         return 0;
     for (index = 0U; index < line->token_count; ++index) {
         if (line->tokens[index].kind == F2C_TOKEN_INVALID)
             return 0;
     }
-    if (!parse_statement(unit, line->text, line->number, statement, classify_tokens(line), 1))
+    body_start = statement_body_start(line);
+    if (!parse_statement(unit, line->text, line->number, statement,
+                         classify_tokens(line, body_start), line, body_start))
         return 0;
-    if (line->token_count != 0U) {
-        const F2cToken *first = &line->tokens[0];
-        const F2cToken *last = &line->tokens[line->token_count - 1U];
-        statement->span.begin = first->span.begin;
-        statement->span.end = last->span.end;
-        if (statement->span.begin.source_name == NULL)
-            statement->span.begin.source_name = line->source_name;
-        if (statement->span.end.source_name == NULL)
-            statement->span.end.source_name = line->source_name;
-    } else {
-        statement->span.begin.source_name = line->source_name;
-        statement->span.end.source_name = line->source_name;
-        statement->span.begin.line = line->number;
-        statement->span.end.line = line->number;
-        statement->span.begin.column = 1U;
-        statement->span.end.column = 1U;
-    }
+    set_statement_span(line, statement);
     return 1;
 }
 
@@ -919,6 +911,8 @@ void f2c_statement_free(F2cStatement *statement) {
     free(statement->text);
     free(statement->tail);
     free(statement->name);
+    free(statement->construct_name);
+    free(statement->control_name);
     while (statement->item_count != 0U) {
         --statement->item_count;
         free(statement->items[statement->item_count]);
@@ -950,6 +944,12 @@ void f2c_statement_free(F2cStatement *statement) {
         free(group->values);
     }
     free(statement->data_groups);
+    while (statement->case_range_count != 0U) {
+        F2cCaseRange *range = &statement->case_ranges[--statement->case_range_count];
+        f2c_expr_free(range->lower);
+        f2c_expr_free(range->upper);
+    }
+    free(statement->case_ranges);
     f2c_expr_free(statement->expression);
     f2c_expr_free(statement->left);
     f2c_expr_free(statement->right);

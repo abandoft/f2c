@@ -71,6 +71,7 @@ static void free_header(Unit *unit) {
     free(unit->name);
     free(unit->result_name);
     free(unit->result_character_length);
+    free(unit->result_derived_type_name);
     for (index = 0U; index < unit->argument_count; ++index)
         free(unit->arguments[index]);
     free(unit->arguments);
@@ -99,6 +100,10 @@ int f2c_parse_unit_header_tokens(const Line *line, Unit *unit) {
             if (candidate.character_length != NULL) {
                 unit->result_character_length = candidate.character_length;
                 candidate.character_length = NULL;
+            }
+            if (candidate.derived_type_name != NULL) {
+                unit->result_derived_type_name = candidate.derived_type_name;
+                candidate.derived_type_name = NULL;
             }
             index = candidate.end;
             f2c_release_type_spec(&candidate);

@@ -134,6 +134,26 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
         if (function_result != NULL && unit->return_type == TYPE_CHARACTER &&
             unit->result_character_length != NULL && function_result->character_length == NULL)
             function_result->character_length = f2c_strdup(unit->result_character_length);
+        if (function_result != NULL && unit->return_type == TYPE_DERIVED &&
+            unit->result_derived_type_name != NULL) {
+            F2cDerivedType *derived = f2c_find_derived_type(unit, unit->result_derived_type_name);
+            char *derived_name = f2c_strdup(unit->result_derived_type_name);
+            char *c_type =
+                derived != NULL && derived->c_name != NULL ? f2c_strdup(derived->c_name) : NULL;
+            if (derived == NULL || derived_name == NULL || c_type == NULL) {
+                free(derived_name);
+                free(c_type);
+                f2c_diagnostic(context, context->lines.items[unit->begin].number, 1,
+                               "unknown or unavailable derived function result type '%s'",
+                               unit->result_derived_type_name);
+            } else {
+                function_result->derived_type = derived;
+                free(function_result->derived_type_name);
+                function_result->derived_type_name = derived_name;
+                free(function_result->c_type);
+                function_result->c_type = c_type;
+            }
+        }
         if (function_result != NULL && function_result->allocatable) {
             char *result_c_name = f2c_strdup("f2c_result");
             if (result_c_name == NULL) {
@@ -275,6 +295,43 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
         unit->return_type = function_result->type;
         unit->return_kind = function_result->kind != 0 ? function_result->kind
                                                        : f2c_default_kind(function_result->type);
+    }
+    if (unit->elemental) {
+        for (i = 0U; i < unit->argument_count; ++i) {
+            Symbol *dummy = f2c_find_symbol(unit, unit->arguments[i]);
+            const size_t declaration_line = dummy != NULL && dummy->declaration_line != 0U
+                                                ? dummy->declaration_line
+                                                : header_line;
+            if (dummy == NULL)
+                continue;
+            if (dummy->rank != 0U)
+                f2c_diagnostic(context, declaration_line, 1,
+                               "dummy argument '%s' of an ELEMENTAL procedure must be scalar",
+                               dummy->name);
+            if (dummy->allocatable || dummy->pointer)
+                f2c_diagnostic(context, declaration_line, 1,
+                               "dummy argument '%s' of an ELEMENTAL procedure cannot be "
+                               "ALLOCATABLE or POINTER",
+                               dummy->name);
+            if (dummy->intent == F2C_INTENT_UNSPECIFIED)
+                f2c_diagnostic(context, declaration_line, 1,
+                               "dummy argument '%s' of an ELEMENTAL procedure requires INTENT",
+                               dummy->name);
+            if (unit->kind == UNIT_FUNCTION && dummy->intent != F2C_INTENT_IN)
+                f2c_diagnostic(context, declaration_line, 1,
+                               "dummy argument '%s' of an ELEMENTAL function requires "
+                               "INTENT(IN)",
+                               dummy->name);
+        }
+        if (function_result != NULL && (function_result->rank != 0U ||
+                                        function_result->allocatable || function_result->pointer))
+            f2c_diagnostic(context,
+                           function_result->declaration_line != 0U
+                               ? function_result->declaration_line
+                               : header_line,
+                           1,
+                           "result of an ELEMENTAL function must be scalar and cannot be "
+                           "ALLOCATABLE or POINTER");
     }
     unit->phase = F2C_UNIT_SYMBOLS_RESOLVED;
 }

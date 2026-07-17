@@ -2,6 +2,20 @@
 
 #include <string.h>
 
+int f2c_symbol_uses_descriptor(const Symbol *symbol) {
+    size_t dimension;
+    if (symbol == NULL)
+        return 0;
+    if (symbol->allocatable || symbol->pointer)
+        return 1;
+    if (!symbol->argument)
+        return 0;
+    for (dimension = 0U; dimension < symbol->rank; ++dimension)
+        if (symbol->dimensions[dimension].kind == F2C_DIMENSION_ASSUMED_SHAPE)
+            return 1;
+    return 0;
+}
+
 const char *f2c_c_type(Type type) {
     switch (type) {
     case TYPE_INTEGER:

@@ -9,6 +9,12 @@ int f2c_statement_parse_arithmetic_labels(F2cStatement *statement);
 char **f2c_statement_split_arguments(const char *text, size_t *count);
 int f2c_statement_parse_io_item(Unit *unit, const char *text, F2cIoItem *item);
 char *f2c_statement_matching_parenthesis(char *open);
-F2cExpr *f2c_statement_parse_parenthesized(Unit *unit, char *text, char **tail);
+F2cExpr *f2c_statement_parse_parenthesized_tokens(Unit *unit, const Line *line, size_t begin,
+                                                  char **tail);
+int f2c_statement_parse_case(Unit *unit, const Line *line, F2cStatement *statement);
+int f2c_statement_parse_construct_syntax(const Line *line, size_t body_start,
+                                         F2cStatement *statement);
+int f2c_statement_tokenize_transient(const char *text, size_t line_number, Line *line);
+void f2c_statement_release_transient(Line *line);
 
 #endif

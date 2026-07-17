@@ -32,8 +32,7 @@ static int parse_attributes(Context *context, const Line *source_line, size_t be
         } else if (f2c_token_equals(attribute, "intent")) {
             size_t close;
             F2cIntent parsed_intent = F2C_INTENT_UNSPECIFIED;
-            if (index + 1U >= end ||
-                source_line->tokens[index + 1U].kind != F2C_TOKEN_LEFT_PAREN ||
+            if (index + 1U >= end || source_line->tokens[index + 1U].kind != F2C_TOKEN_LEFT_PAREN ||
                 !f2c_token_matching_delimiter(source_line->tokens, end, index + 1U, &close) ||
                 close != index + 3U ||
                 source_line->tokens[index + 2U].kind != F2C_TOKEN_IDENTIFIER) {
@@ -166,6 +165,7 @@ int f2c_copy_procedure_signature(Symbol *symbol, Unit *signature) {
         symbol->external_parameter_optional[i] = dummy != NULL && dummy->optional;
         symbol->external_parameter_allocatable[i] = dummy != NULL && dummy->allocatable;
         symbol->external_parameter_pointer[i] = dummy != NULL && dummy->pointer;
+        symbol->external_parameter_descriptor[i] = f2c_symbol_uses_descriptor(dummy);
         symbol->external_parameter_derived_types[i] = dummy != NULL ? dummy->derived_type : NULL;
         symbol->external_parameter_polymorphic[i] = dummy != NULL && dummy->polymorphic;
         symbol->external_parameter_const[i] = dummy != NULL && dummy->intent == F2C_INTENT_IN;

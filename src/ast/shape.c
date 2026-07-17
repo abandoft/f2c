@@ -15,8 +15,98 @@ const F2cExpr *f2c_ast_intrinsic_argument_value(const F2cExpr *argument) {
                : argument;
 }
 
-static const F2cExpr *intrinsic_named_argument(const F2cExpr *call, const char *keyword,
-                                               size_t position) {
+static uint64_t constructor_unsigned_distance(int64_t lower, int64_t upper) {
+    if (lower >= 0 || upper < 0)
+        return (uint64_t)(upper - lower);
+    return (uint64_t)upper + (uint64_t)(-(lower + 1)) + UINT64_C(1);
+}
+
+static uint64_t constructor_unsigned_magnitude(int64_t value) {
+    return value >= 0 ? (uint64_t)value : (uint64_t)(-(value + 1)) + UINT64_C(1);
+}
+
+static int constructor_extent_add(uint64_t left, uint64_t right, uint64_t *result) {
+    if (right > UINT64_MAX - left)
+        return 0;
+    *result = left + right;
+    return 1;
+}
+
+static int constructor_extent_multiply(uint64_t left, uint64_t right, uint64_t *result) {
+    if (left != 0U && right > UINT64_MAX / left)
+        return 0;
+    *result = left * right;
+    return 1;
+}
+
+int f2c_ast_constructor_extent(Unit *unit, const F2cExpr *expression, uint64_t *extent) {
+    uint64_t total = UINT64_C(0);
+    size_t child;
+    if (expression == NULL || extent == NULL)
+        return 0;
+    if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
+        for (child = 0U; child < expression->child_count; ++child) {
+            uint64_t child_extent;
+            const int known =
+                f2c_ast_constructor_extent(unit, expression->children[child], &child_extent);
+            if (known <= 0)
+                return known;
+            if (!constructor_extent_add(total, child_extent, &total))
+                return -1;
+        }
+        *extent = total;
+        return 1;
+    }
+    if (expression->kind == F2C_EXPR_IMPLIED_DO) {
+        const size_t value_count =
+            expression->child_count >= 3U ? expression->child_count - 3U : 0U;
+        int64_t first;
+        int64_t last;
+        int64_t step;
+        uint64_t iterations;
+        if (value_count == 0U ||
+            !f2c_evaluate_integer_constant(unit, expression->children[value_count], &first) ||
+            !f2c_evaluate_integer_constant(unit, expression->children[value_count + 1U], &last) ||
+            !f2c_evaluate_integer_constant(unit, expression->children[value_count + 2U], &step) ||
+            step == 0)
+            return 0;
+        if ((step > 0 && first > last) || (step < 0 && first < last)) {
+            *extent = UINT64_C(0);
+            return 1;
+        }
+        iterations =
+            constructor_unsigned_distance(step > 0 ? first : last, step > 0 ? last : first) /
+            constructor_unsigned_magnitude(step);
+        if (iterations == UINT64_MAX)
+            return -1;
+        ++iterations;
+        for (child = 0U; child < value_count; ++child) {
+            uint64_t child_extent;
+            const int known =
+                f2c_ast_constructor_extent(unit, expression->children[child], &child_extent);
+            if (known <= 0)
+                return known;
+            if (!constructor_extent_add(total, child_extent, &total))
+                return -1;
+        }
+        if (!constructor_extent_multiply(total, iterations, &total))
+            return -1;
+        *extent = total;
+        return 1;
+    }
+    if (expression->rank == 0U) {
+        *extent = UINT64_C(1);
+        return 1;
+    }
+    if (expression->rank == 1U && expression->shape.dimensions[0].extent_known) {
+        *extent = expression->shape.dimensions[0].extent;
+        return 1;
+    }
+    return 0;
+}
+
+const F2cExpr *f2c_ast_intrinsic_argument(const F2cExpr *call, const char *keyword,
+                                          size_t position) {
     size_t positional = 0U;
     size_t i;
     if (call == NULL)
@@ -41,21 +131,37 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
     int64_t dimension_value;
     size_t result_dimension;
     size_t source_dimension;
+    if (strcmp(name, "shape") == 0 || strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0) {
+        source = f2c_ast_intrinsic_argument(expression,
+                                            strcmp(name, "shape") == 0 ? "source" : "array", 0U);
+        dimension =
+            strcmp(name, "shape") == 0 ? NULL : f2c_ast_intrinsic_argument(expression, "dim", 1U);
+        if (dimension != NULL) {
+            f2c_ast_set_expression_shape(expression, 0U, F2C_SHAPE_SCALAR);
+        } else {
+            f2c_ast_set_expression_shape(expression, 1U, F2C_SHAPE_EXPRESSION);
+            if (source != NULL) {
+                expression->shape.dimensions[0].extent_known = 1;
+                expression->shape.dimensions[0].extent = source->rank;
+            }
+        }
+        return;
+    }
     if (strcmp(name, "pack") == 0) {
-        const F2cExpr *vector = intrinsic_named_argument(expression, "vector", 2U);
+        const F2cExpr *vector = f2c_ast_intrinsic_argument(expression, "vector", 2U);
         f2c_ast_set_expression_shape(expression, 1U, F2C_SHAPE_EXPRESSION);
         if (vector != NULL && vector->rank == 1U)
             expression->shape.dimensions[0] = vector->shape.dimensions[0];
         return;
     }
     if (strcmp(name, "unpack") == 0) {
-        const F2cExpr *mask = intrinsic_named_argument(expression, "mask", 1U);
+        const F2cExpr *mask = f2c_ast_intrinsic_argument(expression, "mask", 1U);
         if (mask != NULL)
             f2c_ast_copy_expression_shape(expression, &mask->shape);
         return;
     }
     if (strcmp(name, "reshape") == 0) {
-        shape = intrinsic_named_argument(expression, "shape", 1U);
+        shape = f2c_ast_intrinsic_argument(expression, "shape", 1U);
         f2c_ast_set_expression_shape(expression, expression->rank, F2C_SHAPE_EXPRESSION);
         if (shape != NULL && shape->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
             for (result_dimension = 0U;
@@ -73,8 +179,8 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
         return;
     }
     if (strcmp(name, "spread") == 0) {
-        source = intrinsic_named_argument(expression, "source", 0U);
-        dimension = intrinsic_named_argument(expression, "dim", 1U);
+        source = f2c_ast_intrinsic_argument(expression, "source", 0U);
+        dimension = f2c_ast_intrinsic_argument(expression, "dim", 1U);
         f2c_ast_set_expression_shape(expression, expression->rank, F2C_SHAPE_EXPRESSION);
         if (source == NULL || dimension == NULL ||
             !f2c_evaluate_integer_constant(parser->unit, dimension, &dimension_value) ||
@@ -91,8 +197,8 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
         return;
     }
     if (strcmp(name, "findloc") == 0) {
-        source = intrinsic_named_argument(expression, "array", 0U);
-        dimension = intrinsic_named_argument(expression, "dim", 2U);
+        source = f2c_ast_intrinsic_argument(expression, "array", 0U);
+        dimension = f2c_ast_intrinsic_argument(expression, "dim", 2U);
         f2c_ast_set_expression_shape(expression, expression->rank, F2C_SHAPE_EXPRESSION);
         if (source == NULL)
             return;

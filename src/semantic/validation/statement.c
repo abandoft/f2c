@@ -31,20 +31,22 @@ static void validate_control_flow_statement(Context *context, Unit *unit,
                               "expression");
         }
     } else if (statement->kind == F2C_STMT_SELECT_CASE) {
-        if (expression != NULL && (expression->type != TYPE_INTEGER || expression->rank != 0U)) {
+        if (expression == NULL) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &statement->span, 1,
+                                     "SELECT CASE requires a selector expression");
+        } else if (expression->rank != 0U ||
+                   (expression->type != TYPE_INTEGER && expression->type != TYPE_CHARACTER &&
+                    expression->type != TYPE_LOGICAL)) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, expression),
-                              1, "SELECT CASE currently requires a scalar INTEGER selector");
-        }
-    } else if (statement->kind == F2C_STMT_CASE && expression != NULL) {
-        if (expression->kind == F2C_EXPR_ARRAY_SECTION) {
+                              1,
+                              "SELECT CASE selector must be a scalar INTEGER, CHARACTER, or "
+                              "LOGICAL expression");
+        } else if (expression->type == TYPE_CHARACTER &&
+                   expression->type_kind != f2c_default_kind(TYPE_CHARACTER)) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, expression),
-                              1, "CASE value ranges are not yet supported");
-        } else if (expression->type != TYPE_INTEGER || expression->rank != 0U) {
-            f2c_diagnostic_at(context, statement->line,
-                              f2c_validation_expression_start_column(statement->text, expression),
-                              1, "CASE value must be a scalar INTEGER constant");
+                              1, "SELECT CASE currently supports default CHARACTER kind only");
         }
     } else if (statement->kind == F2C_STMT_DO) {
         int64_t step;
@@ -176,6 +178,14 @@ static void validate_pointer_statement(Context *context, const F2cStatement *sta
 static void validate_statement(Context *context, Unit *unit, F2cStatement *statement) {
     size_t i;
     size_t j;
+    if (statement->kind == F2C_STMT_INVALID) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &statement->span, 1,
+                                 "unsupported Fortran statement: %s", statement->text);
+    }
+    if (!statement->construct_syntax_valid) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &statement->span, 1,
+                                 "malformed construct name or control target syntax");
+    }
     f2c_validation_report_parse_error(context, statement->line, statement->text,
                                       statement->expression, "statement");
     f2c_validation_constructor(context, unit, statement->line, statement->text,
@@ -201,6 +211,8 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
     f2c_validation_expression_calls(context, unit, statement->line, statement->text,
                                     statement->step);
     validate_control_flow_statement(context, unit, statement);
+    f2c_validation_case_statement(context, unit, statement);
+    f2c_validation_where_statement(context, statement);
     validate_pointer_statement(context, statement);
     f2c_validation_intrinsic_assignment(context, statement);
     f2c_validation_constructor_assignment(context, unit, statement);
@@ -227,6 +239,7 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         Unit *definition = f2c_validation_procedure_call(
             context, unit, statement->line, statement->text, statement->name, &statement->arguments,
             &statement->items, &statement->item_count, 1);
+        statement->resolved_procedure = definition;
         if (definition != NULL && definition->name != NULL && !definition->interface_abstract &&
             strcmp(statement->name, definition->name) != 0) {
             char *resolved = f2c_strdup(definition->name);
@@ -404,8 +417,6 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
 void f2c_validate_unit_expressions(Context *context, Unit *unit) {
     size_t i;
     size_t type_index;
-    for (i = 0U; i < unit->statement_count; ++i)
-        validate_statement(context, unit, &unit->statements[i]);
     for (i = 0U; i < unit->symbol_count; ++i)
         validate_symbol_expressions(context, unit, &unit->symbols[i]);
     for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
@@ -413,4 +424,8 @@ void f2c_validate_unit_expressions(Context *context, Unit *unit) {
         for (i = 0U; i < derived->component_count; ++i)
             validate_symbol_expressions(context, unit, &derived->components[i]);
     }
+    f2c_validation_bind_constructs(context, unit);
+    for (i = 0U; i < unit->statement_count; ++i)
+        validate_statement(context, unit, &unit->statements[i]);
+    f2c_validation_select_case_constructs(context, unit);
 }

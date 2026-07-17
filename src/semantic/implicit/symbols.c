@@ -6,16 +6,16 @@
 
 static int is_fortran_keyword(const char *name) {
     static const char *const keywords[] = {
-        "allocate",   "assign",  "backspace", "block",     "call",      "case",   "character",
-        "class",      "close",   "complex",   "contains",  "continue",  "cycle",  "data",
-        "deallocate", "default", "do",        "double",    "else",      "elseif", "end",
-        "enddo",      "endfile", "endif",     "endselect", "endwhere",  "error",  "exit",
-        "external",   "forall",  "format",    "function",  "go",        "goto",   "if",
-        "implicit",   "import",  "inquire",   "integer",   "interface", "is",     "logical",
-        "namelist",   "none",    "open",      "nullify",   "precision", "print",  "program",
-        "read",       "real",    "result",    "return",    "rewind",    "select", "stop",
-        "subroutine", "then",    "to",        "type",      "use",       "where",  "while",
-        "write",
+        "allocate",   "assign",    "backspace", "block",     "call",      "case",   "character",
+        "class",      "close",     "complex",   "contains",  "continue",  "cycle",  "data",
+        "deallocate", "default",   "do",        "double",    "else",      "elseif", "end",
+        "enddo",      "endfile",   "endif",     "endselect", "endwhere",  "error",  "exit",
+        "external",   "forall",    "format",    "function",  "go",        "goto",   "if",
+        "implicit",   "import",    "inquire",   "integer",   "interface", "is",     "logical",
+        "namelist",   "none",      "open",      "nullify",   "precision", "print",  "program",
+        "read",       "real",      "result",    "return",    "rewind",    "select", "stop",
+        "subroutine", "then",      "to",        "type",      "use",       "where",  "while",
+        "write",      "elsewhere",
     };
     size_t index;
     for (index = 0U; index < sizeof(keywords) / sizeof(keywords[0]); ++index) {
@@ -28,6 +28,78 @@ static int is_fortran_keyword(const char *name) {
 static int token_is_operator(const Line *line, size_t index, const char *text) {
     return index < line->token_count && line->tokens[index].kind == F2C_TOKEN_OPERATOR &&
            f2c_token_equals(&line->tokens[index], text);
+}
+
+static size_t statement_body_start(const Line *line) {
+    size_t start =
+        line != NULL && line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U
+                                                                                           : 0U;
+    if (line != NULL && start + 2U < line->token_count &&
+        line->tokens[start].kind == F2C_TOKEN_IDENTIFIER &&
+        line->tokens[start + 1U].kind == F2C_TOKEN_COLON)
+        start += 2U;
+    return start;
+}
+
+static int is_construct_name_reference(const Line *line, size_t body, size_t index) {
+    size_t cursor;
+    size_t close;
+    if (line == NULL || index + 1U != line->token_count || index <= body)
+        return 0;
+    if (index != 0U && (f2c_line_token_equals(line, index - 1U, "cycle") ||
+                        f2c_line_token_equals(line, index - 1U, "exit")))
+        return 1;
+    if ((f2c_line_token_equals(line, body, "cycle") || f2c_line_token_equals(line, body, "exit")) &&
+        index == body + 1U)
+        return 1;
+    if ((f2c_line_token_equals(line, body, "endif") || f2c_line_token_equals(line, body, "enddo") ||
+         f2c_line_token_equals(line, body, "endselect") ||
+         f2c_line_token_equals(line, body, "endwhere")) &&
+        index == body + 1U)
+        return 1;
+    if (f2c_line_token_equals(line, body, "end") && index == body + 2U &&
+        (f2c_line_token_equals(line, body + 1U, "if") ||
+         f2c_line_token_equals(line, body + 1U, "do") ||
+         f2c_line_token_equals(line, body + 1U, "select") ||
+         f2c_line_token_equals(line, body + 1U, "block") ||
+         f2c_line_token_equals(line, body + 1U, "where")))
+        return 1;
+    if (f2c_line_token_equals(line, body, "else") && index == body + 1U)
+        return 1;
+    if (f2c_line_token_equals(line, body, "case")) {
+        if (f2c_line_token_equals(line, body + 1U, "default"))
+            return index == body + 2U;
+        return body + 1U < line->token_count &&
+               line->tokens[body + 1U].kind == F2C_TOKEN_LEFT_PAREN &&
+               f2c_token_matching_delimiter(line->tokens, line->token_count, body + 1U, &close) &&
+               close + 1U == index;
+    }
+    if (f2c_line_token_equals(line, body, "elsewhere")) {
+        if (index == body + 1U)
+            return 1;
+        return body + 1U < line->token_count &&
+               line->tokens[body + 1U].kind == F2C_TOKEN_LEFT_PAREN &&
+               f2c_token_matching_delimiter(line->tokens, line->token_count, body + 1U, &close) &&
+               close + 1U == index;
+    }
+    if (f2c_line_token_equals(line, body, "type") || f2c_line_token_equals(line, body, "class")) {
+        if (f2c_line_token_equals(line, body, "class") &&
+            f2c_line_token_equals(line, body + 1U, "default"))
+            return index == body + 2U;
+        return f2c_line_token_equals(line, body + 1U, "is") && body + 2U < line->token_count &&
+               line->tokens[body + 2U].kind == F2C_TOKEN_LEFT_PAREN &&
+               f2c_token_matching_delimiter(line->tokens, line->token_count, body + 2U, &close) &&
+               close + 1U == index;
+    }
+    if (!f2c_line_token_equals(line, body, "elseif") &&
+        !(f2c_line_token_equals(line, body, "else") &&
+          f2c_line_token_equals(line, body + 1U, "if")))
+        return 0;
+    for (cursor = body + 1U; cursor < index; ++cursor) {
+        if (f2c_line_token_equals(line, cursor, "then"))
+            return cursor + 1U == index;
+    }
+    return 0;
 }
 
 static int preceded_by_call(const Line *line, size_t index) {
@@ -77,9 +149,7 @@ static Symbol *bind_known_internal(Context *context, Unit *host, Unit *definitio
 
 void f2c_discover_implicit_line_symbols(Context *context, Unit *unit, const Line *line) {
     size_t index;
-    size_t start =
-        line != NULL && line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U
-                                                                                           : 0U;
+    size_t start = statement_body_start(line);
     size_t parenthesis_depth = 0U;
     if (line == NULL || f2c_declaration_tokens(line) || f2c_line_token_equals(line, start, "use") ||
         f2c_line_token_equals(line, start, "contains") ||
@@ -116,6 +186,7 @@ void f2c_discover_implicit_line_symbols(Context *context, Unit *unit, const Line
             (index + 1U < line->token_count && token_is_operator(line, index + 1U, "=") &&
              parenthesis_depth != 0U && f2c_find_symbol(unit, name) == NULL) ||
             (index + 1U < line->token_count && line->tokens[index + 1U].kind == F2C_TOKEN_COLON) ||
+            is_construct_name_reference(line, start, index) ||
             (unit->name != NULL && strcmp(name, unit->name) == 0) ||
             (unit->fortran_name != NULL && strcmp(name, unit->fortran_name) == 0)) {
             free(name);

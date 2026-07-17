@@ -38,6 +38,31 @@ static void set_combined_expression_range(F2cExpr *expression, const F2cExpr *le
     expression->source_length = end - left->source_offset;
 }
 
+static int matmul_result_kind(const F2cExpr *expression) {
+    int result = 0;
+    size_t argument;
+    if (expression == NULL)
+        return f2c_default_kind(TYPE_UNKNOWN);
+    for (argument = 0U; argument < expression->child_count; ++argument) {
+        const F2cExpr *value = f2c_ast_intrinsic_argument_value(expression->children[argument]);
+        int contributes = 0;
+        if (value == NULL)
+            continue;
+        if (expression->type == TYPE_INTEGER)
+            contributes = value->type == TYPE_INTEGER;
+        else if (expression->type == TYPE_LOGICAL)
+            contributes = value->type == TYPE_LOGICAL;
+        else if (expression->type == TYPE_REAL || expression->type == TYPE_DOUBLE)
+            contributes = value->type == TYPE_REAL || value->type == TYPE_DOUBLE;
+        else if (expression->type == TYPE_COMPLEX || expression->type == TYPE_DOUBLE_COMPLEX)
+            contributes = value->type == TYPE_REAL || value->type == TYPE_DOUBLE ||
+                          value->type == TYPE_COMPLEX || value->type == TYPE_DOUBLE_COMPLEX;
+        if (contributes && value->type_kind > result)
+            result = value->type_kind;
+    }
+    return result != 0 ? result : f2c_default_kind(expression->type);
+}
+
 static F2cExpr *parse_section(AstParser *parser, F2cExpr *lower) {
     F2cExpr *section = f2c_expr_new(F2C_EXPR_ARRAY_SECTION, TYPE_UNKNOWN, NULL, 0U);
     F2cExpr *upper = NULL;
@@ -230,20 +255,27 @@ static F2cExpr *parse_postfix(AstParser *parser, const F2cToken *name_token) {
             expression->shape.kind = F2C_SHAPE_EXPRESSION;
             expression->shape.dimensions[0] = source_shape.dimensions[1];
             expression->shape.dimensions[1] = source_shape.dimensions[0];
-        } else if (strcmp(expression->text, "matmul") == 0 && expression->child_count == 2U &&
-                   expression->rank == 2U) {
+        } else if (strcmp(expression->text, "matmul") == 0 && expression->child_count == 2U) {
             const F2cExpr *left = f2c_ast_intrinsic_argument_value(expression->children[0]);
             const F2cExpr *right = f2c_ast_intrinsic_argument_value(expression->children[1]);
-            expression->shape.rank = 2U;
             expression->shape.kind = F2C_SHAPE_EXPRESSION;
-            if (left != NULL && left->rank == 2U)
-                expression->shape.dimensions[0] = left->shape.dimensions[0];
-            if (right != NULL && right->rank == 2U)
-                expression->shape.dimensions[1] = right->shape.dimensions[1];
+            expression->shape.rank = expression->rank;
+            if (expression->rank == 2U) {
+                if (left != NULL && left->rank == 2U)
+                    expression->shape.dimensions[0] = left->shape.dimensions[0];
+                if (right != NULL && right->rank == 2U)
+                    expression->shape.dimensions[1] = right->shape.dimensions[1];
+            } else if (expression->rank == 1U) {
+                if (left != NULL && left->rank == 2U)
+                    expression->shape.dimensions[0] = left->shape.dimensions[0];
+                else if (right != NULL && right->rank == 2U)
+                    expression->shape.dimensions[0] = right->shape.dimensions[1];
+            }
         }
         if (strcmp(expression->text, "pack") == 0 || strcmp(expression->text, "unpack") == 0 ||
             strcmp(expression->text, "reshape") == 0 || strcmp(expression->text, "spread") == 0 ||
-            strcmp(expression->text, "findloc") == 0)
+            strcmp(expression->text, "findloc") == 0 || strcmp(expression->text, "shape") == 0 ||
+            strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0)
             f2c_ast_set_transform_intrinsic_shape(parser, expression);
         expression->type_kind = f2c_default_kind(expression->type);
         if (expression->child_count != 0U) {
@@ -255,12 +287,23 @@ static F2cExpr *parse_postfix(AstParser *parser, const F2cToken *name_token) {
                     expression->derived_type = first_argument->derived_type;
             }
         }
+        if (strcmp(expression->text, "matmul") == 0)
+            expression->type_kind = matmul_result_kind(expression);
         if (strcmp(expression->text, "real") == 0 && expression->child_count >= 2U) {
             const int selected_kind = f2c_ast_kind_value_from_argument(expression->children[1]);
             if (selected_kind != 0)
                 expression->type_kind = selected_kind;
         } else if (strcmp(expression->text, "cmplx") == 0 && expression->child_count >= 3U) {
             const int selected_kind = f2c_ast_kind_value_from_argument(expression->children[2]);
+            if (selected_kind != 0)
+                expression->type_kind = selected_kind;
+        } else if (strcmp(expression->text, "size") == 0 ||
+                   strcmp(expression->text, "lbound") == 0 ||
+                   strcmp(expression->text, "ubound") == 0 ||
+                   strcmp(expression->text, "shape") == 0) {
+            const F2cExpr *kind_argument = f2c_ast_intrinsic_argument(
+                expression, "kind", strcmp(expression->text, "shape") == 0 ? 1U : 2U);
+            const int selected_kind = f2c_ast_kind_value_from_argument(kind_argument);
             if (selected_kind != 0)
                 expression->type_kind = selected_kind;
         }
@@ -351,6 +394,8 @@ static F2cExpr *parse_implied_do(AstParser *parser, F2cExpr **values, size_t val
         goto failed;
     for (i = 0U; i < value_count; ++i) {
         expression->type = f2c_ast_common_constructor_type(expression->type, values[i]->type);
+        if (values[i]->type == TYPE_DERIVED && expression->derived_type == NULL)
+            expression->derived_type = values[i]->derived_type;
         if (!push_expression(parser, expression, values[i]))
             goto failed;
         values[i] = NULL;
@@ -532,6 +577,7 @@ static F2cExpr *parse_primary(AstParser *parser) {
         f2c_ast_copy_expression_shape(expression, &operand->shape);
     } else if (token.kind == F2C_TOKEN_ARRAY_BEGIN) {
         Type element_type = TYPE_UNKNOWN;
+        F2cDerivedType *element_derived_type = NULL;
         expression = f2c_expr_new(F2C_EXPR_ARRAY_CONSTRUCTOR, TYPE_UNKNOWN, NULL, 0U);
         f2c_ast_next_token(parser);
         while (expression != NULL && parser->token.kind != F2C_TOKEN_ARRAY_END &&
@@ -543,6 +589,8 @@ static F2cExpr *parse_primary(AstParser *parser) {
                 return NULL;
             }
             element_type = f2c_ast_common_constructor_type(element_type, element->type);
+            if (element->type == TYPE_DERIVED && element_derived_type == NULL)
+                element_derived_type = element->derived_type;
             if (parser->token.kind == F2C_TOKEN_COMMA)
                 f2c_ast_next_token(parser);
             else
@@ -553,7 +601,10 @@ static F2cExpr *parse_primary(AstParser *parser) {
         else
             f2c_ast_next_token(parser);
         if (expression != NULL) {
+            uint64_t constructor_extent;
+            int extent_known;
             expression->type = element_type;
+            expression->derived_type = element_derived_type;
             expression->type_kind = f2c_default_kind(element_type);
             for (size_t element_index = 0U; element_index < expression->child_count;
                  ++element_index) {
@@ -565,8 +616,10 @@ static F2cExpr *parse_primary(AstParser *parser) {
             expression->shape.dimensions[0].kind = F2C_DIMENSION_EXPLICIT;
             expression->shape.dimensions[0].lower_known = 1;
             expression->shape.dimensions[0].lower = 1;
-            expression->shape.dimensions[0].extent_known = 1;
-            expression->shape.dimensions[0].extent = expression->child_count;
+            extent_known =
+                f2c_ast_constructor_extent(parser->unit, expression, &constructor_extent);
+            expression->shape.dimensions[0].extent_known = extent_known > 0;
+            expression->shape.dimensions[0].extent = extent_known > 0 ? constructor_extent : 0U;
         }
     } else if (token.kind == F2C_TOKEN_LEFT_PAREN) {
         expression = parse_parenthesized_expression(parser);

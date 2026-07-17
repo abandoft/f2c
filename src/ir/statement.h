@@ -4,16 +4,21 @@
 #include "ir/expression.h"
 
 typedef enum F2cStatementKind {
+    F2C_STMT_INVALID,
     F2C_STMT_EMPTY,
     F2C_STMT_DECLARATION,
     F2C_STMT_END_SELECT,
     F2C_STMT_CASE,
     F2C_STMT_SELECT_CASE,
+    F2C_STMT_ELSEWHERE,
+    F2C_STMT_WHERE,
+    F2C_STMT_END_WHERE,
     F2C_STMT_TYPE_GUARD,
     F2C_STMT_SELECT_TYPE,
     F2C_STMT_BLOCK_SCOPE,
     F2C_STMT_END_BLOCK_SCOPE,
-    F2C_STMT_END_BLOCK,
+    F2C_STMT_END_IF,
+    F2C_STMT_END_DO,
     F2C_STMT_ELSE_IF,
     F2C_STMT_ELSE,
     F2C_STMT_IF,
@@ -42,8 +47,7 @@ typedef enum F2cStatementKind {
     F2C_STMT_GOTO,
     F2C_STMT_ASSIGNED_GOTO,
     F2C_STMT_LABEL,
-    F2C_STMT_ASSIGNMENT,
-    F2C_STMT_UNSUPPORTED
+    F2C_STMT_ASSIGNMENT
 } F2cStatementKind;
 
 typedef enum F2cIrState { F2C_IR_SYNTAX, F2C_IR_TYPED } F2cIrState;
@@ -113,6 +117,13 @@ typedef struct F2cDataGroup {
     size_t value_count;
 } F2cDataGroup;
 
+typedef struct F2cCaseRange {
+    F2cExpr *lower;
+    F2cExpr *upper;
+    F2cSourceSpan span;
+    int has_colon;
+} F2cCaseRange;
+
 struct F2cStatement {
     F2cStatementKind kind;
     F2cIrState state;
@@ -121,6 +132,8 @@ struct F2cStatement {
     char *text;
     char *tail;
     char *name;
+    char *construct_name;
+    char *control_name;
     char **items;
     F2cExpr **arguments;
     size_t item_count;
@@ -130,6 +143,8 @@ struct F2cStatement {
     size_t io_item_count;
     F2cDataGroup *data_groups;
     size_t data_group_count;
+    F2cCaseRange *case_ranges;
+    size_t case_range_count;
     F2cExpr *expression;
     F2cExpr *left;
     F2cExpr *right;
@@ -137,12 +152,18 @@ struct F2cStatement {
     F2cExpr *step;
     F2cExpr *allocation_character_length;
     F2cDerivedType *guard_type;
+    Unit *resolved_procedure;
+    struct F2cStatement *construct_owner;
+    struct F2cStatement *control_target;
     char **labels;
     size_t label_count;
     F2cStatement *nested;
     int block;
     int error_stop;
     int unroll_hint;
+    int case_default;
+    int case_syntax_valid;
+    int construct_syntax_valid;
 };
 
 char *f2c_find_assignment(char *line);

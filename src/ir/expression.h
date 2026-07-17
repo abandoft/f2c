@@ -39,10 +39,13 @@ struct F2cExpr {
     char *text;
     char *source;
     char *lowered_c;
+    char *lowered_extent_c;
+    char *lowered_character_length_c;
     size_t source_offset;
     size_t source_length;
     size_t parse_error_offset;
     Symbol *symbol;
+    Unit *resolved_procedure;
     F2cDerivedType *derived_type;
     size_t temporary_index;
     size_t statement_temporary_index;

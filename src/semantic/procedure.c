@@ -117,6 +117,11 @@ static void validate_interface_definition(Context *context, Unit *caller, const 
                        definition->kind == UNIT_SUBROUTINE ? "SUBROUTINE" : "FUNCTION");
         return;
     }
+    if (interface->elemental != definition->elemental) {
+        f2c_diagnostic(context, line, 1,
+                       "explicit interface for '%s' has an incompatible ELEMENTAL attribute",
+                       visible_name);
+    }
     if (interface->kind == UNIT_FUNCTION && !same_function_result_type(interface, definition)) {
         f2c_diagnostic(context, line, 1,
                        "explicit interface for function '%s' has return type '%s' but the "
@@ -176,6 +181,25 @@ static int register_procedure(Context *context, Unit *unit) {
     return 1;
 }
 
+static Procedure *find_visible_internal_procedure(Context *context, const Unit *caller,
+                                                  const char *name) {
+    size_t index;
+    if (context == NULL || caller == NULL || name == NULL)
+        return NULL;
+    for (index = 0U; index < context->procedures.count; ++index) {
+        Procedure *procedure = &context->procedures.items[index];
+        const Unit *definition = procedure->definition;
+        if (definition == NULL || !definition->internal || definition->fortran_name == NULL ||
+            strcmp(definition->fortran_name, name) != 0)
+            continue;
+        if ((caller->internal && caller->host_index == definition->host_index) ||
+            (!caller->internal && definition->host_index < context->units.count &&
+             &context->units.items[definition->host_index] == caller))
+            return procedure;
+    }
+    return NULL;
+}
+
 static void bind_external(Context *context, Unit *caller, Symbol *external) {
     Unit *interface =
         external->external_signature_explicit ? find_explicit_interface(caller, external) : NULL;
@@ -183,8 +207,11 @@ static void bind_external(Context *context, Unit *caller, Symbol *external) {
                                                     : find_procedure(context, external->name);
     Unit *definition;
     size_t i;
+    context->options = &caller->options;
     if (procedure == NULL && external->c_name != NULL)
         procedure = find_procedure(context, external->name);
+    if (procedure == NULL)
+        procedure = find_visible_internal_procedure(context, caller, external->name);
     if (interface != NULL && procedure != NULL && procedure->definition != caller)
         validate_interface_definition(context, caller, external, interface, procedure->definition);
     if (interface != NULL)
@@ -192,7 +219,17 @@ static void bind_external(Context *context, Unit *caller, Symbol *external) {
     if (procedure == NULL || procedure->definition == caller)
         return;
     definition = procedure->definition;
-    context->options = &caller->options;
+    if (definition->internal &&
+        (external->c_name == NULL || strcmp(external->c_name, definition->name) != 0)) {
+        char *resolved_name = f2c_strdup(definition->name);
+        if (resolved_name == NULL) {
+            f2c_diagnostic(context, context->lines.items[definition->begin].number, 1,
+                           "out of memory binding internal procedure '%s'", external->name);
+            return;
+        }
+        free(external->c_name);
+        external->c_name = resolved_name;
+    }
     if ((external->external_subroutine && definition->kind == UNIT_FUNCTION) ||
         (!external->external_subroutine && external->type != TYPE_UNKNOWN &&
          definition->kind == UNIT_SUBROUTINE)) {
@@ -239,6 +276,7 @@ static void bind_external(Context *context, Unit *caller, Symbol *external) {
         external->external_parameter_optional[i] = dummy != NULL && dummy->optional;
         external->external_parameter_allocatable[i] = dummy != NULL && dummy->allocatable;
         external->external_parameter_pointer[i] = dummy != NULL && dummy->pointer;
+        external->external_parameter_descriptor[i] = f2c_symbol_uses_descriptor(dummy);
         external->external_parameter_derived_types[i] = dummy != NULL ? dummy->derived_type : NULL;
         external->external_parameter_polymorphic[i] = dummy != NULL && dummy->polymorphic;
         external->external_parameter_const[i] = dummy != NULL && dummy->intent == F2C_INTENT_IN;
@@ -284,6 +322,7 @@ static int bind_internal(Context *context, Unit *definition) {
         symbol->external_parameter_optional[i] = dummy != NULL && dummy->optional;
         symbol->external_parameter_allocatable[i] = dummy != NULL && dummy->allocatable;
         symbol->external_parameter_pointer[i] = dummy != NULL && dummy->pointer;
+        symbol->external_parameter_descriptor[i] = f2c_symbol_uses_descriptor(dummy);
         symbol->external_parameter_derived_types[i] = dummy != NULL ? dummy->derived_type : NULL;
         symbol->external_parameter_polymorphic[i] = dummy != NULL && dummy->polymorphic;
         symbol->external_parameter_const[i] = dummy != NULL && dummy->intent == F2C_INTENT_IN;

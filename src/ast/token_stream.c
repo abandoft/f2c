@@ -12,11 +12,19 @@ static void normalize_expression_token(F2cToken *token) {
         token->kind = F2C_TOKEN_ARRAY_BEGIN;
     else if (token->kind == F2C_TOKEN_RIGHT_BRACKET)
         token->kind = F2C_TOKEN_ARRAY_END;
-    else if (token->kind == F2C_TOKEN_DOUBLE_COLON || token->kind == F2C_TOKEN_SEMICOLON)
+    else if (token->kind == F2C_TOKEN_SEMICOLON)
         token->kind = F2C_TOKEN_INVALID;
 }
 
 void f2c_ast_next_token(AstParser *parser) {
+    if (parser->double_colon_pending) {
+        memset(&parser->token, 0, sizeof(parser->token));
+        parser->token.kind = F2C_TOKEN_COLON;
+        parser->token.begin = parser->double_colon_begin + 1;
+        parser->token.length = 1U;
+        parser->double_colon_pending = 0;
+        return;
+    }
     if (parser->tokens != NULL) {
         if (parser->token_index < parser->token_count) {
             parser->token = parser->tokens[parser->token_index++];
@@ -25,6 +33,12 @@ void f2c_ast_next_token(AstParser *parser) {
             memset(&parser->token, 0, sizeof(parser->token));
             parser->token.kind = F2C_TOKEN_END;
             parser->token.begin = parser->cursor;
+        }
+        if (parser->token.kind == F2C_TOKEN_DOUBLE_COLON) {
+            parser->double_colon_begin = parser->token.begin;
+            parser->double_colon_pending = 1;
+            parser->token.kind = F2C_TOKEN_COLON;
+            parser->token.length = 1U;
         }
         normalize_expression_token(&parser->token);
         if (parser->token.kind == F2C_TOKEN_INVALID)
@@ -38,6 +52,12 @@ void f2c_ast_next_token(AstParser *parser) {
         f2c_token_stream_next(&stream);
         parser->cursor = stream.cursor;
         parser->token = stream.token;
+        if (parser->token.kind == F2C_TOKEN_DOUBLE_COLON) {
+            parser->double_colon_begin = parser->token.begin;
+            parser->double_colon_pending = 1;
+            parser->token.kind = F2C_TOKEN_COLON;
+            parser->token.length = 1U;
+        }
         normalize_expression_token(&parser->token);
         if (parser->token.kind == F2C_TOKEN_INVALID)
             f2c_ast_parser_error(parser,

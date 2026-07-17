@@ -157,6 +157,10 @@ void f2c_statement_parse_data(Unit *unit, F2cStatement *statement) {
 void f2c_statement_parse_label(Unit *unit, F2cStatement *statement) {
     const char *cursor = statement->text;
     const char *tail;
+    if (!isdigit((unsigned char)*cursor)) {
+        statement->kind = F2C_STMT_INVALID;
+        return;
+    }
     while (isdigit((unsigned char)*cursor))
         ++cursor;
     statement->name = f2c_strdup_n(statement->text, (size_t)(cursor - statement->text));

@@ -68,6 +68,8 @@ void f2c_expr_free(F2cExpr *expression) {
     free(expression->text);
     free(expression->source);
     free(expression->lowered_c);
+    free(expression->lowered_extent_c);
+    free(expression->lowered_character_length_c);
     free(expression);
 }
 

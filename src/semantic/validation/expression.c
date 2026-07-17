@@ -102,6 +102,119 @@ static void validate_intrinsic_arity(Context *context, size_t line, const char *
     }
 }
 
+static const F2cExpr *inquiry_argument(const F2cExpr *call, const char *keyword, size_t position) {
+    size_t positional = 0U;
+    size_t argument;
+    if (call == NULL)
+        return NULL;
+    for (argument = 0U; argument < call->child_count; ++argument) {
+        const F2cExpr *actual = call->children[argument];
+        if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT) {
+            if (actual->text != NULL && strcmp(actual->text, keyword) == 0)
+                return actual->child_count == 1U ? actual->children[0] : NULL;
+        } else if (positional++ == position) {
+            return actual;
+        }
+    }
+    return NULL;
+}
+
+static void validate_matrix_intrinsic(Context *context, size_t line, const char *statement_text,
+                                      const F2cExpr *expression) {
+    const int transpose = expression->text != NULL && strcmp(expression->text, "transpose") == 0;
+    const F2cExpr *left = inquiry_argument(expression, transpose ? "matrix" : "matrix_a", 0U);
+    const F2cExpr *right = transpose ? NULL : inquiry_argument(expression, "matrix_b", 1U);
+    size_t argument;
+    for (argument = 0U; argument < expression->child_count; ++argument) {
+        const F2cExpr *actual = expression->children[argument];
+        if (actual == NULL || actual->kind != F2C_EXPR_KEYWORD_ARGUMENT || actual->text == NULL)
+            continue;
+        if ((transpose && strcmp(actual->text, "matrix") != 0) ||
+            (!transpose && strcmp(actual->text, "matrix_a") != 0 &&
+             strcmp(actual->text, "matrix_b") != 0))
+            f2c_diagnostic_at(context, line,
+                              f2c_validation_expression_start_column(statement_text, actual), 1,
+                              "%s has no argument named '%s'", expression->text, actual->text);
+    }
+    if (transpose) {
+        if (left == NULL || left->rank != 2U)
+            f2c_diagnostic_at(context, line,
+                              f2c_validation_expression_start_column(statement_text, left), 1,
+                              "TRANSPOSE requires a rank-two array argument");
+        return;
+    }
+    if (left == NULL || left->rank < 1U || left->rank > 2U)
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, left), 1,
+                          "MATMUL MATRIX_A must have rank one or two");
+    if (right == NULL || right->rank < 1U || right->rank > 2U)
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, right), 1,
+                          "MATMUL MATRIX_B must have rank one or two");
+    if (left == NULL || right == NULL)
+        return;
+    if (left->rank == 1U && right->rank == 1U)
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, expression), 1,
+                          "MATMUL does not accept two rank-one operands; use DOT_PRODUCT");
+    if (!((left->type == TYPE_LOGICAL && right->type == TYPE_LOGICAL) ||
+          (f2c_type_is_numeric(left->type) && f2c_type_is_numeric(right->type))))
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, expression), 1,
+                          "MATMUL operands must both be numeric or both be LOGICAL");
+    if (left->rank >= 1U && left->rank <= 2U && right->rank >= 1U && right->rank <= 2U &&
+        left->shape.dimensions[left->rank - 1U].extent_known &&
+        right->shape.dimensions[0].extent_known &&
+        left->shape.dimensions[left->rank - 1U].extent != right->shape.dimensions[0].extent)
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, expression), 1,
+                          "MATMUL inner extents are not conformable (%llu and %llu)",
+                          (unsigned long long)left->shape.dimensions[left->rank - 1U].extent,
+                          (unsigned long long)right->shape.dimensions[0].extent);
+}
+
+static void validate_array_inquiry(Context *context, Unit *unit, size_t line,
+                                   const char *statement_text, const F2cExpr *expression) {
+    const int shape = expression->text != NULL && strcmp(expression->text, "shape") == 0;
+    const F2cExpr *array = inquiry_argument(expression, shape ? "source" : "array", 0U);
+    const F2cExpr *dimension = shape ? NULL : inquiry_argument(expression, "dim", 1U);
+    const F2cExpr *kind = inquiry_argument(expression, "kind", shape ? 1U : 2U);
+    int64_t value;
+    size_t argument;
+    for (argument = 0U; argument < expression->child_count; ++argument) {
+        const F2cExpr *actual = expression->children[argument];
+        if (actual == NULL || actual->kind != F2C_EXPR_KEYWORD_ARGUMENT || actual->text == NULL)
+            continue;
+        if (strcmp(actual->text, shape ? "source" : "array") != 0 &&
+            (!shape && strcmp(actual->text, "dim") != 0) && strcmp(actual->text, "kind") != 0)
+            f2c_diagnostic_at(context, line,
+                              f2c_validation_expression_start_column(statement_text, actual), 1,
+                              "%s has no argument named '%s'", expression->text, actual->text);
+    }
+    if (array == NULL || array->rank == 0U)
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, array), 1,
+                          "%s requires a non-scalar array argument", expression->text);
+    if (dimension != NULL && (dimension->type != TYPE_INTEGER || dimension->rank != 0U)) {
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, dimension), 1,
+                          "DIM in %s must be a scalar INTEGER expression", expression->text);
+    } else if (dimension != NULL && array != NULL &&
+               f2c_evaluate_integer_constant(unit, dimension, &value) &&
+               (value < 1 || (uint64_t)value > array->rank)) {
+        f2c_diagnostic_at(
+            context, line, f2c_validation_expression_start_column(statement_text, dimension), 1,
+            "DIM in %s must be between 1 and array rank %zu", expression->text, array->rank);
+    }
+    if (kind != NULL && (kind->type != TYPE_INTEGER || kind->rank != 0U ||
+                         !f2c_evaluate_integer_constant(unit, kind, &value) ||
+                         (value != 1 && value != 2 && value != 4 && value != 8)))
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, kind), 1,
+                          "KIND in %s must be a supported scalar INTEGER constant (1, 2, 4, or 8)",
+                          expression->text);
+}
+
 static void validate_substring_semantics(Context *context, Unit *unit, size_t line,
                                          const char *statement_text, const F2cExpr *expression) {
     const F2cExpr *selector;
@@ -359,24 +472,28 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
         expression->shape.rank = 0U;
         expression->shape.kind = F2C_SHAPE_SCALAR;
         if (expression->child_count != function->statement_function_argument_count) {
-            f2c_diagnostic_at(context, line,
-                              f2c_validation_expression_start_column(statement_text, expression),
-                              1, "statement function '%s' expects %zu arguments but has %zu",
-                              function->name, function->statement_function_argument_count,
-                              expression->child_count);
+            f2c_diagnostic_at(
+                context, line, f2c_validation_expression_start_column(statement_text, expression),
+                1, "statement function '%s' expects %zu arguments but has %zu", function->name,
+                function->statement_function_argument_count, expression->child_count);
         }
         for (i = 0U; i < expression->child_count; ++i) {
             if (expression->children[i] != NULL &&
                 expression->children[i]->kind == F2C_EXPR_KEYWORD_ARGUMENT)
-                f2c_diagnostic_at(context, line,
-                                  f2c_validation_expression_start_column(
-                                      statement_text, expression->children[i]),
-                                  1, "statement functions do not accept keyword arguments");
+                f2c_diagnostic_at(
+                    context, line,
+                    f2c_validation_expression_start_column(statement_text, expression->children[i]),
+                    1, "statement functions do not accept keyword arguments");
         }
     } else if (expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
-        f2c_is_intrinsic_name(expression->text)) {
+               f2c_is_intrinsic_name(expression->text)) {
         const F2cIntrinsicSignature *signature = f2c_find_intrinsic(expression->text);
         validate_intrinsic_arity(context, line, statement_text, expression);
+        if (strcmp(expression->text, "size") == 0 || strcmp(expression->text, "shape") == 0 ||
+            strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0)
+            validate_array_inquiry(context, unit, line, statement_text, expression);
+        if (strcmp(expression->text, "transpose") == 0 || strcmp(expression->text, "matmul") == 0)
+            validate_matrix_intrinsic(context, line, statement_text, expression);
         if (signature != NULL && signature->rank_rule == F2C_INTRINSIC_RANK_ELEMENTAL) {
             const F2cExpr *array_argument = NULL;
             for (i = 0U; i < expression->child_count; ++i) {
@@ -430,6 +547,7 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
             f2c_validation_procedure_call(context, unit, line, statement_text, expression->text,
                                           &expression->children, NULL, &expression->child_count, 0);
         expression->child_capacity = expression->child_count;
+        expression->resolved_procedure = definition;
         if (definition != NULL && definition->kind == UNIT_FUNCTION) {
             Symbol *result = definition->result_name != NULL
                                  ? f2c_find_symbol(definition, definition->result_name)
@@ -440,6 +558,26 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
             expression->rank = result != NULL ? result->rank : 0U;
             if (result != NULL)
                 expression->shape = result->shape;
+            if (definition->elemental) {
+                const F2cExpr *array_argument = NULL;
+                for (i = 0U; i < expression->child_count; ++i) {
+                    const F2cExpr *argument = f2c_validation_actual_value(expression->children[i]);
+                    if (argument != NULL && argument->kind != F2C_EXPR_ABSENT_ARGUMENT &&
+                        argument->rank != 0U) {
+                        array_argument = argument;
+                        break;
+                    }
+                }
+                if (array_argument != NULL) {
+                    expression->rank = array_argument->rank;
+                    expression->shape = array_argument->shape;
+                    expression->shape.kind = F2C_SHAPE_EXPRESSION;
+                } else {
+                    expression->rank = 0U;
+                    memset(&expression->shape, 0, sizeof(expression->shape));
+                    expression->shape.kind = F2C_SHAPE_SCALAR;
+                }
+            }
         }
         if (definition != NULL && definition->name != NULL && !definition->interface_abstract &&
             strcmp(expression->text, definition->name) != 0) {

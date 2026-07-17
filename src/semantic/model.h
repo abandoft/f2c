@@ -60,6 +60,7 @@ struct Symbol {
     int *external_parameter_optional;
     int *external_parameter_allocatable;
     int *external_parameter_pointer;
+    int *external_parameter_descriptor;
     F2cDerivedType **external_parameter_derived_types;
     int *external_parameter_polymorphic;
     Symbol **external_parameter_procedures;
@@ -159,6 +160,7 @@ struct Unit {
     int return_type_explicit;
     char *result_name;
     char *result_character_length;
+    char *result_derived_type_name;
     Symbol *symbols;
     size_t symbol_count;
     size_t symbol_capacity;

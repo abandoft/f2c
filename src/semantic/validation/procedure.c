@@ -66,7 +66,7 @@ static int interface_candidate_matches(Unit *candidate, F2cExpr *const *argument
         } else if ((dummy->type != TYPE_UNKNOWN && value->type != TYPE_UNKNOWN &&
                     (dummy->type != value->type || (dummy->kind != 0 && value->type_kind != 0 &&
                                                     dummy->kind != value->type_kind))) ||
-                   (dummy->rank != value->rank &&
+                   (dummy->rank != value->rank && !(candidate->elemental && dummy->rank == 0U) &&
                     !(dummy->rank != 0U && array_storage_sequence_actual(value))) ||
                    (dummy->allocatable && (value->kind != F2C_EXPR_NAME || value->symbol == NULL ||
                                            !value->symbol->allocatable))) {
@@ -407,6 +407,8 @@ int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const
             expected->external_parameter_allocatable[i] !=
                 actual->external_parameter_allocatable[i] ||
             expected->external_parameter_pointer[i] != actual->external_parameter_pointer[i] ||
+            expected->external_parameter_descriptor[i] !=
+                actual->external_parameter_descriptor[i] ||
             expected->external_parameter_derived_types[i] !=
                 actual->external_parameter_derived_types[i] ||
             expected->external_parameter_polymorphic[i] !=
@@ -533,7 +535,9 @@ static int overriding_signatures_compatible(const F2cTypeBinding *parent,
             expected->external_parameter_allocatable[expected_argument] !=
                 actual->external_parameter_allocatable[actual_argument] ||
             expected->external_parameter_pointer[expected_argument] !=
-                actual->external_parameter_pointer[actual_argument])
+                actual->external_parameter_pointer[actual_argument] ||
+            expected->external_parameter_descriptor[expected_argument] !=
+                actual->external_parameter_descriptor[actual_argument])
             return 0;
         ++expected_argument;
         ++actual_argument;
@@ -691,6 +695,17 @@ void f2c_resolve_derived_semantics(Context *context) {
         resolve_derived_unit(context, &context->units.items[unit]);
 }
 
+static int has_vector_subscript(const F2cExpr *expression) {
+    size_t selector;
+    if (expression == NULL || expression->kind != F2C_EXPR_ARRAY_REFERENCE)
+        return 0;
+    for (selector = 0U; selector < expression->child_count; ++selector)
+        if (expression->children[selector]->kind != F2C_EXPR_ARRAY_SECTION &&
+            expression->children[selector]->rank != 0U)
+            return 1;
+    return 0;
+}
+
 static void validate_procedure_actual(Context *context, Unit *caller, const Unit *definition,
                                       const Symbol *dummy, const F2cExpr *actual, size_t index,
                                       size_t line, const char *statement_text) {
@@ -773,7 +788,7 @@ static void validate_procedure_actual(Context *context, Unit *caller, const Unit
                           "dummy '%s'",
                           index + 1U, definition->name, dummy->name);
     }
-    if (value->rank != dummy->rank &&
+    if (value->rank != dummy->rank && !(definition->elemental && dummy->rank == 0U) &&
         !(dummy->rank != 0U && array_storage_sequence_actual(value))) {
         f2c_diagnostic_at(
             context, line, column, 1,
@@ -794,7 +809,16 @@ static void validate_procedure_actual(Context *context, Unit *caller, const Unit
         }
     }
     if ((dummy->intent == F2C_INTENT_OUT || dummy->intent == F2C_INTENT_INOUT) &&
-        !value->definable) {
+        has_vector_subscript(value)) {
+        f2c_diagnostic_at(context, line, column, 1,
+                          "argument %zu of procedure '%s' uses a vector subscript but dummy '%s' "
+                          "has INTENT(%s)",
+                          index + 1U,
+                          definition->fortran_name != NULL ? definition->fortran_name
+                                                           : definition->name,
+                          dummy->name, dummy->intent == F2C_INTENT_OUT ? "OUT" : "INOUT");
+    } else if ((dummy->intent == F2C_INTENT_OUT || dummy->intent == F2C_INTENT_INOUT) &&
+               !value->definable) {
         f2c_diagnostic_at(context, line, column, 1,
                           "argument %zu of procedure '%s' is not definable but dummy '%s' has "
                           "INTENT(%s)",
@@ -804,6 +828,37 @@ static void validate_procedure_actual(Context *context, Unit *caller, const Unit
                           dummy->name, dummy->intent == F2C_INTENT_OUT ? "OUT" : "INOUT");
     }
     (void)caller;
+}
+
+static void validate_elemental_conformance(Context *context, const Unit *definition, size_t line,
+                                           const char *statement_text, F2cExpr *const *arguments,
+                                           size_t argument_count) {
+    const F2cExpr *array_argument = NULL;
+    size_t i;
+    if (definition == NULL || !definition->elemental)
+        return;
+    for (i = 0U; i < argument_count; ++i) {
+        const F2cExpr *argument = f2c_validation_actual_value(arguments[i]);
+        size_t dimension;
+        if (argument == NULL || argument->kind == F2C_EXPR_ABSENT_ARGUMENT || argument->rank == 0U)
+            continue;
+        if (array_argument == NULL) {
+            array_argument = argument;
+        } else if (array_argument->rank != argument->rank) {
+            f2c_diagnostic_at(
+                context, line, f2c_validation_expression_start_column(statement_text, argument), 1,
+                "ELEMENTAL procedure '%s' has nonconformable actual argument ranks %zu and %zu",
+                definition->fortran_name != NULL ? definition->fortran_name : definition->name,
+                array_argument->rank, argument->rank);
+        } else if (f2c_validation_shapes_mismatch(array_argument, argument, &dimension)) {
+            f2c_diagnostic_at(
+                context, line, f2c_validation_expression_start_column(statement_text, argument), 1,
+                "ELEMENTAL procedure '%s' has nonconformable actual argument extent in "
+                "dimension %zu",
+                definition->fortran_name != NULL ? definition->fortran_name : definition->name,
+                dimension + 1U);
+        }
+    }
 }
 
 Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
@@ -863,5 +918,7 @@ Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
                                   arguments != NULL && *arguments != NULL ? (*arguments)[i] : NULL,
                                   i, line, statement_text);
     }
+    validate_elemental_conformance(context, definition, line, statement_text,
+                                   arguments != NULL ? *arguments : NULL, *argument_count);
     return definition;
 }

@@ -82,6 +82,18 @@ static void validate_constructor_semantics_impl(Context *context, Unit *unit, si
     size_t i;
     if (expression == NULL)
         return;
+    if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && expression->type == TYPE_DERIVED &&
+        expression->derived_type != NULL) {
+        for (i = 0U; i < expression->child_count; ++i) {
+            const F2cExpr *value = expression->children[i];
+            if (value->type == TYPE_DERIVED && value->derived_type != NULL &&
+                value->derived_type != expression->derived_type) {
+                f2c_diagnostic_at(context, line,
+                                  f2c_validation_expression_column(statement_text, value), 1,
+                                  "array-constructor derived values must have the same type");
+            }
+        }
+    }
     if (expression->kind == F2C_EXPR_IMPLIED_DO) {
         int64_t step;
         const size_t value_count =

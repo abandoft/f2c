@@ -39,5 +39,9 @@ void f2c_validation_io_item_calls(Context *context, Unit *unit, size_t line,
                                   const char *statement_text, F2cIoItem *item);
 void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *statement);
 void f2c_validation_move_alloc(Context *context, Unit *unit, F2cStatement *statement);
+void f2c_validation_case_statement(Context *context, Unit *unit, F2cStatement *statement);
+void f2c_validation_select_case_constructs(Context *context, Unit *unit);
+void f2c_validation_bind_constructs(Context *context, Unit *unit);
+void f2c_validation_where_statement(Context *context, const F2cStatement *statement);
 
 #endif

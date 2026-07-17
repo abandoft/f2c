@@ -90,6 +90,7 @@ static int copy_signature_to_symbol(Context *context, Unit *host, Unit *procedur
         external->external_parameter_optional[i] = dummy != NULL && dummy->optional;
         external->external_parameter_allocatable[i] = dummy != NULL && dummy->allocatable;
         external->external_parameter_pointer[i] = dummy != NULL && dummy->pointer;
+        external->external_parameter_descriptor[i] = f2c_symbol_uses_descriptor(dummy);
         external->external_parameter_derived_types[i] = dummy != NULL ? dummy->derived_type : NULL;
         external->external_parameter_polymorphic[i] = dummy != NULL && dummy->polymorphic;
         external->external_parameter_const[i] = dummy != NULL && dummy->intent == F2C_INTENT_IN;
@@ -111,14 +112,13 @@ static int copy_interface_signatures(Context *context, Unit *host, Unit *procedu
 }
 
 static char *parse_generic_name(Context *context, const Line *line) {
-    const size_t start = line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U
-                                                                                           : 0U;
+    const size_t start =
+        line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U : 0U;
     if (f2c_abstract_interface_tokens(line))
         return f2c_strdup("");
     if (start + 1U == line->token_count)
         return f2c_strdup("");
-    if (start + 2U != line->token_count ||
-        line->tokens[start + 1U].kind != F2C_TOKEN_IDENTIFIER) {
+    if (start + 2U != line->token_count || line->tokens[start + 1U].kind != F2C_TOKEN_IDENTIFIER) {
         f2c_diagnostic(context, line->number, 1,
                        "only a plain name is supported on a generic INTERFACE statement");
         return NULL;

@@ -8,9 +8,25 @@ static size_t declaration_start(const Line *line, const char *keyword) {
     size_t index =
         line != NULL && line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U
                                                                                            : 0U;
+    size_t cursor;
+    size_t depth = 0U;
     if (!f2c_line_token_equals(line, index, keyword))
         return SIZE_MAX;
     ++index;
+    for (cursor = index; cursor < line->token_count; ++cursor) {
+        const F2cToken *token = &line->tokens[cursor];
+        if (token->kind == F2C_TOKEN_LEFT_PAREN || token->kind == F2C_TOKEN_LEFT_BRACKET ||
+            token->kind == F2C_TOKEN_ARRAY_BEGIN) {
+            ++depth;
+        } else if (token->kind == F2C_TOKEN_RIGHT_PAREN || token->kind == F2C_TOKEN_RIGHT_BRACKET ||
+                   token->kind == F2C_TOKEN_ARRAY_END) {
+            if (depth != 0U)
+                --depth;
+        } else if (depth == 0U && token->kind == F2C_TOKEN_OPERATOR &&
+                   (f2c_token_equals(token, "=") || f2c_token_equals(token, "=>"))) {
+            return SIZE_MAX;
+        }
+    }
     if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_DOUBLE_COLON)
         ++index;
     return index;

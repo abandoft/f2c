@@ -7,6 +7,7 @@
 void f2c_validate_unit_expressions(Context *context, Unit *unit);
 void f2c_resolve_derived_semantics(Context *context);
 int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count);
+int f2c_symbol_uses_descriptor(const Symbol *symbol);
 int f2c_evaluate_integer_constant(Unit *unit, const F2cExpr *expression, int64_t *value);
 int f2c_evaluate_integer_text(Unit *unit, const char *text, int64_t *value);
 char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression);

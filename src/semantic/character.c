@@ -242,6 +242,8 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
     Buffer result = {0};
     if (expression == NULL || expression->type != TYPE_CHARACTER)
         return NULL;
+    if (expression->lowered_character_length_c != NULL)
+        return f2c_strdup(expression->lowered_character_length_c);
     if (expression->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("0U");
     if (expression->kind == F2C_EXPR_STRING_LITERAL) {
@@ -271,7 +273,8 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
         if (expression->text != NULL && expression->child_count != 0U &&
             (strcmp(expression->text, "reshape") == 0 || strcmp(expression->text, "pack") == 0 ||
              strcmp(expression->text, "unpack") == 0 || strcmp(expression->text, "spread") == 0 ||
-             strcmp(expression->text, "cshift") == 0 || strcmp(expression->text, "eoshift") == 0)) {
+             strcmp(expression->text, "cshift") == 0 || strcmp(expression->text, "eoshift") == 0 ||
+             strcmp(expression->text, "transpose") == 0)) {
             const F2cExpr *source = expression->children[0];
             if (source != NULL && source->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
                 source->child_count == 1U)
@@ -367,6 +370,8 @@ char *f2c_character_source_pointer(Unit *unit, const F2cExpr *right, const char 
     const Symbol *symbol = right != NULL ? right->symbol : NULL;
     if (right == NULL || right_code == NULL)
         return NULL;
+    if (right->lowered_c != NULL && right->lowered_character_length_c != NULL)
+        return f2c_strdup(right_code);
     if (right->kind == F2C_EXPR_STRING_LITERAL ||
         (right->kind == F2C_EXPR_NAME && symbol != NULL && symbol->parameter))
         return f2c_strdup(right_code);

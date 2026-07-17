@@ -34,6 +34,10 @@ void f2c_visit_statement_expressions(F2cStatement *statement, F2cExpressionVisit
     f2c_visit_expression(statement->limit, visitor, state);
     f2c_visit_expression(statement->step, visitor, state);
     f2c_visit_expression(statement->allocation_character_length, visitor, state);
+    for (i = 0U; i < statement->case_range_count; ++i) {
+        f2c_visit_expression(statement->case_ranges[i].lower, visitor, state);
+        f2c_visit_expression(statement->case_ranges[i].upper, visitor, state);
+    }
     for (i = 0U; i < statement->item_count; ++i)
         f2c_visit_expression(statement->arguments != NULL ? statement->arguments[i] : NULL, visitor,
                              state);
