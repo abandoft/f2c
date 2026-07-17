@@ -1,5 +1,7 @@
 #include "internal/f2c.h"
 
+#include "core/generated/private.h"
+
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -304,6 +306,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                                            "    size_t rank;\n"
                                            "    int64_t lower[15];\n"
                                            "    int64_t extent[15];\n"
+                                           "    ptrdiff_t stride[15];\n"
                                            "    size_t character_length;\n"
                                            "} f2c_descriptor;\n");
         f2c_buffer_append(&context.output,
@@ -311,6 +314,76 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                           "int64_t lower, size_t extent) { uint64_t offset; if (subscript < lower) "
                           "abort(); offset = (uint64_t)(subscript - lower); if (offset >= "
                           "(uint64_t)extent) abort(); return (size_t)offset; }\n");
+        f2c_buffer_append(
+            &context.output,
+            "static inline F2C_UNUSED ptrdiff_t f2c_descriptor_stride_multiply(ptrdiff_t a, "
+            "ptrdiff_t b) { if (a > 0 ? (b > 0 ? a > PTRDIFF_MAX / b : b < PTRDIFF_MIN / a) "
+            ": a < 0 ? (b > 0 ? a < PTRDIFF_MIN / b : b < 0 && a < PTRDIFF_MAX / b) : "
+            "false) abort(); return a * b; }\n"
+            "static inline F2C_UNUSED ptrdiff_t f2c_descriptor_stride_extent(ptrdiff_t stride, "
+            "size_t extent) { if (extent > (size_t)PTRDIFF_MAX) abort(); return "
+            "f2c_descriptor_stride_multiply(stride, (ptrdiff_t)extent); }\n"
+            "static inline F2C_UNUSED ptrdiff_t f2c_descriptor_stride_step(ptrdiff_t stride, "
+            "int64_t step) { if (step == 0 || step < (int64_t)PTRDIFF_MIN || step > "
+            "(int64_t)PTRDIFF_MAX) abort(); return f2c_descriptor_stride_multiply(stride, "
+            "(ptrdiff_t)step); }\n"
+            "static inline F2C_UNUSED ptrdiff_t f2c_descriptor_offset_add(ptrdiff_t left, "
+            "ptrdiff_t right) { if ((right > 0 && left > PTRDIFF_MAX - right) || (right < 0 && "
+            "left < PTRDIFF_MIN - right)) abort(); return left + right; }\n"
+            "static inline F2C_UNUSED ptrdiff_t f2c_array_descriptor_offset(size_t rank, const "
+            "int64_t *subscripts, const int64_t *lowers, const size_t *extents, const ptrdiff_t "
+            "*strides) { size_t dimension; ptrdiff_t result = 0; for (dimension = 0U; dimension "
+            "< rank; ++dimension) { size_t ordinal = f2c_array_offset(subscripts[dimension], "
+            "lowers[dimension], extents[dimension]); if (ordinal > (size_t)PTRDIFF_MAX) abort(); "
+            "result = f2c_descriptor_offset_add(result, f2c_descriptor_stride_multiply("
+            "(ptrdiff_t)ordinal, strides[dimension])); } return result; }\n");
+        f2c_buffer_append(
+            &context.output,
+            "static inline F2C_UNUSED bool f2c_size_multiply(size_t left, size_t right, "
+            "size_t *result) { if (right != 0U && left > SIZE_MAX / right) return false; "
+            "*result = left * right; return true; }\n");
+        f2c_buffer_append(
+            &context.output,
+            "static inline F2C_UNUSED size_t f2c_inquiry_extent(int64_t dimension, size_t "
+            "rank, const size_t *extents) { if (dimension < 1 || (uint64_t)dimension > "
+            "(uint64_t)rank) abort(); return extents[(size_t)dimension - 1U]; }\n"
+            "static inline F2C_UNUSED size_t f2c_inquiry_size(size_t rank, const size_t "
+            "*extents) { size_t result = 1U; size_t dimension; for (dimension = 0U; "
+            "dimension < rank; ++dimension) if (!f2c_size_multiply(result, "
+            "extents[dimension], &result)) abort(); return result; }\n"
+            "static inline F2C_UNUSED int64_t f2c_inquiry_lower_bound(int64_t lower, size_t "
+            "extent) { return extent == 0U ? INT64_C(1) : lower; }\n"
+            "static inline F2C_UNUSED int64_t f2c_inquiry_lower(int64_t dimension, size_t "
+            "rank, const int64_t *lowers, const size_t *extents) { size_t index; if "
+            "(dimension < 1 || (uint64_t)dimension > (uint64_t)rank) abort(); index = "
+            "(size_t)dimension - 1U; return f2c_inquiry_lower_bound(lowers[index], "
+            "extents[index]); }\n"
+            "static inline F2C_UNUSED int64_t f2c_inquiry_upper(int64_t lower, size_t extent) "
+            "{ uint64_t delta; if (extent == 0U) { if (lower == INT64_MIN) abort(); return "
+            "lower - INT64_C(1); } delta = (uint64_t)extent - UINT64_C(1); if (delta > "
+            "(uint64_t)INT64_MAX || lower > INT64_MAX - (int64_t)delta) abort(); return lower "
+            "+ (int64_t)delta; }\n"
+            "static inline F2C_UNUSED int64_t f2c_inquiry_upper_dimension(int64_t dimension, "
+            "size_t rank, const int64_t *lowers, const size_t *extents) { size_t index; if "
+            "(dimension < 1 || (uint64_t)dimension > (uint64_t)rank) abort(); index = "
+            "(size_t)dimension - 1U; return f2c_inquiry_upper("
+            "f2c_inquiry_lower_bound(lowers[index], extents[index]), extents[index]); }\n"
+            "static inline F2C_UNUSED int64_t f2c_inquiry_size_integer(size_t value, int "
+            "kind) { uint64_t maximum = kind == 1 ? UINT64_C(127) : kind == 2 ? "
+            "UINT64_C(32767) : kind == 4 ? UINT64_C(2147483647) : kind == 8 ? "
+            "(uint64_t)INT64_MAX : UINT64_C(0); if (maximum == 0U || (uint64_t)value > "
+            "maximum) abort(); return (int64_t)value; }\n"
+            "static inline F2C_UNUSED int64_t f2c_inquiry_bound_integer(int64_t value, int "
+            "kind) { int64_t minimum = kind == 1 ? INT64_C(-128) : kind == 2 ? "
+            "INT64_C(-32768) : kind == 4 ? INT64_C(-2147483647) - INT64_C(1) : kind == 8 ? "
+            "INT64_MIN : INT64_C(1); int64_t maximum = kind == 1 ? INT64_C(127) : kind == 2 "
+            "? INT64_C(32767) : kind == 4 ? INT64_C(2147483647) : kind == 8 ? INT64_MAX : "
+            "INT64_C(0); if (minimum > maximum || value < minimum || value > maximum) "
+            "abort(); return value; }\n");
+        f2c_buffer_append(
+            &context.output,
+            "static inline F2C_UNUSED int64_t f2c_descriptor_extent(size_t extent) { if "
+            "((uint64_t)extent > (uint64_t)INT64_MAX) abort(); return (int64_t)extent; }\n");
         f2c_buffer_append(
             &context.output,
             "static inline F2C_UNUSED int f2c_character_compare(const char *left, size_t "
@@ -593,6 +666,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                 "double: f2c_dot_d)((a), (ad), (b), (bd), (n))\n"
                 "#define F2C_LOGICAL_DOT(a, ad, b, bd, n) f2c_dot_l((a), (ad), (b), (bd), "
                 "(n))\n");
+            f2c_emit_relation_reduction_support(&context.output, needs_complex);
         }
         if (needs_random) {
             f2c_buffer_append(
@@ -882,7 +956,7 @@ void f2c_result_free(F2cResult *result) {
 }
 
 #ifndef F2C_VERSION
-#define F2C_VERSION "1.1.0"
+#define F2C_VERSION "1.2.0"
 #endif
 
 const char *f2c_version(void) { return F2C_VERSION; }

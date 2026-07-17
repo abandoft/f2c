@@ -54,8 +54,7 @@ void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, co
             f2c_buffer_append(output, ", ");
         if (nested != NULL)
             f2c_emit_procedure_pointer_type(output, nested, NULL);
-        else if (procedure->external_parameter_allocatable[parameter] ||
-                 procedure->external_parameter_pointer[parameter])
+        else if (procedure->external_parameter_descriptor[parameter])
             f2c_buffer_append(output, "f2c_descriptor *");
         else if (procedure->type_bound && parameter == procedure->type_bound_pass_index &&
                  !procedure->type_bound_nopass)
@@ -73,7 +72,8 @@ void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, co
     for (parameter = 0U; parameter < procedure->external_parameter_count; ++parameter) {
         if (procedure->external_parameter_types[parameter] == TYPE_CHARACTER &&
             !procedure->external_parameter_allocatable[parameter] &&
-            !procedure->external_parameter_pointer[parameter])
+            !procedure->external_parameter_pointer[parameter] &&
+            !procedure->external_parameter_descriptor[parameter])
             f2c_buffer_append(output, ", size_t");
     }
     f2c_buffer_append(output, ")");
@@ -108,7 +108,7 @@ void f2c_unit_emit_named_signature(Buffer *output, Unit *unit, const char *name,
             f2c_buffer_append(output, ", ");
         if (symbol != NULL && symbol->external) {
             f2c_emit_procedure_pointer_type(output, symbol, f2c_symbol_c_name(unit, symbol));
-        } else if (symbol != NULL && (symbol->allocatable || symbol->pointer)) {
+        } else if (symbol != NULL && f2c_symbol_uses_descriptor(symbol)) {
             f2c_buffer_printf(output, "f2c_descriptor *f2c_descriptor_%s",
                               f2c_symbol_c_name(unit, symbol));
         } else {
@@ -122,7 +122,7 @@ void f2c_unit_emit_named_signature(Buffer *output, Unit *unit, const char *name,
     for (i = 0U; i < unit->argument_count; ++i) {
         Symbol *symbol = f2c_find_symbol(unit, unit->arguments[i]);
         if (symbol != NULL && !symbol->external && symbol->type == TYPE_CHARACTER &&
-            !symbol->allocatable && !symbol->pointer)
+            !f2c_symbol_uses_descriptor(symbol))
             f2c_buffer_printf(output, ", size_t f2c_len_%s", f2c_symbol_c_name(unit, symbol));
     }
     f2c_buffer_append(output, ")");
@@ -196,8 +196,7 @@ static void emit_external_prototypes(Context *context) {
                         f2c_buffer_append(&context->output, ", ");
                     if (procedure != NULL)
                         f2c_emit_procedure_pointer_type(&context->output, procedure, NULL);
-                    else if (symbol->external_parameter_allocatable[parameter] ||
-                             symbol->external_parameter_pointer[parameter])
+                    else if (symbol->external_parameter_descriptor[parameter])
                         f2c_buffer_append(&context->output, "f2c_descriptor *");
                     else
                         f2c_buffer_printf(
@@ -209,7 +208,8 @@ static void emit_external_prototypes(Context *context) {
                 for (parameter = 0U; parameter < symbol->external_parameter_count; ++parameter) {
                     if (symbol->external_parameter_types[parameter] == TYPE_CHARACTER &&
                         !symbol->external_parameter_allocatable[parameter] &&
-                        !symbol->external_parameter_pointer[parameter])
+                        !symbol->external_parameter_pointer[parameter] &&
+                        !symbol->external_parameter_descriptor[parameter])
                         f2c_buffer_append(&context->output, ", size_t");
                 }
                 f2c_buffer_append(&context->output, ");\n");
@@ -273,6 +273,7 @@ void f2c_emit_interface_header(Context *context) {
                               "    size_t rank;\n"
                               "    int64_t lower[15];\n"
                               "    int64_t extent[15];\n"
+                              "    ptrdiff_t stride[15];\n"
                               "    size_t character_length;\n"
                               "} f2c_descriptor;\n\n"
                               "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");

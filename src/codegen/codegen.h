@@ -50,6 +50,17 @@ char *f2c_bridge_implicit_mutable_actual(const Symbol *callee, size_t parameter,
                                          const F2cExpr *actual, const char *code);
 int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *statement,
                        Line *source_line, int *depth);
+int f2c_emit_select_case_begin(Context *context, Unit *unit, const F2cStatement *statement,
+                               int *depth);
+int f2c_emit_case_begin(Context *context, Unit *unit, const F2cStatement *statement, int *depth);
+int f2c_emit_select_case_end(Context *context, const F2cStatement *statement, int *depth);
+int f2c_emit_type_guard(Context *context, Unit *unit, const F2cStatement *statement, size_t line,
+                        int *depth);
+int f2c_emit_where_begin(Context *context, Unit *unit, const F2cStatement *statement, int *depth);
+int f2c_emit_elsewhere(Context *context, Unit *unit, const F2cStatement *statement, int depth);
+int f2c_emit_where_end(Context *context, Unit *unit, const F2cStatement *statement, int *depth);
+int f2c_emit_where_assignment(Context *context, Unit *unit, const F2cStatement *statement,
+                              int depth);
 void f2c_emit_data_statement(Context *context, Unit *unit, const F2cStatement *statement,
                              int depth);
 int f2c_emit_rank2_section_assignment(Context *context, Unit *unit, const F2cExpr *left,
@@ -59,6 +70,8 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
 char *f2c_symbol_element_count(Unit *unit, Symbol *symbol);
 int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr *left,
                                     const F2cExpr *right, size_t line, int depth);
+int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStatement *statement,
+                                  int depth);
 int f2c_emit_transform_assignment(Context *context, Unit *unit, const F2cExpr *left,
                                   const F2cExpr *right, size_t line, int depth);
 int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement *statement,

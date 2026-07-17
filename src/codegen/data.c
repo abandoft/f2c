@@ -85,6 +85,18 @@ static F2cExpr *clone_with_integers(const F2cExpr *expression,
     clone->symbol = expression->symbol;
     clone->temporary_index = expression->temporary_index;
     clone->lowered_c = expression->lowered_c != NULL ? f2c_strdup(expression->lowered_c) : NULL;
+    clone->lowered_extent_c =
+        expression->lowered_extent_c != NULL ? f2c_strdup(expression->lowered_extent_c) : NULL;
+    clone->lowered_character_length_c = expression->lowered_character_length_c != NULL
+                                            ? f2c_strdup(expression->lowered_character_length_c)
+                                            : NULL;
+    if ((expression->lowered_c != NULL && clone->lowered_c == NULL) ||
+        (expression->lowered_extent_c != NULL && clone->lowered_extent_c == NULL) ||
+        (expression->lowered_character_length_c != NULL &&
+         clone->lowered_character_length_c == NULL)) {
+        f2c_expr_free(clone);
+        return NULL;
+    }
     if (expression->kind == F2C_EXPR_NAME) {
         for (i = substitution_count; i != 0U; --i) {
             const F2cExpr *iterator = substitutions[i - 1U].iterator;

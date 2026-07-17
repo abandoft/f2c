@@ -424,7 +424,7 @@ char *f2c_symbol_dimension_lower(Unit *unit, const Symbol *symbol, size_t dimens
     Buffer result = {0};
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
-    if (symbol->allocatable || symbol->pointer) {
+    if (f2c_symbol_uses_descriptor(symbol)) {
         f2c_buffer_printf(&result, "%s_lower_%zu", f2c_symbol_c_name(unit, symbol), dimension + 1U);
         return f2c_buffer_take(&result);
     }
@@ -435,7 +435,7 @@ char *f2c_symbol_dimension_upper(Unit *unit, const Symbol *symbol, size_t dimens
     Buffer result = {0};
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
-    if (symbol->allocatable || symbol->pointer) {
+    if (f2c_symbol_uses_descriptor(symbol)) {
         f2c_buffer_printf(&result, "(%s_lower_%zu + %s_extent_%zu - 1)",
                           f2c_symbol_c_name(unit, symbol), dimension + 1U,
                           f2c_symbol_c_name(unit, symbol), dimension + 1U);
@@ -450,7 +450,7 @@ char *f2c_symbol_dimension_extent(Unit *unit, const Symbol *symbol, size_t dimen
     char *upper;
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
-    if (symbol->allocatable || symbol->pointer) {
+    if (f2c_symbol_uses_descriptor(symbol)) {
         f2c_buffer_printf(&result, "%s_extent_%zu", f2c_symbol_c_name(unit, symbol),
                           dimension + 1U);
         return f2c_buffer_take(&result);
@@ -480,6 +480,29 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
             character_length = f2c_strdup("1U");
         f2c_buffer_printf(&result, "(size_t)(%s) * (size_t)(", character_length);
     }
+    if (symbol->argument && f2c_symbol_uses_descriptor(symbol)) {
+        f2c_buffer_printf(&result, "f2c_array_descriptor_offset(%zuU, (const int64_t[]){", count);
+        for (i = 0U; i < count; ++i)
+            f2c_buffer_printf(&result, "%s(int64_t)(%s)", i == 0U ? "" : ", ", indices[i]);
+        f2c_buffer_append(&result, "}, (const int64_t[]){");
+        for (i = 0U; i < count; ++i)
+            f2c_buffer_printf(&result, "%s(int64_t)%s_lower_%zu", i == 0U ? "" : ", ",
+                              f2c_symbol_c_name(unit, symbol), i + 1U);
+        f2c_buffer_append(&result, "}, (const size_t[]){");
+        for (i = 0U; i < count; ++i)
+            f2c_buffer_printf(&result, "%s(size_t)%s_extent_%zu", i == 0U ? "" : ", ",
+                              f2c_symbol_c_name(unit, symbol), i + 1U);
+        f2c_buffer_append(&result, "}, (const ptrdiff_t[]){");
+        for (i = 0U; i < count; ++i)
+            f2c_buffer_printf(&result, "%s%s_stride_%zu", i == 0U ? "" : ", ",
+                              f2c_symbol_c_name(unit, symbol), i + 1U);
+        f2c_buffer_append(&result, "})");
+        if (character_length != NULL)
+            f2c_buffer_append(&result, ")");
+        f2c_buffer_append(&result, "]");
+        free(character_length);
+        return f2c_buffer_take(&result);
+    }
     for (i = 0U; i < count; ++i) {
         char *lower =
             i < symbol->rank ? f2c_symbol_dimension_lower(unit, symbol, i) : f2c_strdup("1");
@@ -490,7 +513,7 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
             size_t j;
             f2c_buffer_append(&result, " + (");
             for (j = 0U; j < i; ++j) {
-                if (symbol->allocatable || symbol->pointer) {
+                if (f2c_symbol_uses_descriptor(symbol)) {
                     f2c_buffer_printf(&result, "%s%s_extent_%zu", j == 0U ? "" : " * ",
                                       f2c_symbol_c_name(unit, symbol), j + 1U);
                     continue;

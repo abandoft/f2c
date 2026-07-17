@@ -11,6 +11,13 @@ void f2c_array_indent(Buffer *output, int depth) {
         f2c_buffer_append(output, "    ");
 }
 
+static const F2cExpr *section_bound(const F2cExpr *section, size_t index) {
+    if (section == NULL || section->kind != F2C_EXPR_ARRAY_SECTION || section->child_count != 3U ||
+        section->children[index]->kind == F2C_EXPR_INVALID)
+        return NULL;
+    return section->children[index];
+}
+
 char *f2c_array_emit_expression(Unit *unit, const F2cExpr *expression) {
     int supported = 0;
     char *result = f2c_emit_expression_ast(unit, expression, &supported);
@@ -19,13 +26,6 @@ char *f2c_array_emit_expression(Unit *unit, const F2cExpr *expression) {
         return NULL;
     }
     return result;
-}
-
-static const F2cExpr *section_bound(const F2cExpr *section, size_t index) {
-    if (section == NULL || section->kind != F2C_EXPR_ARRAY_SECTION || section->child_count != 3U ||
-        section->children[index]->kind == F2C_EXPR_INVALID)
-        return NULL;
-    return section->children[index];
 }
 
 static char *dimension_bound(Unit *unit, Symbol *symbol, size_t dimension, int upper) {
@@ -129,6 +129,11 @@ static F2cExpr *clone_array_reference(Unit *unit, const F2cExpr *expression) {
     clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
     clone->source = expression->source != NULL ? f2c_strdup(expression->source) : NULL;
     clone->lowered_c = expression->lowered_c != NULL ? f2c_strdup(expression->lowered_c) : NULL;
+    clone->lowered_extent_c =
+        expression->lowered_extent_c != NULL ? f2c_strdup(expression->lowered_extent_c) : NULL;
+    clone->lowered_character_length_c = expression->lowered_character_length_c != NULL
+                                            ? f2c_strdup(expression->lowered_character_length_c)
+                                            : NULL;
     clone->children = expression->child_count != 0U
                           ? (F2cExpr **)calloc(expression->child_count, sizeof(*clone->children))
                           : NULL;
@@ -137,6 +142,9 @@ static F2cExpr *clone_array_reference(Unit *unit, const F2cExpr *expression) {
     if ((expression->text != NULL && clone->text == NULL) ||
         (expression->source != NULL && clone->source == NULL) ||
         (expression->lowered_c != NULL && clone->lowered_c == NULL) ||
+        (expression->lowered_extent_c != NULL && clone->lowered_extent_c == NULL) ||
+        (expression->lowered_character_length_c != NULL &&
+         clone->lowered_character_length_c == NULL) ||
         (expression->child_count != 0U && clone->children == NULL))
         goto failed;
     for (dimension = 0U; dimension < expression->child_count; ++dimension) {
@@ -174,6 +182,11 @@ static F2cExpr *clone_expression(Unit *unit, const F2cExpr *expression) {
     clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
     clone->source = expression->source != NULL ? f2c_strdup(expression->source) : NULL;
     clone->lowered_c = expression->lowered_c != NULL ? f2c_strdup(expression->lowered_c) : NULL;
+    clone->lowered_extent_c =
+        expression->lowered_extent_c != NULL ? f2c_strdup(expression->lowered_extent_c) : NULL;
+    clone->lowered_character_length_c = expression->lowered_character_length_c != NULL
+                                            ? f2c_strdup(expression->lowered_character_length_c)
+                                            : NULL;
     clone->children = expression->child_count != 0U
                           ? (F2cExpr **)calloc(expression->child_count, sizeof(*clone->children))
                           : NULL;
@@ -182,6 +195,9 @@ static F2cExpr *clone_expression(Unit *unit, const F2cExpr *expression) {
     if ((expression->text != NULL && clone->text == NULL) ||
         (expression->source != NULL && clone->source == NULL) ||
         (expression->lowered_c != NULL && clone->lowered_c == NULL) ||
+        (expression->lowered_extent_c != NULL && clone->lowered_extent_c == NULL) ||
+        (expression->lowered_character_length_c != NULL &&
+         clone->lowered_character_length_c == NULL) ||
         (expression->child_count != 0U && clone->children == NULL))
         goto failed;
     for (i = 0U; i < expression->child_count; ++i) {
@@ -245,6 +261,18 @@ static F2cExpr *clone_whole_array_element(Unit *unit, const F2cExpr *expression,
                                           size_t section_count) {
     F2cExpr *element;
     size_t dimension;
+    char ordinal_storage[F2C_MAX_RANK][32];
+    const char *ordinals[F2C_MAX_RANK] = {0};
+    if (expression != NULL && expression->rank == section_count && section_count != 0U) {
+        for (dimension = 0U; dimension < section_count; ++dimension) {
+            (void)snprintf(ordinal_storage[dimension], sizeof(ordinal_storage[dimension]),
+                           "f2c_section_%zu", dimension);
+            ordinals[dimension] = ordinal_storage[dimension];
+        }
+        element = f2c_array_element_expression(unit, expression, section_count, ordinals);
+        if (element != NULL)
+            return element;
+    }
     if (expression != NULL && expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && section_count == 1U)
         return vector_index_expression(unit, expression, 0U);
     if (expression != NULL && expression->kind == F2C_EXPR_ARRAY_REFERENCE &&
@@ -603,197 +631,6 @@ char *f2c_symbol_element_count(Unit *unit, Symbol *symbol) {
     return f2c_buffer_take(&count);
 }
 
-static const F2cExpr *transform_argument(const F2cExpr *argument) {
-    return argument != NULL && argument->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
-                   argument->child_count == 1U
-               ? argument->children[0]
-               : argument;
-}
-
-static int emit_rank2_transform_assignment(Context *context, Unit *unit, Symbol *target,
-                                           const F2cExpr *right, size_t line, int depth) {
-    const F2cExpr *left_argument;
-    const F2cExpr *right_argument = NULL;
-    Symbol *left_source;
-    Symbol *right_source = NULL;
-    char *target_rows = NULL;
-    char *target_columns = NULL;
-    char *left_rows = NULL;
-    char *left_columns = NULL;
-    char *right_rows = NULL;
-    char *right_columns = NULL;
-    const char *target_name;
-    const char *left_name;
-    const char *right_name = NULL;
-    const char *c_type;
-    int matmul;
-    if (right == NULL || right->kind != F2C_EXPR_CALL || right->text == NULL || target == NULL ||
-        target->rank != 2U ||
-        (strcmp(right->text, "transpose") != 0 && strcmp(right->text, "matmul") != 0))
-        return 0;
-    matmul = strcmp(right->text, "matmul") == 0;
-    if (right->child_count != (matmul ? 2U : 1U))
-        goto unsupported;
-    left_argument = transform_argument(right->children[0]);
-    if (matmul)
-        right_argument = transform_argument(right->children[1]);
-    left_source = left_argument != NULL && left_argument->kind == F2C_EXPR_NAME
-                      ? left_argument->symbol
-                      : NULL;
-    right_source = right_argument != NULL && right_argument->kind == F2C_EXPR_NAME
-                       ? right_argument->symbol
-                       : NULL;
-    if (left_source == NULL || left_source->rank != 2U ||
-        (matmul && (right_source == NULL || right_source->rank != 2U)))
-        goto unsupported;
-    if (!matmul && (left_source->type != target->type || left_source->kind != target->kind))
-        goto incompatible;
-    if (matmul &&
-        ((!f2c_type_is_numeric(left_source->type) && left_source->type != TYPE_LOGICAL) ||
-         left_source->type != right_source->type || left_source->kind != right_source->kind ||
-         target->type != left_source->type || target->kind != left_source->kind))
-        goto incompatible;
-    if (target->allocatable || target->pointer) {
-        f2c_diagnostic(context, line, 1,
-                       "%s assignment currently requires an allocated rank-two target with "
-                       "explicit shape",
-                       matmul ? "MATMUL" : "TRANSPOSE");
-        return 1;
-    }
-    target_rows = f2c_symbol_dimension_extent(unit, target, 0U);
-    target_columns = f2c_symbol_dimension_extent(unit, target, 1U);
-    left_rows = f2c_symbol_dimension_extent(unit, left_source, 0U);
-    left_columns = f2c_symbol_dimension_extent(unit, left_source, 1U);
-    if (matmul) {
-        right_rows = f2c_symbol_dimension_extent(unit, right_source, 0U);
-        right_columns = f2c_symbol_dimension_extent(unit, right_source, 1U);
-    }
-    if (target_rows == NULL || target_columns == NULL || left_rows == NULL ||
-        left_columns == NULL || (matmul && (right_rows == NULL || right_columns == NULL)))
-        goto unsupported;
-    target_name = f2c_symbol_c_name(unit, target);
-    left_name = f2c_symbol_c_name(unit, left_source);
-    if (matmul)
-        right_name = f2c_symbol_c_name(unit, right_source);
-    c_type = f2c_symbol_c_type(target);
-    f2c_array_indent(&context->output, depth);
-    f2c_buffer_append(&context->output, "{\n");
-    f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output, "const size_t f2c_transform_rows = (size_t)(%s);\n",
-                      target_rows);
-    f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output, "const size_t f2c_transform_columns = (size_t)(%s);\n",
-                      target_columns);
-    f2c_array_indent(&context->output, depth + 1);
-    if (matmul) {
-        f2c_buffer_printf(&context->output, "const size_t f2c_transform_inner = (size_t)(%s);\n",
-                          left_columns);
-        f2c_array_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output,
-                          "if ((size_t)(%s) != f2c_transform_rows || (size_t)(%s) != "
-                          "f2c_transform_inner || (size_t)(%s) != f2c_transform_columns) "
-                          "abort();\n",
-                          left_rows, right_rows, right_columns);
-    } else {
-        f2c_buffer_printf(&context->output,
-                          "if ((size_t)(%s) != f2c_transform_columns || (size_t)(%s) != "
-                          "f2c_transform_rows) abort();\n",
-                          left_rows, left_columns);
-    }
-    f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_append(&context->output, "if (f2c_transform_columns != 0U && f2c_transform_rows > "
-                                        "SIZE_MAX / f2c_transform_columns) abort();\n");
-    f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_append(&context->output, "const size_t f2c_transform_count = f2c_transform_rows * "
-                                        "f2c_transform_columns;\n");
-    f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output,
-                      "%s *f2c_transform_values = f2c_transform_count == 0U ? NULL : "
-                      "(%s *)malloc(f2c_transform_count * sizeof(*f2c_transform_values));\n",
-                      c_type, c_type);
-    f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_append(&context->output,
-                      "if (f2c_transform_count != 0U && f2c_transform_values == NULL) abort();\n");
-    f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_append(&context->output,
-                      "for (size_t f2c_transform_column = 0U; f2c_transform_column < "
-                      "f2c_transform_columns; ++f2c_transform_column) {\n");
-    f2c_array_indent(&context->output, depth + 2);
-    f2c_buffer_append(&context->output, "for (size_t f2c_transform_row = 0U; f2c_transform_row < "
-                                        "f2c_transform_rows; ++f2c_transform_row) {\n");
-    if (matmul) {
-        f2c_array_indent(&context->output, depth + 3);
-        f2c_buffer_printf(&context->output, "%s f2c_transform_value = (%s)0;\n", c_type, c_type);
-        f2c_array_indent(&context->output, depth + 3);
-        f2c_buffer_append(&context->output,
-                          "for (size_t f2c_transform_index = 0U; f2c_transform_index < "
-                          "f2c_transform_inner; ++f2c_transform_index)\n");
-        f2c_array_indent(&context->output, depth + 4);
-        if (target->type == TYPE_LOGICAL) {
-            f2c_buffer_printf(&context->output,
-                              "f2c_transform_value = (int32_t)(f2c_transform_value || "
-                              "(%s[f2c_transform_row + f2c_transform_rows * "
-                              "f2c_transform_index] && %s[f2c_transform_index + "
-                              "f2c_transform_inner * f2c_transform_column]));\n",
-                              left_name, right_name);
-        } else {
-            f2c_buffer_printf(&context->output,
-                              "f2c_transform_value += %s[f2c_transform_row + "
-                              "f2c_transform_rows * f2c_transform_index] * "
-                              "%s[f2c_transform_index + f2c_transform_inner * "
-                              "f2c_transform_column];\n",
-                              left_name, right_name);
-        }
-        f2c_array_indent(&context->output, depth + 3);
-        f2c_buffer_append(&context->output,
-                          "f2c_transform_values[f2c_transform_row + f2c_transform_rows * "
-                          "f2c_transform_column] = f2c_transform_value;\n");
-    } else {
-        f2c_array_indent(&context->output, depth + 3);
-        f2c_buffer_printf(&context->output,
-                          "f2c_transform_values[f2c_transform_row + f2c_transform_rows * "
-                          "f2c_transform_column] = %s[f2c_transform_column + "
-                          "f2c_transform_columns * f2c_transform_row];\n",
-                          left_name);
-    }
-    f2c_array_indent(&context->output, depth + 2);
-    f2c_buffer_append(&context->output, "}\n");
-    f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_append(&context->output, "}\n");
-    f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output,
-                      "if (f2c_transform_count != 0U) memmove(%s, f2c_transform_values, "
-                      "f2c_transform_count * sizeof(*f2c_transform_values));\n",
-                      target_name);
-    f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_append(&context->output, "free(f2c_transform_values);\n");
-    f2c_array_indent(&context->output, depth);
-    f2c_buffer_append(&context->output, "}\n");
-    free(target_rows);
-    free(target_columns);
-    free(left_rows);
-    free(left_columns);
-    free(right_rows);
-    free(right_columns);
-    return 1;
-
-incompatible:
-    f2c_diagnostic(context, line, 1,
-                   "%s operands and target must have matching intrinsic type and kind",
-                   matmul ? "MATMUL" : "TRANSPOSE");
-    return 1;
-unsupported:
-    free(target_rows);
-    free(target_columns);
-    free(left_rows);
-    free(left_columns);
-    free(right_rows);
-    free(right_columns);
-    f2c_diagnostic(context, line, 1, "%s currently requires whole named rank-two arrays",
-                   right != NULL && right->text != NULL ? right->text : "array transformation");
-    return 1;
-}
-
 int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr *left,
                                     const F2cExpr *right, size_t line, int depth) {
     Symbol *left_symbol = left != NULL ? left->symbol : NULL;
@@ -804,8 +641,6 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
         left_symbol->rank == 0U)
         return 0;
     if (f2c_emit_transform_assignment(context, unit, left, right, line, depth))
-        return 1;
-    if (emit_rank2_transform_assignment(context, unit, left_symbol, right, line, depth))
         return 1;
     if (left_symbol->allocatable && right != NULL && right->kind == F2C_EXPR_CALL &&
         right->symbol != NULL && right->symbol->external_result_allocatable) {
@@ -875,6 +710,8 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
                            "rank-one intrinsic target and compatible element values");
         return 1;
     }
+    if (f2c_array_emit_elemental_assignment(context, unit, left_symbol, right, line, depth))
+        return 1;
     if (left_symbol->allocatable || left_symbol->pointer) {
         f2c_array_indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "if (%s == NULL) abort();\n",

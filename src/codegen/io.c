@@ -179,18 +179,27 @@ int f2c_io_emit_defined_io_call(Context *context, const char *value, F2cDerivedT
                           v_list != NULL ? v_list : "f2c_dtio_empty_v_list",
                           v_list_count != NULL ? v_list_count : "0U");
         f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output,
+                          "f2c_descriptor f2c_dtio_v_list_descriptor = {"
+                          ".data = f2c_implicit_mutable_actual(f2c_dtio_v_list), "
+                          ".element_size = sizeof(*f2c_dtio_v_list), .rank = 1U};\n");
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output, "f2c_dtio_v_list_descriptor.lower[0] = 1; "
+                                            "f2c_dtio_v_list_descriptor.extent[0] = "
+                                            "(int64_t)f2c_dtio_v_list_count; "
+                                            "f2c_dtio_v_list_descriptor.stride[0] = 1;\n");
+        f2c_io_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "++f2c_child_io_depth;\n");
         f2c_io_indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output,
-                          "%s((void *)&(%s), &f2c_dtio_unit, %s, f2c_dtio_v_list, "
+                          "%s((void *)&(%s), &f2c_dtio_unit, %s, "
+                          "&f2c_dtio_v_list_descriptor, "
                           "&f2c_dtio_iostat, f2c_dtio_iomsg, strlen(%s), "
                           "sizeof(f2c_dtio_iomsg));\n",
                           callee, value, iotype != NULL ? iotype : "\"LISTDIRECTED\"",
                           iotype != NULL ? iotype : "\"LISTDIRECTED\"");
         f2c_io_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "--f2c_child_io_depth;\n");
-        f2c_io_indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output, "(void)f2c_dtio_v_list_count;\n");
     } else {
         f2c_io_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "++f2c_child_io_depth;\n");

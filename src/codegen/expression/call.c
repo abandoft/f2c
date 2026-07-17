@@ -1,5 +1,8 @@
 #include "codegen/expression/private.h"
 
+#include "codegen/array/private.h"
+#include "codegen/descriptor/private.h"
+
 #include <ctype.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -27,8 +30,23 @@ static const F2cExpr *intrinsic_argument_value(const F2cExpr *argument) {
                : argument;
 }
 
-static int emit_array_view(Unit *unit, const F2cExpr *array, char **pointer, char **count,
-                           char **stride, int *supported) {
+static const F2cExpr *call_argument(const F2cExpr *call, const char *keyword, size_t position) {
+    size_t positional = 0U;
+    size_t argument;
+    for (argument = 0U; call != NULL && argument < call->child_count; ++argument) {
+        const F2cExpr *actual = call->children[argument];
+        if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT) {
+            if (actual->text != NULL && strcmp(actual->text, keyword) == 0)
+                return intrinsic_argument_value(actual);
+        } else if (positional++ == position) {
+            return actual;
+        }
+    }
+    return NULL;
+}
+
+int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, char **count,
+                              char **stride, int *supported) {
     Buffer extent = {0};
     Buffer storage_stride = {0};
     const F2cExpr *selector;
@@ -56,6 +74,38 @@ static int emit_array_view(Unit *unit, const F2cExpr *array, char **pointer, cha
         *count = f2c_buffer_take(&extent);
         *stride = f2c_strdup("1");
         return *supported && *pointer != NULL && *count != NULL && *stride != NULL;
+    }
+    if (array->kind == F2C_EXPR_CALL && array->text != NULL &&
+        strcmp(array->text, "reshape") == 0) {
+        const F2cExpr *source = call_argument(array, "source", 0U);
+        const F2cExpr *pad = call_argument(array, "pad", 2U);
+        const F2cExpr *order = call_argument(array, "order", 3U);
+        char *source_count = NULL;
+        Buffer result_count = {0};
+        size_t index;
+        if (source == NULL || pad != NULL || order != NULL || array->rank == 0U ||
+            !f2c_expression_array_view(unit, source, pointer, &source_count, stride, supported))
+            return 0;
+        for (index = 0U; index < array->rank; ++index) {
+            char *dimension_extent = f2c_array_expression_extent(unit, array, index);
+            if (dimension_extent == NULL) {
+                free(*pointer);
+                free(source_count);
+                free(*stride);
+                *pointer = NULL;
+                *stride = NULL;
+                return 0;
+            }
+            f2c_buffer_printf(&result_count, "%s(size_t)(%s)", index == 0U ? "" : " * ",
+                              dimension_extent);
+            free(dimension_extent);
+        }
+        f2c_buffer_printf(&extent, "((%s) <= (size_t)(%s) ? (%s) : (abort(), 0U))",
+                          result_count.data, source_count, result_count.data);
+        free(result_count.data);
+        free(source_count);
+        *count = f2c_buffer_take(&extent);
+        return *pointer != NULL && *count != NULL && *stride != NULL;
     }
     if (array->kind != F2C_EXPR_ARRAY_REFERENCE || array->symbol == NULL || array->rank != 1U)
         return 0;
@@ -320,6 +370,11 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
     if (actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
     symbol = actual->symbol;
+    if (actual->lowered_c != NULL && actual->kind == F2C_EXPR_NAME && actual->symbol == NULL &&
+        actual->value_category == F2C_VALUE_VARIABLE) {
+        f2c_buffer_printf(&result, "&(%s)", code);
+        return f2c_buffer_take(&result);
+    }
     if (actual->lowered_c != NULL)
         return f2c_strdup(code);
     if (actual->kind == F2C_EXPR_NAME && symbol != NULL) {
@@ -351,6 +406,47 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
     return f2c_emit_scalar_temporary_address(
         actual->type != TYPE_UNKNOWN ? f2c_expression_c_type(actual) : f2c_c_type(TYPE_REAL),
         actual->type != TYPE_UNKNOWN ? actual->type : TYPE_REAL, code);
+}
+
+static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supported) {
+    Buffer result = {0};
+    char *character_length = NULL;
+    F2cDescriptorView view = {0};
+    Symbol *symbol;
+    size_t dimension;
+    if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT && actual->child_count == 1U)
+        actual = actual->children[0];
+    if (actual != NULL && actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
+        return f2c_strdup("NULL");
+    if (actual == NULL || actual->symbol == NULL || !f2c_descriptor_view(unit, actual, &view)) {
+        *supported = 0;
+        return NULL;
+    }
+    symbol = actual->symbol;
+    if (actual->type == TYPE_CHARACTER)
+        character_length = f2c_character_length_expression(unit, actual);
+    f2c_buffer_printf(&result,
+                      "(&(f2c_descriptor){.data = f2c_implicit_mutable_actual(%s), "
+                      ".element_size = sizeof(%s), .rank = %zuU, .lower = {",
+                      view.data, f2c_symbol_c_type(symbol), view.rank);
+    for (dimension = 0U; dimension < view.rank; ++dimension) {
+        f2c_buffer_printf(&result, "%s(int64_t)(%s)", dimension == 0U ? "" : ", ",
+                          view.lower[dimension]);
+    }
+    f2c_buffer_append(&result, "}, .extent = {");
+    for (dimension = 0U; dimension < view.rank; ++dimension) {
+        f2c_buffer_printf(&result, "%sf2c_descriptor_extent((size_t)(%s))",
+                          dimension == 0U ? "" : ", ", view.extent[dimension]);
+    }
+    f2c_buffer_append(&result, "}, .stride = {");
+    for (dimension = 0U; dimension < view.rank; ++dimension)
+        f2c_buffer_printf(&result, "%s(ptrdiff_t)(%s)", dimension == 0U ? "" : ", ",
+                          view.stride[dimension]);
+    f2c_buffer_printf(&result, "}, .character_length = (size_t)(%s)})",
+                      character_length != NULL ? character_length : "0U");
+    free(character_length);
+    f2c_descriptor_view_free(&view);
+    return f2c_buffer_take(&result);
 }
 
 static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *supported) {
@@ -415,7 +511,11 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
             actual = expression->children[explicit_argument++];
         }
         code = f2c_expression_emit(unit, actual, supported);
-        lowered = *supported && code != NULL ? emit_external_actual(unit, actual, code) : NULL;
+        lowered = *supported && code != NULL
+                      ? (procedure->external_parameter_descriptor[parameter]
+                             ? emit_descriptor_actual(unit, actual, supported)
+                             : emit_external_actual(unit, actual, code))
+                      : NULL;
         free(code);
         if (lowered == NULL) {
             free(callee);
@@ -432,7 +532,8 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
         char *length;
         if (procedure->external_parameter_types[parameter] != TYPE_CHARACTER ||
             procedure->external_parameter_allocatable[parameter] ||
-            procedure->external_parameter_pointer[parameter])
+            procedure->external_parameter_pointer[parameter] ||
+            procedure->external_parameter_descriptor[parameter])
             continue;
         if (!procedure->type_bound_nopass && parameter == procedure->type_bound_pass_index)
             actual = passed_object;
@@ -533,6 +634,11 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         (void)pointer;
         return f2c_buffer_take(&result);
     }
+    if (expression->text != NULL &&
+        (strcmp(expression->text, "size") == 0 ||
+         ((strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0) &&
+          expression->rank == 0U)))
+        return f2c_expression_array_inquiry(unit, expression, supported);
     if (expression->text != NULL && expression->child_count == 1U &&
         expression->children[0]->type == TYPE_CHARACTER &&
         (strcmp(expression->text, "len") == 0 || strcmp(expression->text, "len_trim") == 0)) {
@@ -585,6 +691,12 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         free(pointer);
         return f2c_buffer_take(&result);
     }
+    {
+        int matched = 0;
+        char *reduction = f2c_expression_relation_reduction(unit, expression, supported, &matched);
+        if (matched)
+            return reduction;
+    }
     if (expression->text != NULL &&
         (strcmp(expression->text, "sum") == 0 || strcmp(expression->text, "product") == 0 ||
          strcmp(expression->text, "maxval") == 0 || strcmp(expression->text, "minval") == 0 ||
@@ -613,7 +725,7 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
             *supported = 0;
             return NULL;
         }
-        if (!emit_array_view(unit, array, &pointer, &count, &stride, supported)) {
+        if (!f2c_expression_array_view(unit, array, &pointer, &count, &stride, supported)) {
             free(pointer);
             free(count);
             free(stride);
@@ -650,10 +762,10 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         char *right_pointer = NULL;
         char *right_count = NULL;
         char *right_stride = NULL;
-        if (!emit_array_view(unit, left_array, &left_pointer, &left_count, &left_stride,
-                             supported) ||
-            !emit_array_view(unit, right_array, &right_pointer, &right_count, &right_stride,
-                             supported)) {
+        if (!f2c_expression_array_view(unit, left_array, &left_pointer, &left_count, &left_stride,
+                                       supported) ||
+            !f2c_expression_array_view(unit, right_array, &right_pointer, &right_count,
+                                       &right_stride, supported)) {
             free(left_pointer);
             free(left_count);
             free(left_stride);
@@ -756,7 +868,11 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         f2c_buffer_printf(&result, "%s(", callee != NULL ? callee : "");
     }
     for (i = 0U; i < expression->child_count; ++i) {
-        char *actual = emit_external_actual(unit, expression->children[i], arguments[i]);
+        char *actual = expression->symbol != NULL &&
+                               i < expression->symbol->external_parameter_count &&
+                               expression->symbol->external_parameter_descriptor[i]
+                           ? emit_descriptor_actual(unit, expression->children[i], supported)
+                           : emit_external_actual(unit, expression->children[i], arguments[i]);
         char *bridged;
         if (actual == NULL) {
             f2c_expression_free_arguments(arguments, types, expression->child_count);

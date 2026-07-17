@@ -256,13 +256,13 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
             f2c_buffer_printf(
                 &context->output,
                 "if (f2c_alloc_lower_%zu < INT32_MIN || f2c_alloc_lower_%zu > INT32_MAX || "
-                "(f2c_alloc_upper_%zu >= f2c_alloc_lower_%zu && f2c_alloc_extent_%zu == 0U) "
-                "|| (f2c_alloc_extent_%zu != 0U && f2c_alloc_count > SIZE_MAX / "
-                "f2c_alloc_extent_%zu)) f2c_alloc_ok = false;\n",
-                d + 1U, d + 1U, d + 1U, d + 1U, d + 1U, d + 1U, d + 1U);
+                "(f2c_alloc_upper_%zu >= f2c_alloc_lower_%zu && f2c_alloc_extent_%zu == 0U)) "
+                "f2c_alloc_ok = false;\n",
+                d + 1U, d + 1U, d + 1U, d + 1U, d + 1U);
             indent(&context->output, depth + 1);
             f2c_buffer_printf(&context->output,
-                              "if (f2c_alloc_ok) f2c_alloc_count *= f2c_alloc_extent_%zu;\n",
+                              "if (f2c_alloc_ok && !f2c_size_multiply(f2c_alloc_count, "
+                              "f2c_alloc_extent_%zu, &f2c_alloc_count)) f2c_alloc_ok = false;\n",
                               d + 1U);
             if (source_expression != NULL && source_expression->rank != 0U && bound != NULL) {
                 char *source_extent =
@@ -376,6 +376,17 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
             indent(&context->output, depth + 2);
             f2c_buffer_printf(&context->output, "%s_extent_%zu = (int32_t)f2c_alloc_extent_%zu;\n",
                               target_name, d + 1U, d + 1U);
+            if (target->kind == F2C_EXPR_NAME && symbol->argument &&
+                f2c_symbol_uses_descriptor(symbol)) {
+                indent(&context->output, depth + 2);
+                if (d == 0U)
+                    f2c_buffer_printf(&context->output, "%s_stride_1 = 1;\n", target_name);
+                else
+                    f2c_buffer_printf(&context->output,
+                                      "%s_stride_%zu = f2c_descriptor_stride_extent(%s_stride_%zu, "
+                                      "(size_t)%s_extent_%zu);\n",
+                                      target_name, d + 1U, target_name, d, target_name, d);
+            }
         }
         indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "}\n");
@@ -450,8 +461,13 @@ int f2c_emit_deallocate_statement(Context *context, Unit *unit, const F2cStateme
         for (d = 0U; d < symbol->rank; ++d) {
             indent(&context->output, depth + 1);
             f2c_buffer_printf(&context->output,
-                              "if (f2c_dealloc_ok) { %s_lower_%zu = 1; %s_extent_%zu = 0; }\n",
+                              "if (f2c_dealloc_ok) { %s_lower_%zu = 1; %s_extent_%zu = 0;",
                               target_name, d + 1U, target_name, d + 1U);
+            if (target->kind == F2C_EXPR_NAME && symbol->argument &&
+                f2c_symbol_uses_descriptor(symbol))
+                f2c_buffer_printf(&context->output, " %s_stride_%zu = %s;", target_name, d + 1U,
+                                  d == 0U ? "1" : "0");
+            f2c_buffer_append(&context->output, " }\n");
         }
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");

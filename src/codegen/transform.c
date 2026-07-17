@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void emit_result_count(Context *context, size_t rank, int depth) {
+void f2c_transform_emit_result_count(Context *context, size_t rank, int depth) {
     size_t dimension;
     f2c_transform_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "size_t f2c_transform_result_count = 1U;\n");
@@ -21,8 +21,8 @@ static void emit_result_count(Context *context, size_t rank, int depth) {
     }
 }
 
-static void emit_result_allocation(Context *context, Unit *unit, const Symbol *target,
-                                   const F2cExpr *element_source, int depth) {
+void f2c_transform_emit_result_allocation(Context *context, Unit *unit, const Symbol *target,
+                                          const F2cExpr *element_source, int depth) {
     if (target->type == TYPE_CHARACTER) {
         char *length = target->deferred_character
                            ? f2c_character_length_expression(unit, element_source)
@@ -69,8 +69,8 @@ static void emit_result_allocation(Context *context, Unit *unit, const Symbol *t
     f2c_buffer_append(&context->output, "if (f2c_transform_result == NULL) abort();\n");
 }
 
-static void emit_result_commit(Context *context, Unit *unit, Symbol *target, size_t rank,
-                               int depth) {
+void f2c_transform_emit_result_commit(Context *context, Unit *unit, Symbol *target, size_t rank,
+                                      int depth) {
     const char *name = f2c_symbol_c_name(unit, target);
     size_t dimension;
     if (target->allocatable) {
@@ -118,8 +118,10 @@ static void emit_result_commit(Context *context, Unit *unit, Symbol *target, siz
         f2c_transform_indent(&context->output, depth);
         if (target->type == TYPE_DERIVED && target->derived_type != NULL) {
             f2c_buffer_printf(&context->output,
-                              "for (size_t i = 0U; i < f2c_transform_result_count; ++i) "
-                              "f2c_copy_%s(&%s[i], &f2c_transform_result[i]);\n",
+                              "for (size_t f2c_transform_index = 0U; "
+                              "f2c_transform_index < f2c_transform_result_count; "
+                              "++f2c_transform_index) f2c_copy_%s(&%s[f2c_transform_index], "
+                              "&f2c_transform_result[f2c_transform_index]);\n",
                               target->derived_type->c_name, name);
             f2c_transform_indent(&context->output, depth);
             f2c_buffer_printf(&context->output,
@@ -146,8 +148,8 @@ static void emit_result_commit(Context *context, Unit *unit, Symbol *target, siz
     f2c_buffer_append(&context->output, "}\n");
 }
 
-static void append_array_store(Buffer *output, const Symbol *target, const char *destination,
-                               const TransformArray *source, const char *source_index) {
+void f2c_transform_append_array_store(Buffer *output, const Symbol *target, const char *destination,
+                                      const TransformArray *source, const char *source_index) {
     if (target->type == TYPE_CHARACTER) {
         f2c_buffer_printf(output,
                           "{ char *f2c_dst = f2c_transform_result + (%s) * "
@@ -191,7 +193,7 @@ static void append_scalar_store(Buffer *output, const Symbol *target, const char
     }
 }
 
-static void emit_source_extents(Context *context, const TransformArray *source, int depth) {
+void f2c_transform_emit_source_extents(Context *context, const TransformArray *source, int depth) {
     size_t dimension;
     for (dimension = 0U; dimension < source->rank; ++dimension) {
         f2c_transform_indent(&context->output, depth);
@@ -212,6 +214,10 @@ static char *vector_element(Unit *unit, const F2cExpr *vector, size_t index) {
     const F2cExpr *value = f2c_transform_argument_value(vector);
     if (value == NULL)
         return NULL;
+    if (value->kind == F2C_EXPR_CALL && value->text != NULL && value->rank == 1U &&
+        (strcmp(value->text, "shape") == 0 || strcmp(value->text, "lbound") == 0 ||
+         strcmp(value->text, "ubound") == 0))
+        return f2c_transform_inquiry_element(unit, value, index);
     if (value->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
         if (index >= value->child_count)
             return NULL;
@@ -233,10 +239,22 @@ static int emit_reshape(Context *context, Unit *unit, Symbol *target, const F2cE
     const F2cExpr *order = f2c_transform_argument(call, "order", 3U);
     TransformArray source = {0};
     TransformArray pad = {0};
+    TransformArray shape_array = {0};
+    TransformArray order_array = {0};
     size_t rank = call->rank;
     size_t dimension;
+    char *shape_probe = vector_element(unit, shape, 0U);
+    char *order_probe = order != NULL ? vector_element(unit, order, 0U) : NULL;
+    const int materialize_shape = shape_probe == NULL;
+    const int materialize_order = order != NULL && order_probe == NULL;
+    free(shape_probe);
+    free(order_probe);
     if (!f2c_transform_array_view(unit, source_expression, &source) ||
         !f2c_transform_compatible_array(target, &source) || rank == 0U || rank != target->rank ||
+        (materialize_shape && (!f2c_transform_array_view(unit, shape, &shape_array) ||
+                               shape_array.type != TYPE_INTEGER || shape_array.rank != 1U)) ||
+        (materialize_order && (!f2c_transform_array_view(unit, order, &order_array) ||
+                               order_array.type != TYPE_INTEGER || order_array.rank != 1U)) ||
         (pad_expression != NULL && (!f2c_transform_array_view(unit, pad_expression, &pad) ||
                                     !f2c_transform_compatible_array(target, &pad)))) {
         f2c_diagnostic(context, line, 1,
@@ -244,16 +262,51 @@ static int emit_reshape(Context *context, Unit *unit, Symbol *target, const F2cE
                        "target");
         f2c_transform_free_array(&source);
         f2c_transform_free_array(&pad);
+        f2c_transform_free_array(&shape_array);
+        f2c_transform_free_array(&order_array);
         return 1;
     }
     f2c_transform_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
+    if (!f2c_transform_materialize_array(context, unit, &source, "reshape_source", depth + 1) ||
+        (materialize_shape && !f2c_transform_materialize_array(context, unit, &shape_array,
+                                                               "reshape_shape", depth + 1)) ||
+        (materialize_order && !f2c_transform_materialize_array(context, unit, &order_array,
+                                                               "reshape_order", depth + 1)) ||
+        (pad_expression != NULL &&
+         !f2c_transform_materialize_array(context, unit, &pad, "reshape_pad", depth + 1))) {
+        f2c_diagnostic(context, line, 1, "RESHAPE array expression could not be materialized");
+        f2c_transform_free_array(&source);
+        f2c_transform_free_array(&pad);
+        f2c_transform_free_array(&shape_array);
+        f2c_transform_free_array(&order_array);
+        return 1;
+    }
+    if (materialize_shape) {
+        f2c_transform_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output, "if ((size_t)(%s) != %zuU) abort();\n",
+                          shape_array.count, rank);
+    }
+    if (materialize_order) {
+        f2c_transform_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output, "if ((size_t)(%s) != %zuU) abort();\n",
+                          order_array.count, rank);
+    }
     for (dimension = 0U; dimension < rank; ++dimension) {
-        char *extent = vector_element(unit, shape, dimension);
+        char *extent;
+        if (materialize_shape) {
+            Buffer item = {0};
+            f2c_buffer_printf(&item, "%s[%zuU]", shape_array.pointer, dimension);
+            extent = f2c_buffer_take(&item);
+        } else {
+            extent = vector_element(unit, shape, dimension);
+        }
         if (extent == NULL) {
             f2c_diagnostic(context, line, 1, "RESHAPE SHAPE must provide every result extent");
             f2c_transform_free_array(&source);
             f2c_transform_free_array(&pad);
+            f2c_transform_free_array(&shape_array);
+            f2c_transform_free_array(&order_array);
             return 1;
         }
         f2c_transform_indent(&context->output, depth + 1);
@@ -268,7 +321,7 @@ static int emit_reshape(Context *context, Unit *unit, Symbol *target, const F2cE
                           dimension + 1U, (depth + 1) * 4, "", dimension + 1U, dimension + 1U);
         free(extent);
     }
-    emit_source_extents(context, &source, depth + 1);
+    f2c_transform_emit_source_extents(context, &source, depth + 1);
     if (pad_expression != NULL) {
         f2c_transform_indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output, "const size_t f2c_transform_pad_count = %s;\n",
@@ -277,7 +330,14 @@ static int emit_reshape(Context *context, Unit *unit, Symbol *target, const F2cE
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output, "const size_t f2c_transform_order[%zu] = {", rank);
     for (dimension = 0U; dimension < rank; ++dimension) {
-        char *item = order != NULL ? vector_element(unit, order, dimension) : NULL;
+        char *item = NULL;
+        if (materialize_order) {
+            Buffer value = {0};
+            f2c_buffer_printf(&value, "%s[%zuU]", order_array.pointer, dimension);
+            item = f2c_buffer_take(&value);
+        } else if (order != NULL) {
+            item = vector_element(unit, order, dimension);
+        }
         if (item != NULL)
             f2c_buffer_printf(&context->output, "%s(size_t)(%s)", dimension == 0U ? "" : ", ",
                               item);
@@ -289,12 +349,16 @@ static int emit_reshape(Context *context, Unit *unit, Symbol *target, const F2cE
     f2c_buffer_append(&context->output, "};\n");
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
-                      "for (size_t i = 0U; i < %zuU; ++i) { if (f2c_transform_order[i] < 1U || "
-                      "f2c_transform_order[i] > %zuU) abort(); for (size_t j = 0U; j < i; ++j) "
-                      "if (f2c_transform_order[i] == f2c_transform_order[j]) abort(); }\n",
+                      "for (size_t f2c_transform_index = 0U; f2c_transform_index < %zuU; "
+                      "++f2c_transform_index) { if (f2c_transform_order[f2c_transform_index] "
+                      "< 1U || f2c_transform_order[f2c_transform_index] > %zuU) abort(); "
+                      "for (size_t f2c_transform_prior = 0U; "
+                      "f2c_transform_prior < f2c_transform_index; ++f2c_transform_prior) "
+                      "if (f2c_transform_order[f2c_transform_index] == "
+                      "f2c_transform_order[f2c_transform_prior]) abort(); }\n",
                       rank, rank);
-    emit_result_count(context, rank, depth + 1);
-    emit_result_allocation(context, unit, target, source_expression, depth + 1);
+    f2c_transform_emit_result_count(context, rank, depth + 1);
+    f2c_transform_emit_result_allocation(context, unit, target, source_expression, depth + 1);
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
                       "if (f2c_transform_source_count < f2c_transform_result_count%s) abort();\n",
@@ -321,23 +385,29 @@ static int emit_reshape(Context *context, Unit *unit, Symbol *target, const F2cE
                           dimension == 0U ? "" : ", ", dimension + 1U);
     f2c_buffer_append(&context->output, "})[d]; } ");
     f2c_buffer_append(&context->output, "if (sequence < f2c_transform_source_count) { ");
-    append_array_store(&context->output, target, "output", &source, "sequence");
+    f2c_transform_append_array_store(&context->output, target, "output", &source, "sequence");
     f2c_buffer_append(&context->output, "} ");
     if (pad_expression != NULL) {
         f2c_buffer_append(&context->output, "else { ");
-        append_array_store(&context->output, target, "output", &pad,
-                           "(sequence - f2c_transform_source_count) % "
-                           "f2c_transform_pad_count");
+        f2c_transform_append_array_store(&context->output, target, "output", &pad,
+                                         "(sequence - f2c_transform_source_count) % "
+                                         "f2c_transform_pad_count");
         f2c_buffer_append(&context->output, "} ");
     }
     f2c_buffer_append(&context->output, "}\n");
-    emit_result_commit(context, unit, target, rank, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &source, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &pad, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &shape_array, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &order_array, depth + 1);
+    f2c_transform_emit_result_commit(context, unit, target, rank, depth + 1);
     f2c_transform_free_array(&source);
     f2c_transform_free_array(&pad);
+    f2c_transform_free_array(&shape_array);
+    f2c_transform_free_array(&order_array);
     return 1;
 }
 
-static char *mask_test(Unit *unit, const F2cExpr *mask, const char *index) {
+char *f2c_transform_mask_test(Unit *unit, const F2cExpr *mask, const char *index) {
     Buffer result = {0};
     const F2cExpr *value = f2c_transform_argument_value(mask);
     char *scalar;
@@ -359,35 +429,68 @@ static int emit_pack(Context *context, Unit *unit, Symbol *target, const F2cExpr
                      int depth) {
     TransformArray source = {0};
     TransformArray vector = {0};
+    TransformArray mask_array = {0};
     const F2cExpr *mask = f2c_transform_argument(call, "mask", 1U);
+    const F2cExpr *mask_value = f2c_transform_argument_value(mask);
     const F2cExpr *vector_expression = f2c_transform_argument(call, "vector", 2U);
-    char *condition;
+    char *condition = NULL;
     if (target->rank != 1U ||
         !f2c_transform_array_view(unit, f2c_transform_argument(call, "array", 0U), &source) ||
-        !f2c_transform_compatible_array(target, &source) ||
+        !f2c_transform_compatible_array(target, &source) || mask_value == NULL ||
+        mask_value->type != TYPE_LOGICAL ||
+        (mask_value->rank != 0U && (!f2c_transform_array_view(unit, mask_value, &mask_array) ||
+                                    mask_array.rank != source.rank)) ||
         (vector_expression != NULL &&
          (!f2c_transform_array_view(unit, vector_expression, &vector) ||
           !f2c_transform_compatible_array(target, &vector)))) {
         f2c_diagnostic(context, line, 1, "PACK requires ARRAY/MASK and a rank-one result/VECTOR");
         f2c_transform_free_array(&source);
         f2c_transform_free_array(&vector);
-        return 1;
-    }
-    condition = mask_test(unit, mask, "i");
-    if (condition == NULL) {
-        f2c_diagnostic(context, line, 1, "PACK MASK must be a scalar or stored LOGICAL array");
-        f2c_transform_free_array(&source);
-        f2c_transform_free_array(&vector);
+        f2c_transform_free_array(&mask_array);
         return 1;
     }
     f2c_transform_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
-    emit_source_extents(context, &source, depth + 1);
+    if (!f2c_transform_materialize_array(context, unit, &source, "pack_source", depth + 1) ||
+        (mask_value->rank != 0U &&
+         !f2c_transform_materialize_array(context, unit, &mask_array, "pack_mask", depth + 1)) ||
+        (vector_expression != NULL &&
+         !f2c_transform_materialize_array(context, unit, &vector, "pack_vector", depth + 1))) {
+        f2c_diagnostic(context, line, 1, "PACK array expression could not be materialized");
+        f2c_transform_free_array(&source);
+        f2c_transform_free_array(&vector);
+        f2c_transform_free_array(&mask_array);
+        return 1;
+    }
+    if (mask_value->rank == 0U) {
+        condition = f2c_transform_mask_test(unit, mask, "f2c_transform_index");
+    } else {
+        Buffer expression = {0};
+        f2c_buffer_printf(&expression, "%s[f2c_transform_index]", mask_array.pointer);
+        condition = f2c_buffer_take(&expression);
+    }
+    if (condition == NULL) {
+        f2c_diagnostic(context, line, 1, "PACK MASK expression could not be lowered");
+        f2c_transform_free_array(&source);
+        f2c_transform_free_array(&vector);
+        f2c_transform_free_array(&mask_array);
+        return 1;
+    }
+    f2c_transform_emit_source_extents(context, &source, depth + 1);
+    if (mask_value->rank != 0U) {
+        f2c_transform_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output,
+                          "if ((size_t)(%s) != f2c_transform_source_count) "
+                          "abort();\n",
+                          mask_array.count);
+    }
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "size_t f2c_transform_selected = 0U;\n");
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
-                      "for (size_t i = 0U; i < f2c_transform_source_count; ++i) if (%s) "
+                      "for (size_t f2c_transform_index = 0U; "
+                      "f2c_transform_index < f2c_transform_source_count; "
+                      "++f2c_transform_index) if (%s) "
                       "++f2c_transform_selected;\n",
                       condition);
     f2c_transform_indent(&context->output, depth + 1);
@@ -396,29 +499,36 @@ static int emit_pack(Context *context, Unit *unit, Symbol *target, const F2cExpr
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output,
                       "if (f2c_transform_selected > f2c_transform_result_extent_1) abort();\n");
-    emit_result_count(context, 1U, depth + 1);
-    emit_result_allocation(context, unit, target, f2c_transform_argument(call, "array", 0U),
-                           depth + 1);
+    f2c_transform_emit_result_count(context, 1U, depth + 1);
+    f2c_transform_emit_result_allocation(context, unit, target,
+                                         f2c_transform_argument(call, "array", 0U), depth + 1);
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "size_t f2c_transform_output = 0U;\n");
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
-                      "for (size_t i = 0U; i < f2c_transform_source_count; ++i) if (%s) { ",
+                      "for (size_t f2c_transform_index = 0U; "
+                      "f2c_transform_index < f2c_transform_source_count; "
+                      "++f2c_transform_index) if (%s) { ",
                       condition);
-    append_array_store(&context->output, target, "f2c_transform_output", &source, "i");
+    f2c_transform_append_array_store(&context->output, target, "f2c_transform_output", &source,
+                                     "f2c_transform_index");
     f2c_buffer_append(&context->output, "++f2c_transform_output; }\n");
     if (vector_expression != NULL) {
         f2c_transform_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output,
                           "while (f2c_transform_output < f2c_transform_result_count) { ");
-        append_array_store(&context->output, target, "f2c_transform_output", &vector,
-                           "f2c_transform_output");
+        f2c_transform_append_array_store(&context->output, target, "f2c_transform_output", &vector,
+                                         "f2c_transform_output");
         f2c_buffer_append(&context->output, "++f2c_transform_output; }\n");
     }
-    emit_result_commit(context, unit, target, 1U, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &source, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &vector, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &mask_array, depth + 1);
+    f2c_transform_emit_result_commit(context, unit, target, 1U, depth + 1);
     free(condition);
     f2c_transform_free_array(&source);
     f2c_transform_free_array(&vector);
+    f2c_transform_free_array(&mask_array);
     return 1;
 }
 
@@ -456,29 +566,49 @@ static int emit_unpack(Context *context, Unit *unit, Symbol *target, const F2cEx
         field_length = f2c_character_length_expression(unit, field);
     f2c_transform_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
+    if (!f2c_transform_materialize_array(context, unit, &vector, "unpack_vector", depth + 1) ||
+        !f2c_transform_materialize_array(context, unit, &mask, "unpack_mask", depth + 1) ||
+        (field_scalar == NULL && !f2c_transform_materialize_array(context, unit, &field_array,
+                                                                  "unpack_field", depth + 1))) {
+        f2c_diagnostic(context, line, 1, "UNPACK array expression could not be materialized");
+        free(field_scalar);
+        free(field_length);
+        f2c_transform_free_array(&vector);
+        f2c_transform_free_array(&mask);
+        f2c_transform_free_array(&field_array);
+        return 1;
+    }
     for (dimension = 0U; dimension < mask.rank; ++dimension) {
         f2c_transform_indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output, "const size_t f2c_transform_result_extent_%zu = %s;\n",
                           dimension + 1U, mask.extents[dimension]);
     }
-    emit_result_count(context, mask.rank, depth + 1);
-    emit_result_allocation(context, unit, target, f2c_transform_argument(call, "vector", 0U),
-                           depth + 1);
+    f2c_transform_emit_result_count(context, mask.rank, depth + 1);
+    f2c_transform_emit_result_allocation(context, unit, target,
+                                         f2c_transform_argument(call, "vector", 0U), depth + 1);
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "size_t f2c_transform_vector_index = 0U;\n");
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
-                      "for (size_t i = 0U; i < f2c_transform_result_count; ++i) { if (%s[i]) { "
+                      "for (size_t f2c_transform_index = 0U; "
+                      "f2c_transform_index < f2c_transform_result_count; "
+                      "++f2c_transform_index) { if (%s[f2c_transform_index]) { "
                       "if (f2c_transform_vector_index >= (size_t)(%s)) abort(); ",
                       mask.pointer, vector.count);
-    append_array_store(&context->output, target, "i", &vector, "f2c_transform_vector_index");
+    f2c_transform_append_array_store(&context->output, target, "f2c_transform_index", &vector,
+                                     "f2c_transform_vector_index");
     f2c_buffer_append(&context->output, "++f2c_transform_vector_index; } else { ");
     if (field_scalar != NULL)
-        append_scalar_store(&context->output, target, "i", field_scalar, field_length);
+        append_scalar_store(&context->output, target, "f2c_transform_index", field_scalar,
+                            field_length);
     else
-        append_array_store(&context->output, target, "i", &field_array, "i");
+        f2c_transform_append_array_store(&context->output, target, "f2c_transform_index",
+                                         &field_array, "f2c_transform_index");
     f2c_buffer_append(&context->output, "} }\n");
-    emit_result_commit(context, unit, target, mask.rank, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &vector, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &mask, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &field_array, depth + 1);
+    f2c_transform_emit_result_commit(context, unit, target, mask.rank, depth + 1);
     free(field_scalar);
     free(field_length);
     f2c_transform_free_array(&vector);
@@ -508,7 +638,7 @@ static int emit_spread(Context *context, Unit *unit, Symbol *target, const F2cEx
         source_expression->type != target->type ||
         (target->type == TYPE_DERIVED && source_expression->derived_type != target->derived_type) ||
         dimension_code == NULL || copies_code == NULL ||
-        (source_rank == 0U ? source_scalar == NULL : source.pointer == NULL)) {
+        (source_rank == 0U ? source_scalar == NULL : source.count == NULL)) {
         f2c_diagnostic(context, line, 1,
                        "SPREAD requires SOURCE, scalar DIM/NCOPIES, and rank+1 target");
         free(source_scalar);
@@ -519,6 +649,15 @@ static int emit_spread(Context *context, Unit *unit, Symbol *target, const F2cEx
     }
     f2c_transform_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
+    if (source_rank != 0U &&
+        !f2c_transform_materialize_array(context, unit, &source, "spread_source", depth + 1)) {
+        f2c_diagnostic(context, line, 1, "SPREAD array expression could not be materialized");
+        free(source_scalar);
+        free(dimension_code);
+        free(copies_code);
+        f2c_transform_free_array(&source);
+        return 1;
+    }
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
                       "const int32_t f2c_transform_dimension = (int32_t)(%s); "
@@ -527,7 +666,7 @@ static int emit_spread(Context *context, Unit *unit, Symbol *target, const F2cEx
                       "f2c_transform_copies_value < 0) abort();\n",
                       dimension_code, copies_code, result_rank);
     if (source_rank != 0U)
-        emit_source_extents(context, &source, depth + 1);
+        f2c_transform_emit_source_extents(context, &source, depth + 1);
     for (dimension = 0U; dimension < result_rank; ++dimension) {
         f2c_transform_indent(&context->output, depth + 1);
         if (source_rank == 0U) {
@@ -559,10 +698,10 @@ static int emit_spread(Context *context, Unit *unit, Symbol *target, const F2cEx
                               dimension + 1U);
         }
     }
-    emit_result_count(context, result_rank, depth + 1);
+    f2c_transform_emit_result_count(context, result_rank, depth + 1);
     if (source_rank == 0U && target->type == TYPE_CHARACTER)
         source_length = f2c_character_length_expression(unit, source_expression);
-    emit_result_allocation(context, unit, target, source_expression, depth + 1);
+    f2c_transform_emit_result_allocation(context, unit, target, source_expression, depth + 1);
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
                       "for (size_t output = 0U; output < f2c_transform_result_count; ++output) { "
@@ -579,9 +718,11 @@ static int emit_spread(Context *context, Unit *unit, Symbol *target, const F2cEx
     if (source_rank == 0U)
         append_scalar_store(&context->output, target, "output", source_scalar, source_length);
     else
-        append_array_store(&context->output, target, "output", &source, "source_index");
+        f2c_transform_append_array_store(&context->output, target, "output", &source,
+                                         "source_index");
     f2c_buffer_append(&context->output, "}\n");
-    emit_result_commit(context, unit, target, result_rank, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &source, depth + 1);
+    f2c_transform_emit_result_commit(context, unit, target, result_rank, depth + 1);
     free(source_scalar);
     free(dimension_code);
     free(copies_code);
@@ -590,8 +731,8 @@ static int emit_spread(Context *context, Unit *unit, Symbol *target, const F2cEx
     return 1;
 }
 
-static char *slice_value(Unit *unit, const F2cExpr *expression, const char *slice,
-                         const char *fallback) {
+static char *slice_value(Unit *unit, const F2cExpr *expression, const TransformArray *array,
+                         const char *slice, const char *fallback) {
     const F2cExpr *value = f2c_transform_argument_value(expression);
     Buffer result = {0};
     char *scalar;
@@ -601,16 +742,12 @@ static char *slice_value(Unit *unit, const F2cExpr *expression, const char *slic
         scalar = f2c_transform_emit_expression(unit, value);
         return scalar;
     }
-    if (value->kind == F2C_EXPR_NAME && value->symbol != NULL) {
-        if (value->type == TYPE_CHARACTER) {
-            char *length = f2c_symbol_character_length(unit, value->symbol);
-            f2c_buffer_printf(&result, "%s + (%s) * (size_t)(%s)",
-                              f2c_symbol_c_name(unit, value->symbol), slice,
-                              length != NULL ? length : "0U");
-            free(length);
-        } else {
-            f2c_buffer_printf(&result, "%s[%s]", f2c_symbol_c_name(unit, value->symbol), slice);
-        }
+    if (array != NULL && array->pointer != NULL) {
+        if (value->type == TYPE_CHARACTER)
+            f2c_buffer_printf(&result, "%s + (%s) * (size_t)(%s)", array->pointer, slice,
+                              array->element_length != NULL ? array->element_length : "0U");
+        else
+            f2c_buffer_printf(&result, "%s[%s]", array->pointer, slice);
         return f2c_buffer_take(&result);
     }
     return NULL;
@@ -619,8 +756,12 @@ static char *slice_value(Unit *unit, const F2cExpr *expression, const char *slic
 static int emit_shift(Context *context, Unit *unit, Symbol *target, const F2cExpr *call,
                       size_t line, int depth, int end_off) {
     TransformArray source = {0};
+    TransformArray shift_array = {0};
+    TransformArray boundary_array = {0};
     const F2cExpr *shift = f2c_transform_argument(call, "shift", 1U);
+    const F2cExpr *shift_value_expression = f2c_transform_argument_value(shift);
     const F2cExpr *boundary = end_off ? f2c_transform_argument(call, "boundary", 2U) : NULL;
+    const F2cExpr *boundary_value_expression = f2c_transform_argument_value(boundary);
     const F2cExpr *dim_argument = f2c_transform_argument(call, "dim", end_off ? 3U : 2U);
     char *dimension_code =
         dim_argument != NULL ? f2c_transform_emit_expression(unit, dim_argument) : f2c_strdup("1");
@@ -631,22 +772,88 @@ static int emit_shift(Context *context, Unit *unit, Symbol *target, const F2cExp
     size_t dimension;
     if (!f2c_transform_array_view(unit, f2c_transform_argument(call, "array", 0U), &source) ||
         !f2c_transform_compatible_array(target, &source) || source.rank != target->rank ||
-        dimension_code == NULL || (end_off && target->type == TYPE_DERIVED && boundary == NULL)) {
+        dimension_code == NULL || shift_value_expression == NULL ||
+        (shift_value_expression->rank != 0U &&
+         (shift_value_expression->type != TYPE_INTEGER ||
+          !f2c_transform_array_view(unit, shift_value_expression, &shift_array) ||
+          shift_array.rank + 1U != source.rank)) ||
+        (boundary_value_expression != NULL && boundary_value_expression->rank != 0U &&
+         (!f2c_transform_array_view(unit, boundary_value_expression, &boundary_array) ||
+          !f2c_transform_compatible_array(target, &boundary_array) ||
+          boundary_array.rank + 1U != source.rank)) ||
+        (end_off && target->type == TYPE_DERIVED && boundary == NULL)) {
         f2c_diagnostic(context, line, 1, "%s requires conforming ARRAY/result and scalar DIM",
                        end_off ? "EOSHIFT" : "CSHIFT");
         f2c_transform_free_array(&source);
+        f2c_transform_free_array(&shift_array);
+        f2c_transform_free_array(&boundary_array);
         free(dimension_code);
         return 1;
     }
     f2c_transform_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
+    if (!f2c_transform_materialize_array(context, unit, &source, "shift_source", depth + 1) ||
+        (shift_value_expression->rank != 0U &&
+         !f2c_transform_materialize_array(context, unit, &shift_array, "shift_values",
+                                          depth + 1)) ||
+        (boundary_value_expression != NULL && boundary_value_expression->rank != 0U &&
+         !f2c_transform_materialize_array(context, unit, &boundary_array, "shift_boundary",
+                                          depth + 1))) {
+        f2c_diagnostic(context, line, 1, "%s ARRAY expression could not be materialized",
+                       end_off ? "EOSHIFT" : "CSHIFT");
+        f2c_transform_free_array(&source);
+        f2c_transform_free_array(&shift_array);
+        f2c_transform_free_array(&boundary_array);
+        free(dimension_code);
+        return 1;
+    }
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(
         &context->output,
         "const int32_t f2c_transform_dimension = (int32_t)(%s); "
         "if (f2c_transform_dimension < 1 || f2c_transform_dimension > %zu) abort();\n",
         dimension_code, source.rank);
-    emit_source_extents(context, &source, depth + 1);
+    f2c_transform_emit_source_extents(context, &source, depth + 1);
+    if (shift_value_expression->rank != 0U) {
+        f2c_transform_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output, "const size_t f2c_transform_shift_extents[%zu] = {",
+                          shift_array.rank);
+        for (dimension = 0U; dimension < shift_array.rank; ++dimension)
+            f2c_buffer_printf(&context->output, "%s%s", dimension == 0U ? "" : ", ",
+                              shift_array.extents[dimension]);
+        f2c_buffer_append(&context->output, "};\n");
+        f2c_transform_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output, "for (size_t d = 0U, k = 0U; d < "
+                                            "sizeof(f2c_transform_shift_extents) / "
+                                            "sizeof(f2c_transform_shift_extents[0]) + 1U; ++d) "
+                                            "if (d + 1U != (size_t)f2c_transform_dimension && "
+                                            "f2c_transform_shift_extents[k++] != "
+                                            "((const size_t[]){");
+        for (dimension = 0U; dimension < source.rank; ++dimension)
+            f2c_buffer_printf(&context->output, "%sf2c_transform_source_extent_%zu",
+                              dimension == 0U ? "" : ", ", dimension + 1U);
+        f2c_buffer_append(&context->output, "})[d]) abort();\n");
+    }
+    if (boundary_value_expression != NULL && boundary_value_expression->rank != 0U) {
+        f2c_transform_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output, "const size_t f2c_transform_boundary_extents[%zu] = {",
+                          boundary_array.rank);
+        for (dimension = 0U; dimension < boundary_array.rank; ++dimension)
+            f2c_buffer_printf(&context->output, "%s%s", dimension == 0U ? "" : ", ",
+                              boundary_array.extents[dimension]);
+        f2c_buffer_append(&context->output, "};\n");
+        f2c_transform_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output, "for (size_t d = 0U, k = 0U; d < "
+                                            "sizeof(f2c_transform_boundary_extents) / "
+                                            "sizeof(f2c_transform_boundary_extents[0]) + 1U; ++d) "
+                                            "if (d + 1U != (size_t)f2c_transform_dimension && "
+                                            "f2c_transform_boundary_extents[k++] != "
+                                            "((const size_t[]){");
+        for (dimension = 0U; dimension < source.rank; ++dimension)
+            f2c_buffer_printf(&context->output, "%sf2c_transform_source_extent_%zu",
+                              dimension == 0U ? "" : ", ", dimension + 1U);
+        f2c_buffer_append(&context->output, "})[d]) abort();\n");
+    }
     for (dimension = 0U; dimension < source.rank; ++dimension) {
         f2c_transform_indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output,
@@ -654,9 +861,9 @@ static int emit_shift(Context *context, Unit *unit, Symbol *target, const F2cExp
                           "f2c_transform_source_extent_%zu;\n",
                           dimension + 1U, dimension + 1U);
     }
-    emit_result_count(context, source.rank, depth + 1);
-    emit_result_allocation(context, unit, target, f2c_transform_argument(call, "array", 0U),
-                           depth + 1);
+    f2c_transform_emit_result_count(context, source.rank, depth + 1);
+    f2c_transform_emit_result_allocation(context, unit, target,
+                                         f2c_transform_argument(call, "array", 0U), depth + 1);
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
                       "for (size_t output = 0U; output < f2c_transform_result_count; ++output) { "
@@ -678,9 +885,10 @@ static int emit_shift(Context *context, Unit *unit, Symbol *target, const F2cExp
                               dimension + 1U, dimension, dimension + 1U);
     }
     {
-        char *shift_value = slice_value(unit, shift, "slice", "0");
+        char *shift_value = slice_value(unit, shift, &shift_array, "slice", "0");
         const char *boundary_fallback = target->type == TYPE_CHARACTER ? "\" \"" : "0";
-        char *boundary_value = slice_value(unit, boundary, "slice", boundary_fallback);
+        char *boundary_value =
+            slice_value(unit, boundary, &boundary_array, "slice", boundary_fallback);
         char *boundary_length =
             target->type == TYPE_CHARACTER
                 ? (boundary != NULL ? f2c_character_length_expression(
@@ -717,173 +925,26 @@ static int emit_shift(Context *context, Unit *unit, Symbol *target, const F2cExp
                                 boundary_value != NULL ? boundary_value : boundary_fallback,
                                 boundary_length);
             f2c_buffer_append(&context->output, "} else { ");
-            append_array_store(&context->output, target, "output", &source, "source_index");
+            f2c_transform_append_array_store(&context->output, target, "output", &source,
+                                             "source_index");
             f2c_buffer_append(&context->output, "} ");
         } else {
-            append_array_store(&context->output, target, "output", &source, "source_index");
+            f2c_transform_append_array_store(&context->output, target, "output", &source,
+                                             "source_index");
         }
         free(shift_value);
         free(boundary_value);
         free(boundary_length);
     }
     f2c_buffer_append(&context->output, "}\n");
-    emit_result_commit(context, unit, target, source.rank, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &source, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &shift_array, depth + 1);
+    f2c_transform_emit_array_cleanup(context, &boundary_array, depth + 1);
+    f2c_transform_emit_result_commit(context, unit, target, source.rank, depth + 1);
     f2c_transform_free_array(&source);
+    f2c_transform_free_array(&shift_array);
+    f2c_transform_free_array(&boundary_array);
     free(dimension_code);
-    return 1;
-}
-
-static int emit_findloc(Context *context, Unit *unit, Symbol *target, const F2cExpr *call,
-                        size_t line, int depth) {
-    TransformArray source = {0};
-    const F2cExpr *value_expression = f2c_transform_argument(call, "value", 1U);
-    const F2cExpr *dim_expression = f2c_transform_argument(call, "dim", 2U);
-    const F2cExpr *mask = f2c_transform_argument(call, "mask", 3U);
-    const F2cExpr *back_expression = f2c_transform_argument(call, "back", 5U);
-    char *value = f2c_transform_emit_expression(unit, value_expression);
-    char *back = back_expression != NULL ? f2c_transform_emit_expression(unit, back_expression)
-                                         : f2c_strdup("false");
-    char *dimension_code =
-        dim_expression != NULL ? f2c_transform_emit_expression(unit, dim_expression) : NULL;
-    char *condition = mask != NULL ? mask_test(unit, mask, "index") : f2c_strdup("true");
-    char *comparison = NULL;
-    size_t dimension;
-    if (target->type != TYPE_INTEGER ||
-        !f2c_transform_array_view(unit, f2c_transform_argument(call, "array", 0U), &source) ||
-        value == NULL || back == NULL || condition == NULL ||
-        (dim_expression == NULL
-             ? target->rank != 1U
-             : source.rank < 2U || target->rank + 1U != source.rank || dimension_code == NULL)) {
-        f2c_diagnostic(context, line, 1,
-                       "FINDLOC requires stored ARRAY, scalar VALUE/BACK, conforming MASK, and a "
-                       "result rank selected by DIM");
-        f2c_transform_free_array(&source);
-        free(value);
-        free(back);
-        free(dimension_code);
-        free(condition);
-        return 1;
-    }
-    if (source.type == TYPE_DERIVED) {
-        f2c_diagnostic(context, line, 1,
-                       "FINDLOC does not accept a derived-type ARRAY without defined equality");
-        f2c_transform_free_array(&source);
-        free(value);
-        free(back);
-        free(dimension_code);
-        free(condition);
-        return 1;
-    }
-    if (source.type == TYPE_CHARACTER) {
-        char *value_length = f2c_character_length_expression(unit, value_expression);
-        Buffer expression = {0};
-        f2c_buffer_printf(&expression,
-                          "f2c_character_compare(%s + index * (size_t)(%s), (size_t)(%s), "
-                          "%s, (size_t)(%s)) == 0",
-                          source.pointer,
-                          source.element_length != NULL ? source.element_length : "0U",
-                          source.element_length != NULL ? source.element_length : "0U", value,
-                          value_length != NULL ? value_length : "0U");
-        comparison = f2c_buffer_take(&expression);
-        free(value_length);
-    } else {
-        Buffer expression = {0};
-        f2c_buffer_printf(&expression, "%s[index] == (%s)", source.pointer, value);
-        comparison = f2c_buffer_take(&expression);
-    }
-    if (comparison == NULL) {
-        f2c_diagnostic(context, line, 1, "FINDLOC comparison could not be lowered");
-        f2c_transform_free_array(&source);
-        free(value);
-        free(back);
-        free(dimension_code);
-        free(condition);
-        return 1;
-    }
-    f2c_transform_indent(&context->output, depth);
-    f2c_buffer_append(&context->output, "{\n");
-    emit_source_extents(context, &source, depth + 1);
-    if (dim_expression != NULL) {
-        f2c_transform_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output,
-                          "const int32_t f2c_transform_dimension = (int32_t)(%s); "
-                          "if (f2c_transform_dimension < 1 || "
-                          "f2c_transform_dimension > %zu) abort();\n",
-                          dimension_code, source.rank);
-        for (dimension = 0U; dimension < target->rank; ++dimension) {
-            f2c_transform_indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "const size_t f2c_transform_result_extent_%zu = "
-                              "f2c_transform_dimension > %zu ? "
-                              "f2c_transform_source_extent_%zu : "
-                              "f2c_transform_source_extent_%zu;\n",
-                              dimension + 1U, dimension + 1U, dimension + 1U, dimension + 2U);
-        }
-        emit_result_count(context, target->rank, depth + 1);
-        emit_result_allocation(context, unit, target, NULL, depth + 1);
-        f2c_transform_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "const size_t f2c_transform_extents[%zu] = {",
-                          source.rank);
-        for (dimension = 0U; dimension < source.rank; ++dimension)
-            f2c_buffer_printf(&context->output, "%sf2c_transform_source_extent_%zu",
-                              dimension == 0U ? "" : ", ", dimension + 1U);
-        f2c_buffer_append(&context->output, "};\n");
-        f2c_transform_indent(&context->output, depth + 1);
-        f2c_buffer_printf(
-            &context->output,
-            "for (size_t output = 0U; output < f2c_transform_result_count; ++output) { "
-            "size_t base = 0U, source_stride = 1U, result_stride = 1U, "
-            "selected_stride = 1U; for (size_t d = 0U; d < %zuU; ++d) { "
-            "if (f2c_transform_dimension == (int32_t)(d + 1U)) "
-            "selected_stride = source_stride; else { size_t coordinate = "
-            "(output / result_stride) %% f2c_transform_extents[d]; "
-            "base += coordinate * source_stride; result_stride *= "
-            "f2c_transform_extents[d]; } source_stride *= f2c_transform_extents[d]; } "
-            "f2c_transform_result[output] = 0; size_t selected_extent = "
-            "f2c_transform_extents[(size_t)f2c_transform_dimension - 1U]; "
-            "for (size_t step = 0U; step < selected_extent; ++step) { "
-            "size_t coordinate = (%s) ? selected_extent - 1U - step : step; "
-            "size_t index = base + coordinate * selected_stride; "
-            "if ((%s) && (%s)) { "
-            "f2c_transform_result[output] = (int32_t)(coordinate + 1U); break; } } }\n",
-            source.rank, back, condition, comparison);
-        emit_result_commit(context, unit, target, target->rank, depth + 1);
-        f2c_transform_free_array(&source);
-        free(value);
-        free(back);
-        free(dimension_code);
-        free(condition);
-        free(comparison);
-        return 1;
-    }
-    f2c_transform_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output, "const size_t f2c_transform_result_extent_1 = %zuU;\n",
-                      source.rank);
-    emit_result_count(context, 1U, depth + 1);
-    emit_result_allocation(context, unit, target, NULL, depth + 1);
-    f2c_transform_indent(&context->output, depth + 1);
-    f2c_buffer_append(&context->output, "for (size_t d = 0U; d < f2c_transform_result_count; ++d) "
-                                        "f2c_transform_result[d] = 0;\n");
-    f2c_transform_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output,
-                      "for (size_t step = 0U; step < f2c_transform_source_count; ++step) { "
-                      "size_t index = (%s) ? f2c_transform_source_count - 1U - step : step; "
-                      "if ((%s) && (%s)) { size_t stride = 1U; ",
-                      back, condition, comparison);
-    for (dimension = 0U; dimension < source.rank; ++dimension)
-        f2c_buffer_printf(&context->output,
-                          "f2c_transform_result[%zu] = (int32_t)((index / stride) %% "
-                          "f2c_transform_source_extent_%zu) + 1; stride *= "
-                          "f2c_transform_source_extent_%zu; ",
-                          dimension, dimension + 1U, dimension + 1U);
-    f2c_buffer_append(&context->output, "break; } }\n");
-    emit_result_commit(context, unit, target, 1U, depth + 1);
-    f2c_transform_free_array(&source);
-    free(value);
-    free(back);
-    free(dimension_code);
-    free(condition);
-    free(comparison);
     return 1;
 }
 
@@ -896,14 +957,18 @@ int f2c_emit_transform_assignment(Context *context, Unit *unit, const F2cExpr *l
         return 0;
     if (strcmp(name, "reshape") != 0 && strcmp(name, "pack") != 0 && strcmp(name, "unpack") != 0 &&
         strcmp(name, "spread") != 0 && strcmp(name, "cshift") != 0 &&
-        strcmp(name, "eoshift") != 0 && strcmp(name, "findloc") != 0)
+        strcmp(name, "eoshift") != 0 && strcmp(name, "findloc") != 0 &&
+        strcmp(name, "transpose") != 0 && strcmp(name, "matmul") != 0 &&
+        strcmp(name, "shape") != 0 && strcmp(name, "lbound") != 0 && strcmp(name, "ubound") != 0)
         return 0;
+    if (strcmp(name, "shape") == 0 || strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0)
+        return f2c_transform_emit_inquiry(context, unit, left, right, line, depth);
     if (!f2c_transform_supported_element_type(target)) {
-        f2c_diagnostic(context, line, 1,
-                       "%s result currently requires an intrinsic non-CHARACTER element type",
-                       name);
+        f2c_diagnostic(context, line, 1, "%s result has an unsupported element type", name);
         return 1;
     }
+    if (strcmp(name, "transpose") == 0 || strcmp(name, "matmul") == 0)
+        return f2c_transform_emit_matrix(context, unit, target, right, line, depth);
     if (strcmp(name, "reshape") == 0)
         return emit_reshape(context, unit, target, right, line, depth);
     if (strcmp(name, "pack") == 0)
@@ -916,5 +981,5 @@ int f2c_emit_transform_assignment(Context *context, Unit *unit, const F2cExpr *l
         return emit_shift(context, unit, target, right, line, depth, 0);
     if (strcmp(name, "eoshift") == 0)
         return emit_shift(context, unit, target, right, line, depth, 1);
-    return emit_findloc(context, unit, target, right, line, depth);
+    return f2c_transform_emit_findloc(context, unit, target, right, line, depth);
 }

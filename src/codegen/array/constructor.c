@@ -179,15 +179,7 @@ static F2cExpr *clone_constructor_expression(const ConstructorEmitter *emitter,
     clone = (F2cExpr *)calloc(1U, sizeof(*clone));
     if (clone == NULL)
         return NULL;
-    clone->kind = expression->kind;
-    clone->type = expression->type;
-    clone->rank = expression->rank;
-    clone->definable = expression->definable;
-    clone->source_offset = expression->source_offset;
-    clone->source_length = expression->source_length;
-    clone->parse_error_offset = expression->parse_error_offset;
-    clone->symbol = expression->symbol;
-    clone->temporary_index = expression->temporary_index;
+    *clone = *expression;
     clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
     clone->source = expression->source != NULL ? f2c_strdup(expression->source) : NULL;
     replacement = constructor_substitution(emitter, expression);
@@ -195,15 +187,27 @@ static F2cExpr *clone_constructor_expression(const ConstructorEmitter *emitter,
         replacement != NULL
             ? f2c_strdup(replacement)
             : (expression->lowered_c != NULL ? f2c_strdup(expression->lowered_c) : NULL);
+    clone->lowered_extent_c =
+        expression->lowered_extent_c != NULL ? f2c_strdup(expression->lowered_extent_c) : NULL;
+    clone->lowered_character_length_c = expression->lowered_character_length_c != NULL
+                                            ? f2c_strdup(expression->lowered_character_length_c)
+                                            : NULL;
+    clone->children = NULL;
+    clone->child_count = 0U;
+    clone->child_capacity = 0U;
     if ((expression->text != NULL && clone->text == NULL) ||
         (expression->source != NULL && clone->source == NULL) ||
-        ((replacement != NULL || expression->lowered_c != NULL) && clone->lowered_c == NULL))
+        ((replacement != NULL || expression->lowered_c != NULL) && clone->lowered_c == NULL) ||
+        (expression->lowered_extent_c != NULL && clone->lowered_extent_c == NULL) ||
+        (expression->lowered_character_length_c != NULL &&
+         clone->lowered_character_length_c == NULL))
         goto failed;
     if (replacement != NULL) {
         clone->kind = F2C_EXPR_NAME;
         clone->type = TYPE_INTEGER;
         clone->rank = 0U;
-        clone->definable = 0;
+        clone->definable = 1;
+        clone->value_category = F2C_VALUE_VARIABLE;
         clone->symbol = NULL;
         return clone;
     }
@@ -240,6 +244,10 @@ static int emit_constructor_scalar(ConstructorEmitter *emitter, const F2cExpr *e
     if ((emitter->character && substituted->type != TYPE_CHARACTER) ||
         (!emitter->character && substituted->type == TYPE_CHARACTER))
         goto cleanup;
+    if (emitter->target->type == TYPE_DERIVED &&
+        (substituted->type != TYPE_DERIVED || substituted->derived_type == NULL ||
+         substituted->derived_type != emitter->target->derived_type))
+        goto cleanup;
     if (!emit_constructor_character_length(emitter, substituted, depth))
         goto cleanup;
     emit_constructor_capacity(emitter, depth);
@@ -250,6 +258,34 @@ static int emit_constructor_scalar(ConstructorEmitter *emitter, const F2cExpr *e
                                                    emitter->character_length, substituted, code,
                                                    depth))
             goto cleanup;
+        f2c_array_indent(&emitter->context->output, depth);
+        f2c_buffer_printf(&emitter->context->output, "++%s;\n", emitter->index);
+    } else if (emitter->target->type == TYPE_DERIVED) {
+        const char *name = emitter->target->derived_type->c_name;
+        const size_t temporary = emitter->next_temporary++;
+        if (substituted->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR ||
+            substituted->kind == F2C_EXPR_CALL) {
+            f2c_array_indent(&emitter->context->output, depth);
+            f2c_buffer_printf(&emitter->context->output, "%s f2c_constructor_derived_%zu = %s;\n",
+                              name, temporary, code);
+            if (substituted->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR) {
+                f2c_array_indent(&emitter->context->output, depth);
+                f2c_buffer_printf(&emitter->context->output,
+                                  "f2c_initialize_%s(&f2c_constructor_derived_%zu);\n", name,
+                                  temporary);
+            }
+            f2c_array_indent(&emitter->context->output, depth);
+            f2c_buffer_printf(&emitter->context->output,
+                              "f2c_clone_%s(&%s[%s], &f2c_constructor_derived_%zu);\n", name,
+                              emitter->storage, emitter->index, temporary);
+            f2c_array_indent(&emitter->context->output, depth);
+            f2c_buffer_printf(&emitter->context->output,
+                              "f2c_destroy_%s(&f2c_constructor_derived_%zu);\n", name, temporary);
+        } else {
+            f2c_array_indent(&emitter->context->output, depth);
+            f2c_buffer_printf(&emitter->context->output, "f2c_clone_%s(&%s[%s], &(%s));\n", name,
+                              emitter->storage, emitter->index, code);
+        }
         f2c_array_indent(&emitter->context->output, depth);
         f2c_buffer_printf(&emitter->context->output, "++%s;\n", emitter->index);
     } else {
@@ -333,17 +369,26 @@ static int emit_constructor_whole_array(ConstructorEmitter *emitter, const F2cEx
         f2c_array_indent(&emitter->context->output, depth + 1);
         f2c_buffer_printf(&emitter->context->output, "++%s;\n", emitter->index);
     } else {
-        if (!f2c_type_is_numeric(source->type) && source->type != TYPE_LOGICAL) {
+        if (emitter->target->type == TYPE_DERIVED && source->type == TYPE_DERIVED &&
+            source->derived_type == emitter->target->derived_type) {
+            f2c_array_indent(&emitter->context->output, depth + 1);
+            f2c_buffer_printf(&emitter->context->output,
+                              "f2c_clone_%s(&%s[%s++], &%s["
+                              "f2c_constructor_source_%zu]);\n",
+                              emitter->target->derived_type->c_name, emitter->storage,
+                              emitter->index, f2c_symbol_c_name(emitter->unit, source), temporary);
+        } else if (!f2c_type_is_numeric(source->type) && source->type != TYPE_LOGICAL) {
             free(source_length);
             free(source_count);
             return 0;
+        } else {
+            f2c_array_indent(&emitter->context->output, depth + 1);
+            f2c_buffer_printf(&emitter->context->output,
+                              "%s[%s++] = (%s)%s["
+                              "f2c_constructor_source_%zu];\n",
+                              emitter->storage, emitter->index, f2c_symbol_c_type(emitter->target),
+                              f2c_symbol_c_name(emitter->unit, source), temporary);
         }
-        f2c_array_indent(&emitter->context->output, depth + 1);
-        f2c_buffer_printf(&emitter->context->output,
-                          "%s[%s++] = (%s)%s["
-                          "f2c_constructor_source_%zu];\n",
-                          emitter->storage, emitter->index, f2c_symbol_c_type(emitter->target),
-                          f2c_symbol_c_name(emitter->unit, source), temporary);
     }
     f2c_array_indent(&emitter->context->output, depth);
     f2c_buffer_append(&emitter->context->output, "}\n");
@@ -468,6 +513,34 @@ static int emit_constructor_value(ConstructorEmitter *emitter, const F2cExpr *ex
     if (expression->rank != 0U)
         return 0;
     return emit_constructor_scalar(emitter, expression, depth);
+}
+
+int f2c_array_emit_constructor_values(Context *context, Unit *unit, Symbol *target,
+                                      const F2cExpr *constructor, const char *storage,
+                                      const char *count, const char *capacity,
+                                      const char *character_length,
+                                      const char *character_length_set, int character, int dynamic,
+                                      int infer_character_length, int depth) {
+    ConstructorEmitter emitter;
+    int result;
+    if (context == NULL || unit == NULL || target == NULL || constructor == NULL ||
+        storage == NULL || count == NULL)
+        return 0;
+    memset(&emitter, 0, sizeof(emitter));
+    emitter.context = context;
+    emitter.unit = unit;
+    emitter.target = target;
+    emitter.storage = storage;
+    emitter.index = count;
+    emitter.capacity = capacity;
+    emitter.character_length = character_length;
+    emitter.character_length_set = character_length_set;
+    emitter.character = character;
+    emitter.dynamic = dynamic;
+    emitter.infer_character_length = infer_character_length;
+    result = emit_constructor_value(&emitter, constructor, depth);
+    release_constructor_emitter(&emitter);
+    return result;
 }
 
 int f2c_array_emit_numeric_constructor(Context *context, Unit *unit, Symbol *left_symbol,

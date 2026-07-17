@@ -17,6 +17,8 @@ static F2cExpr *clone_expression(const F2cExpr *source) {
     clone->text = NULL;
     clone->source = NULL;
     clone->lowered_c = NULL;
+    clone->lowered_extent_c = NULL;
+    clone->lowered_character_length_c = NULL;
     clone->children = NULL;
     clone->child_count = 0U;
     clone->child_capacity = 0U;
@@ -25,6 +27,13 @@ static F2cExpr *clone_expression(const F2cExpr *source) {
     if (source->source != NULL && (clone->source = f2c_strdup(source->source)) == NULL)
         goto failed;
     if (source->lowered_c != NULL && (clone->lowered_c = f2c_strdup(source->lowered_c)) == NULL)
+        goto failed;
+    if (source->lowered_extent_c != NULL &&
+        (clone->lowered_extent_c = f2c_strdup(source->lowered_extent_c)) == NULL)
+        goto failed;
+    if (source->lowered_character_length_c != NULL &&
+        (clone->lowered_character_length_c = f2c_strdup(source->lowered_character_length_c)) ==
+            NULL)
         goto failed;
     if (source->child_count != 0U) {
         if (source->child_count > SIZE_MAX / sizeof(*clone->children))

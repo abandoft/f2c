@@ -175,8 +175,7 @@ static void emit_lifecycle_prototypes(Context *context, Units *units) {
             for (size_t finalizer = 0U; finalizer < derived->finalizer_count; ++finalizer) {
                 Unit *procedure = find_finalizer(context, derived->finalizers[finalizer]);
                 if (procedure != NULL)
-                    f2c_buffer_printf(&context->output, "void %s(%s *);\n", procedure->name,
-                                      derived->c_name);
+                    f2c_emit_procedure_prototype(&context->output, procedure);
             }
         }
     }
@@ -216,8 +215,7 @@ static void emit_dispatch_parameter(Buffer *output, const Symbol *procedure, siz
         f2c_buffer_printf(&name, "f2c_argument_%zu", parameter);
         f2c_emit_procedure_pointer_type(output, nested, name.data);
         free(name.data);
-    } else if (procedure->external_parameter_allocatable[parameter] ||
-               procedure->external_parameter_pointer[parameter]) {
+    } else if (procedure->external_parameter_descriptor[parameter]) {
         f2c_buffer_printf(output, "f2c_descriptor *f2c_argument_%zu", parameter);
     } else if (procedure->type_bound && parameter == procedure->type_bound_pass_index &&
                !procedure->type_bound_nopass) {
@@ -261,7 +259,8 @@ static void emit_dispatch_wrapper(Context *context, F2cDerivedType *dynamic_type
     for (parameter = 0U; parameter < signature->external_parameter_count; ++parameter)
         if (signature->external_parameter_types[parameter] == TYPE_CHARACTER &&
             !signature->external_parameter_allocatable[parameter] &&
-            !signature->external_parameter_pointer[parameter])
+            !signature->external_parameter_pointer[parameter] &&
+            !signature->external_parameter_descriptor[parameter])
             f2c_buffer_printf(&context->output, ", size_t f2c_length_%zu", parameter);
     f2c_buffer_append(&context->output, ") {\n    ");
     if (!signature->external_subroutine && !character_result)
@@ -286,7 +285,8 @@ static void emit_dispatch_wrapper(Context *context, F2cDerivedType *dynamic_type
     for (parameter = 0U; parameter < signature->external_parameter_count; ++parameter)
         if (signature->external_parameter_types[parameter] == TYPE_CHARACTER &&
             !signature->external_parameter_allocatable[parameter] &&
-            !signature->external_parameter_pointer[parameter])
+            !signature->external_parameter_pointer[parameter] &&
+            !signature->external_parameter_descriptor[parameter])
             f2c_buffer_printf(&context->output, ", f2c_length_%zu", parameter);
     f2c_buffer_append(&context->output, ");\n}\n");
 }
@@ -478,7 +478,14 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                 if (procedure == NULL || rank == 0U)
                     continue;
                 f2c_buffer_printf(&context->output,
-                                  "    if (rank == %zuU) { %s(value); "
+                                  "    if (rank == %zuU) { f2c_descriptor f2c_finalizer = {"
+                                  ".data = value, .element_size = sizeof(*value), .rank = rank}; "
+                                  "for (size_t d = 0U; d < rank; ++d) { "
+                                  "f2c_finalizer.lower[d] = 1; f2c_finalizer.extent[d] = "
+                                  "d == 0U ? (int64_t)count : 1; f2c_finalizer.stride[d] = "
+                                  "d == 0U ? 1 : f2c_descriptor_stride_extent("
+                                  "f2c_finalizer.stride[d - 1U], "
+                                  "(size_t)f2c_finalizer.extent[d - 1U]); } %s(&f2c_finalizer); "
                                   "for (size_t i = count; i-- > 0U;) "
                                   "f2c_destroy_own_components_%s(&value[i]); ",
                                   rank, procedure->name, derived->c_name);

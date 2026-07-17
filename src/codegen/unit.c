@@ -12,7 +12,7 @@ static void emit_declarations(Context *context, Unit *unit) {
         Symbol *symbol = &unit->symbols[i];
         size_t dimension;
         const char *name;
-        if (!symbol->argument || (!symbol->allocatable && !symbol->pointer))
+        if (!symbol->argument || !f2c_symbol_uses_descriptor(symbol))
             continue;
         name = f2c_symbol_c_name(unit, symbol);
         f2c_unit_indent(output, 1);
@@ -35,26 +35,50 @@ static void emit_declarations(Context *context, Unit *unit) {
                               "size_t f2c_char_len_%s = f2c_descriptor_%s != NULL ? "
                               "f2c_descriptor_%s->character_length : 0U;\n",
                               name, name, name);
+        } else if (symbol->type == TYPE_CHARACTER && symbol->character_length != NULL &&
+                   strcmp(symbol->character_length, "*") == 0) {
+            f2c_unit_indent(output, 1);
+            f2c_buffer_printf(output,
+                              "const size_t f2c_len_%s = f2c_descriptor_%s != NULL ? "
+                              "f2c_descriptor_%s->character_length : 0U;\n",
+                              name, name, name);
         }
         for (dimension = 0U; dimension < symbol->rank; ++dimension) {
+            char *declared_lower = !symbol->allocatable && !symbol->pointer
+                                       ? f2c_emit_typed_expression(
+                                             unit, symbol->dimensions[dimension].lower_expression)
+                                       : NULL;
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(
                 output,
                 "if (f2c_descriptor_%s != NULL && (f2c_descriptor_%s->lower[%zu] < "
                 "INT32_MIN || f2c_descriptor_%s->lower[%zu] > INT32_MAX || "
                 "f2c_descriptor_%s->extent[%zu] < 0 || f2c_descriptor_%s->extent[%zu] > "
-                "INT32_MAX)) abort();\n",
-                name, name, dimension, name, dimension, name, dimension, name, dimension);
+                "INT32_MAX || (f2c_descriptor_%s->extent[%zu] > 1 && "
+                "f2c_descriptor_%s->stride[%zu] == 0))) abort();\n",
+                name, name, dimension, name, dimension, name, dimension, name, dimension, name,
+                dimension, name, dimension);
             f2c_unit_indent(output, 1);
-            f2c_buffer_printf(output,
-                              "int32_t %s_lower_%zu = f2c_descriptor_%s != NULL ? "
-                              "(int32_t)f2c_descriptor_%s->lower[%zu] : 1;\n",
-                              name, dimension + 1U, name, name, dimension);
+            if (symbol->allocatable || symbol->pointer)
+                f2c_buffer_printf(output,
+                                  "int32_t %s_lower_%zu = f2c_descriptor_%s != NULL ? "
+                                  "(int32_t)f2c_descriptor_%s->lower[%zu] : 1;\n",
+                                  name, dimension + 1U, name, name, dimension);
+            else
+                f2c_buffer_printf(output, "const int32_t %s_lower_%zu = (int32_t)(%s);\n", name,
+                                  dimension + 1U, declared_lower != NULL ? declared_lower : "1");
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output,
                               "int32_t %s_extent_%zu = f2c_descriptor_%s != NULL ? "
                               "(int32_t)f2c_descriptor_%s->extent[%zu] : 0;\n",
                               name, dimension + 1U, name, name, dimension);
+            f2c_unit_indent(output, 1);
+            f2c_buffer_printf(output,
+                              "%sptrdiff_t %s_stride_%zu = f2c_descriptor_%s != NULL ? "
+                              "f2c_descriptor_%s->stride[%zu] : 0;\n",
+                              symbol->allocatable || symbol->pointer ? "" : "const ", name,
+                              dimension + 1U, name, name, dimension);
+            free(declared_lower);
         }
     }
     {
@@ -335,8 +359,7 @@ static int statement_function_definition_line(const Unit *unit, size_t statement
         return 0;
     line = &context->lines.items[line_index];
     start = line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U : 0U;
-    if (start + 3U >= line->token_count ||
-        line->tokens[start].kind != F2C_TOKEN_IDENTIFIER ||
+    if (start + 3U >= line->token_count || line->tokens[start].kind != F2C_TOKEN_IDENTIFIER ||
         line->tokens[start + 1U].kind != F2C_TOKEN_LEFT_PAREN ||
         !f2c_token_matching_delimiter(line->tokens, line->token_count, start + 1U, &close) ||
         close + 1U >= line->token_count || line->tokens[close + 1U].kind != F2C_TOKEN_OPERATOR ||
@@ -379,8 +402,7 @@ static void emit_character_temporaries(Buffer *output, Unit *unit) {
     size_t i;
     for (i = 0U; i < unit->statement_count; ++i)
         if (!statement_function_definition_line(unit, i))
-            f2c_visit_statement_expressions(&unit->statements[i], emit_character_temporary,
-                                            output);
+            f2c_visit_statement_expressions(&unit->statements[i], emit_character_temporary, output);
 }
 
 static size_t statement_function_expansion_count(F2cExpr *expression) {
@@ -426,8 +448,7 @@ static void assign_statement_function_temporary(F2cExpr *expression, void *state
         return;
     expression->statement_temporary_index = assigner->next++;
     expression->statement_nested_temporary_begin = assigner->next;
-    nested = statement_function_expansion_count(
-        expression->symbol->statement_function_expression);
+    nested = statement_function_expansion_count(expression->symbol->statement_function_expression);
     if (nested != SIZE_MAX && nested <= SIZE_MAX - assigner->next)
         assigner->next += nested;
 }
@@ -456,14 +477,14 @@ static void emit_statement_function_temporary_for_call(StatementFunctionTemporar
         f2c_buffer_printf(emitter->output, "%s f2c_statement_argument_%zu_%zu = {0};\n",
                           f2c_symbol_c_type(dummy), temporary, argument);
         f2c_unit_indent(emitter->output, 1);
-        f2c_buffer_printf(emitter->output, "(void)f2c_statement_argument_%zu_%zu;\n",
-                          temporary, argument);
+        f2c_buffer_printf(emitter->output, "(void)f2c_statement_argument_%zu_%zu;\n", temporary,
+                          argument);
     }
 }
 
 static void emit_nested_statement_function_temporaries(F2cExpr *expression,
-                                                        StatementFunctionTemporaryEmitter *emitter,
-                                                        size_t *next) {
+                                                       StatementFunctionTemporaryEmitter *emitter,
+                                                       size_t *next) {
     size_t child;
     Symbol *function;
     if (expression == NULL)
@@ -477,8 +498,8 @@ static void emit_nested_statement_function_temporaries(F2cExpr *expression,
     if (!function->statement_function_expanding &&
         function->statement_function_expression != NULL) {
         function->statement_function_expanding = 1;
-        emit_nested_statement_function_temporaries(function->statement_function_expression,
-                                                    emitter, next);
+        emit_nested_statement_function_temporaries(function->statement_function_expression, emitter,
+                                                   next);
         function->statement_function_expanding = 0;
     }
 }
@@ -487,13 +508,14 @@ static void emit_statement_function_temporary(F2cExpr *expression, void *state) 
     StatementFunctionTemporaryEmitter *emitter = (StatementFunctionTemporaryEmitter *)state;
     size_t next;
     if (expression == NULL || expression->kind != F2C_EXPR_CALL || expression->symbol == NULL ||
-        !expression->symbol->statement_function || expression->statement_temporary_index == SIZE_MAX)
+        !expression->symbol->statement_function ||
+        expression->statement_temporary_index == SIZE_MAX)
         return;
     emit_statement_function_temporary_for_call(emitter, expression->symbol,
                                                expression->statement_temporary_index);
     next = expression->statement_nested_temporary_begin;
-    emit_nested_statement_function_temporaries(
-        expression->symbol->statement_function_expression, emitter, &next);
+    emit_nested_statement_function_temporaries(expression->symbol->statement_function_expression,
+                                               emitter, &next);
 }
 
 static void emit_statement_function_temporaries(Buffer *output, Unit *unit) {
@@ -654,6 +676,16 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
             f2c_unit_indent(output, depth);
             f2c_buffer_printf(output, "f2c_result_descriptor.extent[%zu] = %s_extent_%zu;\n",
                               dimension, name, dimension + 1U);
+            f2c_unit_indent(output, depth);
+            if (dimension == 0U)
+                f2c_buffer_append(output, "f2c_result_descriptor.stride[0] = 1;\n");
+            else
+                f2c_buffer_printf(
+                    output,
+                    "f2c_result_descriptor.stride[%zu] = f2c_descriptor_stride_extent("
+                    "f2c_result_descriptor.stride[%zu], "
+                    "(size_t)f2c_result_descriptor.extent[%zu]);\n",
+                    dimension, dimension - 1U, dimension - 1U);
         }
         free(character_length);
     }
@@ -685,6 +717,19 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
                 f2c_unit_indent(output, depth + 1);
                 f2c_buffer_printf(output, "f2c_descriptor_%s->extent[%zu] = %s_extent_%zu;\n", name,
                                   dimension, name, dimension + 1U);
+                f2c_unit_indent(output, depth + 1);
+                if (symbol->pointer)
+                    f2c_buffer_printf(output, "f2c_descriptor_%s->stride[%zu] = %s_stride_%zu;\n",
+                                      name, dimension, name, dimension + 1U);
+                else if (dimension == 0U)
+                    f2c_buffer_printf(output, "f2c_descriptor_%s->stride[0] = 1;\n", name);
+                else
+                    f2c_buffer_printf(
+                        output,
+                        "f2c_descriptor_%s->stride[%zu] = f2c_descriptor_stride_extent("
+                        "f2c_descriptor_%s->stride[%zu], "
+                        "(size_t)f2c_descriptor_%s->extent[%zu]);\n",
+                        name, dimension, name, dimension - 1U, name, dimension - 1U);
             }
             f2c_unit_indent(output, depth);
             f2c_buffer_append(output, "}\n");
@@ -753,8 +798,22 @@ static void emit_unused_suppression(Buffer *output, Unit *unit) {
         f2c_unit_indent(output, 1);
         f2c_buffer_printf(output, "(void)%s;\n",
                           symbol != NULL ? f2c_symbol_c_name(unit, symbol) : unit->arguments[i]);
+        if (symbol != NULL && f2c_symbol_uses_descriptor(symbol)) {
+            size_t dimension;
+            for (dimension = 0U; dimension < symbol->rank; ++dimension) {
+                f2c_unit_indent(output, 1);
+                f2c_buffer_printf(output, "(void)%s_lower_%zu;\n", f2c_symbol_c_name(unit, symbol),
+                                  dimension + 1U);
+                f2c_unit_indent(output, 1);
+                f2c_buffer_printf(output, "(void)%s_extent_%zu;\n", f2c_symbol_c_name(unit, symbol),
+                                  dimension + 1U);
+                f2c_unit_indent(output, 1);
+                f2c_buffer_printf(output, "(void)%s_stride_%zu;\n", f2c_symbol_c_name(unit, symbol),
+                                  dimension + 1U);
+            }
+        }
         if (symbol != NULL && !symbol->external && symbol->type == TYPE_CHARACTER &&
-            !symbol->allocatable && !symbol->pointer) {
+            !f2c_symbol_uses_descriptor(symbol)) {
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output, "(void)f2c_len_%s;\n", f2c_symbol_c_name(unit, symbol));
         }
@@ -803,7 +862,7 @@ static void emit_wrapper_arguments(Buffer *output, Unit *unit) {
         Symbol *symbol = f2c_find_symbol(unit, unit->arguments[i]);
         if (emitted)
             f2c_buffer_append(output, ", ");
-        if (symbol != NULL && (symbol->allocatable || symbol->pointer))
+        if (symbol != NULL && f2c_symbol_uses_descriptor(symbol))
             f2c_buffer_printf(output, "f2c_descriptor_%s", f2c_symbol_c_name(unit, symbol));
         else
             f2c_buffer_append(output, symbol != NULL ? f2c_symbol_c_name(unit, symbol)
@@ -813,7 +872,7 @@ static void emit_wrapper_arguments(Buffer *output, Unit *unit) {
     for (i = 0U; i < unit->argument_count; ++i) {
         Symbol *symbol = f2c_find_symbol(unit, unit->arguments[i]);
         if (symbol == NULL || symbol->external || symbol->type != TYPE_CHARACTER ||
-            symbol->allocatable || symbol->pointer)
+            f2c_symbol_uses_descriptor(symbol))
             continue;
         if (emitted)
             f2c_buffer_append(output, ", ");
