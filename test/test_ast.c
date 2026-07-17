@@ -96,6 +96,29 @@ static void test_kind_shape_and_value_category(void) {
                strcmp(f2c_c_type_kind(function.return_type, function.return_kind), "int64_t") == 0,
            "function headers preserve an explicit INTEGER kind in their ABI");
     f2c_free_unit(&function);
+
+    memset(&function, 0, sizeof(function));
+    expect(f2c_parse_unit_header(
+               "recursive pure real(kind=8) function evaluate(value) result(answer)", &function) &&
+               function.kind == UNIT_FUNCTION && function.recursive && function.pure &&
+               function.return_type == TYPE_DOUBLE && function.return_kind == 8 &&
+               function.argument_count == 1U && strcmp(function.arguments[0], "value") == 0 &&
+               strcmp(function.result_name, "answer") == 0,
+           "canonical header tokens accept attributes before a typed function prefix");
+    f2c_free_unit(&function);
+
+    memset(&function, 0, sizeof(function));
+    expect(f2c_parse_unit_header("real(kind=8) recursive function after_type()", &function) &&
+               function.recursive && function.return_type == TYPE_DOUBLE,
+           "canonical header tokens accept procedure attributes after a type prefix");
+    f2c_free_unit(&function);
+
+    memset(&function, 0, sizeof(function));
+    expect(f2c_parse_unit_header("elemental subroutine apply(value)", &function) &&
+               function.kind == UNIT_SUBROUTINE && function.elemental &&
+               function.argument_count == 1U,
+           "canonical header tokens retain ELEMENTAL procedure metadata");
+    f2c_free_unit(&function);
 }
 
 static void test_typed_numeric_tree(void) {
@@ -356,8 +379,11 @@ static void test_malformed_expression_locations(void) {
                "expression root owns the exact source used for diagnostics");
         expect(expression != NULL && expression->parse_error_offset != SIZE_MAX,
                "expression root retains the parser error offset");
-        expect(f2c_translate_expression(&unit, invalid[i]) == NULL,
-               "malformed expressions never lower to a placeholder C value");
+        {
+            char *lowered = f2c_emit_typed_expression(&unit, expression);
+            expect(lowered == NULL, "malformed expressions never lower to a placeholder C value");
+            free(lowered);
+        }
         f2c_expr_free(expression);
     }
 }

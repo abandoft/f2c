@@ -34,8 +34,7 @@ static int do_count_fits_default_integer(const F2cStatement *statement) {
     if (step == 1 && statement->right->kind == F2C_EXPR_INTEGER_LITERAL &&
         statement->right->text != NULL) {
         start = strtoll(statement->right->text, &end, 10);
-        if (end != statement->right->text && *end == '\0' && start >= 2 &&
-            start <= INT32_MAX)
+        if (end != statement->right->text && *end == '\0' && start >= 2 && start <= INT32_MAX)
             return 1;
     }
     return step <= -3 || step >= 3;
@@ -228,6 +227,11 @@ static char *emit_statement_expression(Unit *unit, const F2cExpr *expression) {
 int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *statement,
                        Line *source_line, int *depth) {
     const char *line = statement->text;
+    if (statement->state != F2C_IR_TYPED) {
+        f2c_diagnostic(context, source_line != NULL ? source_line->number : statement->line, 1,
+                       "internal compiler error: code generation received untyped statement IR");
+        return 0;
+    }
     if (statement->kind == F2C_STMT_EMPTY || statement->kind == F2C_STMT_DECLARATION) {
         return 1;
     }
@@ -514,39 +518,34 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                 statement->expression->kind == F2C_EXPR_COMPONENT &&
                 statement->expression->child_count != 0U &&
                 procedure->external_parameter_count == statement->item_count + 1U) {
-                char **items = (char **)calloc(procedure->external_parameter_count, sizeof(*items));
                 F2cExpr **arguments =
                     (F2cExpr **)calloc(procedure->external_parameter_count, sizeof(*arguments));
-                if (items != NULL && arguments != NULL) {
+                if (arguments != NULL) {
                     size_t source = 0U;
                     for (size_t parameter = 0U; parameter < procedure->external_parameter_count;
                          ++parameter) {
                         if (parameter == procedure->type_bound_pass_index) {
-                            items[parameter] = (char *)"f2c_passed_object";
                             arguments[parameter] = statement->expression->children[0];
                         } else {
-                            items[parameter] = statement->items[source];
                             arguments[parameter] = statement->arguments[source++];
                         }
                     }
-                    f2c_emit_call_with_signature(&context->output, unit, callee, procedure, items,
+                    f2c_emit_call_with_signature(&context->output, unit, callee, procedure,
                                                  arguments, procedure->external_parameter_count,
                                                  *depth);
                 } else {
                     f2c_diagnostic(context, source_line->number, 1,
                                    "out of memory lowering type-bound call");
                 }
-                free(items);
                 free(arguments);
             } else {
                 f2c_emit_call_with_signature(&context->output, unit, callee, procedure,
-                                             statement->items, statement->arguments,
-                                             statement->item_count, *depth);
+                                             statement->arguments, statement->item_count, *depth);
             }
             free(callee);
         } else {
-            f2c_emit_call(&context->output, unit, statement->name, statement->items,
-                          statement->arguments, statement->item_count, *depth);
+            f2c_emit_call(&context->output, unit, statement->name, statement->arguments,
+                          statement->item_count, *depth);
         }
     } else if (statement->kind == F2C_STMT_MOVE_ALLOC) {
         if (!f2c_emit_move_alloc_statement(context, unit, statement, *depth))
@@ -562,18 +561,22 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                               ? "return f2c_result;\n"
                               : (unit->kind == UNIT_PROGRAM ? "return 0;\n" : "return;\n"));
     } else if (statement->kind == F2C_STMT_STOP) {
-        const int error_stop = f2c_starts_word(statement->text, "error stop");
-        const char *code_text = f2c_trim((char *)statement->text +
-                                         (error_stop ? strlen("error stop") : strlen("stop")));
-        char *code = *code_text != '\0' && *code_text != '\'' && *code_text != '"'
-                         ? f2c_translate_expression(unit, code_text)
+        int supported = 1;
+        char *code = statement->expression != NULL
+                         ? f2c_emit_expression_ast(unit, statement->expression, &supported)
                          : NULL;
+        if (statement->expression != NULL && (!supported || code == NULL)) {
+            free(code);
+            f2c_diagnostic(context, source_line->number, 1,
+                           "internal compiler error: typed STOP code cannot be emitted");
+            return 0;
+        }
         indent(&context->output, *depth);
-        if (code != NULL)
+        if (supported && code != NULL)
             f2c_buffer_printf(
                 &context->output,
                 unit->kind == UNIT_PROGRAM ? "return (int)(%s);\n" : "exit((int)(%s));\n", code);
-        else if (error_stop)
+        else if (statement->error_stop)
             f2c_buffer_append(&context->output, unit->kind == UNIT_PROGRAM
                                                     ? "return EXIT_FAILURE;\n"
                                                     : "exit(EXIT_FAILURE);\n");
@@ -783,14 +786,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                                       dimension + 1U, pointer_name, dimension + 1U,
                                       f2c_symbol_c_name(unit, target), dimension + 1U);
                 } else {
-                    char *lower =
-                        f2c_translate_expression(unit, target->dimensions[dimension].lower != NULL
-                                                           ? target->dimensions[dimension].lower
-                                                           : "1");
-                    char *upper =
-                        f2c_translate_expression(unit, target->dimensions[dimension].upper != NULL
-                                                           ? target->dimensions[dimension].upper
-                                                           : "0");
+                    char *lower = f2c_symbol_dimension_lower(unit, target, dimension);
+                    char *upper = f2c_symbol_dimension_upper(unit, target, dimension);
                     f2c_buffer_printf(&context->output,
                                       "%s_lower_%zu = (int32_t)(%s); %s_extent_%zu = "
                                       "(int32_t)((%s) - (%s) + 1);\n",
@@ -822,7 +819,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             free(left_name);
             return 1;
         }
-        if (f2c_emit_rank2_section_assignment(context, unit, left_symbol, left_text, right_text,
+        if (f2c_emit_rank2_section_assignment(context, unit, statement->left, statement->right,
                                               *depth)) {
             free(left_name);
             return 1;
@@ -847,13 +844,13 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             int right_supported = 0;
             left = f2c_emit_expression_ast(unit, statement->left, &left_supported);
             right = f2c_emit_expression_ast(unit, statement->right, &right_supported);
-            if (!left_supported || left == NULL) {
+            if (!left_supported || left == NULL || !right_supported || right == NULL) {
                 free(left);
-                left = f2c_translate_expression(unit, left_text);
-            }
-            if (!right_supported || right == NULL) {
                 free(right);
-                right = f2c_translate_expression(unit, right_text);
+                f2c_diagnostic(context, source_line->number, 1,
+                               "internal compiler error: typed assignment cannot be emitted");
+                free(left_name);
+                return 0;
             }
         }
         right_type = statement->right != NULL ? statement->right->type : TYPE_UNKNOWN;

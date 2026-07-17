@@ -428,8 +428,7 @@ char *f2c_symbol_dimension_lower(Unit *unit, const Symbol *symbol, size_t dimens
         f2c_buffer_printf(&result, "%s_lower_%zu", f2c_symbol_c_name(unit, symbol), dimension + 1U);
         return f2c_buffer_take(&result);
     }
-    return f2c_emit_cached_expression(unit, symbol->dimensions[dimension].lower_expression,
-                                      symbol->dimensions[dimension].lower);
+    return f2c_emit_typed_expression(unit, symbol->dimensions[dimension].lower_expression);
 }
 
 char *f2c_symbol_dimension_upper(Unit *unit, const Symbol *symbol, size_t dimension) {
@@ -442,8 +441,7 @@ char *f2c_symbol_dimension_upper(Unit *unit, const Symbol *symbol, size_t dimens
                           f2c_symbol_c_name(unit, symbol), dimension + 1U);
         return f2c_buffer_take(&result);
     }
-    return f2c_emit_cached_expression(unit, symbol->dimensions[dimension].upper_expression,
-                                      symbol->dimensions[dimension].upper);
+    return f2c_emit_typed_expression(unit, symbol->dimensions[dimension].upper_expression);
 }
 
 char *f2c_symbol_dimension_extent(Unit *unit, const Symbol *symbol, size_t dimension) {
@@ -497,12 +495,10 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
                                       f2c_symbol_c_name(unit, symbol), j + 1U);
                     continue;
                 }
-                const char *lo = symbol->dimensions[j].lower;
-                const char *hi = symbol->dimensions[j].upper;
                 char *lo_c;
                 char *hi_c;
-                lo_c = f2c_translate_expression(unit, lo);
-                hi_c = f2c_translate_expression(unit, hi);
+                lo_c = f2c_symbol_dimension_lower(unit, symbol, j);
+                hi_c = f2c_symbol_dimension_upper(unit, symbol, j);
                 f2c_buffer_printf(&result, "%s((%s) - (%s) + 1)", j == 0U ? "" : " * ", hi_c, lo_c);
                 free(lo_c);
                 free(hi_c);
@@ -528,12 +524,12 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
 }
 
 char *f2c_find_assignment(char *line) {
-    F2cLexer lexer;
+    F2cTokenStream lexer;
     int parenthesis_depth = 0;
     int bracket_depth = 0;
-    f2c_lexer_init(&lexer, line, 1U, 1U);
+    f2c_token_stream_init(&lexer, line, 1U, 1U);
     for (;;) {
-        f2c_lexer_next(&lexer);
+        f2c_token_stream_next(&lexer);
         if (lexer.token.kind == F2C_TOKEN_END)
             return NULL;
         if (lexer.token.kind == F2C_TOKEN_LEFT_PAREN)

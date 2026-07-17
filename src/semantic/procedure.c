@@ -209,12 +209,6 @@ static void bind_external(Context *context, Unit *caller, Symbol *external) {
                        f2c_c_type(definition->return_type));
         return;
     }
-    if (definition->argument_count > 64U) {
-        f2c_diagnostic(context, context->lines.items[definition->begin].number, 1,
-                       "procedure '%s' exceeds the supported 64-argument interface limit",
-                       external->name);
-        return;
-    }
     external->external_subroutine = definition->kind == UNIT_SUBROUTINE;
     if (!f2c_copy_function_result_metadata(external, definition)) {
         f2c_diagnostic(context, context->lines.items[definition->begin].number, 1,
@@ -227,8 +221,14 @@ static void bind_external(Context *context, Unit *caller, Symbol *external) {
                        external->name);
         return;
     }
+    if (!f2c_symbol_resize_external_parameters(external, definition->argument_count)) {
+        f2c_diagnostic(context, context->lines.items[definition->begin].number, 1,
+                       "out of memory recording %zu parameters for procedure '%s'",
+                       definition->argument_count, external->name);
+        return;
+    }
     external->external_parameter_count = definition->argument_count;
-    for (i = 0U; i < definition->argument_count && i < 64U; ++i) {
+    for (i = 0U; i < definition->argument_count; ++i) {
         Symbol *dummy = f2c_find_symbol(definition, definition->arguments[i]);
         external->external_parameter_types[i] = dummy != NULL ? dummy->type : TYPE_REAL;
         external->external_parameter_kinds[i] =
@@ -270,8 +270,10 @@ static int bind_internal(Context *context, Unit *definition) {
         return 0;
     if (!copy_function_character_length(symbol, definition))
         return 0;
+    if (!f2c_symbol_resize_external_parameters(symbol, definition->argument_count))
+        return 0;
     symbol->external_parameter_count = definition->argument_count;
-    for (i = 0U; i < definition->argument_count && i < 64U; ++i) {
+    for (i = 0U; i < definition->argument_count; ++i) {
         Symbol *dummy = f2c_find_symbol(definition, definition->arguments[i]);
         symbol->external_parameter_types[i] = dummy != NULL ? dummy->type : TYPE_REAL;
         symbol->external_parameter_kinds[i] =

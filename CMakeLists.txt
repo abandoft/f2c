@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
     f2c
-    VERSION 1.0.0
+    VERSION 1.1.0
     DESCRIPTION "A modern, high-performance F2C"
     LANGUAGES C
 )
@@ -24,42 +24,103 @@ option(F2C_BUILD_LIBFUZZER "Build the coverage-guided libFuzzer target" OFF)
 
 set(
     F2C_CORE_SOURCES
-    src/core/support.c
-    src/core/transpile.c
-    src/frontend/interface.c
-    src/frontend/lexer.c
-    src/frontend/modules.c
-    src/frontend/parser.c
-    src/frontend/procedure.c
-    src/frontend/source.c
-    src/semantic/character.c
-    src/semantic/constant.c
-    src/semantic/implicit.c
-    src/semantic/intrinsic.c
-    src/semantic/procedure.c
-    src/semantic/type.c
-    src/semantic/validation.c
+    src/ast/budget.c
     src/ast/expression.c
     src/ast/internal.h
-    src/ast/lexer.c
     src/ast/parser.c
+    src/ast/shape.c
     src/ast/statement.c
+    src/ast/statement/data.c
+    src/ast/statement/parenthesis.c
+    src/ast/statement/private.h
+    src/ast/token_stream.c
     src/ast/visit.c
     src/codegen/allocation.c
     src/codegen/array.c
+    src/codegen/array/constructor.c
+    src/codegen/array/private.h
     src/codegen/call.c
+    src/codegen/codegen.h
     src/codegen/data.c
     src/codegen/expression.c
+    src/codegen/expression/call.c
+    src/codegen/expression/private.h
+    src/codegen/expression/statement_function.c
     src/codegen/io.c
-    src/codegen/io/support.c
+    src/codegen/io/control.c
     src/codegen/io/format.c
+    src/codegen/io/formatted.c
+    src/codegen/io/namelist.c
+    src/codegen/io/private.h
+    src/codegen/io/support.c
     src/codegen/lowering.c
+    src/codegen/module.c
     src/codegen/ownership.c
     src/codegen/statement.c
     src/codegen/transform.c
+    src/codegen/transform/private.h
+    src/codegen/transform/view.c
     src/codegen/type/derived.c
     src/codegen/unit.c
+    src/codegen/unit/interface.c
+    src/codegen/unit/private.h
+    src/core/config.c
+    src/core/cleanup.c
+    src/core/support.c
+    src/core/transpile.c
+    src/frontend/analyze.c
+    src/frontend/attributes.c
+    src/frontend/declaration/common.c
+    src/frontend/declaration/dimension.c
+    src/frontend/declaration/entity.c
+    src/frontend/declaration/namelist.c
+    src/frontend/declaration/optional.c
+    src/frontend/declaration/private.h
+    src/frontend/declaration/syntax.c
+    src/frontend/declaration/type.c
+    src/frontend/derived.c
+    src/frontend/frontend.h
+    src/frontend/interface.c
+    src/frontend/lexer.c
+    src/frontend/module_constants.h
+    src/frontend/modules.c
+    src/frontend/parser.c
+    src/frontend/pipeline.c
+    src/frontend/pipeline.h
+    src/frontend/private.h
+    src/frontend/procedure.c
+    src/frontend/references.c
+    src/frontend/source.c
+    src/frontend/statement.c
+    src/frontend/syntax.c
+    src/frontend/token.h
+    src/frontend/token_cursor.c
+    src/frontend/unit_header.c
+    src/internal/base.h
+    src/internal/context.h
     src/internal/f2c.h
+    src/ir/expression.h
+    src/ir/statement.h
+    src/ir/type.h
+    src/semantic/character.c
+    src/semantic/constant.c
+    src/semantic/implicit.c
+    src/semantic/implicit/declaration.c
+    src/semantic/implicit/private.h
+    src/semantic/implicit/symbols.c
+    src/semantic/intrinsic.c
+    src/semantic/intrinsic.h
+    src/semantic/model.h
+    src/semantic/procedure.c
+    src/semantic/semantic.h
+    src/semantic/signature.c
+    src/semantic/type.c
+    src/semantic/validation.c
+    src/semantic/validation/allocation.c
+    src/semantic/validation/expression.c
+    src/semantic/validation/private.h
+    src/semantic/validation/procedure.c
+    src/semantic/validation/statement.c
 )
 
 function(f2c_configure_core_target target)
@@ -129,7 +190,8 @@ if(BUILD_SHARED_LIBS)
     target_compile_definitions(f2c_core PUBLIC F2C_SHARED)
 endif()
 
-add_executable(f2c src/cli/main.c)
+set(F2C_CLI_SOURCES src/cli/io.c src/cli/io.h src/cli/main.c)
+add_executable(f2c ${F2C_CLI_SOURCES})
 target_compile_features(f2c PRIVATE c_std_17)
 target_link_libraries(f2c PRIVATE f2c::core)
 if(MSVC)
@@ -195,6 +257,14 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_tests)
     add_test(NAME unit COMMAND f2c_tests)
 
+    add_test(
+        NAME architecture_boundaries
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test/check_architecture.cmake
+    )
+
     add_test(NAME cli_help COMMAND f2c --help)
     set_tests_properties(
         cli_help
@@ -212,6 +282,15 @@ if(F2C_BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures/assigned_goto.f
             -o
             ${CMAKE_CURRENT_BINARY_DIR}/cli-auto-fixed.c
+    )
+    add_test(
+        NAME cli_io
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DF2C=$<TARGET_FILE:f2c>
+            -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test/cli_io.cmake
     )
 
     add_executable(f2c_ast_tests test/test_ast.c)
@@ -240,6 +319,18 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_fuzz_tests test/test_fuzz.c)
     f2c_configure_test_target(f2c_fuzz_tests)
     add_test(NAME mutation_fuzz COMMAND f2c_fuzz_tests)
+
+    add_executable(f2c_storage_tests test/test_storage.c)
+    f2c_configure_test_target(f2c_storage_tests)
+    add_test(NAME storage_semantics COMMAND f2c_storage_tests)
+
+    add_executable(f2c_declaration_tests test/test_declaration.c)
+    f2c_configure_test_target(f2c_declaration_tests)
+    add_test(NAME declaration_semantics COMMAND f2c_declaration_tests)
+
+    add_executable(f2c_implicit_tests test/test_implicit.c)
+    f2c_configure_test_target(f2c_implicit_tests)
+    add_test(NAME implicit_semantics COMMAND f2c_implicit_tests)
 
     add_executable(f2c_benchmark_statistics_tests test/test_benchmark_statistics.c)
     target_include_directories(

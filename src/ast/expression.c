@@ -33,8 +33,11 @@ F2cExpr *f2c_expr_new(F2cExprKind kind, Type type, const char *text, size_t leng
         break;
     }
     expression->temporary_index = SIZE_MAX;
+    expression->statement_temporary_index = SIZE_MAX;
+    expression->statement_nested_temporary_begin = SIZE_MAX;
     expression->source_offset = SIZE_MAX;
     expression->parse_error_offset = SIZE_MAX;
+    expression->tree_depth = 1U;
     if (text != NULL) {
         expression->text = f2c_strdup_n(text, length);
         if (expression->text == NULL) {
@@ -81,5 +84,7 @@ int f2c_expr_push(F2cExpr *parent, F2cExpr *child) {
         parent->child_capacity = capacity;
     }
     parent->children[parent->child_count++] = child;
+    if (child->tree_depth < SIZE_MAX && child->tree_depth + 1U > parent->tree_depth)
+        parent->tree_depth = child->tree_depth + 1U;
     return 1;
 }

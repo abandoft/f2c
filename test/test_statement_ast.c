@@ -37,6 +37,34 @@ int main(void) {
     unit.symbols = symbols;
     unit.symbol_count = 5U;
 
+    {
+        static char source[] = "x = x + 1.0";
+        F2cToken tokens[8];
+        F2cTokenStream stream;
+        Line line = {0};
+        size_t count = 0U;
+        f2c_token_stream_init(&stream, source, 11U, 3U);
+        for (;;) {
+            f2c_token_stream_next(&stream);
+            if (stream.token.kind == F2C_TOKEN_END)
+                break;
+            if (count < sizeof(tokens) / sizeof(tokens[0]))
+                tokens[count++] = stream.token;
+        }
+        line.text = source;
+        line.source_name = "token-path.f90";
+        line.number = 11U;
+        line.tokens = tokens;
+        line.token_count = count;
+        expect(f2c_parse_statement_tokens(&unit, &line, &statement),
+               "statement syntax AST consumes the canonical line token stream");
+        expect(statement.state == F2C_IR_SYNTAX && statement.span.begin.line == 11U &&
+                   statement.span.begin.column == 3U &&
+                   strcmp(statement.span.begin.source_name, "token-path.f90") == 0,
+               "statement syntax AST retains phase and source span metadata");
+        f2c_statement_free(&statement);
+    }
+
     expect(f2c_parse_statement(&unit, "if (n.gt.0) x = 1.0", 12U, &statement),
            "single-line IF parses");
     expect(statement.kind == F2C_STMT_IF && statement.expression != NULL,

@@ -1,22 +1,100 @@
+#include "frontend/module_constants.h"
 #include "internal/f2c.h"
 
-#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
-static const char *skip_space(const char *cursor) {
-    while (isspace((unsigned char)*cursor))
-        ++cursor;
-    return cursor;
+typedef struct UseSyntax {
+    const F2cToken *module_name;
+    size_t association_begin;
+    int intrinsic;
+    int non_intrinsic;
+    int only;
+    int valid;
+} UseSyntax;
+
+static size_t statement_start(const Line *line) {
+    if (line != NULL && line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER)
+        return 1U;
+    return 0U;
 }
 
-typedef struct ModuleConstant {
-    const char *name;
-    Type type;
-    const char *initializer;
-} ModuleConstant;
+static int parse_use_syntax(const Line *line, UseSyntax *syntax) {
+    const size_t start = statement_start(line);
+    size_t index = start + 1U;
+    memset(syntax, 0, sizeof(*syntax));
+    syntax->association_begin = line != NULL ? line->token_count : 0U;
+    if (line == NULL || !f2c_line_token_equals(line, start, "use"))
+        return 0;
+    if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_COMMA) {
+        ++index;
+        if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_IDENTIFIER)
+            return 1;
+        syntax->intrinsic = f2c_token_equals(&line->tokens[index], "intrinsic");
+        syntax->non_intrinsic = f2c_token_equals(&line->tokens[index], "non_intrinsic");
+        if (!syntax->intrinsic && !syntax->non_intrinsic)
+            return 1;
+        ++index;
+        if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_DOUBLE_COLON)
+            return 1;
+        ++index;
+    } else if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_DOUBLE_COLON) {
+        ++index;
+    }
+    if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_IDENTIFIER)
+        return 1;
+    syntax->module_name = &line->tokens[index++];
+    if (index == line->token_count) {
+        syntax->valid = 1;
+        return 1;
+    }
+    if (line->tokens[index].kind != F2C_TOKEN_COMMA)
+        return 1;
+    ++index;
+    if (index < line->token_count && f2c_line_token_equals(line, index, "only")) {
+        syntax->only = 1;
+        ++index;
+        if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_COLON)
+            return 1;
+        ++index;
+    }
+    syntax->association_begin = index;
+    syntax->valid = 1;
+    return 1;
+}
 
-static const ModuleConstant la_constants[] = {
+static int next_use_association(const Line *line, size_t *cursor, const F2cToken **local,
+                                const F2cToken **remote, int *renamed) {
+    size_t index = *cursor;
+    *local = NULL;
+    *remote = NULL;
+    *renamed = 0;
+    if (index >= line->token_count)
+        return 0;
+    if (line->tokens[index].kind != F2C_TOKEN_IDENTIFIER)
+        return -1;
+    *local = &line->tokens[index++];
+    *remote = *local;
+    if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_OPERATOR &&
+        f2c_token_equals(&line->tokens[index], "=>")) {
+        *renamed = 1;
+        ++index;
+        if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_IDENTIFIER)
+            return -1;
+        *remote = &line->tokens[index++];
+    }
+    if (index < line->token_count) {
+        if (line->tokens[index].kind != F2C_TOKEN_COMMA)
+            return -1;
+        ++index;
+        if (index == line->token_count)
+            return -1;
+    }
+    *cursor = index;
+    return 1;
+}
+
+static const F2cModuleConstant la_constants[] = {
     {"sp", TYPE_INTEGER, "4"},
     {"szero", TYPE_REAL, "0.0"},
     {"shalf", TYPE_REAL, "0.5"},
@@ -71,7 +149,13 @@ static const ModuleConstant la_constants[] = {
     {"dsbig", TYPE_DOUBLE, "1.1113793747425387d-162"},
 };
 
-static const ModuleConstant *find_la_constant(const char *name) {
+const F2cModuleConstant *f2c_la_constants(size_t *count) {
+    if (count != NULL)
+        *count = sizeof(la_constants) / sizeof(la_constants[0]);
+    return la_constants;
+}
+
+static const F2cModuleConstant *find_la_constant(const char *name) {
     size_t i;
     for (i = 0U; i < sizeof(la_constants) / sizeof(la_constants[0]); ++i) {
         if (strcmp(la_constants[i].name, name) == 0)
@@ -82,7 +166,7 @@ static const ModuleConstant *find_la_constant(const char *name) {
 
 static void import_la_constant(Context *context, Unit *unit, Line *line, const char *local_name,
                                const char *module_name) {
-    const ModuleConstant *constant = find_la_constant(module_name);
+    const F2cModuleConstant *constant = find_la_constant(module_name);
     Symbol *symbol;
     if (constant == NULL) {
         f2c_diagnostic(context, line->number, 1, "LA_CONSTANTS has no member '%s'", module_name);
@@ -109,43 +193,40 @@ static void import_la_constant(Context *context, Unit *unit, Line *line, const c
     }
 }
 
-static void import_la_constants(Context *context, Unit *unit, Line *source_line) {
-    const char *only;
-    char *copy;
-    char **imports;
-    size_t count = 0U;
-    size_t i;
-    if (!f2c_starts_word(source_line->text, "use la_constants"))
-        return;
-    only = strstr(source_line->text, "only:");
-    if (only == NULL) {
+static void import_la_constants(Context *context, Unit *unit, Line *source_line,
+                                const UseSyntax *syntax) {
+    size_t cursor = syntax->association_begin;
+    int status;
+    if (!syntax->only) {
         f2c_diagnostic(context, source_line->number, 1,
                        "USE LA_CONSTANTS without ONLY is not supported");
         return;
     }
-    copy = f2c_strdup(only + strlen("only:"));
-    if (copy == NULL) {
-        f2c_diagnostic(context, source_line->number, 1, "out of memory importing LA_CONSTANTS");
-        return;
-    }
-    imports = f2c_split_arguments(copy, &count);
-    for (i = 0U; i < count; ++i) {
-        char *mapping = strstr(imports[i], "=>");
+    do {
+        const F2cToken *local_token;
+        const F2cToken *module_token;
+        int renamed;
         char *local_name;
         char *module_name;
-        if (mapping != NULL) {
-            *mapping = '\0';
-            local_name = f2c_trim(imports[i]);
-            module_name = f2c_trim(mapping + 2);
-        } else {
-            local_name = f2c_trim(imports[i]);
-            module_name = local_name;
+        status = next_use_association(source_line, &cursor, &local_token, &module_token, &renamed);
+        if (status <= 0)
+            break;
+        local_name = f2c_token_text(local_token);
+        module_name = f2c_token_text(module_token);
+        if (local_name == NULL || module_name == NULL) {
+            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
+                                "out of memory importing LA_CONSTANTS");
+            free(local_name);
+            free(module_name);
+            return;
         }
         import_la_constant(context, unit, source_line, local_name, module_name);
-        free(imports[i]);
-    }
-    free(imports);
-    free(copy);
+        free(local_name);
+        free(module_name);
+        (void)renamed;
+    } while (status > 0);
+    if (status < 0)
+        f2c_diagnostic(context, source_line->number, 1, "malformed USE LA_CONSTANTS association");
 }
 
 static Unit *find_project_module(Context *context, const char *name) {
@@ -201,6 +282,9 @@ static int clone_module_symbol(Unit *unit, const Symbol *source, const char *loc
     target->module_entity = 1;
     target->deferred_character = source->deferred_character;
     target->derived_type = source->derived_type;
+    target->declaration_line = source->declaration_line;
+    target->initializer_syntax = source->initializer_syntax;
+    target->character_length_syntax = source->character_length_syntax;
     free(target->c_name);
     target->c_name = f2c_strdup(source->c_name);
     free(target->initializer);
@@ -225,6 +309,8 @@ static int clone_module_symbol(Unit *unit, const Symbol *source, const char *loc
         target->dimensions[dimension].upper = source->dimensions[dimension].upper != NULL
                                                   ? f2c_strdup(source->dimensions[dimension].upper)
                                                   : NULL;
+        target->dimension_lower_syntax[dimension] = source->dimension_lower_syntax[dimension];
+        target->dimension_upper_syntax[dimension] = source->dimension_upper_syntax[dimension];
     }
     return 1;
 }
@@ -264,9 +350,9 @@ static int import_module_procedure(Unit *unit, Unit *procedure, const char *loca
         free(symbol->character_length);
         symbol->character_length = length;
     }
+    if (!f2c_symbol_resize_external_parameters(symbol, procedure->argument_count))
+        return 0;
     symbol->external_parameter_count = procedure->argument_count;
-    if (symbol->external_parameter_count > 64U)
-        symbol->external_parameter_count = 64U;
     free(symbol->c_name);
     symbol->c_name = f2c_strdup(procedure->name);
     if (symbol->c_name == NULL)
@@ -332,39 +418,32 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
 }
 
 void f2c_import_module(Context *context, Unit *unit, Line *source_line) {
-    const char *cursor;
-    const char *only;
-    size_t consumed = 0U;
+    UseSyntax syntax;
     char *module_name;
     Unit *module;
-    if (!f2c_starts_word(source_line->text, "use"))
+    if (!parse_use_syntax(source_line, &syntax))
         return;
-    cursor = source_line->text + strlen("use");
-    while (isspace((unsigned char)*cursor))
-        ++cursor;
-    if (*cursor == ',') {
-        const char *double_colon = strstr(cursor, "::");
-        if (double_colon == NULL)
-            return;
-        cursor = double_colon + 2;
-    } else if (cursor[0] == ':' && cursor[1] == ':') {
-        cursor += 2;
+    if (!syntax.valid || syntax.module_name == NULL) {
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, source_line,
+                                  source_line->token_count != 0U ? &source_line->tokens[0] : NULL,
+                                  1, "malformed USE statement");
+        return;
     }
-    while (isspace((unsigned char)*cursor))
-        ++cursor;
-    module_name = f2c_identifier(cursor, &consumed);
-    if (module_name == NULL)
+    module_name = f2c_token_text(syntax.module_name);
+    if (module_name == NULL) {
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
+                            "out of memory parsing USE statement");
         return;
+    }
     if (strcmp(module_name, "la_constants") == 0) {
         free(module_name);
-        import_la_constants(context, unit, source_line);
+        import_la_constants(context, unit, source_line, &syntax);
         return;
     }
     module = find_project_module(context, module_name);
     if (module == NULL &&
         (strcmp(module_name, "iso_fortran_env") == 0 || strcmp(module_name, "iso_c_binding") == 0 ||
-         strncmp(module_name, "ieee_", strlen("ieee_")) == 0 ||
-         strstr(source_line->text, "intrinsic") != NULL)) {
+         strncmp(module_name, "ieee_", strlen("ieee_")) == 0 || syntax.intrinsic)) {
         free(module_name);
         return;
     }
@@ -377,32 +456,43 @@ void f2c_import_module(Context *context, Unit *unit, Line *source_line) {
          * below imports its typed entities and interfaces. */
         return;
     }
-    only = strstr(cursor + consumed, "only:");
-    if (only == NULL) {
+    if (syntax.association_begin == source_line->token_count) {
         import_entire_project_module(context, unit, module, source_line->number);
     } else {
-        char *copy = f2c_strdup(only + strlen("only:"));
-        char **imports;
-        size_t count = 0U;
-        size_t i;
-        if (copy == NULL)
-            return;
-        imports = f2c_split_arguments(copy, &count);
-        for (i = 0U; i < count; ++i) {
-            char *mapping = strstr(imports[i], "=>");
-            char *local_name = f2c_trim(imports[i]);
-            char *remote_name = local_name;
-            if (mapping != NULL) {
-                *mapping = '\0';
-                local_name = f2c_trim(imports[i]);
-                remote_name = f2c_trim(mapping + 2);
+        size_t cursor = syntax.association_begin;
+        int status;
+        if (!syntax.only)
+            import_entire_project_module(context, unit, module, source_line->number);
+        do {
+            const F2cToken *local_token;
+            const F2cToken *remote_token;
+            int renamed;
+            char *local_name;
+            char *remote_name;
+            status =
+                next_use_association(source_line, &cursor, &local_token, &remote_token, &renamed);
+            if (status <= 0)
+                break;
+            local_name = f2c_token_text(local_token);
+            remote_name = f2c_token_text(remote_token);
+            if (local_name == NULL || remote_name == NULL) {
+                f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
+                                    "out of memory importing module association");
+                free(local_name);
+                free(remote_name);
+                return;
             }
             (void)import_project_member(context, unit, module, local_name, remote_name,
                                         source_line->number);
-            free(imports[i]);
-        }
-        free(imports);
-        free(copy);
+            free(local_name);
+            free(remote_name);
+            (void)renamed;
+        } while (status > 0);
+        if (status < 0)
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, source_line,
+                                      source_line->token_count != 0U ? &source_line->tokens[0]
+                                                                     : NULL,
+                                      1, "malformed USE association list");
     }
 }
 
@@ -433,20 +523,15 @@ void f2c_import_host_module(Context *context, Unit *unit) {
 int f2c_discover_modules(Context *context) {
     size_t line_index;
     for (line_index = 0U; line_index < context->lines.count; ++line_index) {
-        const char *text = context->lines.items[line_index].text;
-        const char *name_text;
-        size_t consumed = 0U;
+        const F2cToken *name_token = NULL;
         char *name;
         size_t end;
         size_t contains;
         Unit *replacement;
         Unit module;
-        if (!f2c_starts_word(text, "module") || f2c_starts_word(text, "module procedure"))
+        if (!f2c_module_header_tokens(&context->lines.items[line_index], &name_token))
             continue;
-        name_text = text + strlen("module");
-        while (isspace((unsigned char)*name_text))
-            ++name_text;
-        name = f2c_identifier(name_text, &consumed);
+        name = f2c_token_text(name_token);
         if (name == NULL)
             continue;
         if (strcmp(name, "la_constants") == 0) {
@@ -457,22 +542,20 @@ int f2c_discover_modules(Context *context) {
         {
             size_t derived_type_depth = 0U;
             for (end = line_index + 1U; end < context->lines.count; ++end) {
-                const char *candidate = context->lines.items[end].text;
-                if (derived_type_depth != 0U && f2c_starts_word(candidate, "end type")) {
+                Line *candidate = &context->lines.items[end];
+                if (derived_type_depth != 0U && f2c_derived_type_end_tokens(candidate)) {
                     --derived_type_depth;
                     continue;
                 }
-                if (f2c_starts_word(candidate, "type") &&
-                    *skip_space(candidate + strlen("type")) != '(' &&
-                    strstr(candidate + strlen("type"), "::") != NULL) {
+                if (f2c_derived_type_start_tokens(candidate)) {
                     ++derived_type_depth;
                     continue;
                 }
                 if (derived_type_depth != 0U)
                     continue;
-                if (contains == context->lines.count && f2c_starts_word(candidate, "contains"))
+                if (contains == context->lines.count && f2c_contains_tokens(candidate))
                     contains = end;
-                if (f2c_starts_word(candidate, "end module"))
+                if (f2c_module_end_tokens(candidate))
                     break;
             }
         }
@@ -494,6 +577,7 @@ int f2c_discover_modules(Context *context) {
             context->modules.capacity = capacity;
         }
         memset(&module, 0, sizeof(module));
+        module.context = context;
         module.kind = UNIT_MODULE;
         module.name = name;
         module.fortran_name = f2c_strdup(name);
@@ -513,158 +597,21 @@ int f2c_discover_modules(Context *context) {
     return 1;
 }
 
-static int has_la_constants_module(const Context *context) {
+int f2c_has_la_constants_module(const Context *context) {
     size_t i;
     for (i = 0U; i < context->lines.count; ++i) {
-        if (f2c_starts_word(context->lines.items[i].text, "module la_constants"))
+        const F2cToken *name = NULL;
+        if (f2c_module_header_tokens(&context->lines.items[i], &name) && name != NULL &&
+            f2c_token_equals(name, "la_constants"))
             return 1;
     }
     return 0;
 }
 
 int f2c_has_supported_module(const Context *context) {
-    return has_la_constants_module(context) || context->modules.count != 0U;
+    return f2c_has_la_constants_module(context) || context->modules.count != 0U;
 }
 
 int f2c_supported_module_needs_complex(const Context *context) {
-    return has_la_constants_module(context);
-}
-
-static char *module_complex_initializer(Unit *unit, const ModuleConstant *constant) {
-    char *copy = f2c_strdup(constant->initializer);
-    char *comma;
-    char *closing;
-    char *real_part;
-    char *imaginary_part;
-    char *real_c;
-    char *imaginary_c;
-    Buffer result = {0};
-    const char *real_type = constant->type == TYPE_DOUBLE_COMPLEX ? "double" : "float";
-    if (copy == NULL)
-        return NULL;
-    comma = strchr(copy, ',');
-    closing = strrchr(copy, ')');
-    if (copy[0] != '(' || comma == NULL || closing == NULL || comma >= closing) {
-        free(copy);
-        return NULL;
-    }
-    *comma = '\0';
-    *closing = '\0';
-    real_part = f2c_trim(copy + 1);
-    imaginary_part = f2c_trim(comma + 1);
-    real_c = f2c_translate_expression(unit, real_part);
-    imaginary_c = f2c_translate_expression(unit, imaginary_part);
-    if (real_c != NULL && imaginary_c != NULL)
-        f2c_buffer_printf(&result, "%s((%s)(%s), (%s)(%s))",
-                          constant->type == TYPE_DOUBLE_COMPLEX ? "F2C_COMPLEX_DOUBLE_INITIALIZER"
-                                                                : "F2C_COMPLEX_FLOAT_INITIALIZER",
-                          real_type, real_c, real_type, imaginary_c);
-    free(real_c);
-    free(imaginary_c);
-    free(copy);
-    return f2c_buffer_take(&result);
-}
-
-void f2c_emit_supported_modules(Context *context) {
-    Unit dummy;
-    size_t i;
-    if (!has_la_constants_module(context))
-        return;
-    memset(&dummy, 0, sizeof(dummy));
-    f2c_buffer_append(&context->output, "/* Fortran module LA_CONSTANTS. */\n");
-    for (i = 0U; i < sizeof(la_constants) / sizeof(la_constants[0]); ++i) {
-        const ModuleConstant *constant = &la_constants[i];
-        char *initializer = constant->type == TYPE_COMPLEX || constant->type == TYPE_DOUBLE_COMPLEX
-                                ? module_complex_initializer(&dummy, constant)
-                                : f2c_translate_expression(&dummy, constant->initializer);
-        f2c_buffer_printf(&context->output, "const %s f2c_la_constants_%s = ",
-                          f2c_c_type_kind(constant->type, f2c_default_kind(constant->type)),
-                          constant->name);
-        if (constant->type == TYPE_CHARACTER) {
-            const char value = constant->initializer != NULL && constant->initializer[0] != '\0'
-                                   ? constant->initializer[1]
-                                   : '\0';
-            if (value == '\'' || value == '\\')
-                f2c_buffer_append(&context->output, "'\\");
-            else
-                f2c_buffer_append(&context->output, "'");
-            f2c_buffer_append_n(&context->output, &value, 1U);
-            f2c_buffer_append(&context->output, "'");
-        } else if (constant->type == TYPE_COMPLEX || constant->type == TYPE_DOUBLE_COMPLEX)
-            f2c_buffer_append(&context->output, initializer);
-        else
-            f2c_buffer_printf(&context->output, "(%s)(%s)",
-                              f2c_c_type_kind(constant->type, f2c_default_kind(constant->type)),
-                              initializer);
-        f2c_buffer_append(&context->output, ";\n");
-        free(initializer);
-    }
-    f2c_buffer_append(&context->output, "\n");
-}
-
-void f2c_emit_project_modules(Context *context) {
-    size_t module_index;
-    for (module_index = 0U; module_index < context->modules.count; ++module_index) {
-        Unit *module = &context->modules.items[module_index];
-        size_t symbol_index;
-        f2c_buffer_printf(&context->output, "/* Fortran module %s. */\n", module->name);
-        for (symbol_index = 0U; symbol_index < module->symbol_count; ++symbol_index) {
-            Symbol *symbol = &module->symbols[symbol_index];
-            const char *name = f2c_symbol_c_name(module, symbol);
-            size_t dimension;
-            char *initializer = symbol->initializer != NULL
-                                    ? f2c_translate_expression(module, symbol->initializer)
-                                    : NULL;
-            if (symbol->parameter)
-                f2c_buffer_append(&context->output, "static F2C_UNUSED const ");
-            else
-                f2c_buffer_append(&context->output, "static F2C_UNUSED ");
-            if (symbol->allocatable || symbol->pointer) {
-                f2c_buffer_printf(&context->output, "%s *%s = NULL;\n", f2c_symbol_c_type(symbol),
-                                  name);
-                if (symbol->deferred_character)
-                    f2c_buffer_printf(&context->output, "static size_t f2c_char_len_%s = 0U;\n",
-                                      name);
-                for (dimension = 0U; dimension < symbol->rank; ++dimension) {
-                    f2c_buffer_printf(&context->output,
-                                      "static int32_t %s_lower_%zu = 1;\n"
-                                      "static int32_t %s_extent_%zu = 0;\n",
-                                      name, dimension + 1U, name, dimension + 1U);
-                }
-                free(initializer);
-                continue;
-            }
-            f2c_buffer_printf(&context->output, "%s %s", f2c_symbol_c_type(symbol), name);
-            if (symbol->type == TYPE_CHARACTER && symbol->rank == 0U) {
-                char *length = f2c_symbol_character_length(module, symbol);
-                f2c_buffer_printf(&context->output, "[(%s) + 1]", length != NULL ? length : "1");
-                free(length);
-            } else if (symbol->rank != 0U) {
-                f2c_buffer_append(&context->output, "[");
-                for (dimension = 0U; dimension < symbol->rank; ++dimension) {
-                    char *lower =
-                        f2c_translate_expression(module, symbol->dimensions[dimension].lower != NULL
-                                                             ? symbol->dimensions[dimension].lower
-                                                             : "1");
-                    char *upper =
-                        f2c_translate_expression(module, symbol->dimensions[dimension].upper != NULL
-                                                             ? symbol->dimensions[dimension].upper
-                                                             : "0");
-                    f2c_buffer_printf(&context->output, "%s((%s) - (%s) + 1)",
-                                      dimension == 0U ? "" : " * ", upper != NULL ? upper : "0",
-                                      lower != NULL ? lower : "1");
-                    free(lower);
-                    free(upper);
-                }
-                f2c_buffer_append(&context->output, "]");
-            }
-            if (initializer != NULL)
-                f2c_buffer_printf(&context->output, " = %s", initializer);
-            else
-                f2c_buffer_append(&context->output, " = {0}");
-            f2c_buffer_append(&context->output, ";\n");
-            free(initializer);
-        }
-        f2c_buffer_append(&context->output, "\n");
-    }
+    return f2c_has_la_constants_module(context);
 }

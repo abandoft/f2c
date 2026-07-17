@@ -87,6 +87,11 @@ foreach(
        module_procedure
        module_allocatable
        allocatable_scope
+       many_arguments
+       statement_function
+       statement_function_single_eval
+       equivalence_group
+       declaration_matrix
        complex_arithmetic
 )
     set(io_generated "${BINARY_DIR}/generated_${io_fixture}.c")

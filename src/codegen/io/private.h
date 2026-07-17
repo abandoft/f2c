@@ -1,0 +1,30 @@
+#ifndef F2C_CODEGEN_IO_PRIVATE_H
+#define F2C_CODEGEN_IO_PRIVATE_H
+
+#include "internal/f2c.h"
+
+void f2c_io_indent(Buffer *output, int depth);
+char *f2c_io_emit_item_expression(Unit *unit, const F2cIoItem *item);
+char *f2c_io_emit_required_expression(Unit *unit, const F2cExpr *expression);
+char *f2c_io_c_string_literal(const char *text, size_t length);
+F2cTypeBinding *f2c_io_defined_binding(F2cDerivedType *derived, F2cDefinedIoKind kind);
+int f2c_io_emit_defined_io_call(Context *context, const char *value, F2cDerivedType *derived,
+                                F2cDefinedIoKind kind, const char *unit_number, const char *iotype,
+                                const char *v_list, const char *v_list_count, const char *status,
+                                int depth);
+void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cIoItem *item,
+                      int input, const char *status, int record_input,
+                      F2cDefinedIoKind defined_kind, const char *unit_number, const char *iotype,
+                      int depth);
+const F2cIoControl *f2c_io_control(const F2cStatement *statement, F2cIoControlKind kind,
+                                   size_t positional);
+void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
+                                const Symbol *symbol, const char *value,
+                                const char *character_length_override, int input, int depth);
+int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
+                         const F2cNamelistGroup *group, int input, const char *unit_number,
+                         int depth);
+void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *item, int input,
+                                const char *unit_number, int depth);
+
+#endif

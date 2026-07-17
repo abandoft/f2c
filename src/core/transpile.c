@@ -87,6 +87,8 @@ static void collect_unit_features(Unit *unit, F2cRequiredFeatures *features) {
         f2c_visit_expression(symbol->initializer_expression, collect_expression_feature, features);
         f2c_visit_expression(symbol->character_length_expression, collect_expression_feature,
                              features);
+        f2c_visit_expression(symbol->statement_function_expression, collect_expression_feature,
+                             features);
         for (dimension = 0U; dimension < symbol->rank; ++dimension) {
             f2c_visit_expression(symbol->dimensions[dimension].lower_expression,
                                  collect_expression_feature, features);
@@ -106,113 +108,13 @@ static void collect_unit_features(Unit *unit, F2cRequiredFeatures *features) {
         collect_statement_features(&unit->statements[i], features);
 }
 
-void f2c_free_unit(Unit *unit) {
-    size_t j;
-    free(unit->name);
-    free(unit->fortran_name);
-    free(unit->result_name);
-    free(unit->result_character_length);
-    free(unit->interface_generic_name);
-    free((char *)unit->options.source_name);
-    for (j = 0U; j < unit->argument_count; ++j)
-        free(unit->arguments[j]);
-    free(unit->arguments);
-    for (j = 0U; j < 26U; ++j)
-        free(unit->implicit_character_lengths[j]);
-    for (j = 0U; j < unit->statement_count; ++j)
-        f2c_statement_free(&unit->statements[j]);
-    free(unit->statements);
-    for (j = 0U; j < unit->namelist_count; ++j) {
-        size_t member;
-        free(unit->namelists[j].name);
-        for (member = 0U; member < unit->namelists[j].member_count; ++member)
-            free(unit->namelists[j].members[member]);
-        free(unit->namelists[j].members);
-    }
-    free(unit->namelists);
-    for (j = 0U; j < unit->symbol_count; ++j) {
-        size_t d;
-        free(unit->symbols[j].name);
-        free(unit->symbols[j].c_name);
-        free(unit->symbols[j].initializer);
-        f2c_expr_free(unit->symbols[j].initializer_expression);
-        free(unit->symbols[j].character_length);
-        f2c_expr_free(unit->symbols[j].character_length_expression);
-        free(unit->symbols[j].procedure_interface_name);
-        free(unit->symbols[j].alias_to);
-        free(unit->symbols[j].common_block);
-        free(unit->symbols[j].derived_type_name);
-        free(unit->symbols[j].c_type);
-        for (d = 0U; d < unit->symbols[j].rank; ++d) {
-            free(unit->symbols[j].dimensions[d].lower);
-            free(unit->symbols[j].dimensions[d].upper);
-            f2c_expr_free(unit->symbols[j].dimensions[d].lower_expression);
-            f2c_expr_free(unit->symbols[j].dimensions[d].upper_expression);
-        }
-    }
-    free(unit->symbols);
-    for (j = 0U; j < unit->derived_type_count; ++j) {
-        size_t component;
-        size_t finalizer;
-        free(unit->derived_types[j].name);
-        free(unit->derived_types[j].c_name);
-        free(unit->derived_types[j].parent_name);
-        for (component = 0U; component < unit->derived_types[j].component_count; ++component) {
-            Symbol *symbol = &unit->derived_types[j].components[component];
-            size_t dimension;
-            free(symbol->name);
-            free(symbol->c_name);
-            free(symbol->initializer);
-            f2c_expr_free(symbol->initializer_expression);
-            free(symbol->character_length);
-            f2c_expr_free(symbol->character_length_expression);
-            free(symbol->procedure_interface_name);
-            free(symbol->alias_to);
-            free(symbol->common_block);
-            free(symbol->derived_type_name);
-            free(symbol->c_type);
-            for (dimension = 0U; dimension < symbol->rank; ++dimension) {
-                free(symbol->dimensions[dimension].lower);
-                free(symbol->dimensions[dimension].upper);
-                f2c_expr_free(symbol->dimensions[dimension].lower_expression);
-                f2c_expr_free(symbol->dimensions[dimension].upper_expression);
-            }
-        }
-        free(unit->derived_types[j].components);
-        for (finalizer = 0U; finalizer < unit->derived_types[j].finalizer_count; ++finalizer)
-            free(unit->derived_types[j].finalizers[finalizer]);
-        free(unit->derived_types[j].finalizers);
-        free(unit->derived_types[j].finalizer_procedures);
-        free(unit->derived_types[j].finalizer_ranks);
-        for (component = 0U; component < unit->derived_types[j].binding_count; ++component) {
-            F2cTypeBinding *binding = &unit->derived_types[j].bindings[component];
-            Symbol *symbol = &binding->procedure;
-            free(binding->name);
-            free(binding->target_name);
-            free(binding->interface_name);
-            free(binding->pass_name);
-            free(symbol->name);
-            free(symbol->c_name);
-            free(symbol->character_length);
-            free(symbol->procedure_interface_name);
-        }
-        free(unit->derived_types[j].bindings);
-        for (component = 0U; component < F2C_DEFINED_IO_COUNT; ++component)
-            free(unit->derived_types[j].defined_io_bindings[component]);
-    }
-    free(unit->derived_types);
-    free(unit->imported_derived_types);
-    for (j = 0U; j < unit->interface_count; ++j)
-        f2c_free_unit(&unit->interfaces[j]);
-    free(unit->interfaces);
-}
-
 static void free_context(Context *context) {
     size_t i;
     for (i = 0U; i < context->lines.count; ++i) {
         free(context->lines.items[i].text);
         free(context->lines.items[i].source_name);
         free(context->lines.items[i].tokens);
+        free(context->lines.items[i].source_map);
     }
     free(context->lines.items);
     for (i = 0U; i < context->units.count; ++i)
@@ -227,20 +129,47 @@ static void free_context(Context *context) {
     free(context->diagnostics.data);
 }
 
-F2cResult f2c_transpile_project(const F2cInput *inputs, size_t input_count) {
+F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_count,
+                                       const F2cConfig *config) {
     Context context;
     F2cOptions defaults = {"<input>", F2C_SOURCE_AUTO, 0};
     size_t i;
     memset(&context, 0, sizeof(context));
     context.options = &defaults;
+    if (!f2c_initialize_context_limits(&context, config))
+        f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
+                            "configuration structure size does not match this f2c build");
     if (inputs == NULL || input_count == 0U) {
-        f2c_diagnostic(&context, 1U, 1, "no project inputs were provided");
+        f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
+                            "no project inputs were provided");
     }
-    for (i = 0U; i < input_count; ++i) {
+    for (i = 0U; inputs != NULL && i < input_count && context.result.error_count == 0U; ++i) {
         const char *source = inputs[i].source != NULL ? inputs[i].source : "";
         const F2cOptions *options = &inputs[i].options;
         F2cSourceForm form = options->source_form;
         context.options = options;
+        if (inputs[i].source == NULL && inputs[i].length != 0U) {
+            f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
+                                "project input has a null source buffer with a nonzero length");
+            break;
+        }
+        if (inputs[i].source != NULL && memchr(inputs[i].source, '\0', inputs[i].length) != NULL) {
+            f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
+                                "project input contains an embedded NUL byte");
+            break;
+        }
+        if (form != F2C_SOURCE_AUTO && form != F2C_SOURCE_FREE && form != F2C_SOURCE_FIXED) {
+            f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
+                                "project input has an invalid source-form value");
+            break;
+        }
+        if (inputs[i].length > context.limits.max_input_bytes - context.input_bytes) {
+            f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, 1U, 1,
+                                "project input limit of %zu bytes exceeded",
+                                context.limits.max_input_bytes);
+            break;
+        }
+        context.input_bytes += inputs[i].length;
         if (form == F2C_SOURCE_AUTO) {
             const char *name = options->source_name;
             const char *extension = name != NULL ? strrchr(name, '.') : NULL;
@@ -251,42 +180,41 @@ F2cResult f2c_transpile_project(const F2cInput *inputs, size_t input_count) {
                        : F2C_SOURCE_FREE;
         }
         if (!f2c_normalize_source(&context, source, inputs[i].length, form)) {
-            f2c_diagnostic(&context, 1U, 1, "out of memory while normalizing project input");
+            if (context.result.error_count == 0U)
+                f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
+                                    "out of memory while normalizing project input");
             break;
         }
     }
-    if (context.result.error_count == 0U &&
-        (!f2c_rewrite_labeled_do(&context) || !f2c_tokenize_lines(&context) ||
-         !f2c_discover_modules(&context) || !f2c_discover_units(&context))) {
-        f2c_diagnostic(&context, 1U, 1, "out of memory");
-    }
-    for (i = 0U; i < context.modules.count; ++i) {
-        context.options = &context.modules.items[i].options;
-        f2c_analyze_module(&context, &context.modules.items[i]);
-    }
-    for (i = 0U; i < context.units.count; ++i) {
-        context.options = &context.units.items[i].options;
-        f2c_analyze_unit(&context, &context.units.items[i]);
-    }
-    if (context.result.error_count == 0U && !f2c_build_procedure_registry(&context))
-        f2c_diagnostic(&context, 1U, 1, "out of memory while building procedure registry");
-    if (context.result.error_count == 0U)
-        f2c_resolve_derived_semantics(&context);
+    if (context.result.error_count == 0U && f2c_build_syntax_program(&context))
+        (void)f2c_build_typed_program(&context);
     if (context.result.error_count == 0U) {
-        for (i = 0U; i < context.units.count; ++i) {
-            context.options = &context.units.items[i].options;
-            f2c_validate_implicit_external(&context, &context.units.items[i]);
-        }
-    }
-    if (context.result.error_count == 0U) {
-        for (i = 0U; i < context.units.count; ++i) {
-            context.options = &context.units.items[i].options;
-            f2c_build_statement_ir(&context, &context.units.items[i]);
+        if (context.phase != F2C_COMPILATION_TYPED_IR) {
+            f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_INTERNAL, 1U, 1,
+                                "internal compiler error: emitter requires typed IR");
+        } else {
+            for (i = 0U; i < context.modules.count; ++i) {
+                if (context.modules.items[i].phase != F2C_UNIT_TYPED_IR) {
+                    f2c_diagnostic_code(
+                        &context, F2C_DIAGNOSTIC_INTERNAL, 1U, 1,
+                        "internal compiler error: module emitter requires typed IR");
+                    break;
+                }
+            }
+            for (i = 0U; i < context.units.count && context.result.error_count == 0U; ++i) {
+                if (context.units.items[i].phase != F2C_UNIT_TYPED_IR) {
+                    f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_INTERNAL, 1U, 1,
+                                        "internal compiler error: unit emitter requires typed IR");
+                    break;
+                }
+            }
         }
     }
     if (context.result.error_count == 0U) {
         F2cRequiredFeatures features = {0};
         size_t u;
+        for (u = 0U; u < context.modules.count; ++u)
+            collect_unit_features(&context.modules.items[u], &features);
         for (u = 0U; u < context.units.count; ++u)
             collect_unit_features(&context.units.items[u], &features);
         if (f2c_supported_module_needs_complex(&context))
@@ -897,7 +825,12 @@ F2cResult f2c_transpile_project(const F2cInput *inputs, size_t input_count) {
             context.options = &context.units.items[i].options;
             f2c_emit_unit(&context, &context.units.items[i]);
         }
+        context.phase = F2C_COMPILATION_EMITTED;
     }
+    if (context.output.limit_exceeded || context.header.limit_exceeded)
+        f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, 1U, 1,
+                            "generated output limit of %zu bytes exceeded",
+                            context.limits.max_output_bytes);
     context.result.code = f2c_buffer_take(&context.output);
     context.result.header = f2c_buffer_take(&context.header);
     context.result.diagnostics = f2c_buffer_take(&context.diagnostics);
@@ -927,6 +860,10 @@ F2cResult f2c_transpile_project(const F2cInput *inputs, size_t input_count) {
     }
 }
 
+F2cResult f2c_transpile_project(const F2cInput *inputs, size_t input_count) {
+    return f2c_transpile_project_config(inputs, input_count, NULL);
+}
+
 F2cResult f2c_transpile(const char *source, size_t length, const F2cOptions *options) {
     F2cInput input;
     input.source = source;
@@ -945,7 +882,7 @@ void f2c_result_free(F2cResult *result) {
 }
 
 #ifndef F2C_VERSION
-#define F2C_VERSION "1.0.0"
+#define F2C_VERSION "1.1.0"
 #endif
 
 const char *f2c_version(void) { return F2C_VERSION; }

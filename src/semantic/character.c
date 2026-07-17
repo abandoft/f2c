@@ -229,8 +229,7 @@ char *f2c_symbol_character_length(Unit *unit, const Symbol *symbol) {
         return f2c_buffer_take(&result);
     }
     if (symbol->character_length != NULL)
-        return f2c_emit_cached_expression(unit, symbol->character_length_expression,
-                                          symbol->character_length);
+        return f2c_emit_typed_expression(unit, symbol->character_length_expression);
     if (symbol->parameter && symbol->initializer != NULL &&
         (symbol->initializer[0] == '\'' || symbol->initializer[0] == '"')) {
         f2c_buffer_printf(&result, "%zuU", string_literal_length(symbol->initializer));
@@ -359,8 +358,7 @@ static char *character_target_length(Unit *unit, const Symbol *symbol) {
         return f2c_buffer_take(&result);
     }
     if (symbol->character_length != NULL)
-        return f2c_emit_cached_expression(unit, symbol->character_length_expression,
-                                          symbol->character_length);
+        return f2c_emit_typed_expression(unit, symbol->character_length_expression);
     return f2c_strdup("1U");
 }
 

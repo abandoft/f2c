@@ -1,0 +1,188 @@
+#include "codegen/io/private.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+static void emit_formatted_scalar(Context *context, Unit *unit, const F2cExpr *expression,
+                                  const Symbol *symbol, const char *value, int input, int depth) {
+    Type type =
+        expression != NULL ? expression->type : (symbol != NULL ? symbol->type : TYPE_UNKNOWN);
+    f2c_io_indent(&context->output, depth);
+    if (type == TYPE_CHARACTER) {
+        char *length = expression != NULL ? f2c_character_length_expression(unit, expression)
+                                          : f2c_symbol_character_length(unit, symbol);
+        char *pointer = expression != NULL ? f2c_character_source_pointer(unit, expression, value)
+                                           : f2c_strdup(value);
+        if (input)
+            f2c_buffer_printf(&context->output,
+                              "(void)f2c_format_read_character(&f2c_io_format, %s, "
+                              "(size_t)(%s));\n",
+                              pointer != NULL ? pointer : value, length != NULL ? length : "1U");
+        else
+            f2c_buffer_printf(&context->output,
+                              "f2c_format_write_character(&f2c_io_format, %s, "
+                              "(size_t)(%s));\n",
+                              pointer != NULL ? pointer : value, length != NULL ? length : "1U");
+        free(length);
+        free(pointer);
+    } else if (type == TYPE_LOGICAL) {
+        if (input) {
+            f2c_buffer_append(&context->output, "{ bool f2c_formatted_value; ");
+            f2c_buffer_printf(&context->output,
+                              "if (f2c_format_read_logical(&f2c_io_format, "
+                              "&f2c_formatted_value) > 0) %s = f2c_formatted_value ? 1 : 0; }\n",
+                              value);
+        } else {
+            f2c_buffer_printf(&context->output,
+                              "f2c_format_write_logical(&f2c_io_format, (%s) != 0);\n", value);
+        }
+    } else if (type == TYPE_INTEGER) {
+        if (input) {
+            f2c_buffer_append(&context->output, "{ int64_t f2c_formatted_value; ");
+            f2c_buffer_printf(&context->output,
+                              "if (f2c_format_read_integer(&f2c_io_format, "
+                              "&f2c_formatted_value) > 0) %s = (%s)f2c_formatted_value; }\n",
+                              value,
+                              symbol != NULL ? f2c_symbol_c_type(symbol)
+                                             : f2c_expression_c_type(expression));
+        } else {
+            f2c_buffer_printf(&context->output,
+                              "f2c_format_write_integer(&f2c_io_format, (int64_t)(%s));\n", value);
+        }
+    } else if (type == TYPE_COMPLEX || type == TYPE_DOUBLE_COMPLEX) {
+        if (input) {
+            f2c_buffer_append(&context->output,
+                              "{ double f2c_formatted_real, f2c_formatted_imaginary; ");
+            f2c_buffer_printf(&context->output,
+                              "if (f2c_format_read_real(&f2c_io_format, &f2c_formatted_real) > "
+                              "0 && f2c_format_read_real(&f2c_io_format, "
+                              "&f2c_formatted_imaginary) > 0) %s = %s(f2c_formatted_real, "
+                              "f2c_formatted_imaginary); }\n",
+                              value, type == TYPE_COMPLEX ? "f2c_make_c" : "f2c_make_z");
+        } else {
+            f2c_buffer_printf(&context->output,
+                              "f2c_format_write_real(&f2c_io_format, (double)%s(%s)); "
+                              "f2c_format_write_real(&f2c_io_format, (double)%s(%s));\n",
+                              type == TYPE_COMPLEX ? "crealf" : "creal", value,
+                              type == TYPE_COMPLEX ? "cimagf" : "cimag", value);
+        }
+    } else {
+        if (input) {
+            f2c_buffer_append(&context->output, "{ double f2c_formatted_value; ");
+            f2c_buffer_printf(&context->output,
+                              "if (f2c_format_read_real(&f2c_io_format, "
+                              "&f2c_formatted_value) > 0) %s = (%s)f2c_formatted_value; }\n",
+                              value,
+                              symbol != NULL ? f2c_symbol_c_type(symbol)
+                                             : f2c_expression_c_type(expression));
+        } else {
+            f2c_buffer_printf(&context->output,
+                              "f2c_format_write_real(&f2c_io_format, (double)(%s));\n", value);
+        }
+    }
+}
+
+static void emit_formatted_derived(Context *context, const char *value, F2cDerivedType *derived,
+                                   int input, const char *unit_number, int depth) {
+    const F2cDefinedIoKind kind =
+        input ? F2C_DEFINED_IO_READ_FORMATTED : F2C_DEFINED_IO_WRITE_FORMATTED;
+    f2c_io_indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "{ f2c_format_descriptor f2c_dtio_descriptor;\n");
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output,
+                      "if (!f2c_format_next(&f2c_io_format, &f2c_dtio_descriptor) || "
+                      "f2c_dtio_descriptor.code[0] != 'D' || "
+                      "f2c_dtio_descriptor.code[1] != 'T') { "
+                      "f2c_io_format.status = 0; } else {\n");
+    if (!f2c_io_emit_defined_io_call(context, value, derived, kind, unit_number,
+                                     "f2c_dtio_descriptor.iotype", "f2c_dtio_descriptor.v_list",
+                                     "f2c_dtio_descriptor.v_list_count", "f2c_io_format.status",
+                                     depth + 2)) {
+        f2c_io_indent(&context->output, depth + 2);
+        f2c_buffer_append(&context->output, "f2c_io_format.status = 0;\n");
+    }
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output, "}\n");
+    f2c_io_indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+}
+
+void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *item, int input,
+                                const char *unit_number, int depth) {
+    const F2cExpr *expression;
+    Symbol *symbol;
+    if (item == NULL)
+        return;
+    if (item->implied_do) {
+        size_t i;
+        char *variable = f2c_io_emit_required_expression(unit, item->iterator);
+        char *start = f2c_io_emit_required_expression(unit, item->initial);
+        char *finish = f2c_io_emit_required_expression(unit, item->limit);
+        char *step = f2c_io_emit_required_expression(unit, item->step);
+        if (variable != NULL && start != NULL && finish != NULL && step != NULL) {
+            f2c_io_indent(&context->output, depth);
+            f2c_buffer_printf(&context->output,
+                              "for (%s = %s; ((%s) >= 0 ? %s <= %s : %s >= %s); %s += %s) "
+                              "{\n",
+                              variable, start, step, variable, finish, variable, finish, variable,
+                              step);
+            for (i = 0U; i < item->child_count; ++i)
+                f2c_io_emit_formatted_item(context, unit, &item->children[i], input, unit_number,
+                                           depth + 1);
+            f2c_io_indent(&context->output, depth);
+            f2c_buffer_append(&context->output, "}\n");
+        }
+        free(variable);
+        free(start);
+        free(finish);
+        free(step);
+        return;
+    }
+    expression = item->expression;
+    symbol = expression != NULL ? expression->symbol : NULL;
+    if (expression == NULL)
+        return;
+    if (expression->kind == F2C_EXPR_NAME && symbol != NULL && symbol->rank != 0U) {
+        char *count = f2c_symbol_element_count(unit, symbol);
+        char *character_length =
+            symbol->type == TYPE_CHARACTER ? f2c_symbol_character_length(unit, symbol) : NULL;
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output,
+                          "for (size_t f2c_format_index = 0U; f2c_format_index < %s; "
+                          "++f2c_format_index) {\n",
+                          count != NULL ? count : "0U");
+        {
+            Buffer value = {0};
+            if (symbol->type == TYPE_CHARACTER)
+                f2c_buffer_printf(&value, "%s + f2c_format_index * (size_t)(%s)",
+                                  f2c_symbol_c_name(unit, symbol),
+                                  character_length != NULL ? character_length : "1U");
+            else
+                f2c_buffer_printf(&value, "%s[f2c_format_index]", f2c_symbol_c_name(unit, symbol));
+            if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL)
+                emit_formatted_derived(
+                    context, value.data != NULL ? value.data : f2c_symbol_c_name(unit, symbol),
+                    symbol->derived_type, input, unit_number, depth + 1);
+            else
+                emit_formatted_scalar(context, unit, NULL, symbol,
+                                      value.data != NULL ? value.data
+                                                         : f2c_symbol_c_name(unit, symbol),
+                                      input, depth + 1);
+            free(value.data);
+        }
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
+        free(count);
+        free(character_length);
+    } else {
+        char *value = f2c_io_emit_item_expression(unit, item);
+        if (value != NULL) {
+            if (expression->type == TYPE_DERIVED && expression->derived_type != NULL)
+                emit_formatted_derived(context, value, expression->derived_type, input, unit_number,
+                                       depth);
+            else
+                emit_formatted_scalar(context, unit, expression, symbol, value, input, depth);
+        }
+        free(value);
+    }
+}

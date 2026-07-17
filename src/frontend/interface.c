@@ -1,14 +1,7 @@
 #include "internal/f2c.h"
 
-#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-
-static const char *skip_space(const char *cursor) {
-    while (isspace((unsigned char)*cursor))
-        ++cursor;
-    return cursor;
-}
 
 int f2c_interface_start_line(const char *line) {
     return f2c_starts_word(line, "interface") || f2c_starts_word(line, "abstract interface");
@@ -76,13 +69,9 @@ static int copy_signature_to_symbol(Context *context, Unit *host, Unit *procedur
     external->external_signature_explicit = 1;
     if (!f2c_copy_function_result_metadata(external, procedure))
         return 0;
+    if (!f2c_symbol_resize_external_parameters(external, procedure->argument_count))
+        return 0;
     external->external_parameter_count = procedure->argument_count;
-    if (external->external_parameter_count > 64U) {
-        f2c_diagnostic(context, context->lines.items[procedure->begin].number, 1,
-                       "procedure '%s' exceeds the supported 64-argument interface limit",
-                       visible_name);
-        external->external_parameter_count = 64U;
-    }
     if (external->type == TYPE_CHARACTER && result_symbol != NULL &&
         result_symbol->character_length != NULL) {
         free(external->character_length);
@@ -122,22 +111,19 @@ static int copy_interface_signatures(Context *context, Unit *host, Unit *procedu
 }
 
 static char *parse_generic_name(Context *context, const Line *line) {
-    const char *cursor = line->text;
-    size_t consumed = 0U;
-    char *name;
-    if (f2c_starts_word(cursor, "abstract interface"))
+    const size_t start = line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U
+                                                                                           : 0U;
+    if (f2c_abstract_interface_tokens(line))
         return f2c_strdup("");
-    cursor = skip_space(cursor + strlen("interface"));
-    if (*cursor == '\0')
+    if (start + 1U == line->token_count)
         return f2c_strdup("");
-    name = f2c_identifier(cursor, &consumed);
-    if (name == NULL || *skip_space(cursor + consumed) != '\0') {
+    if (start + 2U != line->token_count ||
+        line->tokens[start + 1U].kind != F2C_TOKEN_IDENTIFIER) {
         f2c_diagnostic(context, line->number, 1,
                        "only a plain name is supported on a generic INTERFACE statement");
-        free(name);
         return NULL;
     }
-    return name;
+    return f2c_token_text(&line->tokens[start + 1U]);
 }
 
 static Unit *find_signature_in_scope(Unit *scope, const char *name, int include_abstract) {
@@ -175,10 +161,7 @@ static size_t find_procedure_end(const Context *context, size_t begin, size_t bl
                                  UnitKind kind) {
     size_t i;
     for (i = begin + 1U; i < block_end; ++i) {
-        const char *line = context->lines.items[i].text;
-        if ((kind == UNIT_SUBROUTINE && f2c_starts_word(line, "end subroutine")) ||
-            (kind == UNIT_FUNCTION && f2c_starts_word(line, "end function")) ||
-            strcmp(line, "end") == 0)
+        if (f2c_program_unit_end_tokens(&context->lines.items[i], kind))
             return i;
     }
     return block_end;
@@ -206,13 +189,13 @@ void f2c_parse_explicit_interfaces(Context *context, Unit *host) {
         size_t j;
         size_t procedure_count = 0U;
         size_t module_procedure_count = 0U;
-        const int abstract_block = f2c_starts_word(start->text, "abstract interface");
+        const int abstract_block = f2c_abstract_interface_tokens(start);
         char *generic_name;
-        if (!f2c_interface_start_line(start->text))
+        if (!f2c_interface_start_tokens(start))
             continue;
         block_end = i + 1U;
         while (block_end < host->end &&
-               !(f2c_interface_end_line(context->lines.items[block_end].text) &&
+               !(f2c_interface_end_tokens(&context->lines.items[block_end]) &&
                  context->lines.items[block_end].interface_depth == start->interface_depth))
             ++block_end;
         if (block_end == host->end) {
@@ -225,12 +208,12 @@ void f2c_parse_explicit_interfaces(Context *context, Unit *host) {
             Unit *previous_specific;
             size_t procedure_end;
             int first_generic_specific;
-            if (f2c_starts_word(context->lines.items[j].text, "module procedure")) {
+            if (f2c_module_procedure_tokens(&context->lines.items[j])) {
                 ++module_procedure_count;
                 ++j;
                 continue;
             }
-            if (!f2c_parse_unit_header(context->lines.items[j].text, &procedure)) {
+            if (!f2c_parse_unit_header_tokens(&context->lines.items[j], &procedure)) {
                 ++j;
                 continue;
             }
@@ -249,6 +232,7 @@ void f2c_parse_explicit_interfaces(Context *context, Unit *host) {
                 break;
             }
             procedure.begin = j;
+            procedure.context = context;
             procedure.end = procedure_end;
             procedure.interface_body = 1;
             procedure.interface_abstract = abstract_block;

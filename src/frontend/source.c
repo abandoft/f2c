@@ -4,6 +4,110 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct SourceBuffer {
+    Buffer text;
+    F2cSourceMapSegment *map;
+    size_t map_count;
+    size_t map_capacity;
+} SourceBuffer;
+
+static void source_buffer_discard(SourceBuffer *buffer) {
+    free(buffer->text.data);
+    free(buffer->map);
+    memset(buffer, 0, sizeof(*buffer));
+}
+
+static int source_map_reserve(SourceBuffer *buffer, size_t additional) {
+    F2cSourceMapSegment *replacement;
+    size_t required;
+    size_t capacity;
+    if (additional > SIZE_MAX - buffer->map_count)
+        return 0;
+    required = buffer->map_count + additional;
+    if (required <= buffer->map_capacity)
+        return 1;
+    capacity = buffer->map_capacity == 0U ? 8U : buffer->map_capacity;
+    while (capacity < required) {
+        if (capacity > SIZE_MAX / 2U)
+            return 0;
+        capacity *= 2U;
+    }
+    if (capacity > SIZE_MAX / sizeof(*replacement))
+        return 0;
+    replacement = (F2cSourceMapSegment *)realloc(buffer->map,
+                                                 capacity * sizeof(*replacement));
+    if (replacement == NULL)
+        return 0;
+    buffer->map = replacement;
+    buffer->map_capacity = capacity;
+    return 1;
+}
+
+static int source_buffer_append(SourceBuffer *buffer, const char *text, size_t length,
+                                size_t physical_line, size_t physical_column) {
+    const size_t logical_begin = buffer->text.length;
+    F2cSourceMapSegment *last;
+    if (length == 0U)
+        return 1;
+    if (!source_map_reserve(buffer, 1U))
+        return 0;
+    f2c_buffer_append_n(&buffer->text, text, length);
+    if (buffer->text.failed)
+        return 0;
+    last = buffer->map_count != 0U ? &buffer->map[buffer->map_count - 1U] : NULL;
+    if (last != NULL && last->logical_begin + last->length == logical_begin &&
+        last->physical_line == physical_line &&
+        last->physical_column + last->length == physical_column) {
+        last->length += length;
+        return 1;
+    }
+    buffer->map[buffer->map_count++] =
+        (F2cSourceMapSegment){logical_begin, length, physical_line, physical_column};
+    return 1;
+}
+
+static int source_buffer_separator(SourceBuffer *buffer, size_t line, size_t column) {
+    if (buffer->text.length == 0U)
+        return 1;
+    return source_buffer_append(buffer, " ", 1U, line, column > 1U ? column - 1U : column);
+}
+
+static F2cSourceMapSegment *source_map_slice(const SourceBuffer *buffer, size_t begin,
+                                             size_t length, size_t *count) {
+    F2cSourceMapSegment *result;
+    size_t index;
+    size_t used = 0U;
+    const size_t end = begin + length;
+    *count = 0U;
+    if (buffer->map_count == 0U || length == 0U)
+        return NULL;
+    if (buffer->map_count > SIZE_MAX / sizeof(*result))
+        return NULL;
+    result = (F2cSourceMapSegment *)malloc(buffer->map_count * sizeof(*result));
+    if (result == NULL)
+        return NULL;
+    for (index = 0U; index < buffer->map_count; ++index) {
+        const F2cSourceMapSegment *segment = &buffer->map[index];
+        const size_t segment_end = segment->logical_begin + segment->length;
+        const size_t overlap_begin = segment->logical_begin > begin ? segment->logical_begin : begin;
+        const size_t overlap_end = segment_end < end ? segment_end : end;
+        if (overlap_begin >= overlap_end)
+            continue;
+        result[used].logical_begin = overlap_begin - begin;
+        result[used].length = overlap_end - overlap_begin;
+        result[used].physical_line = segment->physical_line;
+        result[used].physical_column =
+            segment->physical_column + overlap_begin - segment->logical_begin;
+        ++used;
+    }
+    if (used == 0U) {
+        free(result);
+        return NULL;
+    }
+    *count = used;
+    return result;
+}
+
 static void strip_comment(char *line) {
     int quote = 0;
     char *cursor;
@@ -22,7 +126,7 @@ static void strip_comment(char *line) {
     }
 }
 
-static void normalize_fixed_numeric_blanks(char *line) {
+static void normalize_fixed_numeric_blanks(char *line, size_t *columns) {
     char *cursor;
     int quote = 0;
     for (cursor = line; *cursor != '\0'; ++cursor) {
@@ -50,15 +154,20 @@ static void normalize_fixed_numeric_blanks(char *line) {
             }
             if (!isdigit((unsigned char)*digits))
                 continue;
-            if (exponent != cursor + 1)
+            if (exponent != cursor + 1) {
+                const size_t destination = (size_t)(cursor + 1 - line);
+                const size_t source = (size_t)(exponent - line);
+                const size_t moved = strlen(exponent);
                 memmove(cursor + 1, exponent, strlen(exponent) + 1U);
+                memmove(columns + destination, columns + source, moved * sizeof(*columns));
+            }
         }
     }
 }
 
-static int push_logical_statements(Context *context, char *line, size_t number) {
-    char *cursor = line;
-    char *start = line;
+static int push_logical_statements(Context *context, SourceBuffer *logical, size_t number) {
+    char *cursor = logical->text.data;
+    char *start = cursor;
     int quote = 0;
     for (;;) {
         if ((*cursor == '\'' || *cursor == '"') &&
@@ -70,18 +179,31 @@ static int push_logical_statements(Context *context, char *line, size_t number) 
         }
         if ((*cursor == ';' && quote == 0) || *cursor == '\0') {
             char *part;
-            char *clean;
-            part = f2c_strdup_n(start, (size_t)(cursor - start));
+            F2cSourceMapSegment *map;
+            size_t map_count;
+            size_t begin = (size_t)(start - logical->text.data);
+            size_t end = (size_t)(cursor - logical->text.data);
+            while (begin < end && isspace((unsigned char)logical->text.data[begin]))
+                ++begin;
+            while (end > begin && isspace((unsigned char)logical->text.data[end - 1U]))
+                --end;
+            part = f2c_strdup_n(logical->text.data + begin, end - begin);
             if (part == NULL) {
-                free(line);
+                source_buffer_discard(logical);
                 return 0;
             }
-            clean = f2c_trim(part);
-            if (*clean != '\0') {
-                if (clean != part)
-                    memmove(part, clean, strlen(clean) + 1U);
-                if (!f2c_lines_push(&context->lines, part, number, context->options)) {
-                    free(line);
+            if (begin != end) {
+                map = source_map_slice(logical, begin, end - begin, &map_count);
+                if (logical->map_count != 0U && map == NULL) {
+                    free(part);
+                    source_buffer_discard(logical);
+                    return 0;
+                }
+                if (map_count != 0U)
+                    number = map[0].physical_line;
+                if (!f2c_lines_push_mapped(context, part, number, map, map_count,
+                                           context->options)) {
+                    source_buffer_discard(logical);
                     return 0;
                 }
             } else {
@@ -93,37 +215,23 @@ static int push_logical_statements(Context *context, char *line, size_t number) 
         }
         ++cursor;
     }
-    free(line);
+    source_buffer_discard(logical);
     return 1;
 }
 
-static int append_logical_line(Context *context, Buffer *logical, size_t number) {
-    char *copy;
-    char *clean;
-    if (logical->length == 0U) {
+static int append_logical_line(Context *context, SourceBuffer *logical, size_t number) {
+    if (logical->text.length == 0U) {
         return 1;
     }
-    copy = f2c_buffer_take(logical);
-    if (copy == NULL) {
-        return 0;
-    }
-    clean = f2c_trim(copy);
-    if (*clean == '\0') {
-        free(copy);
-        return 1;
-    }
-    f2c_lowercase_code(clean);
-    if (clean != copy) {
-        memmove(copy, clean, strlen(clean) + 1U);
-    }
-    return push_logical_statements(context, copy, number);
+    f2c_lowercase_code(logical->text.data);
+    return push_logical_statements(context, logical, number);
 }
 
 int f2c_normalize_source(Context *context, const char *source, size_t length, F2cSourceForm form) {
     size_t offset = 0U;
     size_t line_number = 0U;
     size_t logical_number = 1U;
-    Buffer logical = {0};
+    SourceBuffer logical = {0};
     int continued = 0;
     int pp_depth = 0;
     int pp_active = 1;
@@ -198,7 +306,10 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
 
         if (form == F2C_SOURCE_FIXED) {
             const size_t raw_length = strlen(raw);
-            char fixed_label[6] = {0};
+            size_t label_begin = 0U;
+            size_t label_end = raw_length < 5U ? raw_length : 5U;
+            size_t *columns = NULL;
+            size_t body_length;
             if (raw_length > 72U &&
                 (raw[0] == 'c' || raw[0] == 'C' || raw[0] == '*' || raw[0] == '!')) {
                 char *embedded_program = strstr(raw + 72, "PROGRAM");
@@ -215,13 +326,10 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
             }
             next_continued = raw_length > 5U && raw[5] != ' ' && raw[5] != '0';
             if (!next_continued && raw_length != 0U) {
-                const size_t label_length = raw_length < 5U ? raw_length : 5U;
-                char *clean_label;
-                memcpy(fixed_label, raw, label_length);
-                clean_label = f2c_trim(fixed_label);
-                if (clean_label != fixed_label) {
-                    memmove(fixed_label, clean_label, strlen(clean_label) + 1U);
-                }
+                while (label_begin < label_end && isspace((unsigned char)raw[label_begin]))
+                    ++label_begin;
+                while (label_end > label_begin && isspace((unsigned char)raw[label_end - 1U]))
+                    --label_end;
             }
             body = raw_length > 6U ? raw + 6 : raw + raw_length;
             /* Reference LAPACK uses the common extended fixed-form width and
@@ -231,9 +339,23 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
             }
             strip_comment(body);
             body = f2c_trim(body);
-            normalize_fixed_numeric_blanks(body);
-            if (!next_continued && logical.length != 0U &&
+            body_length = strlen(body);
+            if (body_length != 0U) {
+                size_t column;
+                columns = (size_t *)malloc(body_length * sizeof(*columns));
+                if (columns == NULL) {
+                    free(raw);
+                    source_buffer_discard(&logical);
+                    return 0;
+                }
+                for (column = 0U; column < body_length; ++column)
+                    columns[column] = (size_t)(body - raw) + column + 1U;
+                normalize_fixed_numeric_blanks(body, columns);
+                body_length = strlen(body);
+            }
+            if (!next_continued && logical.text.length != 0U &&
                 !append_logical_line(context, &logical, logical_number)) {
+                free(columns);
                 free(raw);
                 return 0;
             }
@@ -241,15 +363,37 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
                 logical_number = line_number;
             }
             if (*body != '\0') {
-                if (logical.length != 0U) {
-                    f2c_buffer_append(&logical, " ");
+                size_t character = 0U;
+                if (!source_buffer_separator(&logical, line_number, columns[0])) {
+                    free(columns);
+                    free(raw);
+                    source_buffer_discard(&logical);
+                    return 0;
                 }
-                if (fixed_label[0] != '\0') {
-                    f2c_buffer_append(&logical, fixed_label);
-                    f2c_buffer_append(&logical, " ");
+                if (label_begin < label_end &&
+                    (!source_buffer_append(&logical, raw + label_begin, label_end - label_begin,
+                                           line_number, label_begin + 1U) ||
+                     !source_buffer_separator(&logical, line_number, columns[0]))) {
+                    free(columns);
+                    free(raw);
+                    source_buffer_discard(&logical);
+                    return 0;
                 }
-                f2c_buffer_append(&logical, body);
+                while (character < body_length) {
+                    size_t run = character + 1U;
+                    while (run < body_length && columns[run] == columns[run - 1U] + 1U)
+                        ++run;
+                    if (!source_buffer_append(&logical, body + character, run - character,
+                                              line_number, columns[character])) {
+                        free(columns);
+                        free(raw);
+                        source_buffer_discard(&logical);
+                        return 0;
+                    }
+                    character = run;
+                }
             }
+            free(columns);
         } else {
             size_t body_length;
             strip_comment(raw);
@@ -271,19 +415,43 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
                 logical_number = line_number;
             }
             if (*body != '\0') {
-                if (logical.length != 0U) {
-                    f2c_buffer_append(&logical, " ");
+                const size_t column = (size_t)(body - raw) + 1U;
+                if (!source_buffer_separator(&logical, line_number, column) ||
+                    !source_buffer_append(&logical, body, strlen(body), line_number, column)) {
+                    free(raw);
+                    source_buffer_discard(&logical);
+                    return 0;
                 }
-                f2c_buffer_append(&logical, body);
             }
             continued = next_continued;
         }
         free(raw);
-        if (logical.failed) {
+        if (logical.text.failed) {
+            source_buffer_discard(&logical);
             return 0;
         }
     }
     return append_logical_line(context, &logical, logical_number);
+}
+
+static int replace_rewritten_line(Line *line, char *text) {
+    F2cSourceMapSegment *map;
+    const F2cSourcePosition origin = f2c_line_source_position(line, 0U);
+    const size_t length = text != NULL ? strlen(text) : 0U;
+    map = length != 0U ? (F2cSourceMapSegment *)malloc(sizeof(*map)) : NULL;
+    if (length != 0U && map == NULL) {
+        free(text);
+        return 0;
+    }
+    if (map != NULL)
+        *map = (F2cSourceMapSegment){0U, length, origin.line, origin.column};
+    free(line->text);
+    free(line->source_map);
+    line->text = text;
+    line->source_map = map;
+    line->source_map_count = map != NULL ? 1U : 0U;
+    line->number = origin.line;
+    return 1;
 }
 
 /* Convert the legacy "DO 10 I=... / 10 CONTINUE" spelling to the block form
@@ -326,8 +494,8 @@ int f2c_rewrite_labeled_do(Context *context) {
         f2c_buffer_printf(&replacement, "do %s", cursor);
         if (replacement.failed)
             return 0;
-        free(context->lines.items[i].text);
-        context->lines.items[i].text = f2c_buffer_take(&replacement);
+        if (!replace_rewritten_line(&context->lines.items[i], f2c_buffer_take(&replacement)))
+            return 0;
 
         for (j = i + 1U; j < context->lines.count; ++j) {
             const char *target = context->lines.items[j].text;
@@ -338,8 +506,9 @@ int f2c_rewrite_labeled_do(Context *context) {
                 f2c_buffer_printf(&terminal, "end do %s", label);
                 if (terminal.failed)
                     return 0;
-                free(context->lines.items[j].text);
-                context->lines.items[j].text = f2c_buffer_take(&terminal);
+                if (!replace_rewritten_line(&context->lines.items[j],
+                                            f2c_buffer_take(&terminal)))
+                    return 0;
                 break;
             }
         }

@@ -6,6 +6,43 @@
 
 static int failures = 0;
 
+typedef struct DiagnosticCapture {
+    size_t count;
+    F2cDiagnosticCode code;
+    F2cDiagnosticSeverity severity;
+    size_t line;
+    size_t column;
+    size_t end_line;
+    size_t end_column;
+    char source_name[64];
+    char message[160];
+} DiagnosticCapture;
+
+static void capture_diagnostic(const F2cDiagnostic *diagnostic, void *user_data) {
+    DiagnosticCapture *capture = (DiagnosticCapture *)user_data;
+    const size_t source_length =
+        diagnostic->begin.source_name != NULL ? strlen(diagnostic->begin.source_name) : 0U;
+    const size_t bounded_source_length = source_length < sizeof(capture->source_name) - 1U
+                                             ? source_length
+                                             : sizeof(capture->source_name) - 1U;
+    const size_t bounded_message_length = diagnostic->message_length < sizeof(capture->message) - 1U
+                                              ? diagnostic->message_length
+                                              : sizeof(capture->message) - 1U;
+    ++capture->count;
+    if (capture->count > 1U && diagnostic->severity < capture->severity)
+        return;
+    capture->code = diagnostic->code;
+    capture->severity = diagnostic->severity;
+    capture->line = diagnostic->begin.line;
+    capture->column = diagnostic->begin.column;
+    capture->end_line = diagnostic->end.line;
+    capture->end_column = diagnostic->end.column;
+    memcpy(capture->source_name, diagnostic->begin.source_name, bounded_source_length);
+    capture->source_name[bounded_source_length] = '\0';
+    memcpy(capture->message, diagnostic->message, bounded_message_length);
+    capture->message[bounded_message_length] = '\0';
+}
+
 static void expect(int condition, const char *message) {
     if (!condition) {
         fprintf(stderr, "FAIL: %s\n", message);
@@ -18,9 +55,9 @@ static void expect_contains(const char *text, const char *needle, const char *me
 }
 
 static void test_version_contract(void) {
-    expect(F2C_VERSION_MAJOR == 1 && F2C_VERSION_MINOR == 0 && F2C_VERSION_PATCH == 0,
+    expect(F2C_VERSION_MAJOR == 1 && F2C_VERSION_MINOR == 1 && F2C_VERSION_PATCH == 0,
            "public version macros match the CMake project version");
-    expect(strcmp(f2c_version(), "1.0.0") == 0,
+    expect(strcmp(f2c_version(), "1.1.0") == 0,
            "runtime version matches the public compile-time version");
 }
 
@@ -29,6 +66,274 @@ static void test_empty_source(void) {
     expect(result.error_count == 1U, "empty source reports one error");
     expect_contains(result.diagnostics, "no PROGRAM", "empty-source diagnostic is actionable");
     f2c_result_free(&result);
+}
+
+static F2cConfig limited_config(void) {
+    F2cConfig config;
+    memset(&config, 0, sizeof(config));
+    config.structure_size = sizeof(config);
+    return config;
+}
+
+static void test_resource_limits(void) {
+    static const char source[] =
+        "program limits\ninteger :: value\nvalue = 1\nend program limits\n";
+    F2cOptions options = {"limits.f90", F2C_SOURCE_FREE, 0};
+    F2cInput input = {source, sizeof(source) - 1U, options};
+    F2cConfig config = limited_config();
+    F2cResult result;
+
+    {
+        DiagnosticCapture capture = {0};
+        config.diagnostic_callback = capture_diagnostic;
+        config.diagnostic_user_data = &capture;
+        result = f2c_transpile_project_config(NULL, 1U, &config);
+        expect(capture.count == 1U, "structured diagnostics report each public API error once");
+        expect(capture.code == F2C_DIAGNOSTIC_INVALID_ARGUMENT,
+               "structured diagnostics expose a stable invalid-argument code");
+        expect(capture.severity == F2C_DIAGNOSTIC_ERROR && capture.line == 1U &&
+                   capture.column == 1U,
+               "structured diagnostics expose severity and source coordinates");
+        expect(strcmp(capture.source_name, "<input>") == 0,
+               "structured diagnostics expose a deterministic source name");
+        expect_contains(capture.message, "no project inputs",
+                        "structured diagnostic messages remain actionable during callbacks");
+        f2c_result_free(&result);
+    }
+
+    config = limited_config();
+    config.limits.max_input_bytes = 8U;
+    result = f2c_transpile_project_config(&input, 1U, &config);
+    expect(result.error_count != 0U && result.code == NULL,
+           "project input budgets fail before source normalization");
+    expect_contains(result.diagnostics, "project input limit of 8 bytes exceeded",
+                    "input-budget diagnostics identify the configured limit");
+    f2c_result_free(&result);
+
+    config = limited_config();
+    config.limits.max_logical_lines = 2U;
+    result = f2c_transpile_project_config(&input, 1U, &config);
+    expect_contains(result.diagnostics, "logical-line limit of 2 exceeded",
+                    "logical-line budgets stop source expansion");
+    f2c_result_free(&result);
+
+    config = limited_config();
+    config.limits.max_tokens = 3U;
+    result = f2c_transpile_project_config(&input, 1U, &config);
+    expect_contains(result.diagnostics, "token limit of 3 exceeded",
+                    "token budgets stop syntax construction");
+    f2c_result_free(&result);
+
+    {
+        static const char expression_source[] =
+            "program expression_limits\ninteger :: value\nvalue = 1 + 2 + 3\nend program "
+            "expression_limits\n";
+        F2cInput expression_input = {
+            expression_source,
+            sizeof(expression_source) - 1U,
+            {"expression_limits.f90", F2C_SOURCE_FREE, 0},
+        };
+        config = limited_config();
+        config.limits.max_ast_nodes = 2U;
+        result = f2c_transpile_project_config(&expression_input, 1U, &config);
+        expect_contains(result.diagnostics, "expression AST-node limit of 2 exceeded",
+                        "AST-node budgets stop syntax-tree amplification");
+        f2c_result_free(&result);
+
+        config = limited_config();
+        config.limits.max_parse_depth = 2U;
+        result = f2c_transpile_project_config(&expression_input, 1U, &config);
+        expect_contains(result.diagnostics, "expression parse-depth limit of 2 exceeded",
+                        "expression-depth budgets stop pathological nesting");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char constant_source[] =
+            "program constant_limits\ninteger :: values(1 + 2)\nvalues = 0\nend program "
+            "constant_limits\n";
+        F2cInput constant_input = {
+            constant_source,
+            sizeof(constant_source) - 1U,
+            {"constant_limits.f90", F2C_SOURCE_FREE, 0},
+        };
+        config = limited_config();
+        config.limits.max_constant_steps = 1U;
+        result = f2c_transpile_project_config(&constant_input, 1U, &config);
+        expect_contains(result.diagnostics, "constant-evaluation step limit of 1 exceeded",
+                        "constant-evaluation budgets stop recursive semantic work");
+        f2c_result_free(&result);
+    }
+
+    config = limited_config();
+    config.limits.max_output_bytes = 64U;
+    result = f2c_transpile_project_config(&input, 1U, &config);
+    expect_contains(result.diagnostics, "generated output limit of 64 bytes exceeded",
+                    "generated-output budgets stop emitter amplification");
+    expect(result.code == NULL, "output-budget failures never return partial generated C");
+    f2c_result_free(&result);
+
+    config = limited_config();
+    config.limits.max_diagnostic_bytes = 32U;
+    result = f2c_transpile_project_config(NULL, 1U, &config);
+    expect(result.error_count != 0U && result.diagnostics != NULL &&
+               strlen(result.diagnostics) <= 32U,
+           "diagnostic byte budgets preserve a valid bounded result buffer");
+    expect(result.diagnostics == NULL || strstr(result.diagnostics, "out of memory") == NULL,
+           "diagnostic truncation is not misreported as allocation failure");
+    f2c_result_free(&result);
+
+    {
+        static const char diagnostic_source[] =
+            "program diagnostics\nbackspace 1\nbackspace 2\nend program diagnostics\n";
+        F2cInput diagnostic_input = {
+            diagnostic_source,
+            sizeof(diagnostic_source) - 1U,
+            {"diagnostics.f90", F2C_SOURCE_FREE, 0},
+        };
+        config = limited_config();
+        config.limits.max_diagnostics = 1U;
+        result = f2c_transpile_project_config(&diagnostic_input, 1U, &config);
+        expect_contains(result.diagnostics, "diagnostic count limit reached",
+                        "diagnostic-count budgets emit one stable suppression notice");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char invalid_source[] = "program invalid\n@\nend program invalid\n";
+        DiagnosticCapture capture = {0};
+        F2cInput invalid_input = {
+            invalid_source,
+            sizeof(invalid_source) - 1U,
+            {"invalid.f90", F2C_SOURCE_FREE, 0},
+        };
+        config = limited_config();
+        config.diagnostic_callback = capture_diagnostic;
+        config.diagnostic_user_data = &capture;
+        result = f2c_transpile_project_config(&invalid_input, 1U, &config);
+        expect(capture.code == F2C_DIAGNOSTIC_INVALID_TOKEN,
+               "lexer failures expose a stable invalid-token code");
+        expect(capture.line == 2U && capture.column == 1U &&
+                   strcmp(capture.source_name, "invalid.f90") == 0,
+               "lexer diagnostics preserve exact file, line, and column coordinates");
+        f2c_result_free(&result);
+    }
+
+    {
+        DiagnosticCapture invalid_capture = {0};
+        config = limited_config();
+        config.structure_size = sizeof(config.structure_size);
+        config.diagnostic_callback = capture_diagnostic;
+        config.diagnostic_user_data = &invalid_capture;
+        result = f2c_transpile_project_config(&input, 1U, &config);
+        expect_contains(result.diagnostics, "configuration structure size does not match",
+                        "the current API rejects smaller configuration layouts");
+        expect(invalid_capture.count == 0U,
+               "a mismatched configuration does not read fields beyond structure_size");
+        f2c_result_free(&result);
+    }
+
+    {
+        DiagnosticCapture invalid_capture = {0};
+        config = limited_config();
+        config.structure_size = sizeof(config) + 1U;
+        config.diagnostic_callback = capture_diagnostic;
+        config.diagnostic_user_data = &invalid_capture;
+        result = f2c_transpile_project_config(&input, 1U, &config);
+        expect_contains(result.diagnostics, "configuration structure size does not match",
+                        "the current API rejects larger configuration layouts");
+        expect(invalid_capture.count == 0U,
+               "a larger unknown configuration layout is not partially interpreted");
+        f2c_result_free(&result);
+    }
+
+    result = f2c_transpile_project_config(NULL, 1U, NULL);
+    expect_contains(result.diagnostics, "no project inputs were provided",
+                    "a null project input array is rejected without dereferencing it");
+    f2c_result_free(&result);
+
+    input.source = NULL;
+    input.length = 1U;
+    result = f2c_transpile_project_config(&input, 1U, NULL);
+    expect_contains(result.diagnostics, "null source buffer with a nonzero length",
+                    "a null source buffer cannot claim readable bytes");
+    f2c_result_free(&result);
+
+    input.source = source;
+    input.length = sizeof(source) - 1U;
+    input.options.source_form = (F2cSourceForm)99;
+    result = f2c_transpile_project_config(&input, 1U, NULL);
+    expect_contains(result.diagnostics, "invalid source-form value",
+                    "invalid public source-form values are rejected deterministically");
+    f2c_result_free(&result);
+
+    {
+        static const char embedded_nul[] = "program nul\n\0end program nul\n";
+        input.source = embedded_nul;
+        input.length = sizeof(embedded_nul) - 1U;
+        input.options.source_form = F2C_SOURCE_FREE;
+        result = f2c_transpile_project_config(&input, 1U, NULL);
+        expect_contains(result.diagnostics, "embedded NUL byte",
+                        "embedded NUL bytes are diagnosed before normalization");
+        f2c_result_free(&result);
+    }
+}
+
+static DiagnosticCapture transpile_invalid_location(const char *source, F2cOptions options) {
+    DiagnosticCapture capture = {0};
+    F2cInput input = {source, strlen(source), options};
+    F2cConfig config = limited_config();
+    F2cResult result;
+    config.diagnostic_callback = capture_diagnostic;
+    config.diagnostic_user_data = &capture;
+    result = f2c_transpile_project_config(&input, 1U, &config);
+    f2c_result_free(&result);
+    return capture;
+}
+
+static void test_physical_source_mapping(void) {
+    static const char continued[] = "program mapped\n"
+                                    "  value = 1 + &\n"
+                                    "    @\n"
+                                    "end program mapped\n";
+    static const char separated[] = "program mapped; @\n"
+                                    "end program mapped\n";
+    static const char fixed[] = "      PROGRAM MAPPED\n"
+                                "      VALUE = 1 +\n"
+                                "     &  @\n"
+                                "      END\n";
+    static const char declaration[] = "subroutine mapped(value)\n"
+                                      "  optional :: value, &\n"
+                                      "    42\n"
+                                      "end subroutine mapped\n";
+    DiagnosticCapture capture =
+        transpile_invalid_location(continued, (F2cOptions){"continued.f90", F2C_SOURCE_FREE, 0});
+    expect(capture.code == F2C_DIAGNOSTIC_INVALID_TOKEN && capture.line == 3U &&
+               capture.column == 5U && capture.end_line == 3U && capture.end_column == 6U &&
+               strcmp(capture.source_name, "continued.f90") == 0,
+           "free-form continuation diagnostics map to the exact physical token range");
+
+    capture =
+        transpile_invalid_location(separated, (F2cOptions){"separated.f90", F2C_SOURCE_FREE, 0});
+    expect(capture.code == F2C_DIAGNOSTIC_INVALID_TOKEN && capture.line == 1U &&
+               capture.column == 17U && capture.end_line == 1U && capture.end_column == 18U,
+           "semicolon-split logical statements preserve their original physical columns");
+
+    capture = transpile_invalid_location(fixed, (F2cOptions){"mapped.f", F2C_SOURCE_FIXED, 0});
+    expect(capture.code == F2C_DIAGNOSTIC_INVALID_TOKEN && capture.line == 3U &&
+               capture.column == 9U && capture.end_line == 3U && capture.end_column == 10U,
+           "fixed-form continuation diagnostics preserve continuation-line columns");
+
+    capture = transpile_invalid_location(declaration,
+                                         (F2cOptions){"declaration.f90", F2C_SOURCE_FREE, 0});
+    if (!(capture.code == F2C_DIAGNOSTIC_SYNTAX && capture.line == 3U && capture.column == 5U &&
+          capture.end_line == 3U && capture.end_column == 7U))
+        fprintf(stderr, "semantic mapping was %d:%zu:%zu-%zu:%zu (%s)\n", (int)capture.code,
+                capture.line, capture.column, capture.end_line, capture.end_column,
+                capture.message);
+    expect(capture.code == F2C_DIAGNOSTIC_SYNTAX && capture.line == 3U && capture.column == 5U &&
+               capture.end_line == 3U && capture.end_column == 7U,
+           "token-based semantic diagnostics retain continuation-line source ranges");
 }
 
 static void test_program_and_control_flow(void) {
@@ -2139,7 +2444,7 @@ static void test_implicit_mapping_semantics(void) {
         F2cOptions invalid_options = {"implicit_overlap.f90", F2C_SOURCE_FREE, 0};
         F2cResult invalid = f2c_transpile(overlap, strlen(overlap), &invalid_options);
         expect(invalid.error_count != 0U, "overlapping letters in IMPLICIT maps are hard errors");
-        expect_contains(invalid.diagnostics, "implicit_overlap.f90:2:1:",
+        expect_contains(invalid.diagnostics, "implicit_overlap.f90:2:33:",
                         "IMPLICIT overlap diagnostics retain source position");
         expect_contains(invalid.diagnostics, "letter 'c' appears in more than one",
                         "IMPLICIT overlap diagnostics identify the conflicting letter");
@@ -2288,9 +2593,100 @@ static void test_type_identifier_assignment(void) {
     f2c_result_free(&result);
 }
 
+static void test_token_driven_scope_and_reference_boundaries(void) {
+    static const char source[] = "subroutine token_boundaries(value, output)\n"
+                                 "  implicit none\n"
+                                 "  real, intent(in) :: value\n"
+                                 "  real, intent(out) :: output\n"
+                                 "  character(len=32) :: marker\n"
+                                 "  marker = 'call hidden(value); end subroutine'\n"
+                                 "  if (value > 0.0) then\n"
+                                 "    output = value\n"
+                                 "  else\n"
+                                 "    output = -value\n"
+                                 "  end if\n"
+                                 "  output = output + 1.0\n"
+                                 "end subroutine token_boundaries\n";
+    F2cOptions options = {"token_boundaries.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, strlen(source), &options);
+    expect(result.error_count == 0U,
+           "strings containing procedure keywords and nested END statements translate");
+    expect(result.code == NULL || strstr(result.code, "extern void hidden") == NULL,
+           "CALL-like text inside a character literal cannot create an external procedure");
+    expect_contains(result.code, "(*output) + 1.0f",
+                    "END IF does not truncate the enclosing procedure body");
+    f2c_result_free(&result);
+
+    {
+        static const char fixed_call[] = "      SUBROUTINE CALL_IF(FLAG, N)\n"
+                                         "      LOGICAL FLAG\n"
+                                         "      INTEGER N\n"
+                                         "      IF (FLAG)\n"
+                                         "     $   CALL CONSUME(N)\n"
+                                         "      END\n"
+                                         "      SUBROUTINE CONSUME(N)\n"
+                                         "      INTEGER N\n"
+                                         "      N = N + 1\n"
+                                         "      END\n";
+        F2cOptions fixed_options = {"call_if.f", F2C_SOURCE_FIXED, 0};
+        F2cResult fixed_result = f2c_transpile(fixed_call, strlen(fixed_call), &fixed_options);
+        expect(fixed_result.error_count == 0U,
+               "single-line IF with a continued CALL discovers its subroutine target");
+        expect(fixed_result.code == NULL || strstr(fixed_result.code, "float consume =") == NULL,
+               "a nested CALL target cannot degrade into an implicitly typed scalar");
+        expect_contains(fixed_result.code, "consume(n);",
+                        "the nested CALL uses the project procedure interface");
+        f2c_result_free(&fixed_result);
+    }
+}
+
+static void test_statement_function_typed_lowering(void) {
+    static const char source[] = "subroutine statement_function_case(x, y)\n"
+                                 "  real :: x, y, square, affine\n"
+                                 "  square(t) = t * t\n"
+                                 "  affine(t) = square(t) + x\n"
+                                 "  y = affine(x + 1.0)\n"
+                                 "end subroutine statement_function_case\n";
+    F2cOptions options = {"statement_function.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, strlen(source), &options);
+    expect(result.error_count == 0U,
+           "legacy statement functions build typed IR and translate without extern shims");
+    expect_contains(result.code, "f2c_statement_argument_",
+                    "statement-function calls materialize typed per-call argument temporaries");
+    expect_contains(result.code, "= ((*x) + 1.0f),",
+                    "statement-function actuals are sequenced and evaluated exactly once");
+    expect(result.code == NULL || strstr(result.code, "extern float square") == NULL,
+           "statement functions never leak as unresolved C procedures");
+    f2c_result_free(&result);
+}
+
+static void test_tokenized_use_association(void) {
+    static const char provider[] = "module use_provider\n"
+                                   "  integer, parameter :: remote_value = 7\n"
+                                   "end module use_provider\n";
+    static const char consumer[] =
+        "subroutine use_consumer(result)\n"
+        "  use, non_intrinsic :: use_provider, only : local_value => remote_value\n"
+        "  integer, intent(out) :: result\n"
+        "  result = local_value\n"
+        "end subroutine use_consumer\n";
+    F2cInput inputs[] = {
+        {provider, sizeof(provider) - 1U, {"use_provider.f90", F2C_SOURCE_FREE, 0}},
+        {consumer, sizeof(consumer) - 1U, {"use_consumer.f90", F2C_SOURCE_FREE, 0}},
+    };
+    F2cResult result = f2c_transpile_project(inputs, 2U);
+    expect(result.error_count == 0U,
+           "tokenized USE syntax accepts module nature, spacing, ONLY, and renaming together");
+    expect_contains(result.code, "f2c_module_use_provider_remote_value",
+                    "USE renaming retains the provider's collision-free storage identity");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_version_contract();
     test_empty_source();
+    test_resource_limits();
+    test_physical_source_mapping();
     test_program_and_control_flow();
     test_wide_do_trip_count();
     test_blas_style_subroutine();
@@ -2334,6 +2730,9 @@ int main(void) {
     test_expression_shape_semantics();
     test_local_array_bounds_contract();
     test_type_identifier_assignment();
+    test_token_driven_scope_and_reference_boundaries();
+    test_statement_function_typed_lowering();
+    test_tokenized_use_association();
     test_implicit_mapping_semantics();
     test_control_flow_semantics();
     test_unsupported_semantics_are_errors();

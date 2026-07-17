@@ -1,0 +1,389 @@
+#include "codegen/unit/private.h"
+
+#include <ctype.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+void f2c_unit_indent(Buffer *output, int depth) {
+    int i;
+    for (i = 0; i < depth; ++i)
+        f2c_buffer_append(output, "    ");
+}
+
+Symbol *f2c_unit_function_result(Unit *unit) {
+    return unit != NULL && unit->kind == UNIT_FUNCTION && unit->result_name != NULL
+               ? f2c_find_symbol(unit, unit->result_name)
+               : NULL;
+}
+
+const char *f2c_unit_function_return_type(Unit *unit) {
+    Symbol *result = f2c_unit_function_result(unit);
+    return result != NULL && result->type == TYPE_DERIVED
+               ? f2c_symbol_c_type(result)
+               : f2c_c_type_kind(unit->return_type, unit->return_kind);
+}
+
+int f2c_unit_has_allocatable_result(Unit *unit) {
+    Symbol *result = f2c_unit_function_result(unit);
+    return result != NULL && result->allocatable;
+}
+
+void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, const char *name) {
+    size_t parameter;
+    const int allocatable_result =
+        !procedure->external_subroutine && procedure->external_result_allocatable;
+    const int character_result =
+        !allocatable_result && !procedure->external_subroutine && procedure->type == TYPE_CHARACTER;
+    f2c_buffer_printf(output, "%s (*",
+                      allocatable_result ? "f2c_descriptor"
+                      : procedure->external_subroutine || character_result
+                          ? "void"
+                          : f2c_symbol_c_type(procedure));
+    if (name != NULL)
+        f2c_buffer_append(output, name);
+    f2c_buffer_append(output, ")(");
+    if (character_result)
+        f2c_buffer_append(output, "char *, size_t");
+    if (procedure->external_parameter_count == 0U && !character_result)
+        f2c_buffer_append(output, "void");
+    for (parameter = 0U; parameter < procedure->external_parameter_count; ++parameter) {
+        Symbol *nested = procedure->external_parameter_procedures[parameter];
+        if (parameter != 0U || character_result)
+            f2c_buffer_append(output, ", ");
+        if (nested != NULL)
+            f2c_emit_procedure_pointer_type(output, nested, NULL);
+        else if (procedure->external_parameter_allocatable[parameter] ||
+                 procedure->external_parameter_pointer[parameter])
+            f2c_buffer_append(output, "f2c_descriptor *");
+        else if (procedure->type_bound && parameter == procedure->type_bound_pass_index &&
+                 !procedure->type_bound_nopass)
+            f2c_buffer_printf(output, "%svoid *",
+                              procedure->external_parameter_const[parameter] ? "const " : "");
+        else
+            f2c_buffer_printf(
+                output, "%s%s *", procedure->external_parameter_const[parameter] ? "const " : "",
+                procedure->external_parameter_types[parameter] == TYPE_DERIVED &&
+                        procedure->external_parameter_derived_types[parameter] != NULL
+                    ? procedure->external_parameter_derived_types[parameter]->c_name
+                    : f2c_c_type_kind(procedure->external_parameter_types[parameter],
+                                      procedure->external_parameter_kinds[parameter]));
+    }
+    for (parameter = 0U; parameter < procedure->external_parameter_count; ++parameter) {
+        if (procedure->external_parameter_types[parameter] == TYPE_CHARACTER &&
+            !procedure->external_parameter_allocatable[parameter] &&
+            !procedure->external_parameter_pointer[parameter])
+            f2c_buffer_append(output, ", size_t");
+    }
+    f2c_buffer_append(output, ")");
+}
+
+void f2c_unit_emit_named_signature(Buffer *output, Unit *unit, const char *name,
+                                   int restricted_arguments) {
+    size_t i;
+    const int allocatable_result = f2c_unit_has_allocatable_result(unit);
+    const int character_result =
+        !allocatable_result && unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER;
+    if (unit->kind == UNIT_PROGRAM) {
+        f2c_buffer_append(output, "int main(void)");
+        return;
+    }
+    f2c_buffer_printf(output, "%s %s(",
+                      allocatable_result ? "f2c_descriptor"
+                      : unit->kind == UNIT_SUBROUTINE || character_result
+                          ? "void"
+                          : f2c_unit_function_return_type(unit),
+                      name);
+    if (character_result)
+        f2c_buffer_printf(output, "char *%sf2c_result, size_t f2c_result_len",
+                          restricted_arguments ? "F2C_RESTRICT " : "");
+    if (unit->argument_count == 0U && !character_result) {
+        f2c_buffer_append(output, "void");
+    }
+    for (i = 0U; i < unit->argument_count; ++i) {
+        Symbol *symbol = f2c_find_symbol(unit, unit->arguments[i]);
+        const char *qualifier = symbol != NULL && symbol->intent == F2C_INTENT_IN ? "const " : "";
+        if (i != 0U || character_result)
+            f2c_buffer_append(output, ", ");
+        if (symbol != NULL && symbol->external) {
+            f2c_emit_procedure_pointer_type(output, symbol, f2c_symbol_c_name(unit, symbol));
+        } else if (symbol != NULL && (symbol->allocatable || symbol->pointer)) {
+            f2c_buffer_printf(output, "f2c_descriptor *f2c_descriptor_%s",
+                              f2c_symbol_c_name(unit, symbol));
+        } else {
+            f2c_buffer_printf(output, "%s%s *%s%s", qualifier,
+                              symbol != NULL ? f2c_symbol_c_type(symbol) : f2c_c_type(TYPE_REAL),
+                              restricted_arguments && symbol != NULL ? "F2C_RESTRICT " : "",
+                              symbol != NULL ? f2c_symbol_c_name(unit, symbol)
+                                             : unit->arguments[i]);
+        }
+    }
+    for (i = 0U; i < unit->argument_count; ++i) {
+        Symbol *symbol = f2c_find_symbol(unit, unit->arguments[i]);
+        if (symbol != NULL && !symbol->external && symbol->type == TYPE_CHARACTER &&
+            !symbol->allocatable && !symbol->pointer)
+            f2c_buffer_printf(output, ", size_t f2c_len_%s", f2c_symbol_c_name(unit, symbol));
+    }
+    f2c_buffer_append(output, ")");
+}
+
+void f2c_unit_emit_signature(Buffer *output, Unit *unit) {
+    f2c_unit_emit_named_signature(output, unit, unit->name, 0);
+}
+
+void f2c_emit_procedure_prototype(Buffer *output, Unit *unit) {
+    if (unit == NULL || unit->kind == UNIT_PROGRAM)
+        return;
+    f2c_unit_emit_signature(output, unit);
+    f2c_buffer_append(output, ";\n");
+}
+
+static int is_defined_unit(Context *context, const char *name) {
+    size_t i;
+    for (i = 0U; i < context->units.count; ++i) {
+        if (strcmp(context->units.items[i].name, name) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+static void emit_external_prototypes(Context *context) {
+    size_t u;
+    for (u = 0U; u < context->units.count; ++u) {
+        Unit *unit = &context->units.items[u];
+        size_t s;
+        for (s = 0U; s < unit->symbol_count; ++s) {
+            Symbol *symbol = &unit->symbols[s];
+            size_t previous_unit;
+            int already_emitted = 0;
+            if (!symbol->external || symbol->argument || symbol->procedure_pointer ||
+                is_defined_unit(context, f2c_symbol_c_name(unit, symbol)))
+                continue;
+            for (previous_unit = 0U; previous_unit <= u && !already_emitted; ++previous_unit) {
+                Unit *previous = &context->units.items[previous_unit];
+                size_t limit = previous_unit == u ? s : previous->symbol_count;
+                size_t previous_symbol;
+                for (previous_symbol = 0U; previous_symbol < limit; ++previous_symbol) {
+                    if (previous->symbols[previous_symbol].external &&
+                        strcmp(f2c_symbol_c_name(previous, &previous->symbols[previous_symbol]),
+                               f2c_symbol_c_name(unit, symbol)) == 0) {
+                        already_emitted = 1;
+                        break;
+                    }
+                }
+            }
+            if (!already_emitted) {
+                size_t parameter;
+                const int allocatable_result =
+                    !symbol->external_subroutine && symbol->external_result_allocatable;
+                const int character_result = !allocatable_result && !symbol->external_subroutine &&
+                                             symbol->type == TYPE_CHARACTER;
+                f2c_buffer_printf(&context->output, "extern %s %s(",
+                                  allocatable_result ? "f2c_descriptor"
+                                  : symbol->external_subroutine || character_result
+                                      ? "void"
+                                      : f2c_symbol_c_type(symbol),
+                                  f2c_symbol_c_name(unit, symbol));
+                if (character_result)
+                    f2c_buffer_append(&context->output, "char *, size_t");
+                if (symbol->external_parameter_count == 0U && !character_result) {
+                    f2c_buffer_append(&context->output, "void");
+                }
+                for (parameter = 0U; parameter < symbol->external_parameter_count; ++parameter) {
+                    Symbol *procedure = symbol->external_parameter_procedures[parameter];
+                    if (parameter != 0U || character_result)
+                        f2c_buffer_append(&context->output, ", ");
+                    if (procedure != NULL)
+                        f2c_emit_procedure_pointer_type(&context->output, procedure, NULL);
+                    else if (symbol->external_parameter_allocatable[parameter] ||
+                             symbol->external_parameter_pointer[parameter])
+                        f2c_buffer_append(&context->output, "f2c_descriptor *");
+                    else
+                        f2c_buffer_printf(
+                            &context->output, "%s%s *",
+                            symbol->external_parameter_const[parameter] ? "const " : "",
+                            f2c_c_type_kind(symbol->external_parameter_types[parameter],
+                                            symbol->external_parameter_kinds[parameter]));
+                }
+                for (parameter = 0U; parameter < symbol->external_parameter_count; ++parameter) {
+                    if (symbol->external_parameter_types[parameter] == TYPE_CHARACTER &&
+                        !symbol->external_parameter_allocatable[parameter] &&
+                        !symbol->external_parameter_pointer[parameter])
+                        f2c_buffer_append(&context->output, ", size_t");
+                }
+                f2c_buffer_append(&context->output, ");\n");
+            }
+        }
+    }
+}
+
+void f2c_emit_prototypes(Context *context) {
+    size_t i;
+    for (i = 0U; i < context->units.count; ++i) {
+        if (context->units.items[i].kind != UNIT_PROGRAM) {
+            f2c_emit_procedure_prototype(&context->output, &context->units.items[i]);
+        }
+    }
+    emit_external_prototypes(context);
+}
+
+void f2c_emit_interface_header(Context *context) {
+    size_t i;
+    uint32_t hash = UINT32_C(2166136261);
+    char guard[64];
+    Buffer *output = &context->header;
+    for (i = 0U; i < context->units.count; ++i) {
+        const unsigned char *name = (const unsigned char *)context->units.items[i].name;
+        while (*name != '\0') {
+            hash = (hash ^ (uint32_t)*name) * UINT32_C(16777619);
+            ++name;
+        }
+        hash = (hash ^ (uint32_t)context->units.items[i].kind) * UINT32_C(16777619);
+    }
+    (void)snprintf(guard, sizeof(guard), "F2C_GENERATED_INTERFACE_%08X_H", (unsigned int)hash);
+    f2c_buffer_printf(output, "#ifndef %s\n#define %s\n\n", guard, guard);
+    f2c_buffer_append(output, "#include <stdbool.h>\n"
+                              "#include <stddef.h>\n"
+                              "#include <stdint.h>\n"
+                              "#include <complex.h>\n\n"
+                              "#ifndef F2C_GENERATED_COMPLEX_TYPES\n"
+                              "#define F2C_GENERATED_COMPLEX_TYPES\n"
+                              "#if defined(_MSC_VER) && !defined(__clang__)\n"
+                              "typedef _Fcomplex f2c_complex_float;\n"
+                              "typedef _Dcomplex f2c_complex_double;\n"
+                              "typedef _Lcomplex f2c_complex_long_double;\n"
+                              "#define F2C_COMPLEX_FLOAT_INITIALIZER(real_part, imag_part) "
+                              "{(real_part), (imag_part)}\n"
+                              "#define F2C_COMPLEX_DOUBLE_INITIALIZER(real_part, imag_part) "
+                              "{(real_part), (imag_part)}\n"
+                              "#else\n"
+                              "typedef float complex f2c_complex_float;\n"
+                              "typedef double complex f2c_complex_double;\n"
+                              "typedef long double complex f2c_complex_long_double;\n"
+                              "#define F2C_COMPLEX_FLOAT_INITIALIZER(real_part, imag_part) "
+                              "((real_part) + (imag_part) * I)\n"
+                              "#define F2C_COMPLEX_DOUBLE_INITIALIZER(real_part, imag_part) "
+                              "((real_part) + (imag_part) * I)\n"
+                              "#endif\n"
+                              "#endif\n\n"
+                              "typedef struct f2c_descriptor {\n"
+                              "    void *data;\n"
+                              "    size_t element_size;\n"
+                              "    size_t rank;\n"
+                              "    int64_t lower[15];\n"
+                              "    int64_t extent[15];\n"
+                              "    size_t character_length;\n"
+                              "} f2c_descriptor;\n\n"
+                              "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
+    for (i = 0U; i < context->units.count; ++i) {
+        if (context->units.items[i].kind != UNIT_PROGRAM) {
+            f2c_unit_emit_signature(output, &context->units.items[i]);
+            f2c_buffer_append(output, ";\n");
+        }
+    }
+    f2c_buffer_append(output, "\n#ifdef __cplusplus\n}\n#endif\n\n");
+    f2c_buffer_printf(output, "#endif /* %s */\n", guard);
+}
+
+static int common_block_emitted_before(Context *context, size_t unit_index, size_t symbol_index,
+                                       const char *block) {
+    size_t u;
+    for (u = 0U; u <= unit_index; ++u) {
+        Unit *unit = &context->units.items[u];
+        const size_t limit = u == unit_index ? symbol_index : unit->symbol_count;
+        size_t s;
+        for (s = 0U; s < limit; ++s) {
+            if (unit->symbols[s].common_block != NULL &&
+                strcmp(unit->symbols[s].common_block, block) == 0)
+                return 1;
+        }
+    }
+    return 0;
+}
+
+void f2c_emit_common_blocks(Context *context) {
+    size_t u;
+    int emitted_macro = 0;
+    for (u = 0U; u < context->units.count; ++u) {
+        Unit *unit = &context->units.items[u];
+        size_t s;
+        for (s = 0U; s < unit->symbol_count; ++s) {
+            Symbol *first = &unit->symbols[s];
+            size_t member_count = 0U;
+            size_t member_index;
+            if (first->common_block == NULL ||
+                common_block_emitted_before(context, u, s, first->common_block))
+                continue;
+            if (!emitted_macro) {
+                f2c_buffer_append(
+                    &context->output,
+                    "#if defined(_MSC_VER)\n#define F2C_COMMON_STORAGE __declspec(selectany)\n"
+                    "#elif defined(__GNUC__) || defined(__clang__)\n"
+                    "#define F2C_COMMON_STORAGE __attribute__((weak))\n"
+                    "#else\n#define F2C_COMMON_STORAGE\n#endif\n");
+                emitted_macro = 1;
+            }
+            for (member_index = 0U; member_index < unit->symbol_count; ++member_index) {
+                Symbol *candidate = &unit->symbols[member_index];
+                if (candidate->common_block != NULL &&
+                    strcmp(candidate->common_block, first->common_block) == 0 &&
+                    candidate->common_index + 1U > member_count)
+                    member_count = candidate->common_index + 1U;
+            }
+            f2c_buffer_printf(&context->output, "F2C_COMMON_STORAGE struct f2c_common_%s {\n",
+                              first->common_block);
+            for (member_index = 0U; member_index < member_count; ++member_index) {
+                Symbol *member = NULL;
+                size_t candidate_index;
+                for (candidate_index = 0U; candidate_index < unit->symbol_count;
+                     ++candidate_index) {
+                    Symbol *candidate = &unit->symbols[candidate_index];
+                    if (candidate->common_block != NULL &&
+                        strcmp(candidate->common_block, first->common_block) == 0 &&
+                        candidate->common_index == member_index) {
+                        member = candidate;
+                        break;
+                    }
+                }
+                if (member == NULL)
+                    continue;
+                f2c_buffer_printf(&context->output, "    %s field_%zu", f2c_symbol_c_type(member),
+                                  member_index);
+                if (member->type == TYPE_CHARACTER && member->rank == 0U &&
+                    member->character_length != NULL) {
+                    char *length =
+                        f2c_emit_typed_expression(unit, member->character_length_expression);
+                    f2c_buffer_printf(&context->output, "[(%s) + 1]", length);
+                    free(length);
+                } else if (member->rank != 0U) {
+                    size_t d;
+                    f2c_buffer_append(&context->output, "[F2C_MAX(1, ");
+                    if (member->type == TYPE_CHARACTER) {
+                        char *length = member->character_length != NULL
+                                           ? f2c_emit_typed_expression(
+                                                 unit, member->character_length_expression)
+                                           : f2c_strdup("1U");
+                        f2c_buffer_printf(&context->output, "(size_t)(%s) * ", length);
+                        free(length);
+                    }
+                    for (d = 0U; d < member->rank; ++d) {
+                        char *lower =
+                            f2c_emit_typed_expression(unit, member->dimensions[d].lower_expression);
+                        char *upper =
+                            f2c_emit_typed_expression(unit, member->dimensions[d].upper_expression);
+                        f2c_buffer_printf(&context->output, "%s((%s) - (%s) + 1)",
+                                          d == 0U ? "" : " * ", upper, lower);
+                        free(lower);
+                        free(upper);
+                    }
+                    f2c_buffer_append(&context->output, ")]");
+                }
+                f2c_buffer_append(&context->output, ";\n");
+            }
+            f2c_buffer_printf(&context->output, "} f2c_common_%s;\n", first->common_block);
+        }
+    }
+    if (emitted_macro)
+        f2c_buffer_append(&context->output, "\n");
+}

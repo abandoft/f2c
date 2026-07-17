@@ -75,28 +75,25 @@ static void emit_component(Context *context, Unit *unit, Symbol *component) {
     }
     if (component->type == TYPE_CHARACTER && component->rank == 0U) {
         char *length = component->character_length != NULL
-                           ? f2c_translate_expression(unit, component->character_length)
+                           ? f2c_emit_typed_expression(unit, component->character_length_expression)
                            : f2c_strdup("1");
         f2c_buffer_printf(output, "[(%s) + 1]", length != NULL ? length : "1");
         free(length);
     } else if (!component->pointer && component->rank != 0U) {
         f2c_buffer_append(output, "[");
         if (component->type == TYPE_CHARACTER) {
-            char *length = component->character_length != NULL
-                               ? f2c_translate_expression(unit, component->character_length)
-                               : f2c_strdup("1");
+            char *length =
+                component->character_length != NULL
+                    ? f2c_emit_typed_expression(unit, component->character_length_expression)
+                    : f2c_strdup("1");
             f2c_buffer_printf(output, "(size_t)(%s) * ", length != NULL ? length : "1");
             free(length);
         }
         for (dimension = 0U; dimension < component->rank; ++dimension) {
             char *lower =
-                f2c_translate_expression(unit, component->dimensions[dimension].lower != NULL
-                                                   ? component->dimensions[dimension].lower
-                                                   : "1");
+                f2c_emit_typed_expression(unit, component->dimensions[dimension].lower_expression);
             char *upper =
-                f2c_translate_expression(unit, component->dimensions[dimension].upper != NULL
-                                                   ? component->dimensions[dimension].upper
-                                                   : "0");
+                f2c_emit_typed_expression(unit, component->dimensions[dimension].upper_expression);
             f2c_buffer_printf(output, "%s((%s) - (%s) + 1)", dimension == 0U ? "" : " * ",
                               upper != NULL ? upper : "0", lower != NULL ? lower : "1");
             free(lower);

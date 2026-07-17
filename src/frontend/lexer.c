@@ -14,19 +14,23 @@ static int token_character_equal(char left, char right) {
     return tolower((unsigned char)left) == tolower((unsigned char)right);
 }
 
-void f2c_lexer_init(F2cLexer *lexer, const char *source, size_t line, size_t base_column) {
-    memset(lexer, 0, sizeof(*lexer));
-    lexer->source = source != NULL ? source : "";
-    lexer->cursor = lexer->source;
-    lexer->line = line;
-    lexer->base_column = base_column;
-    lexer->token.kind = F2C_TOKEN_END;
-    lexer->token.begin = lexer->source;
-    lexer->token.line = line;
-    lexer->token.column = base_column;
+void f2c_token_stream_init(F2cTokenStream *stream, const char *source, size_t line,
+                           size_t base_column) {
+    memset(stream, 0, sizeof(*stream));
+    stream->source = source != NULL ? source : "";
+    stream->cursor = stream->source;
+    stream->line = line;
+    stream->base_column = base_column;
+    stream->token.kind = F2C_TOKEN_END;
+    stream->token.begin = stream->source;
+    stream->token.line = line;
+    stream->token.column = base_column;
+    stream->token.span.begin.line = line;
+    stream->token.span.begin.column = base_column;
+    stream->token.span.end = stream->token.span.begin;
 }
 
-static void set_error(F2cLexer *lexer, const char *at) {
+static void set_error(F2cTokenStream *lexer, const char *at) {
     if (lexer->error_at == NULL)
         lexer->error_at = at;
 }
@@ -43,7 +47,7 @@ static int valid_real_fraction(const char *cursor) {
     return (next == 'f' || next == 'F') && !identifier_continue(cursor[2]);
 }
 
-static int scan_hollerith(F2cLexer *lexer, const char *begin, const char *digits_end) {
+static int scan_hollerith(F2cTokenStream *lexer, const char *begin, const char *digits_end) {
     char *end = NULL;
     unsigned long long count;
     const char *payload;
@@ -71,7 +75,7 @@ static int scan_hollerith(F2cLexer *lexer, const char *begin, const char *digits
     return 1;
 }
 
-static void scan_number(F2cLexer *lexer, const char *begin) {
+static void scan_number(F2cTokenStream *lexer, const char *begin) {
     const char *digits_end;
     int valid = 1;
     if (*lexer->cursor == '.')
@@ -112,7 +116,7 @@ static void scan_number(F2cLexer *lexer, const char *begin) {
     lexer->token.kind = valid ? F2C_TOKEN_NUMBER : F2C_TOKEN_INVALID;
 }
 
-static void scan_string(F2cLexer *lexer, const char *begin) {
+static void scan_string(F2cTokenStream *lexer, const char *begin) {
     const char quote = *lexer->cursor++;
     int closed = 0;
     while (*lexer->cursor != '\0') {
@@ -130,7 +134,7 @@ static void scan_string(F2cLexer *lexer, const char *begin) {
         set_error(lexer, begin);
 }
 
-static int scan_boz(F2cLexer *lexer, const char *begin) {
+static int scan_boz(F2cTokenStream *lexer, const char *begin) {
     const char prefix = (char)tolower((unsigned char)begin[0]);
     const char quote = begin[1];
     const char *cursor;
@@ -151,7 +155,7 @@ static int scan_boz(F2cLexer *lexer, const char *begin) {
     return 1;
 }
 
-void f2c_lexer_next(F2cLexer *lexer) {
+void f2c_token_stream_next(F2cTokenStream *lexer) {
     const char *begin;
     while (isspace((unsigned char)*lexer->cursor))
         ++lexer->cursor;
@@ -160,6 +164,9 @@ void f2c_lexer_next(F2cLexer *lexer) {
     lexer->token.length = 0U;
     lexer->token.line = lexer->line;
     lexer->token.column = lexer->base_column + (size_t)(begin - lexer->source);
+    lexer->token.span.begin.line = lexer->token.line;
+    lexer->token.span.begin.column = lexer->token.column;
+    lexer->token.span.end = lexer->token.span.begin;
     if (*begin == '\0' || *begin == '!') {
         lexer->token.kind = F2C_TOKEN_END;
         if (*begin == '!')
@@ -169,6 +176,7 @@ void f2c_lexer_next(F2cLexer *lexer) {
     if (identifier_start(*begin)) {
         if (scan_boz(lexer, begin)) {
             lexer->token.length = (size_t)(lexer->cursor - begin);
+            lexer->token.span.end.column = lexer->token.column + lexer->token.length;
             return;
         }
         ++lexer->cursor;
@@ -243,18 +251,25 @@ void f2c_lexer_next(F2cLexer *lexer) {
         set_error(lexer, begin);
     }
     lexer->token.length = (size_t)(lexer->cursor - begin);
+    lexer->token.span.end.column = lexer->token.column + lexer->token.length;
 }
 
 int f2c_token_equals(const F2cToken *token, const char *text) {
-    size_t index = 0U;
+    const char *cursor;
+    const char *end;
     if (token == NULL || text == NULL)
         return 0;
-    while (index < token->length && text[index] != '\0') {
-        if (!token_character_equal(token->begin[index], text[index]))
+    cursor = token->begin;
+    end = token->begin + token->length;
+    while (cursor < end || *text != '\0') {
+        while (cursor < end && isspace((unsigned char)*cursor))
+            ++cursor;
+        if (cursor == end || *text == '\0')
+            return cursor == end && *text == '\0';
+        if (!token_character_equal(*cursor++, *text++))
             return 0;
-        ++index;
     }
-    return index == token->length && text[index] == '\0';
+    return 1;
 }
 
 char *f2c_token_text(const F2cToken *token) {
@@ -280,8 +295,13 @@ int f2c_hollerith_payload(const char *text, const char **payload, size_t *length
     return 1;
 }
 
-static int push_token(Line *line, size_t *capacity, F2cToken token) {
+static int push_token(Context *context, Line *line, size_t *capacity, F2cToken token) {
     F2cToken *replacement;
+    if (context->limits.max_tokens != 0U && context->token_count >= context->limits.max_tokens) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, &token.span, 1,
+                                 "token limit of %zu exceeded", context->limits.max_tokens);
+        return 0;
+    }
     if (line->token_count == *capacity) {
         const size_t next = *capacity == 0U ? 16U : *capacity * 2U;
         if (next < *capacity || next > SIZE_MAX / sizeof(*replacement))
@@ -293,6 +313,7 @@ static int push_token(Line *line, size_t *capacity, F2cToken token) {
         *capacity = next;
     }
     line->tokens[line->token_count++] = token;
+    ++context->token_count;
     return 1;
 }
 
@@ -300,23 +321,29 @@ int f2c_tokenize_lines(Context *context) {
     size_t index;
     for (index = 0U; index < context->lines.count; ++index) {
         Line *line = &context->lines.items[index];
-        F2cLexer lexer;
+        F2cTokenStream lexer;
         size_t capacity = 0U;
         free(line->tokens);
         line->tokens = NULL;
         line->token_count = 0U;
-        f2c_lexer_init(&lexer, line->text, line->number, 1U);
+        f2c_token_stream_init(&lexer, line->text, line->number, 1U);
         for (;;) {
-            f2c_lexer_next(&lexer);
+            f2c_token_stream_next(&lexer);
             if (lexer.token.kind == F2C_TOKEN_END)
                 break;
-            if (!push_token(line, &capacity, lexer.token)) {
-                f2c_diagnostic(context, line->number, 1, "out of memory tokenizing source");
+            lexer.token.span = f2c_line_source_span(line, (size_t)(lexer.token.begin - line->text),
+                                                    lexer.token.length);
+            lexer.token.line = lexer.token.span.begin.line;
+            lexer.token.column = lexer.token.span.begin.column;
+            if (!push_token(context, line, &capacity, lexer.token)) {
+                if (context->result.error_count == 0U)
+                    f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line->number, 1,
+                                        "out of memory tokenizing source");
                 return 0;
             }
             if (lexer.token.kind == F2C_TOKEN_INVALID) {
-                f2c_diagnostic_at(context, line->number, lexer.token.column, 1,
-                                  "invalid token in Fortran source");
+                f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_INVALID_TOKEN, &lexer.token.span,
+                                         1, "invalid token in Fortran source");
                 break;
             }
         }

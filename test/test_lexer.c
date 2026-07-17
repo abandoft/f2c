@@ -13,6 +13,42 @@ static void expect(int condition, const char *message) {
     }
 }
 
+static Line tokenized_line(const char *source) {
+    Line line;
+    F2cTokenStream stream;
+    size_t capacity = 0U;
+    memset(&line, 0, sizeof(line));
+    line.text = (char *)source;
+    line.number = 1U;
+    f2c_token_stream_init(&stream, source, 1U, 1U);
+    for (;;) {
+        F2cToken *replacement;
+        f2c_token_stream_next(&stream);
+        if (stream.token.kind == F2C_TOKEN_END)
+            break;
+        if (line.token_count == capacity) {
+            const size_t next = capacity == 0U ? 8U : capacity * 2U;
+            replacement = (F2cToken *)realloc(line.tokens, next * sizeof(*replacement));
+            if (replacement == NULL) {
+                free(line.tokens);
+                line.tokens = NULL;
+                line.token_count = 0U;
+                return line;
+            }
+            line.tokens = replacement;
+            capacity = next;
+        }
+        line.tokens[line.token_count++] = stream.token;
+    }
+    return line;
+}
+
+static void release_tokenized_line(Line *line) {
+    free(line->tokens);
+    line->tokens = NULL;
+    line->token_count = 0U;
+}
+
 static void test_complete_statement_tokens(void) {
     static const char source[] = "integer(kind=8), allocatable :: values(:)";
     static const F2cTokenKind expected[] = {
@@ -21,16 +57,16 @@ static void test_complete_statement_tokens(void) {
         F2C_TOKEN_DOUBLE_COLON, F2C_TOKEN_IDENTIFIER,  F2C_TOKEN_LEFT_PAREN, F2C_TOKEN_COLON,
         F2C_TOKEN_RIGHT_PAREN,
     };
-    F2cLexer lexer;
+    F2cTokenStream lexer;
     size_t index;
-    f2c_lexer_init(&lexer, source, 41U, 3U);
+    f2c_token_stream_init(&lexer, source, 41U, 3U);
     for (index = 0U; index < sizeof(expected) / sizeof(expected[0]); ++index) {
-        f2c_lexer_next(&lexer);
+        f2c_token_stream_next(&lexer);
         expect(lexer.token.kind == expected[index],
                "the full-source lexer emits the expected declaration token");
         expect(lexer.token.line == 41U, "tokens retain their physical source line");
     }
-    f2c_lexer_next(&lexer);
+    f2c_token_stream_next(&lexer);
     expect(lexer.token.kind == F2C_TOKEN_END, "the declaration token stream terminates exactly");
     expect(lexer.error_at == NULL, "a valid declaration has no lexical error");
     expect(lexer.token.column == strlen(source) + 3U,
@@ -39,14 +75,14 @@ static void test_complete_statement_tokens(void) {
 
 static void test_legacy_and_literal_boundaries(void) {
     static const char source[] = "print *, 'a'';b'; value = 5HHELLO, mask = z'00ff'";
-    F2cLexer lexer;
+    F2cTokenStream lexer;
     int saw_string = 0;
     int saw_separator = 0;
     int saw_hollerith = 0;
     int saw_boz = 0;
-    f2c_lexer_init(&lexer, source, 7U, 1U);
+    f2c_token_stream_init(&lexer, source, 7U, 1U);
     do {
-        f2c_lexer_next(&lexer);
+        f2c_token_stream_next(&lexer);
         saw_string |=
             lexer.token.kind == F2C_TOKEN_STRING && f2c_token_equals(&lexer.token, "'a'';b'");
         saw_separator |= lexer.token.kind == F2C_TOKEN_SEMICOLON;
@@ -98,10 +134,156 @@ static void test_shared_argument_and_expression_lexing(void) {
     f2c_expr_free(boz);
 }
 
+static void test_pretokenized_expression_path(void) {
+    static const char source[] = "value + 2 * scale";
+    F2cToken tokens[8];
+    F2cTokenStream stream;
+    Symbol symbols[2];
+    Unit unit;
+    F2cExpr *expression;
+    const char *error_at = NULL;
+    size_t count = 0U;
+    memset(&unit, 0, sizeof(unit));
+    memset(symbols, 0, sizeof(symbols));
+    symbols[0].name = "value";
+    symbols[0].c_name = "value";
+    symbols[0].type = TYPE_INTEGER;
+    symbols[0].kind = 4;
+    symbols[1].name = "scale";
+    symbols[1].c_name = "scale";
+    symbols[1].type = TYPE_INTEGER;
+    symbols[1].kind = 4;
+    unit.symbols = symbols;
+    unit.symbol_count = 2U;
+
+    f2c_token_stream_init(&stream, source, 19U, 5U);
+    for (;;) {
+        f2c_token_stream_next(&stream);
+        if (stream.token.kind == F2C_TOKEN_END)
+            break;
+        expect(count < sizeof(tokens) / sizeof(tokens[0]),
+               "pretokenized expression fits the test token buffer");
+        if (count < sizeof(tokens) / sizeof(tokens[0]))
+            tokens[count++] = stream.token;
+    }
+    expression = f2c_parse_expression_tokens(&unit, tokens, count, source, &error_at);
+    expect(expression != NULL && error_at == NULL && expression->kind == F2C_EXPR_BINARY,
+           "the AST parser consumes the canonical pretokenized stream");
+    expect(expression != NULL && expression->span.begin.line == 19U &&
+               expression->span.begin.column == 5U && expression->span.end.line == 19U,
+           "pretokenized AST nodes retain physical source coordinates");
+    f2c_expr_free(expression);
+}
+
+static void test_token_cursor_and_ranges(void) {
+    static const char source[] = "(alpha + [beta, gamma])";
+    F2cToken tokens[16];
+    F2cTokenStream stream;
+    F2cTokenCursor cursor;
+    F2cToken deep[140];
+    size_t count = 0U;
+    size_t close = 0U;
+    size_t index;
+    char *text;
+    f2c_token_stream_init(&stream, source, 3U, 1U);
+    for (;;) {
+        f2c_token_stream_next(&stream);
+        if (stream.token.kind == F2C_TOKEN_END)
+            break;
+        if (count < sizeof(tokens) / sizeof(tokens[0]))
+            tokens[count++] = stream.token;
+    }
+    f2c_token_cursor_init(&cursor, tokens, count);
+    expect(f2c_token_cursor_consume(&cursor, F2C_TOKEN_LEFT_PAREN, NULL),
+           "the token cursor consumes an expected delimiter");
+    expect(f2c_token_cursor_peek(&cursor, 0U) != NULL &&
+               f2c_token_equals(f2c_token_cursor_peek(&cursor, 0U), "alpha"),
+           "the token cursor exposes bounded lookahead");
+    expect(f2c_token_cursor_take(&cursor) == &tokens[1],
+           "taking a token advances the canonical cursor exactly once");
+    expect(f2c_token_matching_delimiter(tokens, count, 0U, &close) && close == count - 1U,
+           "mixed nested delimiters resolve to the matching closing token");
+    expect(f2c_token_range_balanced(tokens, count),
+           "a well-formed canonical token range reports balanced delimiters");
+    text =
+        f2c_token_range_text((F2cTokenRange){source, sizeof(source) - 1U, tokens + 1U, count - 2U});
+    expect(text != NULL && strcmp(text, "alpha + [beta, gamma]") == 0,
+           "token ranges retain the exact original source spelling");
+    free(text);
+
+    for (index = 0U; index < 70U; ++index)
+        deep[index].kind = F2C_TOKEN_LEFT_PAREN;
+    for (index = 70U; index < 140U; ++index)
+        deep[index].kind = F2C_TOKEN_RIGHT_PAREN;
+    expect(f2c_token_matching_delimiter(deep, 140U, 0U, &close) && close == 139U,
+           "delimiter matching has no hidden fixed nesting limit");
+    deep[139].kind = F2C_TOKEN_RIGHT_BRACKET;
+    expect(!f2c_token_range_balanced(deep, 140U),
+           "mismatched delimiter kinds are rejected deterministically");
+
+    tokens[0].begin = source + sizeof(source) - 1U;
+    tokens[0].length = 1U;
+    text = f2c_token_range_text((F2cTokenRange){source, sizeof(source) - 1U, tokens, 1U});
+    expect(text == NULL, "token ranges cannot read beyond their owning source buffer");
+    free(text);
+
+    f2c_token_cursor_init(&cursor, NULL, 1U);
+    expect(f2c_token_cursor_peek(&cursor, 0U) == NULL,
+           "a token cursor rejects an inconsistent null token buffer");
+}
+
+static void test_statement_syntax_predicates(void) {
+    Line module = tokenized_line("module numerics");
+    Line module_procedure = tokenized_line("module procedure solve");
+    Line quoted_end = tokenized_line("print *, 'end module numerics'");
+    Line end_if = tokenized_line("end if");
+    Line labeled_end = tokenized_line("120 end subroutine solve");
+    Line derived = tokenized_line("type, abstract, extends(base) :: child");
+    Line declaration = tokenized_line("type(child) :: value");
+    Line contains_name = tokenized_line("contains_value = 'contains'");
+    Line abstract_interface = tokenized_line("abstract interface");
+    const F2cToken *module_name = NULL;
+
+    expect(f2c_module_header_tokens(&module, &module_name) && module_name != NULL &&
+               f2c_token_equals(module_name, "numerics"),
+           "module headers and names are classified from canonical tokens");
+    expect(!f2c_module_header_tokens(&module_procedure, NULL) &&
+               f2c_module_procedure_tokens(&module_procedure),
+           "MODULE PROCEDURE cannot be mistaken for a module definition");
+    expect(!f2c_module_end_tokens(&quoted_end),
+           "keywords inside a character literal cannot terminate a module");
+    expect(!f2c_program_unit_end_tokens(&end_if, UNIT_SUBROUTINE),
+           "END IF cannot terminate an enclosing procedure");
+    expect(f2c_program_unit_end_tokens(&labeled_end, UNIT_SUBROUTINE),
+           "labeled procedure terminators retain their unit kind");
+    expect(f2c_derived_type_start_tokens(&derived),
+           "attributed derived-type definitions are recognized structurally");
+    expect(!f2c_derived_type_start_tokens(&declaration),
+           "TYPE(name) declarations cannot open a derived-type definition");
+    expect(!f2c_contains_tokens(&contains_name),
+           "identifiers and strings containing CONTAINS cannot change scope");
+    expect(f2c_interface_start_tokens(&abstract_interface) &&
+               f2c_abstract_interface_tokens(&abstract_interface),
+           "ABSTRACT INTERFACE is represented by one shared syntax predicate");
+
+    release_tokenized_line(&module);
+    release_tokenized_line(&module_procedure);
+    release_tokenized_line(&quoted_end);
+    release_tokenized_line(&end_if);
+    release_tokenized_line(&labeled_end);
+    release_tokenized_line(&derived);
+    release_tokenized_line(&declaration);
+    release_tokenized_line(&contains_name);
+    release_tokenized_line(&abstract_interface);
+}
+
 int main(void) {
     test_complete_statement_tokens();
     test_legacy_and_literal_boundaries();
     test_shared_argument_and_expression_lexing();
+    test_pretokenized_expression_path();
+    test_token_cursor_and_ranges();
+    test_statement_syntax_predicates();
     if (failures != 0) {
         fprintf(stderr, "%d lexer test(s) failed\n", failures);
         return EXIT_FAILURE;

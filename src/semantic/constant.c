@@ -56,10 +56,54 @@ static int64_t literal_character_length(const char *text) {
     return length;
 }
 
-static int evaluate(Unit *unit, const F2cExpr *expression, int64_t *value, unsigned int depth) {
+typedef struct F2cConstantEvaluation {
+    Unit *unit;
+    Context *context;
+    size_t steps;
+} F2cConstantEvaluation;
+
+static size_t evaluation_line(const F2cConstantEvaluation *evaluation) {
+    if (evaluation->context != NULL && evaluation->unit != NULL &&
+        evaluation->unit->begin < evaluation->context->lines.count)
+        return evaluation->context->lines.items[evaluation->unit->begin].number;
+    return 1U;
+}
+
+static int consume_evaluation_step(F2cConstantEvaluation *evaluation, size_t depth) {
+    Context *context = evaluation->context;
+    const size_t depth_limit =
+        context != NULL ? context->limits.max_parse_depth : F2C_DEFAULT_MAX_PARSE_DEPTH;
+    const size_t step_limit =
+        context != NULL ? context->limits.max_constant_steps : F2C_DEFAULT_MAX_CONSTANT_STEPS;
+    if (depth_limit != 0U && depth >= depth_limit) {
+        if (context != NULL && !context->constant_depth_limit_reported) {
+            context->constant_depth_limit_reported = 1;
+            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, evaluation_line(evaluation),
+                                1, "constant-evaluation depth limit of %zu exceeded", depth_limit);
+        }
+        return 0;
+    }
+    if (step_limit != 0U &&
+        (context != NULL ? context->constant_evaluation_steps : evaluation->steps) >= step_limit) {
+        if (context != NULL && !context->constant_step_limit_reported) {
+            context->constant_step_limit_reported = 1;
+            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, evaluation_line(evaluation),
+                                1, "constant-evaluation step limit of %zu exceeded", step_limit);
+        }
+        return 0;
+    }
+    ++evaluation->steps;
+    if (context != NULL)
+        ++context->constant_evaluation_steps;
+    return 1;
+}
+
+static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression, int64_t *value,
+                    size_t depth) {
     int64_t left;
     int64_t right;
-    if (expression == NULL || value == NULL || depth > 64U)
+    Unit *unit = evaluation->unit;
+    if (expression == NULL || value == NULL || !consume_evaluation_step(evaluation, depth))
         return 0;
     if (expression->kind == F2C_EXPR_INTEGER_LITERAL && expression->text != NULL) {
         char *end = NULL;
@@ -75,12 +119,12 @@ static int evaluate(Unit *unit, const F2cExpr *expression, int64_t *value, unsig
         expression->symbol->parameter && expression->symbol->initializer != NULL) {
         F2cExpr *initializer =
             f2c_parse_expression_ast(unit, expression->symbol->initializer, NULL);
-        const int result = evaluate(unit, initializer, value, depth + 1U);
+        const int result = evaluate(evaluation, initializer, value, depth + 1U);
         f2c_expr_free(initializer);
         return result;
     }
     if (expression->kind == F2C_EXPR_UNARY && expression->child_count == 1U &&
-        evaluate(unit, expression->children[0], &left, depth + 1U)) {
+        evaluate(evaluation, expression->children[0], &left, depth + 1U)) {
         if (strcmp(expression->text, "+") == 0) {
             *value = left;
             return 1;
@@ -108,9 +152,9 @@ static int evaluate(Unit *unit, const F2cExpr *expression, int64_t *value, unsig
             return 0;
         }
         if ((strcmp(expression->text, "max") == 0 || strcmp(expression->text, "min") == 0) &&
-            evaluate(unit, expression->children[0], value, depth + 1U)) {
+            evaluate(evaluation, expression->children[0], value, depth + 1U)) {
             for (i = 1U; i < expression->child_count; ++i) {
-                if (!evaluate(unit, expression->children[i], &right, depth + 1U))
+                if (!evaluate(evaluation, expression->children[i], &right, depth + 1U))
                     return 0;
                 if ((strcmp(expression->text, "max") == 0 && right > *value) ||
                     (strcmp(expression->text, "min") == 0 && right < *value))
@@ -121,8 +165,8 @@ static int evaluate(Unit *unit, const F2cExpr *expression, int64_t *value, unsig
         return 0;
     }
     if (expression->kind != F2C_EXPR_BINARY || expression->child_count != 2U ||
-        !evaluate(unit, expression->children[0], &left, depth + 1U) ||
-        !evaluate(unit, expression->children[1], &right, depth + 1U))
+        !evaluate(evaluation, expression->children[0], &left, depth + 1U) ||
+        !evaluate(evaluation, expression->children[1], &right, depth + 1U))
         return 0;
     if (strcmp(expression->text, "+") == 0)
         return checked_add(left, right, value);
@@ -154,7 +198,8 @@ static int evaluate(Unit *unit, const F2cExpr *expression, int64_t *value, unsig
 }
 
 int f2c_evaluate_integer_constant(Unit *unit, const F2cExpr *expression, int64_t *value) {
-    return evaluate(unit, expression, value, 0U);
+    F2cConstantEvaluation evaluation = {unit, unit != NULL ? unit->context : NULL, 0U};
+    return evaluate(&evaluation, expression, value, 0U);
 }
 
 int f2c_evaluate_integer_text(Unit *unit, const char *text, int64_t *value) {
