@@ -1,3 +1,11 @@
+## 1.1.0
+
+- Refactored the frontend, semantic analysis, AST, typed IR, and code generation pipelines.
+- Improved parsing and semantic validation for declarations, implicit typing, storage association, expressions, and statements.
+- Added per-request resource limits, structured diagnostic callbacks, and strict configuration validation.
+- Improved command-line streaming I/O and atomic file writes to prevent incomplete artifacts after failures.
+- Expanded regression tests for architectural boundaries, the command-line interface, semantic analysis, and generated code.
+
 ## 1.0.0
 
 - Rebuilt f2c as a modular, portable C17 project with CMake.
