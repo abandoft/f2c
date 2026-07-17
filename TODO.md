@@ -28,7 +28,8 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建成功，各配置的 CTest 均为 25/25；架构边界检查已经作为独立测试运行。
+  构建成功；本轮静态 Debug、静态 Release 与 ASan/UBSan Debug 的 CTest 均为 27/27，架构边界
+  检查已经作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -54,7 +55,9 @@
   `USE`、`PROCEDURE`、`NAMELIST`、`COMMON` 及 `EQUIVALENCE` 的外层结构和实体设计子已经迁移；
   类型声明的 type/kind/length 选择器、属性、实体、维度和初始化，以及程序单元头和 `IMPLICIT`
   映射/符号发现均消费 canonical token，并把规格表达式范围保存到语义模型。`EQUIVALENCE` 下标
-  直接构建并常量求值 token AST。`DATA`、旧式控制语句、I/O 和少量字符串入口仍有文本扫描。
+  直接构建并常量求值 token AST；属性关键字会结合顶层赋值 token 判别，`DIMENSION`、`EXTERNAL`、
+  `PARAMETER`、`SAVE` 和 `EQUIVALENCE` 作为合法变量名时不再被误判为声明。`DATA`、旧式控制语句、
+  I/O 和少量字符串入口仍有文本扫描。
 - [x] 只保留 `frontend/token.h` 定义的 `F2cToken/F2cTokenStream`。表达式 AST 已删除独立的
   `AstTokenKind/AstToken`，`ast/token_stream.c` 只负责表达式上下文的 token 约束，不再实现第二套
   词法规则；预分词表达式和语句的源码 span 已由单元测试覆盖。公共的有界 token cursor、源码
@@ -75,9 +78,17 @@
 - [ ] 为所有表达式节点完整确定基础类型、kind、逐维 shape、动态 extent、可定义性、值类别、
   所有权和多态动态类型；不能确定时必须保存显式约束，而不是退回字符串推断。
 - [ ] 完成标量、数组、数组段、向量下标、数组构造器、隐式 DO、子串、组件引用和函数结果的
-  统一形状传播、合形检查与别名分析。
+  统一形状传播、合形检查与别名分析。`ANY/ALL/COUNT` 现在可以直接归约同 type/kind 的数值、
+  LOGICAL、COMPLEX 和 CHARACTER 数组关系，支持动态元素数、数组段、标量广播、扁平构造器及
+  无 `PAD/ORDER` 的 `RESHAPE` 视图；运行时会验证动态合形。CHARACTER 数组表达式和派生类型
+  仿射数组段现可按元素长度或深拷贝所有权快照；返回派生类型的用户 ELEMENTAL 函数结果会在
+  快照后销毁逐元素返回临时值。不同数值 kind 的通用隐式提升、除 `TRANSPOSE` 外的嵌套
+  transformational 结果、带 `DIM/MASK` 的归约和其他非 designator 派生类型数组表达式仍需纳入
+  统一临时量引擎。
 - [ ] 将参数、kind、字符长度、数组边界和初始化中的规格表达式全部纳入溢出安全的常量求值器，
-  补齐标准允许的 inquiry/specification intrinsic。
+  补齐标准允许的 inquiry/specification intrinsic。`SIZE/SHAPE/LBOUND/UBOUND` 现已建立 typed
+  rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级，仍需补齐其余规格
+  intrinsic 和所有允许出现位置。
 - [x] 移除 `f2c_emit_cached_expression` 和 `f2c_translate_expression` 原始文本降级路径；模块实体、
   派生类型组件、声明初始化、字符长度和数组边界均在语义阶段建立表达式 AST。`codegen/` 不得
   调用表达式解析器，该边界由 `architecture_boundaries` 测试强制检查。
@@ -94,7 +105,18 @@
 - [ ] 建立目标 ABI 数据模型，覆盖所承诺的 INTEGER、REAL、COMPLEX、LOGICAL 和 CHARACTER
   kind，不再把 kind 仅当作附加整数元数据。
 - [ ] 完整区分显式形状、假定大小、假定形状和延迟形状，统一标量、数组、字符、可分配及指针
-  哑实参和函数结果的描述符契约。
+  哑实参和函数结果的描述符契约。假定形状哑实参现在通过签名元数据和数组描述符传递逐维 extent，
+  保留哑实参声明下界，并支持固定形状/可分配整数组实参、内部子程序和函数表达式；DT I/O 与
+  rank-specific FINAL 调用已同步该 ABI。描述符现保存逐维有符号 stride，具名数组以及由标量下标
+  和 triplet 组成的任意 rank 仿射数组段可用于语句调用和函数表达式，并可跨假定形状过程继续传递；
+  transformational intrinsic 读取假定形状实参时也会按 descriptor stride 一次性快照。正/负非单位
+  步长均有严格 C17 执行与 gfortran 差分。transformational intrinsic 已能逐元素读取向量下标并
+  一次性物化；普通 `CALL` 语句现也会为向量下标、数组构造器、嵌套 `TRANSPOSE`、用户
+  `ELEMENTAL` 结果和其他可元素化数组表达式生成连续临时量及描述符，覆盖数值、CHARACTER 和
+  含可分配组件的派生类型，并按 `INTENT` 管理复制和所有权。假定长度 CHARACTER 数组从描述符
+  绑定元素长度；向量下标用于 `INTENT(OUT/INOUT)` 会在语义阶段硬失败。函数表达式中的同类过程
+  实参、局部指针的非连续关联、假定大小最后一维及 FINAL 的完整逐维 shape 仍未统一，故本任务
+  保持未关闭。
 - [ ] 把字符长度、逐维 shape、`VALUE`、`OPTIONAL`、`INTENT`、别名限制和嵌套过程签名纳入
   项目级接口兼容检查。
 - [x] 过程接口参数类型、kind、rank、intent、可选性、动态属性及嵌套过程元数据均使用原子扩容的
@@ -109,7 +131,15 @@
   `declaration/type.c`、`entity.c`、`dimension.c` 已承担 token 语法解析，重复属性、重复 shape、
   冲突类型和非法指针初始化会硬失败；仍需把所有属性组合和跨声明一致性集中到独立语义阶段。
 - [ ] 补齐 `PROGRAM`、`MODULE`、`BLOCK DATA`、`SUBROUTINE`、`FUNCTION`、`ENTRY`、内部过程
-  和任意层宿主关联；验证 `RECURSIVE`、`PURE`、`ELEMENTAL` 等过程属性。
+  和任意层宿主关联；验证 `RECURSIVE`、`PURE`、`ELEMENTAL` 等过程属性。用户定义
+  `ELEMENTAL` 函数和子程序现已在 typed IR 上保存具体过程绑定，并检查标量哑实参、`INTENT`、
+  禁止的 `ALLOCATABLE/POINTER` 属性、标量函数结果、显式接口属性一致性以及数组实参逐维合形；
+  数组实际参数会把 rank、动态 extent 和 shape 传播到函数结果，标量实参按元素广播。代码生成
+  使用统一 elementizer 处理全数组、任意 rank 数组段、关键字实参、模块/内部过程、单行及块
+  `WHERE` 和 elemental 子程序调用；数值、LOGICAL、CHARACTER、派生类型、零大小、重叠赋值及
+  可分配目标均先完整求值到临时量，再按 Fortran 所有权规则提交。数组构造器实参复用通用临时量
+  引擎，覆盖嵌套构造值和隐式 DO。独立负向语义测试、严格 C17 执行夹具及 gfortran 逐行差分已
+  加入数值验证 CI；本任务仍因其他程序单元和过程属性组合未完成而保持未关闭。
 - [ ] 完成显式/隐式接口、关键字与可选实参、过程实参、交替返回、字符隐藏长度和存储序列关联。
 - [ ] 完成命名及空白 `COMMON`、`EQUIVALENCE`、`DATA` 和 `SAVE` 的布局、初始化顺序、重叠与
   跨程序单元一致性。目前空白 `COMMON` 会产生硬错误。
@@ -125,20 +155,50 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 用单一声明式注册表描述每个 intrinsic 的标准版本、泛型候选、参数关联、kind/rank/shape
   规则、常量折叠和 C17 降级，删除语义分析与代码生成之间的重复分派。
 - [ ] 完成 F90 全部 intrinsic 及项目承诺的旧式 intrinsic；重点补齐位操作、字符处理、数值模型、
-  kind 选择、数组 inquiry 和随机数语义。
+  kind 选择、数组 inquiry 和随机数语义。数组 inquiry 子集已覆盖非默认下界、零 extent 的标准
+  `LBOUND=1/UBOUND=0`、动态 `DIM`、`KIND=1/2/4/8`、切片/构造器/elemental 数组表达式、可分配
+  结果和假定形状哑实参；独立负向语义测试、严格 C17 执行及 gfortran 差分已进入 CI。
 - [ ] 让 `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/TRANSPOSE/MATMUL` 等支持任意合法数组
-  表达式、所有已支持 kind/rank、零大小数组和非默认下界，而不是只接受具名整数组。
+  表达式、所有已支持 kind/rank、零大小数组和非默认下界，而不是只接受具名整数组。上述 intrinsic
+  的数值、LOGICAL、COMPLEX 和 CHARACTER 输入现共用列主序数组视图与一次性临时量引擎；
+  派生类型仿射数组段使用逐元素深拷贝及逆序销毁。MASK、SHIFT、BOUNDARY、PAD、SHAPE 和 ORDER
+  数组表达式也只求值一次。`TRANSPOSE` 支持任意可元素化 rank-2 输入，`MATMUL` 覆盖矩阵×矩阵、
+  矩阵×向量、向量×矩阵、混合数值 kind 提升及 LOGICAL/COMPLEX 运算，并在语义阶段拒绝非标准
+  的向量×向量和静态不合形内维。非连续数组段经假定形状过程转发、可分配及零大小结果、严格
+  C17 执行和 gfortran 差分均已覆盖；嵌套 `TRANSPOSE` 及用户 ELEMENTAL 派生类型结果也已进入
+  同一临时量流程。数值、CHARACTER 和含可分配组件的派生类型向量下标均已通过严格执行与差分，
+  派生类型结果使用深拷贝快照。仍需完成其他嵌套 transformational 结果、更多非 designator
+  派生类型表达式，以及全部 CHARACTER/派生类型可选参数组合，故本任务未关闭。
 - [ ] 对后续标准已经实现的 `FINDLOC` 等 intrinsic 逐项声明版本，并补齐字符、派生类型定义相等、
   `DIM/MASK/BACK/KIND` 的全部合法组合。
 - [ ] 为每个 intrinsic 建立表驱动正向/负向组合测试，并与至少两个原生 Fortran 编译器差分。
 
 ### P0-STMT-01 语句 AST 和控制流
 
-- [ ] 删除 `F2C_STMT_UNSUPPORTED` 的注释式输出路径；所有未支持语句必须在解析或语义阶段以
-  稳定诊断失败，代码生成阶段不得第一次发现语义错误。
-- [ ] 完成 F90 `WHERE/ELSEWHERE`、命名构造、字符/逻辑 `SELECT CASE`、CASE 范围、所有合法
-  `DO` 形式、单行/块 IF 和旧式控制语句。目前 `SELECT CASE` 仅接受标量 INTEGER，CASE 范围
-  被拒绝。
+- [x] 删除 `F2C_STMT_UNSUPPORTED` 及其注释式输出路径；无法识别的语句现在以结构化
+  `F2C_DIAGNOSTIC_UNSUPPORTED` 硬失败且不生成 C，emitter 对缺失生成器的 typed IR 只报告内部
+  错误。typed 语句表达式无法生成时也会产生硬诊断并抑制全部 C 输出，禁止再用常量 `0` 静默
+  代替；对应负向回归同时验证这一契约。正向生成、负向诊断和架构边界测试均已进入现有 CI。
+- [ ] 完成 F90 `WHERE/ELSEWHERE`、所有合法 `DO` 形式、单行/块 IF 和旧式控制语句。命名
+  `DO`、`IF`、`SELECT CASE`、`SELECT TYPE` 和 `BLOCK` 已进入统一 token → 语句 AST → typed IR
+  流程；分支及结束名称、活动名称唯一性、`CYCLE/EXIT` 的命名 DO 目标都由构造绑定阶段验证。
+  跨层 `CYCLE/EXIT` 使用稳定 IR 编号的 C17 标签，并在跳转前执行作用域清理；正向严格编译、
+  负向语义矩阵及 gfortran 执行差分均已进入测试和数值验证 CI。
+  `SELECT CASE` 已使用独立 typed IR 支持标量 INTEGER、默认 kind CHARACTER 和 LOGICAL 选择器，
+  支持值列表、开区间/闭区间及任意位置的 DEFAULT；选择器只求值一次，初始化表达式、类型、重复
+  DEFAULT、LOGICAL 范围和可静态判定的重叠范围均在生成前验证。构造绑定阶段会记录每个 CASE、
+  TYPE/CLASS guard 和终止语句的直接所有者，区分 END IF/END DO，并拒绝错配、缺失、嵌套位置错误
+  及首个 CASE 之前的可执行语句。严格 C17 执行测试和 gfortran 输出差分已进入 CI；非默认
+  CHARACTER kind 仍需随完整 kind/ABI 数据模型一并实现。
+  `WHERE/ELSEWHERE` 已使用独立语句 IR 和构造绑定，支持单行、块、命名、masked/default branch
+  及嵌套形式；掩码在进入分支时快照，masked assignment 先快照全部选中右值再写回，覆盖数值、
+  LOGICAL、CHARACTER 和派生类型数组。逐维静态/运行时合形、零大小与乘法溢出检查、动态数组段、
+  任意 rank 的 Fortran 元素顺序、重叠数组段及 `::` triplet token 均已有回归。掩码、数组段边界
+  和赋值中的非平凡标量子表达式会在元素循环外物化；数值、逻辑、CHARACTER 与派生类型数组构造器
+  均通过通用动态 shape/value 临时量先完整求值再按掩码选择，覆盖嵌套构造值、隐式 DO、整数组值、
+  动态字符长度以及派生对象 clone/finalization。具体派生函数结果类型也会从 unit header 传播到结果
+  符号、过程签名和调用表达式。严格 C17 生成执行夹具和 gfortran 差分已加入数值验证 CI；该任务仍
+  因其他合法 `DO`/旧式控制形式未完成而保持未关闭。
 - [ ] 将标签、计算/赋值 `GOTO`、算术 IF、旧式标号 DO、`RETURN`、`STOP`、`CYCLE` 和 `EXIT`
   建模为显式控制流图，统一验证不可达目标、非法跨构造跳转和清理边。
 - [ ] 对任何离开作用域的边执行正确的临时量释放、可分配对象清理和派生对象终结；异常 I/O 分支
@@ -209,7 +269,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [x] 拆分当前超大实现文件：`semantic/validation.c`、`frontend/parser.c`、`codegen/io.c`、
   `codegen/array.c`、`ast/parser.c`、`codegen/expression.c` 和 `codegen/unit.c`。按声明、接口、
   控制流、I/O 语义、数组构造、transform、过程调用、生命周期和 emitter 职责划分；当前生产
-  C/H 文件均少于 1,000 行。
+  C/H 文件均少于 1,000 行。数组 inquiry、数组关系归约、transform inquiry、`SELECT TYPE`
+  guard、矩阵 transformational intrinsic 及关系归约生成支持分别位于独立模块，避免重新堆回通用
+  call/statement/transpile 文件。
 - [x] 将 `src/internal/f2c.h` 从 730 行全局定义缩减为轻量跨域聚合头；基础设施、token、type、
   expression IR、statement IR、symbol/model、context、semantic 与 codegen 分别使用私有头文件。
 - [x] 用 `F2cCompilationPhase`、`F2cUnitPhase` 和 `F2cIrState` 明确 source → token/syntax AST →

@@ -8,11 +8,19 @@ program transform_character_derived
 
   character(len=3) :: words(4), matrix(2, 2), selected(3), vector(3)
   character(len=3) :: expanded(2, 4), shifted_words(4), ended_words(4)
+  character(len=3) :: reversed_words(4)
+  character(len=3) :: indexed_words(4)
+  character(len=4) :: expression_words(2), expression_transposed(2, 2), nested_transposed(2, 2)
   character(len=:), allocatable :: dynamic_words(:)
   integer :: location(1)
+  integer :: word_order(4), item_order(3)
   logical :: word_mask(4), item_mask(3)
   type(item) :: items(3), item_shape(3), item_selected(2), item_vector(2)
   type(item) :: item_unpacked(3), item_expanded(2, 3), item_shifted(3), item_ended(3)
+  type(item) :: item_reversed(3), item_section_selected(2)
+  type(item) :: item_matrix(2, 2), item_transposed(2, 2)
+  type(item) :: item_bumped(3)
+  type(item) :: item_indexed(3)
   type(item), allocatable :: dynamic_items(:)
   type(item) :: boundary
 
@@ -21,6 +29,7 @@ program transform_character_derived
   words(3) = 'ccc'
   words(4) = 'dd'
   word_mask = (/.true., .false., .true., .false./)
+  word_order = (/4, 2, 3, 1/)
   vector(1) = 'v1'
   vector(2) = 'v2'
   vector(3) = 'v3'
@@ -32,6 +41,11 @@ program transform_character_derived
   expanded = spread(words, 1, 2)
   location = findloc(words, 'ccc')
   dynamic_words = pack(words, word_mask)
+  expression_words = pack(words // 'x', word_mask)
+  reversed_words = cshift(words(4:1:-1), 1)
+  expression_transposed = transpose(matrix // 'x')
+  nested_transposed = transpose(transpose(matrix // 'y'))
+  indexed_words = cshift(words(word_order), 1)
 
   if (matrix(1, 1) /= 'aa ' .or. matrix(2, 1) /= 'b  ') stop 1
   if (matrix(1, 2) /= 'ccc' .or. matrix(2, 2) /= 'dd ') stop 2
@@ -41,6 +55,12 @@ program transform_character_derived
   if (expanded(1, 3) /= 'ccc' .or. expanded(2, 4) /= 'dd ') stop 6
   if (location(1) /= 3) stop 7
   if (dynamic_words(1) /= 'aa ' .or. dynamic_words(2) /= 'ccc') stop 15
+  if (expression_words(1) /= 'aa x' .or. expression_words(2) /= 'cccx') stop 18
+  if (reversed_words(1) /= 'ccc' .or. reversed_words(4) /= 'dd ') stop 19
+  if (expression_transposed(1, 2) /= 'b  x' .or. &
+      expression_transposed(2, 1) /= 'cccx') stop 23
+  if (nested_transposed(1, 2) /= 'cccy' .or. nested_transposed(2, 1) /= 'b  y') stop 24
+  if (indexed_words(1) /= 'b  ' .or. indexed_words(4) /= 'dd ') stop 27
 
   items(1)%value = 10
   items(2)%value = 20
@@ -50,6 +70,7 @@ program transform_character_derived
   items(2)%payload(1) = 202
   items(3)%payload(1) = 303
   item_mask = (/.true., .false., .true./)
+  item_order = (/3, 1, 2/)
   item_vector(1) = items(2)
   item_vector(2) = items(1)
   boundary%value = -1
@@ -63,6 +84,15 @@ program transform_character_derived
   item_shifted = cshift(items, 1)
   item_ended = eoshift(items, 1, boundary)
   dynamic_items = reshape(items, (/3/))
+  item_reversed = reshape(items(3:1:-1), (/3/))
+  item_section_selected = pack(items(3:1:-1), item_mask)
+  item_matrix(1, 1) = items(1)
+  item_matrix(2, 1) = items(2)
+  item_matrix(1, 2) = items(3)
+  item_matrix(2, 2) = boundary
+  item_transposed = transpose(item_matrix(2:1:-1, 2:1:-1))
+  item_bumped = reshape(bump(items), (/3/))
+  item_indexed = reshape(items(item_order), (/3/))
 
   items(1)%payload(1) = 999
   boundary%payload(1) = -999
@@ -73,4 +103,21 @@ program transform_character_derived
   if (item_shifted(1)%value /= 20 .or. item_shifted(3)%payload(1) /= 101) stop 12
   if (item_ended(1)%value /= 20 .or. item_ended(3)%payload(1) /= -101) stop 13
   if (dynamic_items(1)%payload(1) /= 101 .or. dynamic_items(3)%value /= 30) stop 17
+  if (item_reversed(1)%payload(1) /= 303 .or. item_reversed(3)%payload(1) /= 101) stop 20
+  if (item_section_selected(1)%value /= 30 .or. &
+      item_section_selected(2)%payload(1) /= 101) stop 21
+  if (item_transposed(1, 1)%payload(1) /= -101 .or. &
+      item_transposed(2, 2)%payload(1) /= 101) stop 22
+  if (item_bumped(1)%value /= 11 .or. item_bumped(3)%value /= 31) stop 25
+  if (item_indexed(1)%payload(1) /= 303 .or. item_indexed(2)%payload(1) /= 101) stop 28
+
+contains
+
+  elemental function bump(source) result(output)
+    type(item), intent(in) :: source
+    type(item) :: output
+
+    output = source
+    output%value = source%value + 1
+  end function bump
 end program transform_character_derived

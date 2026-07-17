@@ -90,6 +90,12 @@ foreach(
        many_arguments
        statement_function
        statement_function_single_eval
+       select_case
+       named_constructs
+       where_construct
+       elemental_procedure
+       array_inquiry
+       descriptor_temporary
        equivalence_group
        declaration_matrix
        complex_arithmetic

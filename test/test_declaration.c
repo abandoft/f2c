@@ -87,9 +87,31 @@ static void test_continued_initializer_location(void) {
     f2c_result_free(&result);
 }
 
+static void test_attribute_keywords_as_identifiers(void) {
+    static const char source[] =
+        "program keyword_identifiers\n"
+        "  implicit none\n"
+        "  integer :: dimension, external, parameter, save, equivalence\n"
+        "  dimension = 1\n"
+        "  external = 2\n"
+        "  parameter = 3\n"
+        "  save = 4\n"
+        "  equivalence = 5\n"
+        "  if (dimension + external + parameter + save + equivalence /= 15) stop 1\n"
+        "end program keyword_identifiers\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code != NULL && result.error_count == 0U,
+           "attribute keywords remain legal identifiers in executable assignments");
+    expect(!capture.captured,
+           "keyword-named variables are classified from token context without diagnostics");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_duplicate_attribute();
     test_duplicate_shape();
     test_continued_initializer_location();
+    test_attribute_keywords_as_identifiers();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

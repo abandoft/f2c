@@ -55,9 +55,9 @@ static void expect_contains(const char *text, const char *needle, const char *me
 }
 
 static void test_version_contract(void) {
-    expect(F2C_VERSION_MAJOR == 1 && F2C_VERSION_MINOR == 1 && F2C_VERSION_PATCH == 0,
+    expect(F2C_VERSION_MAJOR == 1 && F2C_VERSION_MINOR == 2 && F2C_VERSION_PATCH == 0,
            "public version macros match the CMake project version");
-    expect(strcmp(f2c_version(), "1.1.0") == 0,
+    expect(strcmp(f2c_version(), "1.2.0") == 0,
            "runtime version matches the public compile-time version");
 }
 
@@ -796,7 +796,8 @@ static void test_allocatable_arrays(void) {
     expect_contains(result.code, "float *work = NULL", "ALLOCATABLE maps to an owned C pointer");
     expect_contains(result.code, "work_extent_1 = (int32_t)f2c_alloc_extent_1",
                     "ALLOCATE commits checked runtime extents");
-    expect_contains(result.code, "f2c_alloc_count > SIZE_MAX / f2c_alloc_extent_1",
+    expect_contains(result.code,
+                    "f2c_size_multiply(f2c_alloc_count, f2c_alloc_extent_1, &f2c_alloc_count)",
                     "ALLOCATE checks element-count multiplication for overflow");
     expect_contains(result.code, "free(work); work = NULL",
                     "DEALLOCATE releases and clears the pointer");
@@ -1281,6 +1282,26 @@ static void test_project_interface_semantics(void) {
         F2cResult result = f2c_transpile_project(inputs, 2U);
         expect(result.error_count == 0U,
                "INTENT(IN) validation accepts a non-definable expression actual");
+        f2c_result_free(&result);
+    }
+    {
+        static const char caller[] = "subroutine call_update(values, order)\n"
+                                     "  real :: values(4)\n"
+                                     "  integer :: order(2)\n"
+                                     "  call update(values(order))\n"
+                                     "end subroutine call_update\n";
+        static const char definition[] = "subroutine update(values)\n"
+                                         "  real, intent(inout) :: values(:)\n"
+                                         "end subroutine update\n";
+        F2cInput inputs[2] = {
+            {caller, sizeof(caller) - 1U, {"vector_intent.f90", F2C_SOURCE_FREE, 0}},
+            {definition, sizeof(definition) - 1U, {"update.f90", F2C_SOURCE_FREE, 0}}};
+        F2cResult result = f2c_transpile_project(inputs, 2U);
+        expect(result.error_count != 0U,
+               "INTENT(INOUT) validation rejects a vector-subscript actual");
+        expect_contains(result.diagnostics,
+                        "uses a vector subscript but dummy 'values' has INTENT(INOUT)",
+                        "vector-subscript diagnostic explains the forbidden definition context");
         f2c_result_free(&result);
     }
     {
@@ -1925,7 +1946,7 @@ static void test_dynamic_array_sections(void) {
                "rank-three negative-stride section assignment translates successfully");
         expect_contains(rank3.code, "int32_t f2c_extent_2",
                         "rank-three section lowering emits all shape dimensions");
-        expect_contains(rank3.code, "f2c_section_2 * ((-1))",
+        expect_contains(rank3.code, "f2c_section_2) * ((-1))",
                         "rank-three section lowering preserves negative strides");
         f2c_result_free(&rank3);
     }
@@ -2106,9 +2127,27 @@ static void test_unsupported_semantics_are_errors(void) {
     F2cOptions options = {"unsupported.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count != 0U, "unsupported semantic constructs are hard errors");
-    expect_contains(result.diagnostics, "statement is not yet translated",
+    expect_contains(result.diagnostics, "unsupported Fortran statement: backspace 1",
                     "unsupported construct diagnostic identifies the rejected statement");
     f2c_result_free(&result);
+
+    {
+        static const char expression_source[] = "program unsupported_statement_expression\n"
+                                                "  implicit none\n"
+                                                "  integer :: values(2, 3)\n"
+                                                "  if (any(shape(values) /= [2, 3])) error stop\n"
+                                                "end program unsupported_statement_expression\n";
+        F2cOptions expression_options = {"unsupported_statement_expression.f90", F2C_SOURCE_FREE,
+                                         0};
+        F2cResult expression_result =
+            f2c_transpile(expression_source, sizeof(expression_source) - 1U, &expression_options);
+        expect(expression_result.error_count != 0U && expression_result.code == NULL,
+               "unsupported typed statement expressions cannot silently become false");
+        expect_contains(expression_result.diagnostics,
+                        "code generation does not support this typed statement expression",
+                        "unsupported typed statement expressions report a hard diagnostic");
+        f2c_result_free(&expression_result);
+    }
 }
 
 static void test_control_flow_semantics(void) {
@@ -2144,8 +2183,9 @@ static void test_control_flow_semantics(void) {
                     "IF condition type is validated");
     expect_contains(result.diagnostics, "DO WHILE condition must be a scalar LOGICAL expression",
                     "DO WHILE condition type is validated");
-    expect_contains(result.diagnostics, "SELECT CASE currently requires a scalar INTEGER",
-                    "SELECT CASE rejects selector kinds the current backend cannot preserve");
+    expect_contains(result.diagnostics,
+                    "SELECT CASE selector must be a scalar INTEGER, CHARACTER, or LOGICAL",
+                    "SELECT CASE rejects selector types outside the standard domain");
     expect_contains(result.diagnostics, "counted DO variable must be a definable scalar",
                     "counted DO validates its control variable");
     expect_contains(result.diagnostics, "counted DO step cannot be zero",
@@ -2156,6 +2196,237 @@ static void test_control_flow_semantics(void) {
                     "computed GOTO validates its selector");
     expect_contains(result.diagnostics, "ASSIGN target must be a definable scalar INTEGER",
                     "legacy assigned-label storage validates its target");
+    f2c_result_free(&result);
+}
+
+static void test_select_case_semantics(void) {
+    static const char source[] =
+        "subroutine invalid_select_case(i, candidate, values, flag, text)\n"
+        "  implicit none\n"
+        "  integer :: i, candidate, values(2)\n"
+        "  logical :: flag\n"
+        "  character(len=4) :: text\n"
+        "  case (1)\n"
+        "  select case (i)\n"
+        "  i = i + 1\n"
+        "  case (candidate)\n"
+        "  case (1:3)\n"
+        "    if (flag) then\n"
+        "    case (8)\n"
+        "    end if\n"
+        "  case (3:4)\n"
+        "  case default\n"
+        "  case default\n"
+        "  end select\n"
+        "  select case (flag)\n"
+        "  case (.false.:.true.)\n"
+        "  end select\n"
+        "  select case (i)\n"
+        "  case ('text')\n"
+        "  end select\n"
+        "  select case (values)\n"
+        "  case (1)\n"
+        "  end select\n"
+        "  select case (text)\n"
+        "  case ('a':'m')\n"
+        "  case ('m':'z')\n"
+        "  end select\n"
+        "  select case (i)\n"
+        "  case (,)\n"
+        "  end select\n"
+        "end subroutine invalid_select_case\n"
+        "subroutine unmatched_select()\n"
+        "  end select\n"
+        "end subroutine unmatched_select\n"
+        "subroutine missing_end_select(value)\n"
+        "  integer :: value\n"
+        "  select case (value)\n"
+        "  case default\n"
+        "    value = 1\n"
+        "end subroutine missing_end_select\n"
+        "subroutine mismatched_end()\n"
+        "  if (.true.) then\n"
+        "  end do\n"
+        "end subroutine mismatched_end\n";
+    F2cOptions options = {"invalid_select_case.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count != 0U && result.code == NULL,
+           "invalid SELECT CASE constructs suppress generated C17");
+    expect_contains(result.diagnostics, "CASE statement must be directly enclosed by SELECT CASE",
+                    "orphan and structurally nested CASE statements are rejected");
+    expect_contains(result.diagnostics, "SELECT CASE block must begin with CASE or END SELECT",
+                    "SELECT CASE rejects executable statements before its first branch");
+    expect_contains(result.diagnostics, "CASE lower value must be an initialization expression",
+                    "CASE values reject nonconstant variables");
+    expect_contains(result.diagnostics, "CASE value range overlaps a previous range",
+                    "overlapping numeric and character CASE ranges are rejected");
+    expect_contains(result.diagnostics, "SELECT CASE cannot contain more than one CASE DEFAULT",
+                    "SELECT CASE rejects duplicate default branches");
+    expect_contains(result.diagnostics, "LOGICAL CASE values cannot use ranges",
+                    "LOGICAL CASE rejects range syntax");
+    expect_contains(result.diagnostics, "does not match SELECT CASE selector type",
+                    "CASE values must match the selector type");
+    expect_contains(result.diagnostics,
+                    "SELECT CASE selector must be a scalar INTEGER, CHARACTER, or LOGICAL",
+                    "SELECT CASE rejects array selectors");
+    expect_contains(result.diagnostics, "malformed CASE value range list",
+                    "malformed CASE lists are syntax errors");
+    expect_contains(result.diagnostics, "END SELECT has no matching opening construct",
+                    "unmatched SELECT terminators are syntax errors");
+    expect_contains(result.diagnostics, "SELECT CASE construct is missing END SELECT",
+                    "unterminated SELECT CASE constructs are syntax errors");
+    expect_contains(result.diagnostics, "END DO has no matching opening construct",
+                    "typed terminators reject a mismatched opening construct");
+    expect_contains(result.diagnostics, "IF construct is missing END IF",
+                    "mismatched terminators retain the unclosed construct diagnostic");
+    f2c_result_free(&result);
+
+    {
+        static const char mismatch_source[] = "program case_span\n"
+                                              "  integer :: value\n"
+                                              "  select case (value)\n"
+                                              "  case ('x')\n"
+                                              "  end select\n"
+                                              "end program case_span\n";
+        F2cInput input = {
+            mismatch_source, sizeof(mismatch_source) - 1U, {"case_span.f90", F2C_SOURCE_FREE, 0}};
+        F2cConfig config = limited_config();
+        DiagnosticCapture capture = {0};
+        config.diagnostic_callback = capture_diagnostic;
+        config.diagnostic_user_data = &capture;
+        result = f2c_transpile_project_config(&input, 1U, &config);
+        expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC &&
+                   capture.line == 4U && capture.column == 9U,
+               "CASE diagnostics preserve the exact endpoint token span and stable code");
+        expect(strcmp(capture.source_name, "case_span.f90") == 0,
+               "CASE endpoint diagnostics preserve their physical source file");
+        f2c_result_free(&result);
+    }
+}
+
+static void test_named_construct_semantics(void) {
+    static const char source[] = "subroutine invalid_control_targets()\n"
+                                 "  implicit none\n"
+                                 "  cycle\n"
+                                 "  exit missing\n"
+                                 "end subroutine invalid_control_targets\n"
+                                 "subroutine invalid_named_if(flag)\n"
+                                 "  implicit none\n"
+                                 "  logical :: flag\n"
+                                 "  decision: if (flag) then\n"
+                                 "    cycle decision\n"
+                                 "  else wrong_branch\n"
+                                 "  else if (flag) then decision\n"
+                                 "  end if wrong_end\n"
+                                 "end subroutine invalid_named_if\n"
+                                 "subroutine invalid_end_names(i)\n"
+                                 "  implicit none\n"
+                                 "  integer :: i\n"
+                                 "  required_name: do i = 1, 2\n"
+                                 "  end do\n"
+                                 "  do i = 1, 2\n"
+                                 "  end do unexpected\n"
+                                 "end subroutine invalid_end_names\n"
+                                 "subroutine duplicate_names(flag)\n"
+                                 "  implicit none\n"
+                                 "  logical :: flag\n"
+                                 "  duplicate: do while (flag)\n"
+                                 "    duplicate: do while (flag)\n"
+                                 "    end do duplicate\n"
+                                 "  end do duplicate\n"
+                                 "end subroutine duplicate_names\n"
+                                 "subroutine invalid_case_name(value)\n"
+                                 "  implicit none\n"
+                                 "  integer :: value\n"
+                                 "  choice: select case (value)\n"
+                                 "  case default wrong_choice\n"
+                                 "  end select choice\n"
+                                 "end subroutine invalid_case_name\n"
+                                 "subroutine invalid_prefix(value)\n"
+                                 "  implicit none\n"
+                                 "  integer :: value\n"
+                                 "  not_a_construct: value = 1\n"
+                                 "end subroutine invalid_prefix\n";
+    F2cOptions options = {"invalid_named_constructs.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count != 0U && result.code == NULL,
+           "invalid named constructs suppress generated C17");
+    expect_contains(result.diagnostics, "CYCLE statement is not enclosed by a DO construct",
+                    "unnamed CYCLE requires an active DO construct");
+    expect_contains(result.diagnostics, "EXIT names unknown construct 'missing'",
+                    "named EXIT resolves only active construct identities");
+    expect_contains(result.diagnostics, "CYCLE target 'decision' is not a DO construct",
+                    "CYCLE rejects a named non-DO construct target");
+    expect_contains(result.diagnostics,
+                    "ELSE construct name 'wrong_branch' does not match 'decision'",
+                    "IF branch names must match their owning construct");
+    expect_contains(result.diagnostics, "ELSE IF cannot follow ELSE in the same IF construct",
+                    "IF branch ordering is validated by the construct binder");
+    expect_contains(result.diagnostics,
+                    "END IF construct name 'wrong_end' does not match 'decision'",
+                    "named IF terminators must match their opener");
+    expect_contains(result.diagnostics, "END DO must specify construct name 'required_name'",
+                    "a named DO requires its name on END DO");
+    expect_contains(result.diagnostics, "END DO names an unnamed construct",
+                    "an unnamed DO rejects a spurious END DO name");
+    expect_contains(result.diagnostics,
+                    "construct name 'duplicate' duplicates an active construct name",
+                    "active construct names must be unique");
+    expect_contains(result.diagnostics,
+                    "CASE construct name 'wrong_choice' does not match 'choice'",
+                    "CASE branch names are bound to their SELECT CASE owner");
+    expect_contains(result.diagnostics, "malformed construct name or control target syntax",
+                    "construct-name prefixes are rejected on non-construct statements");
+    f2c_result_free(&result);
+}
+
+static void test_where_semantics(void) {
+    static const char source[] = "subroutine invalid_where(mask, values, other, scalar)\n"
+                                 "  implicit none\n"
+                                 "  logical :: mask(2,2), scalar\n"
+                                 "  integer :: values(3), other(2,2)\n"
+                                 "  where (scalar) other = 1\n"
+                                 "  where (mask) values = other\n"
+                                 "  where (mask) other = values\n"
+                                 "  where (values) values = 1\n"
+                                 "  elsewhere\n"
+                                 "  guarded: where (mask)\n"
+                                 "    call rejected()\n"
+                                 "  elsewhere guarded\n"
+                                 "  elsewhere guarded\n"
+                                 "  elsewhere (mask) guarded\n"
+                                 "  end where guarded\n"
+                                 "end subroutine invalid_where\n"
+                                 "subroutine missing_where_end(mask, values)\n"
+                                 "  logical :: mask(2)\n"
+                                 "  integer :: values(2)\n"
+                                 "  where (mask)\n"
+                                 "    values = 1\n"
+                                 "end subroutine missing_where_end\n";
+    F2cOptions options = {"invalid_where.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count != 0U && result.code == NULL,
+           "invalid WHERE constructs suppress generated C17");
+    expect_contains(result.diagnostics, "WHERE mask must be a LOGICAL array expression",
+                    "WHERE rejects scalar and nonlogical masks");
+    expect_contains(result.diagnostics,
+                    "masked assignment target rank 1 does not conform to WHERE mask rank 2",
+                    "masked assignments require a target conformable with the mask");
+    expect_contains(result.diagnostics,
+                    "masked assignment value rank 1 does not conform to WHERE mask rank 2",
+                    "array assignment values must conform with the WHERE mask");
+    expect_contains(result.diagnostics, "ELSEWHERE must be directly enclosed by WHERE",
+                    "orphan ELSEWHERE statements are rejected");
+    expect_contains(result.diagnostics,
+                    "WHERE body may contain only intrinsic assignment or nested WHERE constructs",
+                    "WHERE blocks reject non-assignment executable statements");
+    expect_contains(result.diagnostics,
+                    "WHERE construct cannot contain more than one unmasked ELSEWHERE",
+                    "WHERE permits at most one default branch");
+    expect_contains(result.diagnostics, "masked ELSEWHERE cannot follow an unmasked ELSEWHERE",
+                    "masked branches cannot follow a default ELSEWHERE");
+    expect_contains(result.diagnostics, "WHERE construct is missing END WHERE",
+                    "unterminated WHERE constructs are syntax errors");
     f2c_result_free(&result);
 }
 
@@ -2556,6 +2827,36 @@ static void test_expression_shape_semantics(void) {
                     "shape diagnostics identify the mismatching dimension");
     expect(result.code == NULL, "shape errors suppress generated C17 output");
     f2c_result_free(&result);
+
+    {
+        static const char invalid_matmul[] = "program invalid_matmul\n"
+                                             "  implicit none\n"
+                                             "  real :: vector_a(2), vector_b(2), scalar\n"
+                                             "  scalar = matmul(vector_a, vector_b)\n"
+                                             "end program invalid_matmul\n";
+        F2cOptions invalid_options = {"invalid_matmul.f90", F2C_SOURCE_FREE, 0};
+        F2cResult invalid = f2c_transpile(invalid_matmul, strlen(invalid_matmul), &invalid_options);
+        expect(invalid.error_count != 0U && invalid.code == NULL,
+               "MATMUL rejects the nonstandard vector-by-vector combination");
+        expect_contains(invalid.diagnostics, "use DOT_PRODUCT",
+                        "MATMUL rank diagnostics identify the standard alternative");
+        f2c_result_free(&invalid);
+    }
+    {
+        static const char invalid_extents[] = "program invalid_matmul_extents\n"
+                                              "  implicit none\n"
+                                              "  real :: left(2, 3), right(4, 2), result(2, 2)\n"
+                                              "  result = matmul(left, right)\n"
+                                              "end program invalid_matmul_extents\n";
+        F2cOptions invalid_options = {"invalid_matmul_extents.f90", F2C_SOURCE_FREE, 0};
+        F2cResult invalid =
+            f2c_transpile(invalid_extents, strlen(invalid_extents), &invalid_options);
+        expect(invalid.error_count != 0U && invalid.code == NULL,
+               "known nonconformable MATMUL inner extents are rejected semantically");
+        expect_contains(invalid.diagnostics, "inner extents are not conformable (3 and 4)",
+                        "MATMUL extent diagnostics report both conflicting extents");
+        f2c_result_free(&invalid);
+    }
 }
 
 static void test_local_array_bounds_contract(void) {
@@ -2735,6 +3036,9 @@ int main(void) {
     test_tokenized_use_association();
     test_implicit_mapping_semantics();
     test_control_flow_semantics();
+    test_select_case_semantics();
+    test_named_construct_semantics();
+    test_where_semantics();
     test_unsupported_semantics_are_errors();
     if (failures != 0) {
         fprintf(stderr, "%d test(s) failed\n", failures);

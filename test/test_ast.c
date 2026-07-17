@@ -90,6 +90,32 @@ static void test_kind_shape_and_value_category(void) {
            "array constructors retain element kind and a known one-dimensional extent");
     f2c_expr_free(expression);
 
+    expression = f2c_parse_expression_ast(&unit, "size(array=matrix, kind=8)", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->type == TYPE_INTEGER &&
+               expression->type_kind == 8 && expression->rank == 0U,
+           "SIZE retains its selected INTEGER kind and scalar result category");
+    f2c_expr_free(expression);
+
+    expression = f2c_parse_expression_ast(&unit, "shape(source=matrix, kind=8)", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->type_kind == 8 &&
+               expression->rank == 1U && expression->shape.dimensions[0].extent_known &&
+               expression->shape.dimensions[0].extent == 2U,
+           "SHAPE typed IR records the source rank as its vector extent");
+    f2c_expr_free(expression);
+
+    expression = f2c_parse_expression_ast(&unit, "lbound(matrix)", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->rank == 1U &&
+               expression->shape.dimensions[0].extent_known &&
+               expression->shape.dimensions[0].extent == 2U,
+           "LBOUND without DIM produces a rank-sized vector");
+    f2c_expr_free(expression);
+
+    expression = f2c_parse_expression_ast(&unit, "ubound(matrix, dim=1, kind=8)", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->type_kind == 8 &&
+               expression->rank == 0U,
+           "UBOUND with DIM produces a scalar of the selected kind");
+    f2c_expr_free(expression);
+
     memset(&function, 0, sizeof(function));
     expect(f2c_parse_unit_header("integer(kind=8) function wide()", &function) &&
                function.return_kind == 8 &&
@@ -118,6 +144,13 @@ static void test_kind_shape_and_value_category(void) {
                function.kind == UNIT_SUBROUTINE && function.elemental &&
                function.argument_count == 1U,
            "canonical header tokens retain ELEMENTAL procedure metadata");
+    f2c_free_unit(&function);
+
+    memset(&function, 0, sizeof(function));
+    expect(f2c_parse_unit_header("type(cell) function make_cell(value)", &function) &&
+               function.return_type == TYPE_DERIVED && function.result_derived_type_name != NULL &&
+               strcmp(function.result_derived_type_name, "cell") == 0,
+           "derived function headers retain the concrete result type name");
     f2c_free_unit(&function);
 }
 
@@ -347,6 +380,13 @@ static void test_array_constructor_implied_do(void) {
                expression->children[1]->kind == F2C_EXPR_IMPLIED_DO &&
                expression->children[1]->children[0]->kind == F2C_EXPR_IMPLIED_DO,
            "nested implied DO is represented recursively without raw-text reparsing");
+    f2c_expr_free(expression);
+
+    error_at = NULL;
+    expression = f2c_parse_expression_ast(&unit, "[(i, i=1,4), [5,6]]", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->shape.dimensions[0].extent_known &&
+               expression->shape.dimensions[0].extent == 6U,
+           "constructor shape sums nested values and implied-DO iteration extents");
     f2c_expr_free(expression);
 }
 

@@ -92,6 +92,14 @@ int main(void) {
            "END BLOCK owns a dedicated construct-scope terminator kind");
     f2c_statement_free(&statement);
 
+    expect(f2c_parse_statement(&unit, "end if", 16U, &statement), "END IF parses");
+    expect(statement.kind == F2C_STMT_END_IF, "END IF owns a distinct typed-IR terminator kind");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "end do", 16U, &statement), "END DO parses");
+    expect(statement.kind == F2C_STMT_END_DO, "END DO owns a distinct typed-IR terminator kind");
+    f2c_statement_free(&statement);
+
     expect(f2c_parse_statement(&unit, "if (x) 10, 20, 30", 12U, &statement),
            "arithmetic IF parses");
     expect(statement.kind == F2C_STMT_ARITHMETIC_IF && statement.expression != NULL &&
@@ -118,11 +126,137 @@ int main(void) {
            "counted DO owns variable, initial, limit, and step ASTs");
     f2c_statement_free(&statement);
 
+    expect(f2c_parse_statement(&unit, "outer: do n = 1, 10, 2", 15U, &statement),
+           "named counted DO parses");
+    expect(statement.kind == F2C_STMT_DO && statement.construct_syntax_valid &&
+               statement.construct_name != NULL && strcmp(statement.construct_name, "outer") == 0 &&
+               statement.left != NULL && statement.right != NULL && statement.limit != NULL &&
+               statement.step != NULL,
+           "named DO retains its construct identity and typed loop control AST");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "decision: if (n > 0) then", 15U, &statement),
+           "named block IF parses");
+    expect(statement.kind == F2C_STMT_IF && statement.block && statement.construct_name != NULL &&
+               strcmp(statement.construct_name, "decision") == 0 && statement.expression != NULL,
+           "named IF classifies from the canonical token body without losing its prefix");
+    expect(statement.expression != NULL && statement.expression->span.begin.line == 15U &&
+               statement.expression->span.begin.column == 15U,
+           "named construct expressions preserve their physical canonical-token span");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "cycle outer", 15U, &statement), "named CYCLE parses");
+    expect(statement.kind == F2C_STMT_CYCLE && statement.construct_syntax_valid &&
+               statement.control_name != NULL && strcmp(statement.control_name, "outer") == 0 &&
+               statement.control_target == NULL,
+           "CYCLE owns an unresolved control name before semantic construct binding");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "end do outer", 15U, &statement), "named END DO parses");
+    expect(statement.kind == F2C_STMT_END_DO && statement.construct_name != NULL &&
+               strcmp(statement.construct_name, "outer") == 0 && statement.name == NULL,
+           "named END DO separates construct identity from legacy terminal labels");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "end do 100", 15U, &statement),
+           "legacy labeled END DO parses");
+    expect(statement.kind == F2C_STMT_END_DO && statement.construct_name == NULL &&
+               statement.name != NULL && strcmp(statement.name, "100") == 0,
+           "numeric END DO suffix remains a legacy terminal label");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "cycle outer extra", 15U, &statement),
+           "malformed named CYCLE still builds syntax IR");
+    expect(statement.kind == F2C_STMT_CYCLE && !statement.construct_syntax_valid,
+           "malformed CYCLE target syntax is preserved for deterministic validation");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "a:1:n)=a(n:1:-1)", 15U, &statement),
+           "malformed construct-prefix input builds bounded syntax IR");
+    expect(statement.kind == F2C_STMT_INVALID && !statement.construct_syntax_valid,
+           "a numeric token after an identifier colon cannot recursively become a label");
+    f2c_statement_free(&statement);
+
     expect(f2c_parse_statement(&unit, "do n = ((n - 1) / 4) * 4 + 1, 1, -4", 15U, &statement),
            "counted DO with a parenthesized initial expression parses");
     expect(statement.kind == F2C_STMT_DO && statement.left != NULL && statement.right != NULL &&
                statement.limit != NULL && statement.step != NULL,
            "top-level comma splitting does not mistake the initial parenthesis for a call list");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "case (1, 3:5, :0, 9:)", 16U, &statement),
+           "CASE value ranges parse");
+    expect(statement.kind == F2C_STMT_CASE && statement.case_syntax_valid &&
+               !statement.case_default && statement.case_range_count == 4U &&
+               !statement.case_ranges[0].has_colon && statement.case_ranges[0].lower != NULL &&
+               statement.case_ranges[0].upper == NULL && statement.case_ranges[1].has_colon &&
+               statement.case_ranges[1].lower != NULL && statement.case_ranges[1].upper != NULL &&
+               statement.case_ranges[2].has_colon && statement.case_ranges[2].lower == NULL &&
+               statement.case_ranges[2].upper != NULL && statement.case_ranges[3].has_colon &&
+               statement.case_ranges[3].lower != NULL && statement.case_ranges[3].upper == NULL,
+           "CASE owns singleton, closed, lower-open, and upper-open range AST nodes");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "case default", 16U, &statement), "CASE DEFAULT parses");
+    expect(statement.kind == F2C_STMT_CASE && statement.case_syntax_valid &&
+               statement.case_default && statement.case_range_count == 0U,
+           "CASE DEFAULT has a dedicated typed-IR flag without synthetic expressions");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "case (1, 3:5) choice", 16U, &statement),
+           "named CASE branch parses");
+    expect(statement.kind == F2C_STMT_CASE && statement.case_syntax_valid &&
+               statement.construct_syntax_valid && statement.construct_name != NULL &&
+               strcmp(statement.construct_name, "choice") == 0 && statement.case_range_count == 2U,
+           "CASE branch retains its optional SELECT construct association name");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "case ('a':'z', 'xy')", 16U, &statement),
+           "character CASE ranges parse");
+    expect(statement.case_range_count == 2U && statement.case_ranges[0].lower != NULL &&
+               statement.case_ranges[0].lower->type == TYPE_CHARACTER &&
+               statement.case_ranges[0].upper != NULL &&
+               statement.case_ranges[0].upper->type == TYPE_CHARACTER,
+           "CASE range endpoints retain their expression types");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "where (work > 0.0) work = work + 1.0", 16U, &statement),
+           "single-line WHERE parses");
+    expect(statement.kind == F2C_STMT_WHERE && !statement.block && statement.expression != NULL &&
+               statement.expression->type == TYPE_LOGICAL && statement.expression->rank == 2U &&
+               statement.nested != NULL && statement.nested->kind == F2C_STMT_ASSIGNMENT,
+           "single-line WHERE owns its array mask and nested assignment AST");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "masking: where (work > 0.0)", 16U, &statement),
+           "named WHERE construct parses");
+    expect(statement.kind == F2C_STMT_WHERE && statement.block &&
+               statement.construct_name != NULL &&
+               strcmp(statement.construct_name, "masking") == 0 && statement.expression != NULL &&
+               statement.expression->rank == 2U,
+           "named WHERE retains its construct identity and typed array mask");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "elsewhere (work < 0.0) masking", 16U, &statement),
+           "masked named ELSEWHERE parses");
+    expect(statement.kind == F2C_STMT_ELSEWHERE && statement.expression != NULL &&
+               statement.expression->type == TYPE_LOGICAL && statement.expression->rank == 2U &&
+               statement.construct_name != NULL && strcmp(statement.construct_name, "masking") == 0,
+           "masked ELSEWHERE owns its branch mask and WHERE association name");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "elsewhere masking", 16U, &statement),
+           "default named ELSEWHERE parses");
+    expect(statement.kind == F2C_STMT_ELSEWHERE && statement.expression == NULL &&
+               statement.construct_name != NULL && strcmp(statement.construct_name, "masking") == 0,
+           "default ELSEWHERE is represented without a synthetic mask expression");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "end where masking", 16U, &statement),
+           "named END WHERE parses");
+    expect(statement.kind == F2C_STMT_END_WHERE && statement.construct_name != NULL &&
+               strcmp(statement.construct_name, "masking") == 0,
+           "END WHERE retains its construct association name");
     f2c_statement_free(&statement);
 
     expect(f2c_parse_statement(&unit, "goto (10, 20, 30), n", 16U, &statement),
