@@ -2072,6 +2072,24 @@ static void test_labeled_do_terminal_branch(void) {
     f2c_result_free(&result);
 }
 
+static void test_labeled_block_if(void) {
+    static const char source[] = "      subroutine labeled_if(ok, value)\n"
+                                 "      logical ok\n"
+                                 "      integer value\n"
+                                 "  170 if (ok) then\n"
+                                 "         value = 1\n"
+                                 "      else\n"
+                                 "         value = 2\n"
+                                 "      end if\n"
+                                 "      end\n";
+    F2cOptions options = {"labeled_if.f", F2C_SOURCE_FIXED, 0};
+    F2cResult result = f2c_transpile(source, strlen(source), &options);
+    expect(result.error_count == 0U, "statement label on block IF translates");
+    expect_contains(result.code, "} else {",
+                    "statement label does not hide its block IF from construct binding");
+    f2c_result_free(&result);
+}
+
 static void test_local_kind_parameter_semantics(void) {
     static const char source[] = "double precision function scaled_norm(x)\n"
                                  "  integer, parameter :: wp = kind(1.d0)\n"
@@ -3020,6 +3038,7 @@ int main(void) {
     test_list_directed_io();
     test_formatted_record_end_branch();
     test_labeled_do_terminal_branch();
+    test_labeled_block_if();
     test_local_kind_parameter_semantics();
     test_character_shape_diagnostics();
     test_empty_declaration_diagnostic();

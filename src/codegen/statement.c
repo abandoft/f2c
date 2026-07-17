@@ -639,7 +639,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                 f2c_buffer_printf(&context->output, "f2c_label_%s: ;\n", statement->name);
             }
             if (statement->nested != NULL)
-                (void)emit_inline_statement(context, unit, statement->nested, source_line, *depth);
+                (void)f2c_emit_statement(context, unit, statement->nested, source_line, depth);
         }
     } else if (statement->kind == F2C_STMT_NULLIFY) {
         size_t item;

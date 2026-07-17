@@ -200,6 +200,11 @@ void f2c_validation_bind_constructs(Context *context, Unit *unit) {
         F2cStatement *statement = &unit->statements[index];
         statement->construct_owner = NULL;
         statement->control_target = NULL;
+        if (statement->kind == F2C_STMT_LABEL && statement->nested != NULL) {
+            statement = statement->nested;
+            statement->construct_owner = NULL;
+            statement->control_target = NULL;
+        }
         if (statement->nested != NULL && (statement->nested->kind == F2C_STMT_CYCLE ||
                                           statement->nested->kind == F2C_STMT_EXIT)) {
             statement->nested->control_target = NULL;
