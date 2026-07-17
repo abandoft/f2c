@@ -72,6 +72,7 @@ program elemental_procedure
   dynamic_values = combine(a(1:2), b(1:2), 1)
   if (any(dynamic_values /= [11, 22])) error stop 12
 
+  allocate(character(len=1) :: dynamic_words(1))
   dynamic_words = decorate(a)
   if (len(dynamic_words(1)) /= 3 .or. any(dynamic_words /= source_words)) error stop 13
 

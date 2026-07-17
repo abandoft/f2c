@@ -24,20 +24,20 @@ void f2c_emit_relation_reduction_support(Buffer *output, int needs_complex) {
                 "#undef F2C_DEFINE_RELATION_REDUCTION\n");
     if (needs_complex) {
         f2c_buffer_append(
-            output, "#define F2C_DEFINE_COMPLEX_RELATION_REDUCTION(s, t) "
+            output, "#define F2C_DEFINE_COMPLEX_RELATION_REDUCTION(s, t, equal_fn) "
                     "static inline F2C_UNUSED int32_t f2c_relation_reduce_##s(const t *a, "
                     "ptrdiff_t ad, size_t an, const t *b, ptrdiff_t bd, size_t bn, int relation, "
                     "int reduction) { size_t i, n; int32_t count = 0; if (an == SIZE_MAX && bn "
                     "== SIZE_MAX) abort(); if (an != SIZE_MAX && bn != SIZE_MAX && an != bn) "
                     "abort(); n = an == SIZE_MAX ? bn : an; for (i = 0U; i < n; ++i) { bool "
-                    "equal = a[(ptrdiff_t)i * ad] == b[(ptrdiff_t)i * bd]; bool value; if "
+                    "equal = equal_fn(a[(ptrdiff_t)i * ad], b[(ptrdiff_t)i * bd]); bool value; if "
                     "(relation == 0) value = equal; else if (relation == 1) value = !equal; else "
                     "abort(); if (reduction == 0 && value) return 1; if (reduction == 1 && "
                     "!value) return 0; if (reduction == 2 && value) ++count; } if (reduction == "
                     "0) return 0; if (reduction == 1) return 1; if (reduction == 2) return count; "
                     "abort(); }\n"
-                    "F2C_DEFINE_COMPLEX_RELATION_REDUCTION(c, f2c_complex_float)\n"
-                    "F2C_DEFINE_COMPLEX_RELATION_REDUCTION(z, f2c_complex_double)\n"
+                    "F2C_DEFINE_COMPLEX_RELATION_REDUCTION(c, f2c_complex_float, f2c_ceq)\n"
+                    "F2C_DEFINE_COMPLEX_RELATION_REDUCTION(z, f2c_complex_double, f2c_zeq)\n"
                     "#undef F2C_DEFINE_COMPLEX_RELATION_REDUCTION\n");
     }
     f2c_buffer_append(output,
