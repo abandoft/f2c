@@ -20,7 +20,7 @@ extern "C" {
 #endif
 
 #define F2C_VERSION_MAJOR 1
-#define F2C_VERSION_MINOR 1
+#define F2C_VERSION_MINOR 2
 #define F2C_VERSION_PATCH 0
 
 #define F2C_DEFAULT_MAX_INPUT_BYTES ((size_t)512U * 1024U * 1024U)

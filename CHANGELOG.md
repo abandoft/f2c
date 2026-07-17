@@ -1,3 +1,11 @@
+## 1.2.0
+
+- Unified and improved the token, AST, typed IR, semantic analysis, and code generation pipelines, with clearer responsibilities across core modules.
+- Improved type and semantic handling for array inquiries, array expressions, array constructors, vector subscripts, and transformational intrinsics.
+- Expanded `TRANSPOSE`, `MATMUL`, and related transformations for dynamic arrays, mixed kinds, characters, complex values, and derived types.
+- Improved assumed-shape array descriptors, noncontiguous array sections, procedure argument temporaries, and ownership management for characters and derived types.
+- Expanded C17, native Fortran differential, sanitizer, negative semantic, and numerical validation pipeline coverage.
+
 ## 1.1.0
 
 - Refactored the frontend, semantic analysis, AST, typed IR, and code generation pipelines.

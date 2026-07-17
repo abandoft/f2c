@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(
     f2c
-    VERSION 1.1.0
+    VERSION 1.2.0
     DESCRIPTION "A modern, high-performance F2C"
     LANGUAGES C
 )
@@ -30,6 +30,8 @@ set(
     src/ast/parser.c
     src/ast/shape.c
     src/ast/statement.c
+    src/ast/statement/case.c
+    src/ast/statement/construct.c
     src/ast/statement/data.c
     src/ast/statement/parenthesis.c
     src/ast/statement/private.h
@@ -37,14 +39,23 @@ set(
     src/ast/visit.c
     src/codegen/allocation.c
     src/codegen/array.c
+    src/codegen/array/assignment.c
+    src/codegen/array/call.c
     src/codegen/array/constructor.c
+    src/codegen/array/element.c
     src/codegen/array/private.h
+    src/codegen/array/temporary.c
     src/codegen/call.c
     src/codegen/codegen.h
     src/codegen/data.c
+    src/codegen/descriptor/materialize.c
+    src/codegen/descriptor/private.h
+    src/codegen/descriptor/view.c
     src/codegen/expression.c
     src/codegen/expression/call.c
+    src/codegen/expression/inquiry.c
     src/codegen/expression/private.h
+    src/codegen/expression/reduction.c
     src/codegen/expression/statement_function.c
     src/codegen/io.c
     src/codegen/io/control.c
@@ -57,7 +68,13 @@ set(
     src/codegen/module.c
     src/codegen/ownership.c
     src/codegen/statement.c
+    src/codegen/statement/select.c
+    src/codegen/statement/type_select.c
+    src/codegen/statement/where.c
     src/codegen/transform.c
+    src/codegen/transform/findloc.c
+    src/codegen/transform/inquiry.c
+    src/codegen/transform/matrix.c
     src/codegen/transform/private.h
     src/codegen/transform/view.c
     src/codegen/type/derived.c
@@ -66,6 +83,8 @@ set(
     src/codegen/unit/private.h
     src/core/config.c
     src/core/cleanup.c
+    src/core/generated/private.h
+    src/core/generated/relation.c
     src/core/support.c
     src/core/transpile.c
     src/frontend/analyze.c
@@ -117,10 +136,13 @@ set(
     src/semantic/type.c
     src/semantic/validation.c
     src/semantic/validation/allocation.c
+    src/semantic/validation/case.c
+    src/semantic/validation/construct.c
     src/semantic/validation/expression.c
     src/semantic/validation/private.h
     src/semantic/validation/procedure.c
     src/semantic/validation/statement.c
+    src/semantic/validation/where.c
 )
 
 function(f2c_configure_core_target target)
@@ -327,6 +349,14 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_declaration_tests test/test_declaration.c)
     f2c_configure_test_target(f2c_declaration_tests)
     add_test(NAME declaration_semantics COMMAND f2c_declaration_tests)
+
+    add_executable(f2c_elemental_tests test/test_elemental.c)
+    f2c_configure_test_target(f2c_elemental_tests)
+    add_test(NAME elemental_semantics COMMAND f2c_elemental_tests)
+
+    add_executable(f2c_inquiry_tests test/test_inquiry.c)
+    f2c_configure_test_target(f2c_inquiry_tests)
+    add_test(NAME inquiry_semantics COMMAND f2c_inquiry_tests)
 
     add_executable(f2c_implicit_tests test/test_implicit.c)
     f2c_configure_test_target(f2c_implicit_tests)
