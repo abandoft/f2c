@@ -95,17 +95,15 @@ int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *ta
         }
     }
     f2c_array_indent(&context->output, emitted_depth);
-    f2c_buffer_append(&context->output, "size_t f2c_element_count = 1U;\n");
+    f2c_buffer_printf(&context->output,
+                      "const size_t f2c_element_count = f2c_inquiry_size(%zuU, "
+                      "(const size_t[]){",
+                      target->rank);
     for (dimension = 0U; dimension < target->rank; ++dimension) {
-        f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_printf(&context->output,
-                          "if (f2c_element_extent_%zu != 0U && f2c_element_count > "
-                          "SIZE_MAX / f2c_element_extent_%zu) abort();\n",
-                          dimension, dimension);
-        f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_printf(&context->output, "f2c_element_count *= f2c_element_extent_%zu;\n",
+        f2c_buffer_printf(&context->output, "%sf2c_element_extent_%zu", dimension == 0U ? "" : ", ",
                           dimension);
     }
+    f2c_buffer_append(&context->output, "});\n");
     if (target->pointer) {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output, "if (%s == NULL) abort();\n",

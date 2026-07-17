@@ -807,7 +807,8 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
     if (statement->kind == F2C_STMT_DATA)
         f2c_statement_parse_data(unit, statement);
     syntax_line = *token_line;
-    syntax_line.tokens += body_start;
+    if (syntax_line.tokens != NULL)
+        syntax_line.tokens += body_start;
     syntax_line.token_count -= body_start;
     if (statement->kind == F2C_STMT_CASE &&
         !f2c_statement_parse_case(unit, &syntax_line, statement)) {
