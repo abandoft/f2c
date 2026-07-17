@@ -106,6 +106,7 @@ static const char *unit_kind_word(UnitKind kind) {
 int f2c_program_unit_end_tokens(const Line *line, UnitKind kind) {
     const size_t count = statement_token_count(line);
     const char *kind_word = unit_kind_word(kind);
+    size_t kind_length;
     char joined[32];
     if (kind_word == NULL || count == 0U)
         return 0;
@@ -113,9 +114,10 @@ int f2c_program_unit_end_tokens(const Line *line, UnitKind kind) {
         return 1;
     if (count >= 2U && word(line, 0U, "end") && word(line, 1U, kind_word))
         return count <= 3U;
-    if (strlen(kind_word) + strlen("end") + 1U > sizeof(joined))
+    kind_length = strlen(kind_word);
+    if (kind_length + sizeof("end") > sizeof(joined))
         return 0;
-    (void)strcpy(joined, "end");
-    (void)strcat(joined, kind_word);
+    (void)memcpy(joined, "end", sizeof("end") - 1U);
+    (void)memcpy(joined + sizeof("end") - 1U, kind_word, kind_length + 1U);
     return count <= 2U && word(line, 0U, joined);
 }
