@@ -42,6 +42,10 @@ cc -std=c17 -O3 output.c -lm -o output
 build/f2c caller.f90 implementation.f90 -o project.c --header project.h
 ```
 
+管道调用可使用 `-` 作为输入或输出路径，例如
+`build/f2c - --free-form -o - < input.f90`。文件产物会先全部暂存再替换；任一 C 或头文件无法写入时，
+已有输出保持不变。
+
 源码形式默认自动识别：`.f`、`.for` 和 `.ftn` 使用固定格式，`.f90` 等现代扩展名使用自由格式。
 文件名无法表达真实物理布局时，可使用 `--free-form` 或 `--fixed-form` 覆盖自动识别；
 `--comments` 会在生成的 C 中保留源码行注释。
@@ -68,6 +72,24 @@ f2c_result_free(&result);
 使用 `F2cInput[]` 和 `f2c_transpile_project` 可在共享过程注册表下转译多个源文件。
 `result.header` 包含该项目定义的外部过程声明。发生硬错误时，`code` 和 `header` 均为 `NULL`，
 `diagnostics` 提供可操作的文件、行和列信息。
+
+长期运行的服务可设置请求级资源预算，不会引入进程全局状态：
+
+```c
+F2cConfig config = {0};
+config.structure_size = sizeof(config);
+config.limits.max_input_bytes = 64U * 1024U * 1024U;
+config.limits.max_output_bytes = 128U * 1024U * 1024U;
+
+F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
+```
+
+限制字段为零时使用对应的 `F2C_DEFAULT_*` 默认值。预算覆盖项目输入总字节数、逻辑行、canonical
+token、表达式 AST 节点与深度、常量求值工作量、诊断数量与字节数，以及分别生成的代码和头文件；
+超限时不会返回不完整的 C 代码。还可通过同步 `F2cDiagnosticCallback` 直接获取结构化诊断分类、
+严重级别、源码范围和消息，无需解析文本诊断。`structure_size` 必须等于
+`sizeof(F2cConfig)`。项目尚未冻结公共 ABI，因此旧版或更大的配置布局都会被拒绝，当前结构的
+全部字段均属于唯一有效的 API。
 
 ## 支持状态
 

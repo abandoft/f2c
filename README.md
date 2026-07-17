@@ -45,6 +45,10 @@ Translate several files as one project and emit a shared C interface:
 build/f2c caller.f90 implementation.f90 -o project.c --header project.h
 ```
 
+Use `-` as an input or output path for pipelines, for example
+`build/f2c - --free-form -o - < input.f90`. File outputs are staged before replacement; if any
+requested artifact cannot be written, existing C and header outputs are preserved.
+
 Source form is automatic by default. `.f`, `.for`, and `.ftn` use fixed form; modern extensions
 such as `.f90` use free form. `--free-form` and `--fixed-form` override detection when a file name
 does not describe its physical layout. `--comments` retains source lines as generated C comments.
@@ -72,6 +76,25 @@ Use `f2c_transpile_project` with an `F2cInput[]` array to translate several sour
 procedure registry. `result.header` contains declarations for the external procedures defined by
 that project. On a hard error, `code` and `header` are `NULL` and `diagnostics` contains actionable
 file, line, and column information.
+
+Long-running services can set request-local resource budgets without process-global state:
+
+```c
+F2cConfig config = {0};
+config.structure_size = sizeof(config);
+config.limits.max_input_bytes = 64U * 1024U * 1024U;
+config.limits.max_output_bytes = 128U * 1024U * 1024U;
+
+F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
+```
+
+A zero limit selects the corresponding `F2C_DEFAULT_*` value. Budgets cover aggregate input bytes,
+logical lines, canonical tokens, expression AST nodes and depth, constant-evaluation work,
+diagnostics, diagnostic bytes, and each generated code/header artifact. Limit failures return no
+partial generated C. A synchronous `F2cDiagnosticCallback` can additionally consume structured
+diagnostic categories, severity, source ranges, and messages without parsing the text rendering.
+`structure_size` must equal `sizeof(F2cConfig)`. The project has not frozen a public ABI yet, so
+older or larger configuration layouts are rejected and all fields belong to the current API.
 
 ## Support status
 
