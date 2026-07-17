@@ -18,7 +18,7 @@ program elemental_procedure
   character(len=3) :: words(4), source_words(4)
   type(cell) :: cells(4)
   integer, allocatable :: dynamic_values(:)
-  character(len=:), allocatable :: dynamic_words(:)
+  character(len=3), allocatable :: dynamic_words(:)
   type(cell), allocatable :: dynamic_cells(:)
 
   a = [1, 2, 3, 4]
@@ -72,7 +72,8 @@ program elemental_procedure
   dynamic_values = combine(a(1:2), b(1:2), 1)
   if (any(dynamic_values /= [11, 22])) error stop 12
 
-  allocate(character(len=1) :: dynamic_words(1))
+  dynamic_words = decorate(a(1:2))
+  if (size(dynamic_words) /= 2) error stop 19
   dynamic_words = decorate(a)
   if (len(dynamic_words(1)) /= 3 .or. any(dynamic_words /= source_words)) error stop 13
 
