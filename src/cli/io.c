@@ -21,6 +21,20 @@ typedef struct StagedArtifact {
 
 static int stream_path(const char *path) { return path == NULL || strcmp(path, "-") == 0; }
 
+static FILE *open_file(const char *path, const char *mode) {
+#if defined(_WIN32)
+    FILE *file = NULL;
+    const errno_t status = fopen_s(&file, path, mode);
+    if (status != 0) {
+        errno = (int)status;
+        return NULL;
+    }
+    return file;
+#else
+    return fopen(path, mode);
+#endif
+}
+
 static char *temporary_path(const char *path, size_t sequence, const char *suffix) {
     const size_t path_length = strlen(path);
     const size_t suffix_length = strlen(suffix);
@@ -91,7 +105,7 @@ static int stage_artifact(StagedArtifact *staged, size_t sequence) {
         staged->temporary_path = temporary_path(staged->artifact->path, sequence + attempt, "tmp");
         if (staged->temporary_path == NULL)
             return -1;
-        file = fopen(staged->temporary_path, "wbx");
+        file = open_file(staged->temporary_path, "wbx");
         if (file != NULL)
             break;
         if (errno != EEXIST)
@@ -194,7 +208,7 @@ char *f2c_cli_read_source(const char *path, size_t maximum_bytes, size_t *length
         return NULL;
     }
     close_file = strcmp(path, "-") != 0;
-    file = close_file ? fopen(path, "rb") : stdin;
+    file = close_file ? open_file(path, "rb") : stdin;
     if (file == NULL)
         return NULL;
     if (maximum_bytes == 0U) {
