@@ -41,8 +41,10 @@ program transform_character_derived
   location = findloc(words, 'ccc')
   block
     character(len=:), allocatable :: dynamic_words(:)
+    character(len=3), allocatable :: packed_words(:)
 
-    dynamic_words = pack(words, word_mask)
+    packed_words = pack(words, word_mask)
+    allocate(dynamic_words, source=packed_words)
     if (dynamic_words(1) /= 'aa ' .or. dynamic_words(2) /= 'ccc') stop 15
   end block
   expression_words = pack(words // 'x', word_mask)
