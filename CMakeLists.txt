@@ -50,6 +50,7 @@ set(
     src/ast/statement/case.c
     src/ast/statement/construct.c
     src/ast/statement/data.c
+    src/ast/statement/io_control.c
     src/ast/statement/io_item.c
     src/ast/statement/label.c
     src/ast/statement/parenthesis.c

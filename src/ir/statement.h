@@ -30,6 +30,9 @@ typedef enum F2cStatementKind {
     F2C_STMT_PRINT,
     F2C_STMT_OPEN,
     F2C_STMT_REWIND,
+    F2C_STMT_BACKSPACE,
+    F2C_STMT_ENDFILE,
+    F2C_STMT_INQUIRE,
     F2C_STMT_CLOSE,
     F2C_STMT_ALLOCATE,
     F2C_STMT_DEALLOCATE,
@@ -95,13 +98,28 @@ typedef enum F2cIoControlKind {
     F2C_IO_CONTROL_SIGN,
     F2C_IO_CONTROL_ASYNCHRONOUS,
     F2C_IO_CONTROL_ID,
-    F2C_IO_CONTROL_NEWUNIT
+    F2C_IO_CONTROL_NEWUNIT,
+    F2C_IO_CONTROL_EXIST,
+    F2C_IO_CONTROL_OPENED,
+    F2C_IO_CONTROL_NUMBER,
+    F2C_IO_CONTROL_NAMED,
+    F2C_IO_CONTROL_NAME,
+    F2C_IO_CONTROL_SEQUENTIAL,
+    F2C_IO_CONTROL_DIRECT,
+    F2C_IO_CONTROL_FORMATTED,
+    F2C_IO_CONTROL_UNFORMATTED,
+    F2C_IO_CONTROL_NEXTREC,
+    F2C_IO_CONTROL_POSITION,
+    F2C_IO_CONTROL_READ,
+    F2C_IO_CONTROL_WRITE,
+    F2C_IO_CONTROL_READWRITE
 } F2cIoControlKind;
 
 typedef struct F2cIoControl {
     F2cIoControlKind kind;
     char *keyword;
     F2cExpr *value;
+    F2cSourceSpan span;
     int asterisk;
 } F2cIoControl;
 
@@ -171,6 +189,7 @@ struct F2cStatement {
     int case_default;
     int case_syntax_valid;
     int data_syntax_valid;
+    int io_syntax_valid;
     int construct_syntax_valid;
 };
 

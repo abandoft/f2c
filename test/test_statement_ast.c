@@ -328,6 +328,38 @@ int main(void) {
            "CLOSE owns a typed positional unit control AST");
     f2c_statement_free(&statement);
 
+    expect(f2c_parse_statement(&unit, "backspace 9", 20U, &statement), "BACKSPACE parses");
+    expect(statement.kind == F2C_STMT_BACKSPACE && statement.io_syntax_valid &&
+               statement.control_count == 1U &&
+               statement.io_controls[0].kind == F2C_IO_CONTROL_POSITIONAL &&
+               statement.io_controls[0].value != NULL &&
+               statement.io_controls[0].value->type == TYPE_INTEGER,
+           "BACKSPACE shorthand owns a typed positional unit control");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "endfile(unit=9, iostat=n)", 20U, &statement),
+           "ENDFILE parses");
+    expect(statement.kind == F2C_STMT_ENDFILE && statement.io_syntax_valid &&
+               statement.control_count == 2U &&
+               statement.io_controls[0].kind == F2C_IO_CONTROL_UNIT &&
+               statement.io_controls[1].kind == F2C_IO_CONTROL_IOSTAT &&
+               statement.io_controls[1].value != NULL &&
+               statement.io_controls[1].value->symbol == &symbols[1],
+           "ENDFILE owns canonical keyword controls and bound expressions");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "inquire(unit=9, opened=done, number=n)", 20U,
+                               &statement),
+           "INQUIRE parses");
+    expect(statement.kind == F2C_STMT_INQUIRE && statement.io_syntax_valid &&
+               statement.control_count == 3U &&
+               statement.io_controls[1].kind == F2C_IO_CONTROL_OPENED &&
+               statement.io_controls[1].value != NULL &&
+               statement.io_controls[1].value->symbol == &symbols[2] &&
+               statement.io_controls[2].kind == F2C_IO_CONTROL_NUMBER,
+           "INQUIRE owns typed query-result designators");
+    f2c_statement_free(&statement);
+
     expect(f2c_parse_statement(&unit, "allocate(work(n, 2), stat=n)", 21U, &statement),
            "ALLOCATE parses");
     expect(statement.kind == F2C_STMT_ALLOCATE && statement.item_count == 2U &&

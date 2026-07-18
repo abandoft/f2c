@@ -98,6 +98,12 @@ static F2cStatementKind classify_tokens(const Line *line, size_t begin) {
         return F2C_STMT_OPEN;
     if (token_word(line, begin, "rewind"))
         return F2C_STMT_REWIND;
+    if (token_word(line, begin, "backspace"))
+        return F2C_STMT_BACKSPACE;
+    if (token_word(line, begin, "endfile"))
+        return F2C_STMT_ENDFILE;
+    if (token_word(line, begin, "inquire"))
+        return F2C_STMT_INQUIRE;
     if (token_word(line, begin, "close"))
         return F2C_STMT_CLOSE;
     if (token_word(line, begin, "allocate"))
@@ -451,125 +457,6 @@ static void parse_call(Unit *unit, F2cStatement *statement) {
         statement->kind = F2C_STMT_MOVE_ALLOC;
 }
 
-static F2cIoControlKind io_control_kind(const char *keyword) {
-    static const struct {
-        const char *name;
-        F2cIoControlKind kind;
-    } controls[] = {
-        {"unit", F2C_IO_CONTROL_UNIT},     {"fmt", F2C_IO_CONTROL_FMT},
-        {"nml", F2C_IO_CONTROL_NML},       {"end", F2C_IO_CONTROL_END},
-        {"eor", F2C_IO_CONTROL_EOR},       {"err", F2C_IO_CONTROL_ERR},
-        {"iostat", F2C_IO_CONTROL_IOSTAT}, {"iomsg", F2C_IO_CONTROL_IOMSG},
-        {"size", F2C_IO_CONTROL_SIZE},     {"advance", F2C_IO_CONTROL_ADVANCE},
-        {"rec", F2C_IO_CONTROL_REC},       {"pos", F2C_IO_CONTROL_POS},
-        {"file", F2C_IO_CONTROL_FILE},     {"status", F2C_IO_CONTROL_STATUS},
-        {"access", F2C_IO_CONTROL_ACCESS}, {"action", F2C_IO_CONTROL_ACTION},
-        {"form", F2C_IO_CONTROL_FORM},     {"recl", F2C_IO_CONTROL_RECL},
-        {"blank", F2C_IO_CONTROL_BLANK},   {"decimal", F2C_IO_CONTROL_DECIMAL},
-        {"delim", F2C_IO_CONTROL_DELIM},   {"encoding", F2C_IO_CONTROL_ENCODING},
-        {"pad", F2C_IO_CONTROL_PAD},       {"round", F2C_IO_CONTROL_ROUND},
-        {"sign", F2C_IO_CONTROL_SIGN},     {"asynchronous", F2C_IO_CONTROL_ASYNCHRONOUS},
-        {"id", F2C_IO_CONTROL_ID},         {"newunit", F2C_IO_CONTROL_NEWUNIT}};
-    size_t i;
-    if (keyword == NULL)
-        return F2C_IO_CONTROL_POSITIONAL;
-    for (i = 0U; i < sizeof(controls) / sizeof(controls[0]); ++i) {
-        if (strcmp(keyword, controls[i].name) == 0)
-            return controls[i].kind;
-    }
-    return F2C_IO_CONTROL_UNKNOWN;
-}
-
-static void parse_io_controls(Unit *unit, F2cStatement *statement, const char *source) {
-    char **items;
-    size_t count = 0U;
-    size_t i;
-    items = f2c_split_arguments(source, &count);
-    if (count == 0U)
-        return;
-    statement->io_controls = (F2cIoControl *)calloc(count, sizeof(*statement->io_controls));
-    if (statement->io_controls == NULL)
-        goto cleanup;
-    for (i = 0U; i < count; ++i) {
-        F2cIoControl *control = &statement->io_controls[i];
-        char *clean = f2c_trim(items[i]);
-        char *equals = f2c_find_assignment(clean);
-        const char *value_text = clean;
-        if (equals != NULL) {
-            size_t consumed = 0U;
-            const char *between;
-            control->keyword = f2c_identifier(clean, &consumed);
-            between = control->keyword != NULL ? clean + consumed : NULL;
-            while (between != NULL && between < equals && isspace((unsigned char)*between))
-                ++between;
-            if (between != equals) {
-                free(control->keyword);
-                control->keyword = NULL;
-                break;
-            }
-            value_text = f2c_trim(equals + 1);
-        }
-        control->kind = io_control_kind(control->keyword);
-        if (strcmp(value_text, "*") == 0)
-            control->asterisk = 1;
-        else if (control->kind == F2C_IO_CONTROL_NML) {
-            size_t consumed = 0U;
-            char *name = f2c_identifier(value_text, &consumed);
-            if (name != NULL && consumed == strlen(value_text)) {
-                control->value = (F2cExpr *)calloc(1U, sizeof(*control->value));
-                if (control->value != NULL) {
-                    control->value->kind = F2C_EXPR_NAME;
-                    control->value->type = TYPE_UNKNOWN;
-                    control->value->value_category = F2C_VALUE_INVALID;
-                    control->value->shape.kind = F2C_SHAPE_SCALAR;
-                    control->value->parse_error_offset = SIZE_MAX;
-                    control->value->text = name;
-                    control->value->source = f2c_strdup(value_text);
-                    name = NULL;
-                }
-            }
-            free(name);
-        } else
-            control->value = f2c_parse_expression_ast(unit, value_text, NULL);
-        if ((!control->asterisk && control->value == NULL) ||
-            (control->keyword != NULL && control->keyword[0] == '\0'))
-            break;
-        ++statement->control_count;
-    }
-
-cleanup:
-    while (count != 0U)
-        free(items[--count]);
-    free(items);
-}
-
-static void parse_io_statement(Unit *unit, F2cStatement *statement) {
-    char *open = strchr(statement->text, '(');
-    char *close = open != NULL ? f2c_statement_matching_parenthesis(open) : NULL;
-    char *items;
-    char *item_close;
-    if (open == NULL || close == NULL)
-        return;
-    parse_io_controls(unit, statement, open);
-    items = f2c_trim(close + 1);
-    if (*items == ',')
-        items = f2c_trim(items + 1);
-    if (*items == '\0')
-        return;
-    item_close = *items == '(' ? f2c_statement_matching_parenthesis(items) : NULL;
-    if (item_close != NULL && *f2c_trim(item_close + 1) == '\0') {
-        statement->items = (char **)calloc(1U, sizeof(*statement->items));
-        statement->arguments = (F2cExpr **)calloc(1U, sizeof(*statement->arguments));
-        if (statement->items == NULL || statement->arguments == NULL)
-            return;
-        statement->items[0] = f2c_strdup(items);
-        statement->arguments[0] = f2c_parse_expression_ast(unit, items, NULL);
-        statement->item_count = 1U;
-    } else {
-        parse_item_list(unit, statement, items, 0);
-    }
-}
-
 static void parse_print_statement(Unit *unit, F2cStatement *statement) {
     char *comma = strchr(statement->text, ',');
     if (comma != NULL)
@@ -716,13 +603,17 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         if (open != NULL)
             parse_item_list(unit, statement, open, 1);
     }
-    if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
-        statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_CLOSE)
-        parse_io_statement(unit, statement);
+    if ((statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
+         statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
+         statement->kind == F2C_STMT_BACKSPACE || statement->kind == F2C_STMT_ENDFILE ||
+         statement->kind == F2C_STMT_INQUIRE || statement->kind == F2C_STMT_CLOSE) &&
+        !f2c_statement_parse_io(unit, token_line, body_start, statement)) {
+        free(owned_syntax_text);
+        return 0;
+    }
     if (statement->kind == F2C_STMT_PRINT)
         parse_print_statement(unit, statement);
-    if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
-        statement->kind == F2C_STMT_PRINT)
+    if (statement->kind == F2C_STMT_PRINT)
         build_io_item_ir(unit, statement);
     if (statement->kind == F2C_STMT_DATA &&
         !f2c_statement_parse_data(unit, token_line, body_start, statement)) {
@@ -737,20 +628,6 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         !f2c_statement_parse_case(unit, &syntax_line, statement)) {
         free(owned_syntax_text);
         return 0;
-    }
-    if (statement->kind == F2C_STMT_REWIND) {
-        char *unit_text = f2c_trim(statement->text + strlen("rewind"));
-        if (*unit_text == '(') {
-            parse_io_statement(unit, statement);
-        } else if (*unit_text != '\0') {
-            statement->io_controls = (F2cIoControl *)calloc(1U, sizeof(*statement->io_controls));
-            if (statement->io_controls != NULL) {
-                statement->io_controls[0].kind = F2C_IO_CONTROL_POSITIONAL;
-                statement->io_controls[0].value = f2c_parse_expression_ast(unit, unit_text, NULL);
-                if (statement->io_controls[0].value != NULL)
-                    statement->control_count = 1U;
-            }
-        }
     }
     if (statement->kind == F2C_STMT_LABEL)
         f2c_statement_parse_label(unit, statement);
