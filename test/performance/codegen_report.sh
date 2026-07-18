@@ -54,6 +54,10 @@ for name in dgemv dgemm dgetrf dpotrf; do
     "$c_compiler" -std=c17 -O3 -ffp-contract=fast -DF2C_FP_CONTRACT=1 -DNDEBUG \
         -fverbose-asm -fopt-info-vec-all="$work/$name.c.vec" \
         -S "$work/$name.c" -o "$work/$name.c.s"
+    "$c_compiler" -std=c17 -O3 -ffp-contract=fast -DF2C_FP_CONTRACT=1 \
+        -DF2C_LOOP_UNROLL= -DNDEBUG \
+        -fverbose-asm -fopt-info-vec-all="$work/$name.c.auto-unroll.vec" \
+        -S "$work/$name.c" -o "$work/$name.c.auto-unroll.s"
     gfortran -O3 -fverbose-asm -fopt-info-vec-all="$work/$name.fortran.vec" \
         -S "$work/$name.f" -o "$work/$name.fortran.s"
 done
