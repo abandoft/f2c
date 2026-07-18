@@ -1,3 +1,12 @@
+## 1.8.0
+
+- Migrated constant, labeled, and assigned FORMATs to the unified token, AST, typed IR, and static C17 instruction pipeline.
+- Added dynamically sized parsing state for true runtime character formats, removing fixed nesting, literal, DT iotype, and v-list capacities.
+- Completed execution paths for nested and unlimited groups, positioning, scaling, sign and decimal controls, and defined-I/O format metadata.
+- Corrected `E`, `D`, and `G` mantissas, exponents, significant digits, extreme values, and positioned records to match native Fortran output.
+- Added byte-exact native FORMAT differentials, deep and long resource boundaries, strict C17, and sanitizer regression coverage.
+- Revalidated all 3,535 Reference LAPACK sources and all 52,512 RFP numerical differentials on the new format pipeline.
+
 ## 1.7.0
 
 - Migrated `PRINT` to the unified token, AST, and typed I/O pipeline, removing text splitting and expression reparsing.
