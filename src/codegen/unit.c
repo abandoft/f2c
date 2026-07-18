@@ -227,7 +227,13 @@ static void emit_declarations(Context *context, Unit *unit) {
             }
             f2c_buffer_append(output, ")]");
         }
-        if (symbol->initializer != NULL) {
+        if (symbol->data_element_initializers != NULL) {
+            initializer = f2c_unit_data_array_initializer(unit, symbol);
+            if (initializer == NULL)
+                f2c_diagnostic(context, symbol->declaration_line, 1,
+                               "typed DATA initializer for array '%s' cannot be emitted",
+                               symbol->name);
+        } else if (symbol->initializer != NULL) {
             if (symbol->type == TYPE_CHARACTER) {
                 int supported = 0;
                 initializer = f2c_character_declaration_initializer(unit, symbol, &supported);
@@ -243,7 +249,7 @@ static void emit_declarations(Context *context, Unit *unit) {
         }
         if (initializer != NULL)
             f2c_buffer_printf(output, " = %s", initializer);
-        else if (symbol->initializer != NULL)
+        else if (symbol->initializer != NULL || symbol->data_element_initializers != NULL)
             f2c_buffer_append(output, " = {0}");
         else if (!symbol->parameter && symbol->rank == 0U)
             f2c_buffer_append(output, " = {0}");

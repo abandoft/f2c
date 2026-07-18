@@ -77,8 +77,7 @@ static int data_item_requires_runtime_initialization(const F2cIoItem *item) {
     if (item == NULL)
         return 1;
     if (!item->implied_do)
-        return item->expression == NULL || item->expression->rank != 0U ||
-               !item->data_static_initializer;
+        return item->expression == NULL || !item->data_static_initializer;
     for (child = 0U; child < item->child_count; ++child)
         if (data_item_requires_runtime_initialization(&item->children[child]))
             return 1;
@@ -195,6 +194,17 @@ static int emit_array_values(Context *context, Unit *unit, const F2cExpr *target
     return 1;
 }
 
+static int consume_array_values(const F2cExpr *target, DataCursor *cursor) {
+    size_t element_count;
+    size_t element;
+    if (!expression_element_count(target, &element_count))
+        return 0;
+    for (element = 0U; element < element_count; ++element)
+        if (next_data_value(cursor) == NULL)
+            return 0;
+    return 1;
+}
+
 static int emit_data_target(Context *context, Unit *unit, const F2cIoItem *target,
                             DataCursor *cursor, DataSubstitutions *substitutions, int depth) {
     int64_t first;
@@ -212,7 +222,9 @@ static int emit_data_target(Context *context, Unit *unit, const F2cIoItem *targe
             return 0;
         }
         if (substituted->rank != 0U) {
-            const int emitted = emit_array_values(context, unit, substituted, cursor, depth);
+            const int emitted = target->data_static_initializer
+                                    ? consume_array_values(substituted, cursor)
+                                    : emit_array_values(context, unit, substituted, cursor, depth);
             f2c_expr_free(substituted);
             return emitted;
         }

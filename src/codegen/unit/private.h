@@ -9,5 +9,6 @@ const char *f2c_unit_function_return_type(Unit *unit);
 void f2c_unit_emit_named_signature(Buffer *output, Unit *unit, const char *name,
                                    int restricted_arguments);
 void f2c_unit_emit_signature(Buffer *output, Unit *unit);
+char *f2c_unit_data_array_initializer(Unit *unit, const Symbol *symbol);
 
 #endif
