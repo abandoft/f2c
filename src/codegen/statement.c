@@ -397,11 +397,9 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                     loop_id, variable, loop_id, loop_id, narrow_count ? "(int32_t)(" : "", variable,
                     loop_id, loop_id, narrow_count ? ")" : "");
             }
-            if (statement->unroll_hint != 0) {
+            if (statement->unroll_hint) {
                 indent(&context->output, *depth);
-                f2c_buffer_append(&context->output, statement->unroll_hint == 2
-                                                        ? "F2C_LOOP_UNROLL_OUTER\n"
-                                                        : "F2C_LOOP_UNROLL\n");
+                f2c_buffer_append(&context->output, "F2C_LOOP_UNROLL\n");
             }
             indent(&context->output, *depth);
             if (statement->left->type == TYPE_INTEGER) {
