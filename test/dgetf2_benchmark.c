@@ -13,8 +13,6 @@ typedef struct Dgetf2Case {
     int repetitions;
 } Dgetf2Case;
 
-enum { F2C_DGETF2_SAMPLE_COUNT = 24 };
-
 void dgetf2(int32_t *, int32_t *, double *, int32_t *, int32_t *, int32_t *);
 void dgetf2_(int32_t *, int32_t *, double *, int32_t *, int32_t *, int32_t *);
 
@@ -76,7 +74,7 @@ static double measure(dgetf2_function function, const Dgetf2Case *test, const do
 
 static int run_case(const Dgetf2Case *test, double *input, double *work, double *reference,
                     int32_t *pivots, int32_t *reference_pivots) {
-    F2cBenchmarkSample samples[F2C_DGETF2_SAMPLE_COUNT];
+    F2cBenchmarkSample samples[F2C_BENCHMARK_SAMPLE_COUNT];
     F2cBenchmarkSample result;
     size_t round;
     if (!verify(test->n, work, reference, pivots, reference_pivots)) {

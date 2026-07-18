@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <time.h>
 
-enum { F2C_BENCHMARK_SAMPLE_COUNT = 12 };
+enum { F2C_BENCHMARK_SAMPLE_COUNT = 24 };
 
 typedef struct F2cBenchmarkSample {
     double generated_seconds;

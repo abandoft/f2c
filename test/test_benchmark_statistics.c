@@ -15,7 +15,7 @@ int main(void) {
     F2cBenchmarkSample median =
         f2c_benchmark_median(median_samples, sizeof(median_samples) / sizeof(median_samples[0]));
 
-    if (F2C_BENCHMARK_SAMPLE_COUNT != 12)
+    if (F2C_BENCHMARK_SAMPLE_COUNT != 24)
         return EXIT_FAILURE;
     if (!close_enough(generated_outer.generated_seconds, 5.0) ||
         !close_enough(generated_outer.fortran_seconds, 5.0))
