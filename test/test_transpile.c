@@ -601,6 +601,55 @@ static void test_extended_fixed_form_width(void) {
     f2c_result_free(&result);
 }
 
+static void test_literal_normalization_boundaries(void) {
+    static const char fixed[] = "      SUBROUTINE LITERAL_FIXED(VALUE, SPLIT, FLAG)\n"
+                                "      CHARACTER*4 VALUE\n"
+                                "      CHARACTER*8 SPLIT\n"
+                                "      INTEGER FLAG\n"
+                                "      VALUE = 4H!;Az; FLAG = 1\n"
+                                "      SPLIT = 8HAb!;&\n"
+                                "     1CdE\n"
+                                "      END\n";
+    static const char free_form[] = "\xEF\xBB\xBFsubroutine literal_free(value)\r\n"
+                                    "  character(len=8), intent(out) :: value\r\n"
+                                    "  value = 'Ab!;&\r\n"
+                                    "&CdEf' ! the exclamation mark above is character data\r\n"
+                                    "end subroutine literal_free";
+    F2cOptions fixed_options = {"literal_fixed.f", F2C_SOURCE_FIXED, 0};
+    F2cOptions free_options = {"literal_free.f90", F2C_SOURCE_FREE, 0};
+    static const char invalid_boz[] = "program invalid_boz\n"
+                                      "  integer :: value\n"
+                                      "  value = b'102'\n"
+                                      "end program invalid_boz\n";
+    F2cResult result = f2c_transpile(fixed, sizeof(fixed) - 1U, &fixed_options);
+    expect(result.error_count == 0U,
+           "fixed-form Hollerith payload punctuation survives source normalization");
+    expect_contains(result.code, "\"!;Az\"",
+                    "Hollerith payload case and punctuation are preserved byte-for-byte");
+    expect_contains(result.code, "(*flag) = 1",
+                    "a semicolon after a Hollerith payload still splits statements");
+    expect_contains(result.code, "\"Ab!;&CdE\"",
+                    "fixed-form continuation joins a split Hollerith payload without a blank");
+    f2c_result_free(&result);
+
+    result = f2c_transpile(free_form, sizeof(free_form) - 1U, &free_options);
+    expect(result.error_count == 0U,
+           "CRLF character-literal continuation translates without a synthetic token error");
+    expect_contains(result.code, "\"Ab!;CdEf\"",
+                    "character continuation joins payload bytes without inserting a blank");
+    expect_not_contains(result.code, "Ab!; CdEf",
+                        "character continuation never changes the literal value");
+    f2c_result_free(&result);
+
+    {
+        DiagnosticCapture capture = transpile_invalid_location(
+            invalid_boz, (F2cOptions){"invalid_boz.f90", F2C_SOURCE_FREE, 0});
+        expect(capture.code == F2C_DIAGNOSTIC_INVALID_TOKEN && capture.line == 3U &&
+                   capture.column == 15U && capture.end_line == 3U && capture.end_column == 16U,
+               "an invalid BOZ digit reports its exact physical source character");
+    }
+}
+
 static void test_function_result_and_power(void) {
     static const char source[] = "double precision function square_plus(x) result(answer)\n"
                                  "  double precision, intent(in) :: x\n"
@@ -3048,6 +3097,7 @@ int main(void) {
     test_fixed_form_continuation();
     test_fixed_form_spaced_exponent();
     test_extended_fixed_form_width();
+    test_literal_normalization_boundaries();
     test_function_result_and_power();
     test_legacy_blas_constructs();
     test_character_and_external_interface();
