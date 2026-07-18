@@ -80,18 +80,8 @@ static const F2cIntegerSubstitution *find_substitution(
 static int clone_owned_text(F2cExpr *clone, const F2cExpr *source) {
     clone->text = source->text != NULL ? f2c_strdup(source->text) : NULL;
     clone->source = source->source != NULL ? f2c_strdup(source->source) : NULL;
-    clone->lowered_c = source->lowered_c != NULL ? f2c_strdup(source->lowered_c) : NULL;
-    clone->lowered_extent_c =
-        source->lowered_extent_c != NULL ? f2c_strdup(source->lowered_extent_c) : NULL;
-    clone->lowered_character_length_c = source->lowered_character_length_c != NULL
-                                            ? f2c_strdup(source->lowered_character_length_c)
-                                            : NULL;
     return (source->text == NULL || clone->text != NULL) &&
-           (source->source == NULL || clone->source != NULL) &&
-           (source->lowered_c == NULL || clone->lowered_c != NULL) &&
-           (source->lowered_extent_c == NULL || clone->lowered_extent_c != NULL) &&
-           (source->lowered_character_length_c == NULL ||
-            clone->lowered_character_length_c != NULL);
+           (source->source == NULL || clone->source != NULL);
 }
 
 F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,

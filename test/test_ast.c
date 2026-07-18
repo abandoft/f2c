@@ -469,6 +469,8 @@ static void test_integer_substitution_clone(void) {
     unit.symbols = symbols;
     unit.symbol_count = 1U;
     expression = f2c_parse_expression_ast(&unit, "i * 2 + 1", &error_at);
+    if (expression != NULL)
+        expression->lowered_c = f2c_strdup("stale_i_expression");
     substitution.symbol = &symbols[0];
     substitution.name = "i";
     substitution.value = 3;
@@ -481,6 +483,8 @@ static void test_integer_substitution_clone(void) {
     expect(clone != NULL && clone->span.begin.line == expression->span.begin.line &&
                clone->source_offset == expression->source_offset,
            "substituted ASTs preserve source and typed metadata");
+    expect(clone != NULL && clone->lowered_c == NULL,
+           "integer substitution invalidates stale expression-lowering caches");
     f2c_expr_free(clone);
     f2c_expr_free(expression);
 }
