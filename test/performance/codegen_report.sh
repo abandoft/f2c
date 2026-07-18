@@ -30,6 +30,10 @@ fi
 {
     "$c_compiler" --version
     gfortran --version
+    uname -a
+    if command -v lscpu >/dev/null 2>&1; then
+        lscpu
+    fi
 } >"$work/compiler-versions.txt"
 
 stage_source() {
@@ -74,6 +78,11 @@ for name in dgemv dgemm dger dtrsm dgetrf dpotrf; do
         -S "$work/$name.c" -o "$work/$name.c.unroll-8.s"
     gfortran -O3 -fverbose-asm -fopt-info-vec-all="$work/$name.fortran.vec" \
         -S "$work/$name.f" -o "$work/$name.fortran.s"
+    "$c_compiler" -std=c17 -O3 -ffp-contract=fast -DF2C_FP_CONTRACT=1 -DNDEBUG \
+        -fopt-info-loop-all="$work/$name.c.loop" \
+        -S "$work/$name.c" -o "$work/$name.c.loop.s"
+    gfortran -O3 -fopt-info-loop-all="$work/$name.fortran.loop" \
+        -S "$work/$name.f" -o "$work/$name.fortran.loop.s"
 done
 
 lto=$work/lto
