@@ -17,6 +17,16 @@ static int statement_begins_loop(const F2cStatement *statement) {
     return statement->kind == F2C_STMT_DO || statement->kind == F2C_STMT_DO_WHILE;
 }
 
+static int statement_prevents_loop_unrolling(const F2cStatement *statement) {
+    int prevents_unrolling = statement->kind == F2C_STMT_CYCLE ||
+                             statement->kind == F2C_STMT_EXIT || statement->kind == F2C_STMT_GOTO ||
+                             statement->kind == F2C_STMT_ASSIGNED_GOTO ||
+                             statement->kind == F2C_STMT_ARITHMETIC_IF ||
+                             statement->kind == F2C_STMT_RETURN || statement->kind == F2C_STMT_STOP;
+    return prevents_unrolling ||
+           (statement->nested != NULL && statement_prevents_loop_unrolling(statement->nested));
+}
+
 static void annotate_loop_hints(Unit *unit) {
     size_t *blocks;
     size_t *loops;
@@ -34,6 +44,11 @@ static void annotate_loop_hints(Unit *unit) {
     }
     for (i = 0U; i < unit->statement_count; ++i) {
         F2cStatement *statement = &unit->statements[i];
+        if (statement_prevents_loop_unrolling(statement)) {
+            size_t active_loop;
+            for (active_loop = 0U; active_loop < loop_count; ++active_loop)
+                unit->statements[loops[active_loop]].unroll_hint = 0;
+        }
         if (statement_begins_loop(statement)) {
             size_t ancestor;
             for (ancestor = 0U; ancestor < loop_count; ++ancestor)

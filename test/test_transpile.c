@@ -555,6 +555,23 @@ static void test_nested_loop_optimization_hints(void) {
     expect_not_contains(result.code, "((*n)) - (1) + 1",
                         "known one-based dimensions omit cancelling stride arithmetic");
     f2c_result_free(&result);
+
+    {
+        static const char transfer_source[] = "subroutine transfer_loop(value)\n"
+                                              "  integer :: value, i\n"
+                                              "  do i = 1, 4\n"
+                                              "    if (i == value) exit\n"
+                                              "  end do\n"
+                                              "end subroutine transfer_loop\n";
+        F2cOptions transfer_options = {"transfer_loop.f90", F2C_SOURCE_FREE, 0};
+        F2cResult transfer =
+            f2c_transpile(transfer_source, sizeof(transfer_source) - 1U, &transfer_options);
+        expect(transfer.error_count == 0U, "counted loop with EXIT translates without errors");
+        expect(transfer.code == NULL ||
+                   strstr(transfer.code, "F2C_LOOP_UNROLL\n    for (;") == NULL,
+               "loops with explicit control transfers omit forced-unroll annotations");
+        f2c_result_free(&transfer);
+    }
 }
 
 static void test_fixed_form_continuation(void) {
