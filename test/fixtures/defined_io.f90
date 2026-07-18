@@ -26,7 +26,7 @@ contains
     integer :: offset
 
     offset = 0
-    if (iotype(1:2) == 'DT') offset = v_list(1)
+    if (iotype(1:2) == 'DT') offset = v_list(size(v_list))
     write(unit, '(i0)', iostat=iostat, iomsg=iomsg) dtv%value + offset
   end subroutine payload_write_formatted
 
@@ -66,6 +66,7 @@ program defined_io
   implicit none
   type(payload) :: source, restored
   character(32) :: buffer
+  character(160) :: runtime_format
 
   source%value = 42
   buffer = ''
@@ -75,6 +76,16 @@ program defined_io
   buffer = '57'
   read(buffer, "(DT'offset'(7))") restored
   if (restored%value /= 50) stop 2
+
+  buffer = ''
+  write(buffer, 200) source
+  if (buffer(1:2) /= '82') stop 5
+
+  runtime_format = "(DT'offset'(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20," // &
+                   "21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40))"
+  buffer = ''
+  write(buffer, runtime_format) source
+  if (buffer(1:2) /= '82') stop 6
 
   buffer = ''
   write(buffer, *) source
@@ -87,4 +98,6 @@ program defined_io
   read(27) restored
   close(27)
   if (restored%value /= 42) stop 4
+200 format(DT'offset'(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20, &
+                          21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40))
 end program defined_io
