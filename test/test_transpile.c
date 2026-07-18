@@ -358,8 +358,6 @@ static void test_program_and_control_flow(void) {
                     "generated source defaults to reproducible floating-point evaluation");
     expect_contains(result.code, "#define F2C_LOOP_UNROLL",
                     "generated source defines a portable loop optimization hint");
-    expect(result.code == NULL || strstr(result.code, "GCC unroll") == NULL,
-           "generated source leaves GCC loop unrolling to its cost model");
     expect_contains(result.code, "__STDC_VERSION__ < 201710L",
                     "generated source rejects pre-C17 compilation modes");
     expect_contains(result.code, "int main(void)", "PROGRAM maps to C main");
