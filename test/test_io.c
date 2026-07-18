@@ -138,13 +138,16 @@ static void test_print_semantics(void) {
 static void test_print_codegen(void) {
     static const char source[] = "program print_codegen\n"
                                  "  implicit none\n"
-                                 "  integer :: iterator\n"
+                                 "  integer :: iterator, assigned_format\n"
                                  "  character(16) :: runtime_format\n"
                                  "  runtime_format = '(A,1X,I3)'\n"
                                  "  print '(A,1X,I3)', 'literal', 7\n"
                                  "  print 100, (iterator, iterator=1,3)\n"
                                  "  print runtime_format, 'runtime', 9\n"
+                                 "  assign 200 to assigned_format\n"
+                                 "  print assigned_format, 4\n"
                                  "100 format(3(I2,1X))\n"
+                                 "200 format('assigned',1X,I2)\n"
                                  "end program print_codegen\n";
     F2cOptions options = {"print_codegen.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
@@ -159,6 +162,11 @@ static void test_print_codegen(void) {
                     "runtime CHARACTER PRINT formats preserve their explicit Fortran length");
     expect_contains(result.code, "for (iterator = 1;",
                     "formatted PRINT implied-DO items lower through the structured item tree");
+    expect_contains(result.code, "switch ((int32_t)(assigned_format))",
+                    "assigned FORMAT variables lower to an explicit runtime selector");
+    expect_contains(result.code,
+                    "case 200: f2c_io_format_text = \"('assigned',1x,i2)\"",
+                    "assigned FORMAT selectors contain only their resolved FORMAT labels");
     f2c_result_free(&result);
 }
 

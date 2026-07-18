@@ -55,6 +55,7 @@ endif()
 foreach(
     io_fixture
     IN ITEMS
+       assigned_format
        print_formats
        formatted_internal
        formatted_record_input
@@ -107,9 +108,13 @@ foreach(
 )
     set(io_generated "${BINARY_DIR}/generated_${io_fixture}.c")
     set(io_executable "${BINARY_DIR}/generated_${io_fixture}_test")
+    set(io_source "${SOURCE_DIR}/test/fixtures/${io_fixture}.f90")
+    if(io_fixture STREQUAL "assigned_format")
+        set(io_source "${SOURCE_DIR}/test/fixtures/${io_fixture}.f")
+    endif()
     execute_process(
         COMMAND "${F2C}" -o "${io_generated}"
-                "${SOURCE_DIR}/test/fixtures/${io_fixture}.f90"
+                "${io_source}"
         RESULT_VARIABLE io_translate_status
         OUTPUT_VARIABLE io_translate_output
         ERROR_VARIABLE io_translate_error)
@@ -154,6 +159,12 @@ foreach(
         if(NOT io_run_output STREQUAL print_formats_expected)
             message(FATAL_ERROR
                     "PRINT format output differs from Fortran semantics: [${io_run_output}]")
+        endif()
+    elseif(io_fixture STREQUAL "assigned_format")
+        string(REPLACE "\r\n" "\n" io_run_output "${io_run_output}")
+        if(NOT io_run_output STREQUAL "ASSIGNED  7\n")
+            message(FATAL_ERROR
+                    "assigned FORMAT output differs from Fortran semantics: [${io_run_output}]")
         endif()
     endif()
 endforeach()
