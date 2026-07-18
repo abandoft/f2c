@@ -77,9 +77,7 @@ static F2cSourceSpan token_range_span(const Line *line, size_t begin, size_t end
     F2cSourceSpan span = {0};
     if (line == NULL || begin >= end || end > line->token_count)
         return span;
-    span.begin = line->tokens[begin].span.begin;
-    span.end = line->tokens[end - 1U].span.end;
-    return span;
+    return f2c_source_span_cover(&line->tokens[begin].span, &line->tokens[end - 1U].span);
 }
 
 static F2cExpr *parse_endpoint(Unit *unit, const Line *line, size_t begin, size_t end) {

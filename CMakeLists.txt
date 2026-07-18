@@ -108,8 +108,15 @@ set(
     src/frontend/pipeline.h
     src/frontend/private.h
     src/frontend/procedure.c
+    src/frontend/preprocessor.c
+    src/frontend/preprocessor.h
+    src/frontend/preprocessor/expansion.c
+    src/frontend/preprocessor/expression.c
+    src/frontend/preprocessor/include.c
+    src/frontend/preprocessor/private.h
     src/frontend/references.c
     src/frontend/source.c
+    src/frontend/source_map.c
     src/frontend/statement.c
     src/frontend/syntax.c
     src/frontend/token.h
@@ -324,6 +331,10 @@ if(F2C_BUILD_TESTING)
     target_include_directories(f2c_lexer_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_lexer_tests)
     add_test(NAME lexer COMMAND f2c_lexer_tests)
+
+    add_executable(f2c_preprocessor_tests test/test_preprocessor.c)
+    f2c_configure_test_target(f2c_preprocessor_tests)
+    add_test(NAME preprocessor COMMAND f2c_preprocessor_tests)
 
     add_executable(f2c_statement_ast_tests test/test_statement_ast.c)
     target_include_directories(

@@ -24,10 +24,15 @@ extern "C" {
 #define F2C_VERSION_PATCH 0
 
 #define F2C_DEFAULT_MAX_INPUT_BYTES ((size_t)512U * 1024U * 1024U)
+#define F2C_DEFAULT_MAX_PREPROCESSED_BYTES ((size_t)512U * 1024U * 1024U)
 #define F2C_DEFAULT_MAX_LOGICAL_LINES ((size_t)4U * 1024U * 1024U)
 #define F2C_DEFAULT_MAX_TOKENS ((size_t)64U * 1024U * 1024U)
 #define F2C_DEFAULT_MAX_AST_NODES ((size_t)32U * 1024U * 1024U)
 #define F2C_DEFAULT_MAX_PARSE_DEPTH ((size_t)512U)
+#define F2C_DEFAULT_MAX_PREPROCESSOR_DEFINITIONS ((size_t)1024U * 1024U)
+#define F2C_DEFAULT_MAX_MACRO_EXPANSION_DEPTH ((size_t)256U)
+#define F2C_DEFAULT_MAX_INCLUDE_DEPTH ((size_t)256U)
+#define F2C_DEFAULT_MAX_INCLUDE_FILES ((size_t)65536U)
 #define F2C_DEFAULT_MAX_CONSTANT_STEPS ((size_t)16U * 1024U * 1024U)
 #define F2C_DEFAULT_MAX_DIAGNOSTICS ((size_t)10000U)
 #define F2C_DEFAULT_MAX_DIAGNOSTIC_BYTES ((size_t)16U * 1024U * 1024U)
@@ -50,6 +55,7 @@ typedef enum F2cDiagnosticCode {
     F2C_DIAGNOSTIC_OUT_OF_MEMORY = 1002,
     F2C_DIAGNOSTIC_INVALID_TOKEN = 2000,
     F2C_DIAGNOSTIC_SYNTAX = 2001,
+    F2C_DIAGNOSTIC_INCLUDE = 2002,
     F2C_DIAGNOSTIC_SEMANTIC = 3000,
     F2C_DIAGNOSTIC_UNSUPPORTED = 4000,
     F2C_DIAGNOSTIC_INTERNAL = 9000
@@ -62,11 +68,15 @@ typedef struct F2cSourceLocation {
 } F2cSourceLocation;
 
 typedef struct F2cDiagnostic {
+    /** All pointed-to strings are valid only for the duration of the callback. */
     F2cDiagnosticCode code;
     F2cDiagnosticSeverity severity;
     F2cSourceLocation begin;
     F2cSourceLocation end;
-    /** Valid only for the duration of the callback. */
+    /** Macro-definition spelling range when the primary range came from expansion. */
+    F2cSourceLocation spelling_begin;
+    F2cSourceLocation spelling_end;
+    int has_spelling_location;
     const char *message;
     size_t message_length;
 } F2cDiagnostic;
@@ -96,10 +106,55 @@ typedef struct F2cInput {
     F2cOptions options;
 } F2cInput;
 
+/**
+ * A case-sensitive object-like definition used by conditional preprocessing.
+ * A null value is equivalent to "1". Definitions may be referenced by #if,
+ * #ifdef, #ifndef and #elif, and are expanded as object-like macros in active
+ * Fortran source. Function-like macros are not part of this contract.
+ */
+typedef struct F2cPreprocessorDefinition {
+    const char *name;
+    const char *value;
+} F2cPreprocessorDefinition;
+
+typedef enum F2cIncludeKind { F2C_INCLUDE_QUOTED = 0, F2C_INCLUDE_SYSTEM = 1 } F2cIncludeKind;
+
+typedef enum F2cIncludeStatus {
+    F2C_INCLUDE_NOT_FOUND = 0,
+    F2C_INCLUDE_FOUND = 1,
+    F2C_INCLUDE_ERROR = 2
+} F2cIncludeStatus;
+
+typedef struct F2cIncludeRequest {
+    const char *including_source_name;
+    const char *requested_name;
+    F2cIncludeKind kind;
+} F2cIncludeRequest;
+
+/**
+ * A resolver-owned source buffer. On F2C_INCLUDE_FOUND, source and source_name
+ * remain valid until the matching release callback. source_name should be a
+ * stable, normalized identity so recursive include cycles can be diagnosed.
+ */
+typedef struct F2cIncludeSource {
+    const char *source_name;
+    const char *source;
+    size_t length;
+    F2cSourceForm source_form;
+    void *handle;
+} F2cIncludeSource;
+
+typedef F2cIncludeStatus (*F2cIncludeResolver)(const F2cIncludeRequest *request,
+                                               F2cIncludeSource *result, void *user_data);
+/** Called exactly once for each F2C_INCLUDE_FOUND result when non-null. */
+typedef void (*F2cIncludeRelease)(F2cIncludeSource *source, void *user_data);
+
 /** Per-request resource budgets. A zero field selects the documented default. */
 typedef struct F2cLimits {
     /** Total source bytes across all project inputs. */
     size_t max_input_bytes;
+    /** Total bytes retained after conditional preprocessing. */
+    size_t max_preprocessed_bytes;
     /** Total normalized logical lines across all project inputs. */
     size_t max_logical_lines;
     /** Total canonical lexical tokens across all project inputs. */
@@ -112,6 +167,14 @@ typedef struct F2cLimits {
     size_t max_ast_nodes;
     /** Maximum recursive expression parsing and constant-evaluation depth. */
     size_t max_parse_depth;
+    /** Maximum number of simultaneously defined conditional macros. */
+    size_t max_preprocessor_definitions;
+    /** Maximum recursive expansion depth while evaluating #if expressions. */
+    size_t max_macro_expansion_depth;
+    /** Maximum recursive #include depth. */
+    size_t max_include_depth;
+    /** Maximum number of resolved include files across the request. */
+    size_t max_include_files;
     /** Total integer constant-evaluation steps across the request. */
     size_t max_constant_steps;
 } F2cLimits;
@@ -123,6 +186,13 @@ typedef struct F2cConfig {
     /** Optional synchronous structured-diagnostic sink. */
     F2cDiagnosticCallback diagnostic_callback;
     void *diagnostic_user_data;
+    /** Request-wide initial definitions; in-source definitions remain input-local. */
+    const F2cPreprocessorDefinition *preprocessor_definitions;
+    size_t preprocessor_definition_count;
+    /** Optional request-local include provider; the core library never opens files itself. */
+    F2cIncludeResolver include_resolver;
+    F2cIncludeRelease include_release;
+    void *include_user_data;
 } F2cConfig;
 
 /** Translate a UTF-8 Fortran source buffer into a self-contained C17 buffer. */

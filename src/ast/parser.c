@@ -919,8 +919,9 @@ static F2cExpr *parse_expression_stream(AstParser *parser, const char *source,
         }
         if (result != NULL && result->source_offset != SIZE_MAX) {
             if (parser->token_count != 0U) {
-                result->span.begin = parser->tokens[0].span.begin;
-                result->span.end = parser->tokens[parser->token_count - 1U].span.end;
+                result->span =
+                    f2c_source_span_cover(&parser->tokens[0].span,
+                                          &parser->tokens[parser->token_count - 1U].span);
             } else {
                 result->span.begin.line = 1U;
                 result->span.begin.column = result->source_offset + 1U;

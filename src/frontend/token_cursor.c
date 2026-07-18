@@ -3,43 +3,81 @@
 #include <stdlib.h>
 #include <string.h>
 
-F2cSourcePosition f2c_line_source_position(const Line *line, size_t logical_offset) {
-    F2cSourcePosition position = {0};
+static const F2cSourceMapSegment *source_segment(const Line *line, size_t logical_offset) {
     size_t index;
-    position.source_name = line != NULL ? line->source_name : NULL;
-    position.line = line != NULL ? line->number : 1U;
-    position.column = logical_offset + 1U;
     if (line == NULL)
-        return position;
+        return NULL;
     for (index = 0U; index < line->source_map_count; ++index) {
         const F2cSourceMapSegment *segment = &line->source_map[index];
         if (logical_offset >= segment->logical_begin &&
-            logical_offset - segment->logical_begin < segment->length) {
-            position.line = segment->physical_line;
-            position.column =
-                segment->physical_column + logical_offset - segment->logical_begin;
-            return position;
-        }
+            logical_offset - segment->logical_begin < segment->length)
+            return segment;
     }
-    if (line->source_map_count != 0U) {
-        const F2cSourceMapSegment *last = &line->source_map[line->source_map_count - 1U];
-        if (logical_offset >= last->logical_begin + last->length) {
-            position.line = last->physical_line;
-            position.column = last->physical_column + last->length;
-        }
-    }
+    return line->source_map_count != 0U ? &line->source_map[line->source_map_count - 1U] : NULL;
+}
+
+static F2cSourcePosition mapped_position(const F2cSourceMapSegment *segment, size_t logical_offset,
+                                         int spelling) {
+    F2cSourcePosition position = {0};
+    size_t relative;
+    unsigned char step;
+    if (segment == NULL)
+        return position;
+    position = spelling && segment->has_spelling ? segment->spelling : segment->expansion;
+    step = spelling && segment->has_spelling ? segment->spelling_column_step
+                                             : segment->expansion_column_step;
+    relative =
+        logical_offset > segment->logical_begin ? logical_offset - segment->logical_begin : 0U;
+    if (relative > segment->length)
+        relative = segment->length;
+    position.column += relative * step;
     return position;
 }
 
-F2cSourceSpan f2c_line_source_span(const Line *line, size_t logical_begin,
-                                   size_t logical_length) {
-    F2cSourceSpan span;
+F2cSourcePosition f2c_line_source_position(const Line *line, size_t logical_offset) {
+    F2cSourcePosition position;
+    const F2cSourceMapSegment *segment = source_segment(line, logical_offset);
+    if (segment != NULL)
+        return mapped_position(segment, logical_offset, 0);
+    position.source_name = line != NULL ? line->source_name : NULL;
+    position.line = line != NULL ? line->number : 1U;
+    position.column = logical_offset + 1U;
+    return position;
+}
+
+F2cSourceSpan f2c_line_source_span(const Line *line, size_t logical_begin, size_t logical_length) {
+    F2cSourceSpan span = {0};
+    const F2cSourceMapSegment *begin_segment = source_segment(line, logical_begin);
+    const size_t logical_last =
+        logical_length != 0U && logical_length - 1U <= SIZE_MAX - logical_begin
+            ? logical_begin + logical_length - 1U
+            : logical_begin;
+    const F2cSourceMapSegment *end_segment = source_segment(line, logical_last);
     span.begin = f2c_line_source_position(line, logical_begin);
     if (logical_length == 0U) {
         span.end = span.begin;
     } else {
-        span.end = f2c_line_source_position(line, logical_begin + logical_length - 1U);
-        ++span.end.column;
+        span.end = mapped_position(end_segment, logical_last, 0);
+        if (end_segment != NULL && end_segment->expansion_column_step == 0U)
+            span.end.column = end_segment->expansion.column + end_segment->expansion_width;
+        else
+            ++span.end.column;
+    }
+    span.has_spelling = (begin_segment != NULL && begin_segment->has_spelling) ||
+                        (end_segment != NULL && end_segment->has_spelling);
+    if (span.has_spelling) {
+        span.spelling_begin = mapped_position(begin_segment, logical_begin, 1);
+        if (logical_length == 0U) {
+            span.spelling_end = span.spelling_begin;
+        } else {
+            span.spelling_end = mapped_position(end_segment, logical_last, 1);
+            if (end_segment != NULL && end_segment->has_spelling &&
+                end_segment->spelling_column_step == 0U)
+                span.spelling_end.column =
+                    end_segment->spelling.column + end_segment->spelling_width;
+            else
+                ++span.spelling_end.column;
+        }
     }
     return span;
 }

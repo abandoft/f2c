@@ -114,7 +114,6 @@ static void free_context(Context *context) {
     size_t i;
     for (i = 0U; i < context->lines.count; ++i) {
         free(context->lines.items[i].text);
-        free(context->lines.items[i].source_name);
         free(context->lines.items[i].tokens);
         free(context->lines.items[i].source_map);
     }
@@ -126,6 +125,9 @@ static void free_context(Context *context) {
         f2c_free_unit(&context->modules.items[i]);
     free(context->modules.items);
     free(context->procedures.items);
+    for (i = 0U; i < context->source_name_count; ++i)
+        free(context->source_names[i]);
+    free(context->source_names);
     free(context->output.data);
     free(context->header.data);
     free(context->diagnostics.data);
@@ -138,6 +140,9 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
     size_t i;
     memset(&context, 0, sizeof(context));
     context.options = &defaults;
+    if (f2c_context_source_name(&context, defaults.source_name) == NULL)
+        f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
+                            "out of memory initializing source names");
     if (!f2c_initialize_context_limits(&context, config))
         f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
                             "configuration structure size does not match this f2c build");

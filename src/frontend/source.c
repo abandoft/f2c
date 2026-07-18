@@ -1,3 +1,4 @@
+#include "frontend/preprocessor.h"
 #include "internal/f2c.h"
 
 #include <ctype.h>
@@ -6,106 +7,49 @@
 
 typedef struct SourceBuffer {
     Buffer text;
-    F2cSourceMapSegment *map;
-    size_t map_count;
-    size_t map_capacity;
+    F2cSourceMap map;
+    const char *source_name;
 } SourceBuffer;
 
 static void source_buffer_discard(SourceBuffer *buffer) {
     free(buffer->text.data);
-    free(buffer->map);
+    f2c_source_map_discard(&buffer->map);
     memset(buffer, 0, sizeof(*buffer));
 }
 
-static int source_map_reserve(SourceBuffer *buffer, size_t additional) {
-    F2cSourceMapSegment *replacement;
-    size_t required;
-    size_t capacity;
-    if (additional > SIZE_MAX - buffer->map_count)
-        return 0;
-    required = buffer->map_count + additional;
-    if (required <= buffer->map_capacity)
-        return 1;
-    capacity = buffer->map_capacity == 0U ? 8U : buffer->map_capacity;
-    while (capacity < required) {
-        if (capacity > SIZE_MAX / 2U)
-            return 0;
-        capacity *= 2U;
-    }
-    if (capacity > SIZE_MAX / sizeof(*replacement))
-        return 0;
-    replacement = (F2cSourceMapSegment *)realloc(buffer->map,
-                                                 capacity * sizeof(*replacement));
-    if (replacement == NULL)
-        return 0;
-    buffer->map = replacement;
-    buffer->map_capacity = capacity;
-    return 1;
-}
-
-static int source_buffer_append(SourceBuffer *buffer, const char *text, size_t length,
-                                size_t physical_line, size_t physical_column) {
+static int source_buffer_append_mapped(SourceBuffer *buffer, const char *text, size_t length,
+                                       const F2cPreprocessedSource *source, size_t source_begin,
+                                       size_t fallback_line, size_t fallback_column) {
     const size_t logical_begin = buffer->text.length;
-    F2cSourceMapSegment *last;
     if (length == 0U)
         return 1;
-    if (!source_map_reserve(buffer, 1U))
-        return 0;
     f2c_buffer_append_n(&buffer->text, text, length);
     if (buffer->text.failed)
         return 0;
-    last = buffer->map_count != 0U ? &buffer->map[buffer->map_count - 1U] : NULL;
-    if (last != NULL && last->logical_begin + last->length == logical_begin &&
-        last->physical_line == physical_line &&
-        last->physical_column + last->length == physical_column) {
-        last->length += length;
+    if (source != NULL && source->source_map.count != 0U &&
+        f2c_source_map_append_slice(&buffer->map, logical_begin, source->source_map.items,
+                                    source->source_map.count, source_begin, length))
         return 1;
+    if (source != NULL && source->source_map.count != 0U)
+        return 0;
+    {
+        const F2cSourcePosition origin = {buffer->source_name, fallback_line, fallback_column};
+        return f2c_source_map_append(&buffer->map, logical_begin, length, origin, length, 1U,
+                                     origin, length, 1U, 0);
     }
-    buffer->map[buffer->map_count++] =
-        (F2cSourceMapSegment){logical_begin, length, physical_line, physical_column};
-    return 1;
 }
 
-static int source_buffer_separator(SourceBuffer *buffer, size_t line, size_t column) {
+static int source_buffer_separator(SourceBuffer *buffer, const F2cPreprocessedSource *source,
+                                   size_t source_offset, size_t line, size_t column) {
     if (buffer->text.length == 0U)
         return 1;
-    return source_buffer_append(buffer, " ", 1U, line, column > 1U ? column - 1U : column);
+    return source_buffer_append_mapped(buffer, " ", 1U, source, source_offset, line,
+                                       column > 1U ? column - 1U : column);
 }
 
 static F2cSourceMapSegment *source_map_slice(const SourceBuffer *buffer, size_t begin,
                                              size_t length, size_t *count) {
-    F2cSourceMapSegment *result;
-    size_t index;
-    size_t used = 0U;
-    const size_t end = begin + length;
-    *count = 0U;
-    if (buffer->map_count == 0U || length == 0U)
-        return NULL;
-    if (buffer->map_count > SIZE_MAX / sizeof(*result))
-        return NULL;
-    result = (F2cSourceMapSegment *)malloc(buffer->map_count * sizeof(*result));
-    if (result == NULL)
-        return NULL;
-    for (index = 0U; index < buffer->map_count; ++index) {
-        const F2cSourceMapSegment *segment = &buffer->map[index];
-        const size_t segment_end = segment->logical_begin + segment->length;
-        const size_t overlap_begin = segment->logical_begin > begin ? segment->logical_begin : begin;
-        const size_t overlap_end = segment_end < end ? segment_end : end;
-        if (overlap_begin >= overlap_end)
-            continue;
-        result[used].logical_begin = overlap_begin - begin;
-        result[used].length = overlap_end - overlap_begin;
-        result[used].physical_line = segment->physical_line;
-        result[used].physical_column =
-            segment->physical_column + overlap_begin - segment->logical_begin;
-        ++used;
-    }
-    if (used == 0U) {
-        free(result);
-        return NULL;
-    }
-    *count = used;
-    return result;
+    return f2c_source_map_slice(buffer->map.items, buffer->map.count, begin, length, count);
 }
 
 static void strip_comment(char *line) {
@@ -194,13 +138,13 @@ static int push_logical_statements(Context *context, SourceBuffer *logical, size
             }
             if (begin != end) {
                 map = source_map_slice(logical, begin, end - begin, &map_count);
-                if (logical->map_count != 0U && map == NULL) {
+                if (logical->map.count != 0U && map == NULL) {
                     free(part);
                     source_buffer_discard(logical);
                     return 0;
                 }
                 if (map_count != 0U)
-                    number = map[0].physical_line;
+                    number = map[0].expansion.line;
                 if (!f2c_lines_push_mapped(context, part, number, map, map_count,
                                            context->options)) {
                     source_buffer_discard(logical);
@@ -227,17 +171,21 @@ static int append_logical_line(Context *context, SourceBuffer *logical, size_t n
     return push_logical_statements(context, logical, number);
 }
 
-int f2c_normalize_source(Context *context, const char *source, size_t length, F2cSourceForm form) {
+static int normalize_preprocessed_source(Context *context, const F2cPreprocessedSource *input,
+                                         F2cSourceForm form) {
+    const char *source = input->text;
+    const size_t length = input->length;
     size_t offset = 0U;
     size_t line_number = 0U;
     size_t logical_number = 1U;
     SourceBuffer logical = {0};
     int continued = 0;
-    int pp_depth = 0;
-    int pp_active = 1;
-    int pp_parent[16] = {0};
-    int pp_taken[16] = {0};
+    logical.source_name = f2c_context_source_name(
+        context, context->options != NULL ? context->options->source_name : NULL);
+    if (logical.source_name == NULL)
+        return 0;
     while (offset < length) {
+        const size_t line_begin = offset;
         size_t end = offset;
         char *raw;
         char *body;
@@ -258,51 +206,6 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
             ++end;
         }
         offset = end;
-
-        {
-            char *directive = f2c_trim(raw);
-            if (*directive == '#') {
-                ++directive;
-                directive = f2c_trim(directive);
-                /* Fortran preprocessing identifiers are case-sensitive in the
-                 * preprocessor, but LAPACK conventionally spells feature
-                 * macros in upper case.  Normalise a private copy before
-                 * evaluating the small, deterministic feature subset that the
-                 * translator supports. */
-                f2c_lowercase_code(directive);
-                if (f2c_starts_word(directive, "if") || f2c_starts_word(directive, "ifdef") ||
-                    f2c_starts_word(directive, "ifndef")) {
-                    const int condition = f2c_starts_word(directive, "ifndef") ||
-                                          strstr(directive, "!defined") != NULL;
-                    if (pp_depth < 16) {
-                        pp_parent[pp_depth] = pp_active;
-                        pp_taken[pp_depth] = condition;
-                        pp_active = pp_active && condition;
-                        ++pp_depth;
-                    }
-                } else if (f2c_starts_word(directive, "elif") && pp_depth > 0) {
-                    const int index = pp_depth - 1;
-                    const int condition = strstr(directive, "!defined") != NULL ||
-                                          strstr(directive, "use_isnan") != NULL;
-                    pp_active = pp_parent[index] && !pp_taken[index] && condition;
-                    if (condition)
-                        pp_taken[index] = 1;
-                } else if (f2c_starts_word(directive, "else") && pp_depth > 0) {
-                    const int index = pp_depth - 1;
-                    pp_active = pp_parent[index] && !pp_taken[index];
-                    pp_taken[index] = 1;
-                } else if (f2c_starts_word(directive, "endif") && pp_depth > 0) {
-                    --pp_depth;
-                    pp_active = pp_parent[pp_depth];
-                }
-                free(raw);
-                continue;
-            }
-            if (!pp_active) {
-                free(raw);
-                continue;
-            }
-        }
 
         if (form == F2C_SOURCE_FIXED) {
             const size_t raw_length = strlen(raw);
@@ -362,18 +265,21 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
             if (!next_continued) {
                 logical_number = line_number;
             }
-            if (*body != '\0') {
+            if (body_length != 0U && columns != NULL) {
                 size_t character = 0U;
-                if (!source_buffer_separator(&logical, line_number, columns[0])) {
+                if (!source_buffer_separator(&logical, input, line_begin + columns[0] - 1U,
+                                             line_number, columns[0])) {
                     free(columns);
                     free(raw);
                     source_buffer_discard(&logical);
                     return 0;
                 }
                 if (label_begin < label_end &&
-                    (!source_buffer_append(&logical, raw + label_begin, label_end - label_begin,
-                                           line_number, label_begin + 1U) ||
-                     !source_buffer_separator(&logical, line_number, columns[0]))) {
+                    (!source_buffer_append_mapped(
+                         &logical, raw + label_begin, label_end - label_begin, input,
+                         line_begin + label_begin, line_number, label_begin + 1U) ||
+                     !source_buffer_separator(&logical, input, line_begin + columns[0] - 1U,
+                                              line_number, columns[0]))) {
                     free(columns);
                     free(raw);
                     source_buffer_discard(&logical);
@@ -383,8 +289,9 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
                     size_t run = character + 1U;
                     while (run < body_length && columns[run] == columns[run - 1U] + 1U)
                         ++run;
-                    if (!source_buffer_append(&logical, body + character, run - character,
-                                              line_number, columns[character])) {
+                    if (!source_buffer_append_mapped(&logical, body + character, run - character,
+                                                     input, line_begin + columns[character] - 1U,
+                                                     line_number, columns[character])) {
                         free(columns);
                         free(raw);
                         source_buffer_discard(&logical);
@@ -416,8 +323,10 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
             }
             if (*body != '\0') {
                 const size_t column = (size_t)(body - raw) + 1U;
-                if (!source_buffer_separator(&logical, line_number, column) ||
-                    !source_buffer_append(&logical, body, strlen(body), line_number, column)) {
+                if (!source_buffer_separator(&logical, input, line_begin + column - 1U, line_number,
+                                             column) ||
+                    !source_buffer_append_mapped(&logical, body, strlen(body), input,
+                                                 line_begin + column - 1U, line_number, column)) {
                     free(raw);
                     source_buffer_discard(&logical);
                     return 0;
@@ -434,6 +343,16 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
     return append_logical_line(context, &logical, logical_number);
 }
 
+int f2c_normalize_source(Context *context, const char *source, size_t length, F2cSourceForm form) {
+    F2cPreprocessedSource preprocessed;
+    int result;
+    if (!f2c_preprocess_source(context, source, length, form, &preprocessed))
+        return 0;
+    result = normalize_preprocessed_source(context, &preprocessed, form);
+    f2c_preprocessed_source_discard(&preprocessed);
+    return result;
+}
+
 static int replace_rewritten_line(Line *line, char *text) {
     F2cSourceMapSegment *map;
     const F2cSourcePosition origin = f2c_line_source_position(line, 0U);
@@ -443,8 +362,10 @@ static int replace_rewritten_line(Line *line, char *text) {
         free(text);
         return 0;
     }
-    if (map != NULL)
-        *map = (F2cSourceMapSegment){0U, length, origin.line, origin.column};
+    if (map != NULL) {
+        const F2cSourcePosition spelling = origin;
+        *map = (F2cSourceMapSegment){0U, length, origin, spelling, length, length, 1U, 1U, 0U};
+    }
     free(line->text);
     free(line->source_map);
     line->text = text;
@@ -506,8 +427,7 @@ int f2c_rewrite_labeled_do(Context *context) {
                 f2c_buffer_printf(&terminal, "end do %s", label);
                 if (terminal.failed)
                     return 0;
-                if (!replace_rewritten_line(&context->lines.items[j],
-                                            f2c_buffer_take(&terminal)))
+                if (!replace_rewritten_line(&context->lines.items[j], f2c_buffer_take(&terminal)))
                     return 0;
                 break;
             }

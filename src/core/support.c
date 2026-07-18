@@ -177,6 +177,15 @@ static void emit_structured_diagnostic(Context *context, F2cDiagnosticCode code,
         diagnostic.end.source_name = span->end.source_name != NULL ? span->end.source_name : name;
         diagnostic.end.line = span->end.line;
         diagnostic.end.column = span->end.column;
+        diagnostic.has_spelling_location = span->has_spelling;
+        if (span->has_spelling) {
+            diagnostic.spelling_begin.source_name = span->spelling_begin.source_name;
+            diagnostic.spelling_begin.line = span->spelling_begin.line;
+            diagnostic.spelling_begin.column = span->spelling_begin.column;
+            diagnostic.spelling_end.source_name = span->spelling_end.source_name;
+            diagnostic.spelling_end.line = span->spelling_end.line;
+            diagnostic.spelling_end.column = span->spelling_end.column;
+        }
     } else {
         diagnostic.end = diagnostic.begin;
     }
@@ -190,6 +199,7 @@ static void diagnostic_v(Context *context, F2cDiagnosticCode code, const F2cSour
     va_list copy;
     int prefix_count;
     int message_count;
+    int spelling_note_count = 0;
     size_t total;
     char *message = NULL;
     const char *name = span != NULL && span->begin.source_name != NULL
@@ -228,8 +238,17 @@ static void diagnostic_v(Context *context, F2cDiagnosticCode code, const F2cSour
     va_copy(copy, args);
     message_count = vsnprintf(NULL, 0U, format, copy);
     va_end(copy);
-    if (prefix_count < 0 || message_count < 0 ||
-        (size_t)prefix_count > SIZE_MAX - (size_t)message_count - 1U) {
+    if (span != NULL && span->has_spelling) {
+        const char *spelling_name =
+            span->spelling_begin.source_name != NULL ? span->spelling_begin.source_name : name;
+        spelling_note_count =
+            snprintf(NULL, 0U, "%s:%zu:%zu: note: expanded from macro definition\n", spelling_name,
+                     span->spelling_begin.line, span->spelling_begin.column);
+    }
+    if (prefix_count < 0 || message_count < 0 || spelling_note_count < 0 ||
+        (size_t)prefix_count > SIZE_MAX - (size_t)message_count - 1U ||
+        (size_t)spelling_note_count >
+            SIZE_MAX - (size_t)prefix_count - (size_t)message_count - 1U) {
         context->diagnostics.failed = 1;
     } else {
         message = (char *)malloc((size_t)message_count + 1U);
@@ -245,7 +264,7 @@ static void diagnostic_v(Context *context, F2cDiagnosticCode code, const F2cSour
         va_end(copy);
         emit_structured_diagnostic(context, code, span, line, column, error, message,
                                    (size_t)message_count);
-        total = (size_t)prefix_count + (size_t)message_count + 1U;
+        total = (size_t)prefix_count + (size_t)message_count + 1U + (size_t)spelling_note_count;
         if (context->diagnostics.limit != 0U &&
             (context->diagnostics.length > context->diagnostics.limit ||
              total > context->diagnostics.limit - context->diagnostics.length)) {
@@ -270,6 +289,17 @@ static void diagnostic_v(Context *context, F2cDiagnosticCode code, const F2cSour
                 context->diagnostics.length += (size_t)message_count;
                 context->diagnostics.data[context->diagnostics.length++] = '\n';
                 context->diagnostics.data[context->diagnostics.length] = '\0';
+                if (spelling_note_count != 0) {
+                    const char *spelling_name = span->spelling_begin.source_name != NULL
+                                                    ? span->spelling_begin.source_name
+                                                    : name;
+                    (void)snprintf(context->diagnostics.data + context->diagnostics.length,
+                                   context->diagnostics.capacity - context->diagnostics.length,
+                                   "%s:%zu:%zu: note: expanded from macro definition\n",
+                                   spelling_name, span->spelling_begin.line,
+                                   span->spelling_begin.column);
+                    context->diagnostics.length += (size_t)spelling_note_count;
+                }
             }
         }
     }
@@ -368,8 +398,12 @@ int f2c_lines_push_mapped(Context *context, char *text, size_t number,
         lines->capacity = capacity;
     }
     lines->items[lines->count].text = text;
-    lines->items[lines->count].source_name = f2c_strdup(
-        options != NULL && options->source_name != NULL ? options->source_name : "<input>");
+    lines->items[lines->count].source_name =
+        source_map_count != 0U && source_map[0].expansion.source_name != NULL
+            ? source_map[0].expansion.source_name
+            : f2c_context_source_name(context, options != NULL && options->source_name != NULL
+                                                   ? options->source_name
+                                                   : "<input>");
     if (lines->items[lines->count].source_name == NULL) {
         free(text);
         free(source_map);

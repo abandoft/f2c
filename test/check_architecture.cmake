@@ -51,6 +51,8 @@ endif()
 file(READ "${SOURCE_DIR}/include/f2c/f2c.h" PUBLIC_API)
 file(READ "${SOURCE_DIR}/src/core/config.c" CONFIG_IMPLEMENTATION)
 file(READ "${SOURCE_DIR}/src/frontend/token.h" TOKEN_API)
+file(READ "${SOURCE_DIR}/src/frontend/source.c" SOURCE_NORMALIZATION)
+file(READ "${SOURCE_DIR}/src/frontend/preprocessor.c" PREPROCESSOR_IMPLEMENTATION)
 if(PUBLIC_API MATCHES "F2C_CONFIG_V[0-9]" OR CONFIG_IMPLEMENTATION MATCHES "offsetof[ \\t\\r\\n]*\\([ \\t\\r\\n]*F2cConfig")
     message(FATAL_ERROR "the unfinished public API must not preserve historical configuration layouts")
 endif()
@@ -59,6 +61,13 @@ if(NOT CONFIG_IMPLEMENTATION MATCHES "structure_size[ \\t\\r\\n]*!=[ \\t\\r\\n]*
 endif()
 if(TOKEN_API MATCHES "F2cLexer" OR TOKEN_API MATCHES "f2c_lexer_(init|next)")
     message(FATAL_ERROR "the canonical token stream must not expose the removed lexer aliases")
+endif()
+if(
+    SOURCE_NORMALIZATION MATCHES "pp_(parent|taken|depth)"
+    OR SOURCE_NORMALIZATION MATCHES "use_isnan"
+    OR PREPROCESSOR_IMPLEMENTATION MATCHES "use_isnan"
+)
+    message(FATAL_ERROR "conditional preprocessing must not restore fixed stacks or LAPACK macro guesses")
 endif()
 
 foreach(SUBSTITUTION_FILE IN ITEMS src/codegen/data.c src/codegen/array/constructor.c)

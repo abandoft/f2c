@@ -677,54 +677,6 @@ static void test_single_complex_specific_abs(void) {
     f2c_result_free(&result);
 }
 
-static void test_preprocessed_lapack_isnan_module(void) {
-    static const char source[] = "module la_xisnan\n"
-                                 "interface la_isnan\n"
-                                 "module procedure sisnan\n"
-                                 "end interface\n"
-                                 "contains\n"
-                                 "logical function sisnan(x)\n"
-                                 "use la_constants, only: wp=>sp\n"
-                                 "#ifdef USE_IEEE_INTRINSIC\n"
-                                 "use, intrinsic :: ieee_arithmetic\n"
-                                 "#elif USE_ISNAN\n"
-                                 "intrinsic :: isnan\n"
-                                 "#endif\n"
-                                 "real(wp) :: x\n"
-                                 "#ifdef USE_IEEE_INTRINSIC\n"
-                                 "sisnan = ieee_is_nan(x)\n"
-                                 "#elif USE_ISNAN\n"
-                                 "sisnan = isnan(x)\n"
-                                 "#else\n"
-                                 "sisnan = x /= x\n"
-                                 "#endif\n"
-                                 "end function sisnan\n"
-                                 "logical function disnan(x)\n"
-                                 "use la_constants, only: wp=>dp\n"
-                                 "real(wp) :: x\n"
-                                 "disnan = x /= x\n"
-                                 "end function disnan\n"
-                                 "end module la_xisnan\n"
-                                 "logical function disnan(x)\n"
-                                 "double precision :: x\n"
-                                 "disnan = x /= x\n"
-                                 "end function disnan\n";
-    F2cOptions options = {"la_xisnan.F90", F2C_SOURCE_FREE, 0};
-    F2cResult result = f2c_transpile(source, strlen(source), &options);
-    expect(result.error_count == 0U, "LAPACK preprocessed module function translates");
-    expect_contains(result.code, "int32_t f2c_module_la_xisnan_sisnan(float *x)",
-                    "module-contained function receives a collision-free C symbol");
-    expect_contains(result.code, "int32_t f2c_module_la_xisnan_disnan(double *x)",
-                    "each module procedure is scoped to its owning module");
-    expect_contains(result.code, "int32_t disnan(double *x)",
-                    "an external procedure may retain the same Fortran name");
-    expect_contains(result.code, "isnan((*x))",
-                    "upper-case LAPACK feature macro selects the supported intrinsic branch");
-    expect(result.code == NULL || strstr(result.code, "x /= x") == NULL,
-           "inactive preprocessor branch is removed");
-    f2c_result_free(&result);
-}
-
 static void test_lapack_f90_semantics(void) {
     static const char source[] = "subroutine scaled_sum(n, work, result)\n"
                                  "  use la_constants, only: wp=>sp, zero=>szero, one=>sone\n"
@@ -3019,7 +2971,6 @@ int main(void) {
     test_complex_temporary_arguments();
     test_typed_integer_and_nested_call_expressions();
     test_single_complex_specific_abs();
-    test_preprocessed_lapack_isnan_module();
     test_lapack_f90_semantics();
     test_standalone_lapack_constants_module();
     test_allocatable_arrays();

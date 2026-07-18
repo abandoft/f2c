@@ -26,6 +26,6 @@ case $relative in
 esac
 
 mkdir -p "$(dirname -- "$generated")" "$(dirname -- "$object")"
-"$f2c" "$source" -o "$generated"
+"$f2c" -DUSE_ISNAN=1 "$source" -o "$generated"
 # shellcheck disable=SC2086
 "$c_compiler" $strict_cflags $fp_flags -c "$generated" -o "$object"
