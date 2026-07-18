@@ -28,7 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建基线已经建立；本轮严格 Release CTest 为 30/30，架构边界检查作为独立测试运行。
+  构建基线已经建立；本轮严格 CTest 为 31/31，架构边界检查作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -57,8 +57,9 @@
   映射/符号发现均消费 canonical token，并把规格表达式范围保存到语义模型。`EQUIVALENCE` 下标
   直接构建并常量求值 token AST；属性关键字会结合顶层赋值 token 判别，`DIMENSION`、`EXTERNAL`、
   `PARAMETER`、`SAVE` 和 `EQUIVALENCE` 作为合法变量名时不再被误判为声明。`DATA` 的组、重复因子、
-  设计子和嵌套隐式 DO 已完全消费 canonical token range；旧式控制语句、I/O 和少量字符串入口仍有
-  文本扫描。源码归一化层的注释识别、分号拆句和代码大小写处理已经
+  设计子和嵌套隐式 DO 已完全消费 canonical token range；`READ/WRITE`、文件控制语句及其控制项和
+  I/O item 已消费 canonical token range，`PRINT`、旧式控制语句和少量字符串入口仍有文本扫描。
+  源码归一化层的注释识别、分号拆句和代码大小写处理已经
   改为消费 canonical token，不会在 token 化之前破坏字符或 Hollerith 载荷。
 - [x] 只保留 `frontend/token.h` 定义的 `F2cToken/F2cTokenStream`。表达式 AST 已删除独立的
   `AstTokenKind/AstToken`，`ast/token_stream.c` 只负责表达式上下文的 token 约束，不再实现第二套
@@ -225,10 +226,15 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 
 ### P0-IO-01 F90 外部与内部 I/O
 
-- [ ] 完成 F90 `OPEN`/`CLOSE` 全部控制项，以及 `INQUIRE`、`BACKSPACE` 和 `ENDFILE`。目前
-  `BACKSPACE` 被明确作为未支持语句测试，`OPEN` 仅处理少量控制项。
+- [ ] 完成 F90 `OPEN`/`CLOSE` 全部控制项，以及 `INQUIRE`、`BACKSPACE` 和 `ENDFILE`。外部文件
+  形式现已进入统一 token → AST → typed IR → emitter 流程；生成端用线程局部文件单元状态机实现
+  `OLD/NEW/SCRATCH/REPLACE/UNKNOWN`、`KEEP/DELETE`、顺序记录倒退、标准 C17 物理 `ENDFILE`
+  截断，以及按 `UNIT/FILE` 查询连接和文件属性。正负向语义、严格 C17 执行、ASan/UBSan 和
+  gfortran 差分已进入测试与 CI；`INQUIRE(IOLENGTH=)`、更完整错误分类及后续标准控制项仍未完成。
 - [ ] 完成顺序/直接访问、格式化/非格式化记录、`REC`、`RECL`、`ACCESS`、`ACTION`、`STATUS`、
-  `BLANK`、`PAD`、`DELIM`、`POSITION` 和所有对应 `IOSTAT/IOMSG/ERR/END/EOR` 状态。
+  `BLANK`、`PAD`、`DELIM`、`POSITION` 和所有对应 `IOSTAT/IOMSG/ERR/END/EOR` 状态。连接状态现保存
+  上述属性，顺序格式化文件控制路径已经执行验证；直接访问 `READ/WRITE REC=`、直接记录边界、
+  动作不匹配的无崩溃错误传播和非格式化记录协议仍需完成。
 - [ ] 让 `PRINT`、`READ` 和 `WRITE` 共享同一格式 AST 和执行引擎；验证显式 FORMAT、运行时格式、
   列表导向、格式回转、嵌套重复组、冒号和空数据列表。
 - [ ] 补齐 `I/B/O/Z/F/E/EN/ES/D/G/L/A` 的宽度、精度、指数位数、舍入、符号、比例因子和
@@ -237,7 +243,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   非前进状态、PAD 和文件位置，确保 Web/mobile 无文件系统环境可运行。
 - [ ] 完成 F90 NAMELIST 的大小写、重复值、子串/数组段、派生对象扩展和错误恢复；动态分配必须
   先验证完整输入再原子提交，失败不得破坏原对象。
-- [ ] 统一文件单元生命周期、预连接单元、并发访问和错误映射，明确线程安全策略。
+- [ ] 统一文件单元生命周期、预连接单元、并发访问和错误映射，明确线程安全策略。文件单元表及
+  内部单元编号现为线程局部，预连接 `0/5/6`、隐式 `fort.<unit>` 连接和查询已有明确路径；仍需
+  完成同一外部文件的跨单元冲突检测、细分标准 I/O 状态码、动作权限失败和并发文件访问契约。
 
 验收标准：建立按语句、控制项、描述符和数据类型组合生成的 I/O 测试矩阵；生成 C 与至少两个
 原生编译器逐记录差分，并在原生、Windows 和 WebAssembly 环境实际执行。
@@ -251,7 +259,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 对辅助函数做基于 IR 使用信息的可达性生成，控制单文件输出的体积、C 编译时间和链接重复；
   不得以引入新的独立运行时库解决该问题。
 - [ ] 为数组描述符、I/O、格式、NAMELIST、派生类型复制/终结等生成逻辑建立结构化 emitter，
-  替换难以审查的大段 C 字符串模板。
+  替换难以审查的大段 C 字符串模板。文件控制 emitter 已按 common/open/position/inquire 职责拆分，
+  文件单元支持生成也已从总控模块隔离；其余格式、NAMELIST、数组和生命周期模板仍需继续迁移。
 - [ ] 建立生成代码可读性规范：稳定命名、源位置注释、确定性声明顺序、合理作用域和格式化；
   对公开接口及有代表性的生成实现使用快照测试。
 - [ ] 记录并限制单个源文件的转译时间、峰值内存、生成 C 大小和生成 C 编译时间。
