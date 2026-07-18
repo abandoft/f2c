@@ -1,0 +1,6 @@
+0program p
+character(len=8) :: x
+x = 1_'Ab!;&
+&CdEf'
+if (x /= 'Ab!;CdEf') error stop
+end program p

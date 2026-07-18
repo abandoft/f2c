@@ -1,0 +1,4 @@
+0program p
+integer :: x
+x = b'102'
+end program p
