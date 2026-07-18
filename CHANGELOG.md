@@ -1,3 +1,12 @@
+## 1.7.0
+
+- Migrated `PRINT` to the unified token, AST, and typed I/O pipeline, removing text splitting and expression reparsing.
+- Unified formatted transfer and format-semantic diagnostics across `PRINT`, `READ`, and `WRITE`.
+- Added list-directed, character, runtime character, labeled, empty-list, and nested implied-DO `PRINT` forms.
+- Added F77 assigned FORMAT variables with dynamic, unbounded format-label selection.
+- Corrected trailing positioning descriptors so generated output records match native Fortran without extra spaces.
+- Expanded strict C17, ASan/UBSan, native Fortran output differential, and pinned Reference BLAS/LAPACK regression coverage.
+
 ## 1.6.0
 
 - Split macro-definition management into a dedicated, bounded preprocessing module and added in-source function-like macros.
