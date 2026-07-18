@@ -1,3 +1,12 @@
+## 1.3.0
+
+- Added a dedicated, bounded conditional preprocessor with dynamic nesting, complete integer expression evaluation, and recursive object-macro expansion.
+- Added `#include`, Fortran `INCLUDE`, `#line`, and numeric line markers while keeping the core library file-system independent through callbacks.
+- Added API preprocessor definitions and CLI `-D`, `-U`, and `-I` options with explicit project and source-local macro scopes.
+- Unified source mapping across preprocessing, source normalization, and tokens so structured diagnostics report both macro expansion and definition locations.
+- Added request-level budgets and negative tests for preprocessed bytes, macro count and depth, and include count and depth.
+- Expanded dedicated preprocessor, CLI include, cross-compiler, sanitizer, and full pinned Reference LAPACK regression coverage.
+
 ## 1.2.0
 
 - Unified and improved the token, AST, typed IR, semantic analysis, and code generation pipelines, with clearer responsibilities across core modules.
