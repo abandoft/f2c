@@ -251,6 +251,65 @@ static void test_source_macro_expansion(void) {
     f2c_result_free(&result);
 }
 
+static void test_function_macro_expansion(void) {
+    static const char source[] = "#define ADD(a,b) ((a) + (b))\n"
+                                 "#define ID(value) value\n"
+                                 "#define ZERO() 4\n"
+                                 "#define ADD_MORE(first,...) ADD(first,__VA_ARGS__)\n"
+                                 "#define JOIN(a,b) a ## b\n"
+                                 "#define OPTIONAL(left,right) left ## right\n"
+                                 "#define STRINGIZE(value) #value\n"
+                                 "subroutine function_macros(value, text)\n"
+                                 "integer :: value, joined\n"
+                                 "character(len=5) :: text\n"
+                                 "value = ADD_MORE(ID(2), ZERO())\n"
+                                 "JOIN(join,ed) = value\n"
+                                 "OPTIONAL(joined,) = OPTIONAL(,value)\n"
+                                 "text = STRINGIZE(hello)\n"
+                                 "end subroutine function_macros\n";
+    F2cConfig config = config_with_definitions(NULL, 0U, NULL);
+    F2cResult result = translate(source, &config);
+    expect(result.error_count == 0U,
+           "function-like, nested, zero-argument and variadic macros translate");
+    expect_contains(result.code, "(*value) = (2 + 4)",
+                    "function-like arguments are recursively expanded exactly once");
+    expect_contains(result.code, "joined = (*value)",
+                    "token pasting forms a canonical Fortran identifier");
+    expect_contains(result.code, "memmove(text, \"hello\"",
+                    "stringizing produces a character literal for the Fortran parser");
+    f2c_result_free(&result);
+
+    result = translate("#define SAME(value) value + 1\n"
+                       "#define SAME(value)   value  +  1\n"
+                       "subroutine equivalent_redefinition(result)\n"
+                       "integer :: result\n"
+                       "result = SAME(2)\n"
+                       "end subroutine equivalent_redefinition\n",
+                       &config);
+    expect(result.error_count == 0U,
+           "equivalent macro redefinitions accept insignificant whitespace differences");
+    f2c_result_free(&result);
+}
+
+static void test_continued_macro_condition(void) {
+    static const char source[] = "#define BETWEEN(value,low,high) \\\n"
+                                 "  ((value) >= (low) && \\\n"
+                                 "   (value) <= (high))\n"
+                                 "#define CAT(a,b) a ## b\n"
+                                 "#if BETWEEN(-1, -2, 0) && CAT(1,0) == 10 && \\\n"
+                                 "    'A' == 65 && '\\n' == 10 && 0xffffffffffffffffULL > 0\n"
+                                 "subroutine continued_macro_condition()\n"
+                                 "end subroutine continued_macro_condition\n"
+                                 "#endif\n";
+    F2cConfig config = config_with_definitions(NULL, 0U, NULL);
+    F2cResult result = translate(source, &config);
+    expect(result.error_count == 0U,
+           "continued function macros and signed, unsigned and character conditions translate");
+    expect_contains(result.code, "void continued_macro_condition(void)",
+                    "continued #if expressions select the expected branch");
+    f2c_result_free(&result);
+}
+
 static void test_source_macro_literal_boundaries(void) {
     static const char source[] = "#define VALUE 7\n"
                                  "subroutine literal_macro_boundary(text)\n"
@@ -394,6 +453,29 @@ static void test_include_resolution(void) {
     expect_contains(result.code, "local_value = 31",
                     "Fortran INCLUDE content enters normalization and typed IR");
     f2c_result_free(&result);
+
+    memset(&fixture, 0, sizeof(fixture));
+    config = include_config(&fixture, NULL);
+    result = translate("#define HEADER(name) #name\n#include HEADER(definitions.inc)\n"
+                       "subroutine macro_include(value)\ninteger :: value\n"
+                       "value = INCLUDED_VALUE\nend subroutine macro_include\n",
+                       &config);
+    expect(result.error_count == 0U,
+           "function-like macro expansion produces a quoted include operand");
+    expect_contains(result.code, "(*value) = 11",
+                    "a macro-selected include contributes definitions to its consumer");
+    expect(fixture.last_kind == F2C_INCLUDE_QUOTED,
+           "stringized macro include operands retain quoted include policy");
+    f2c_result_free(&result);
+
+    memset(&fixture, 0, sizeof(fixture));
+    config = include_config(&fixture, NULL);
+    result = translate("#define SYSTEM_HEADER <definitions.inc>\n#include SYSTEM_HEADER\n"
+                       "subroutine macro_system_include()\nend subroutine macro_system_include\n",
+                       &config);
+    expect(result.error_count == 0U && fixture.last_kind == F2C_INCLUDE_SYSTEM,
+           "object macros can select system include operands");
+    f2c_result_free(&result);
 }
 
 static void test_include_diagnostics_and_limits(void) {
@@ -475,13 +557,41 @@ static void expect_preprocessor_error(const char *source, F2cDiagnosticCode code
     f2c_result_free(&result);
 }
 
-static void test_explicit_unsupported_contract(void) {
+static void test_explicit_preprocessor_contract(void) {
     expect_preprocessor_error("  #include \"values.inc\"\n", F2C_DIAGNOSTIC_UNSUPPORTED, 1U, 3U,
                               "#include requires a configured resolver",
                               "#include is a hard error until include resolution is configured");
-    expect_preprocessor_error("#define VALUE(x) x\n", F2C_DIAGNOSTIC_UNSUPPORTED, 1U, 9U,
-                              "function-like macro is not supported",
-                              "function-like definitions cannot be silently miscompiled");
+    expect_preprocessor_error("#define DUPLICATE(x,x) x\n", F2C_DIAGNOSTIC_SYNTAX, 1U, 21U,
+                              "duplicate function-like macro parameter",
+                              "duplicate function-like parameters are rejected");
+    expect_preprocessor_error("#define PAIR(a,b) a + b\ninteger :: value = PAIR(1)\n",
+                              F2C_DIAGNOSTIC_SYNTAX, 2U, 20U, "argument count mismatch",
+                              "function-like invocation arity is validated before parsing Fortran");
+    expect_preprocessor_error("#define OPEN(a) a\ninteger :: value = OPEN(1\n",
+                              F2C_DIAGNOSTIC_SYNTAX, 2U, 20U, "unterminated function-like macro",
+                              "unterminated function-like invocations are rejected");
+    expect_preprocessor_error("#define RECUR(value) RECUR(value)\ninteger :: value = RECUR(1)\n",
+                              F2C_DIAGNOSTIC_SYNTAX, 2U, 20U, "cyclic source macro",
+                              "recursive function-like expansions terminate with a hard error");
+    expect_preprocessor_error(
+        "#define BAD_PASTE(value) ## value\ninteger :: value = BAD_PASTE(1)\n",
+        F2C_DIAGNOSTIC_SYNTAX, 2U, 20U, "invalid leading token-paste operator",
+        "invalid token-paste placement is rejected");
+    expect_preprocessor_error("#define CHANGED 1\n#define CHANGED 2\n", F2C_DIAGNOSTIC_SYNTAX,
+                              2U, 9U, "incompatible redefinition",
+                              "incompatible macro redefinitions preserve the original table");
+}
+
+static void test_continuation_locations(void) {
+    static const char source[] = "#define VALUE \\\n"
+                                 "  7\n"
+                                 "@\n";
+    DiagnosticCapture capture = {0};
+    F2cConfig config = config_with_definitions(NULL, 0U, &capture);
+    F2cResult result = translate(source, &config);
+    expect(result.error_count != 0U && capture.count != 0U && capture.first.begin.line == 3U,
+           "directive splicing preserves following physical source line locations");
+    f2c_result_free(&result);
 }
 
 static void test_line_remapping(void) {
@@ -610,6 +720,22 @@ static void test_resource_limits(void) {
 
     memset(&capture, 0, sizeof(capture));
     config = config_with_definitions(NULL, 0U, &capture);
+    config.limits.max_macro_arguments = 1U;
+    result = translate("#define TOO_MANY(first,second) first\n", &config);
+    expect(result.error_count != 0U && capture.first.code == F2C_DIAGNOSTIC_RESOURCE_LIMIT,
+           "function-like formal parameters obey the request-local argument limit");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    config = config_with_definitions(NULL, 0U, &capture);
+    config.limits.max_macro_arguments = 1U;
+    result = translate("#define MANY(...) 1\ninteger :: value = MANY(1,2)\n", &config);
+    expect(result.error_count != 0U && capture.first.code == F2C_DIAGNOSTIC_RESOURCE_LIMIT,
+           "function-like actual arguments obey the request-local argument limit");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    config = config_with_definitions(NULL, 0U, &capture);
     config.limits.max_preprocessed_bytes = 8U;
     result = translate("subroutine too_large()\nend subroutine too_large\n", &config);
     expect(result.error_count != 0U && capture.first.code == F2C_DIAGNOSTIC_RESOURCE_LIMIT,
@@ -676,12 +802,15 @@ int main(void) {
     test_reference_lapack_condition();
     test_integer_expression_and_definitions();
     test_source_macro_expansion();
+    test_function_macro_expansion();
+    test_continued_macro_condition();
     test_source_macro_literal_boundaries();
     test_case_sensitive_dynamic_nesting();
     test_project_definition_scope();
     test_include_resolution();
     test_include_diagnostics_and_limits();
-    test_explicit_unsupported_contract();
+    test_explicit_preprocessor_contract();
+    test_continuation_locations();
     test_line_remapping();
     test_expansion_and_spelling_locations();
     test_malformed_conditions();
