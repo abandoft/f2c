@@ -50,8 +50,10 @@ static int include_cycle(const PreprocessorIncludeFrame *frame, const char *sour
 
 int f2c_preprocessor_process_include(Preprocessor *preprocessor, const char *rest, size_t line,
                                      size_t column) {
-    const char *cursor = skip_space(rest);
-    const char opening = *cursor;
+    Buffer expanded = {0};
+    const char *operand;
+    const char *cursor;
+    char opening;
     char closing = '\0';
     const char *name_begin;
     const char *name_end;
@@ -63,15 +65,22 @@ int f2c_preprocessor_process_include(Preprocessor *preprocessor, const char *res
     const char *source_name;
     int result = 0;
     int release_source = 0;
+    expanded.limit = preprocessor->context->limits.max_preprocessed_bytes;
+    if (!f2c_preprocessor_expand_directive_operand(preprocessor, rest, strlen(rest), line, column,
+                                                   &expanded))
+        goto cleanup;
+    operand = expanded.data != NULL ? expanded.data : "";
+    cursor = skip_space(operand);
+    opening = *cursor;
     if (opening == '"' || opening == '\'')
         closing = opening;
     else if (opening == '<')
         closing = '>';
     if (closing == '\0') {
         include_diagnostic(preprocessor, F2C_DIAGNOSTIC_SYNTAX, line,
-                           column + (size_t)(cursor - rest),
+                           column + (size_t)(cursor - operand),
                            "expected a quoted or system include name%s", "");
-        return 0;
+        goto cleanup;
     }
     name_begin = ++cursor;
     while (*cursor != '\0' && *cursor != closing)
@@ -80,14 +89,14 @@ int f2c_preprocessor_process_include(Preprocessor *preprocessor, const char *res
     if (*cursor != closing || name_end == name_begin ||
         (*skip_space(cursor + 1) != '\0' && *skip_space(cursor + 1) != '!')) {
         include_diagnostic(preprocessor, F2C_DIAGNOSTIC_SYNTAX, line,
-                           column + (size_t)(cursor - rest), "malformed #include operand%s", "");
-        return 0;
+                           column + (size_t)(cursor - operand), "malformed #include operand%s", "");
+        goto cleanup;
     }
     requested_name = f2c_strdup_n(name_begin, (size_t)(name_end - name_begin));
     if (requested_name == NULL) {
         include_diagnostic(preprocessor, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, column,
                            "out of memory parsing include '%s'", "");
-        return 0;
+        goto cleanup;
     }
     if (preprocessor->context->include_resolver == NULL) {
         include_diagnostic(preprocessor, F2C_DIAGNOSTIC_UNSUPPORTED, line, column,
@@ -173,5 +182,6 @@ cleanup:
     if (release_source && preprocessor->context->include_release != NULL)
         preprocessor->context->include_release(&source, preprocessor->context->include_user_data);
     free(requested_name);
+    free(expanded.data);
     return result;
 }
