@@ -9,27 +9,47 @@ typedef struct IoControlName {
 } IoControlName;
 
 static const IoControlName control_names[] = {
-    {"unit", F2C_IO_CONTROL_UNIT},           {"fmt", F2C_IO_CONTROL_FMT},
-    {"nml", F2C_IO_CONTROL_NML},             {"end", F2C_IO_CONTROL_END},
-    {"eor", F2C_IO_CONTROL_EOR},             {"err", F2C_IO_CONTROL_ERR},
-    {"iostat", F2C_IO_CONTROL_IOSTAT},       {"iomsg", F2C_IO_CONTROL_IOMSG},
-    {"size", F2C_IO_CONTROL_SIZE},           {"advance", F2C_IO_CONTROL_ADVANCE},
-    {"rec", F2C_IO_CONTROL_REC},             {"pos", F2C_IO_CONTROL_POS},
-    {"file", F2C_IO_CONTROL_FILE},           {"status", F2C_IO_CONTROL_STATUS},
-    {"access", F2C_IO_CONTROL_ACCESS},       {"action", F2C_IO_CONTROL_ACTION},
-    {"form", F2C_IO_CONTROL_FORM},           {"recl", F2C_IO_CONTROL_RECL},
-    {"blank", F2C_IO_CONTROL_BLANK},         {"decimal", F2C_IO_CONTROL_DECIMAL},
-    {"delim", F2C_IO_CONTROL_DELIM},         {"encoding", F2C_IO_CONTROL_ENCODING},
-    {"pad", F2C_IO_CONTROL_PAD},             {"round", F2C_IO_CONTROL_ROUND},
-    {"sign", F2C_IO_CONTROL_SIGN},           {"asynchronous", F2C_IO_CONTROL_ASYNCHRONOUS},
-    {"id", F2C_IO_CONTROL_ID},               {"newunit", F2C_IO_CONTROL_NEWUNIT},
-    {"exist", F2C_IO_CONTROL_EXIST},         {"opened", F2C_IO_CONTROL_OPENED},
-    {"number", F2C_IO_CONTROL_NUMBER},       {"named", F2C_IO_CONTROL_NAMED},
-    {"name", F2C_IO_CONTROL_NAME},           {"sequential", F2C_IO_CONTROL_SEQUENTIAL},
-    {"direct", F2C_IO_CONTROL_DIRECT},       {"formatted", F2C_IO_CONTROL_FORMATTED},
+    {"unit", F2C_IO_CONTROL_UNIT},
+    {"fmt", F2C_IO_CONTROL_FMT},
+    {"nml", F2C_IO_CONTROL_NML},
+    {"end", F2C_IO_CONTROL_END},
+    {"eor", F2C_IO_CONTROL_EOR},
+    {"err", F2C_IO_CONTROL_ERR},
+    {"iostat", F2C_IO_CONTROL_IOSTAT},
+    {"iomsg", F2C_IO_CONTROL_IOMSG},
+    {"size", F2C_IO_CONTROL_SIZE},
+    {"advance", F2C_IO_CONTROL_ADVANCE},
+    {"rec", F2C_IO_CONTROL_REC},
+    {"pos", F2C_IO_CONTROL_POS},
+    {"file", F2C_IO_CONTROL_FILE},
+    {"status", F2C_IO_CONTROL_STATUS},
+    {"access", F2C_IO_CONTROL_ACCESS},
+    {"action", F2C_IO_CONTROL_ACTION},
+    {"form", F2C_IO_CONTROL_FORM},
+    {"recl", F2C_IO_CONTROL_RECL},
+    {"blank", F2C_IO_CONTROL_BLANK},
+    {"decimal", F2C_IO_CONTROL_DECIMAL},
+    {"delim", F2C_IO_CONTROL_DELIM},
+    {"encoding", F2C_IO_CONTROL_ENCODING},
+    {"pad", F2C_IO_CONTROL_PAD},
+    {"round", F2C_IO_CONTROL_ROUND},
+    {"sign", F2C_IO_CONTROL_SIGN},
+    {"asynchronous", F2C_IO_CONTROL_ASYNCHRONOUS},
+    {"id", F2C_IO_CONTROL_ID},
+    {"newunit", F2C_IO_CONTROL_NEWUNIT},
+    {"exist", F2C_IO_CONTROL_EXIST},
+    {"opened", F2C_IO_CONTROL_OPENED},
+    {"number", F2C_IO_CONTROL_NUMBER},
+    {"named", F2C_IO_CONTROL_NAMED},
+    {"name", F2C_IO_CONTROL_NAME},
+    {"sequential", F2C_IO_CONTROL_SEQUENTIAL},
+    {"direct", F2C_IO_CONTROL_DIRECT},
+    {"formatted", F2C_IO_CONTROL_FORMATTED},
     {"unformatted", F2C_IO_CONTROL_UNFORMATTED},
-    {"nextrec", F2C_IO_CONTROL_NEXTREC},     {"position", F2C_IO_CONTROL_POSITION},
-    {"read", F2C_IO_CONTROL_READ},           {"write", F2C_IO_CONTROL_WRITE},
+    {"nextrec", F2C_IO_CONTROL_NEXTREC},
+    {"position", F2C_IO_CONTROL_POSITION},
+    {"read", F2C_IO_CONTROL_READ},
+    {"write", F2C_IO_CONTROL_WRITE},
     {"readwrite", F2C_IO_CONTROL_READWRITE},
 };
 
@@ -50,8 +70,8 @@ static F2cSourceSpan range_span(F2cTokenRange range) {
         span.end = range.tokens[range.count - 1U].span.end;
         span.spelling_begin = range.tokens[0].span.spelling_begin;
         span.spelling_end = range.tokens[range.count - 1U].span.spelling_end;
-        span.has_spelling = range.tokens[0].span.has_spelling ||
-                            range.tokens[range.count - 1U].span.has_spelling;
+        span.has_spelling =
+            range.tokens[0].span.has_spelling || range.tokens[range.count - 1U].span.has_spelling;
     }
     return span;
 }
@@ -78,11 +98,11 @@ static F2cExpr *parse_namelist_name(F2cTokenRange range) {
 }
 
 static int parse_control(Unit *unit, F2cTokenRange range, F2cIoControl *control) {
-    const size_t equals =
-        f2c_token_range_find_top_level(range, 0U, F2C_TOKEN_OPERATOR, "=");
+    const size_t equals = f2c_token_range_find_top_level(range, 0U, F2C_TOKEN_OPERATOR, "=");
     F2cTokenRange value = range;
     memset(control, 0, sizeof(*control));
     control->span = range_span(range);
+    control->format_span = control->span;
     if (range.count == 0U || !f2c_token_range_balanced(range.tokens, range.count))
         return 0;
     if (equals != SIZE_MAX) {
@@ -102,16 +122,15 @@ static int parse_control(Unit *unit, F2cTokenRange range, F2cIoControl *control)
         control->asterisk = 1;
         return 1;
     }
-    control->value = control->kind == F2C_IO_CONTROL_NML
-                         ? parse_namelist_name(value)
-                         : f2c_parse_expression_tokens(unit, value.tokens, value.count,
-                                                       value.source, NULL);
+    control->value =
+        control->kind == F2C_IO_CONTROL_NML
+            ? parse_namelist_name(value)
+            : f2c_parse_expression_tokens(unit, value.tokens, value.count, value.source, NULL);
     return control->value != NULL;
 }
 
 static int position_statement(F2cStatementKind kind) {
-    return kind == F2C_STMT_REWIND || kind == F2C_STMT_BACKSPACE ||
-           kind == F2C_STMT_ENDFILE;
+    return kind == F2C_STMT_REWIND || kind == F2C_STMT_BACKSPACE || kind == F2C_STMT_ENDFILE;
 }
 
 static int parse_control_list(Unit *unit, F2cTokenRange range, F2cStatement *statement) {
@@ -167,8 +186,7 @@ static int parse_io_items(Unit *unit, F2cTokenRange range, F2cStatement *stateme
         statement->arguments[index] = f2c_parse_expression_tokens(
             unit, parts[index].tokens, parts[index].count, parts[index].source, NULL);
         if (statement->items[index] == NULL || statement->arguments[index] == NULL ||
-            !f2c_statement_parse_io_item_tokens(unit, parts[index],
-                                                &statement->io_items[index])) {
+            !f2c_statement_parse_io_item_tokens(unit, parts[index], &statement->io_items[index])) {
             free(parts);
             return 0;
         }
@@ -195,8 +213,7 @@ int f2c_statement_parse_io(Unit *unit, const Line *line, size_t body_start,
             return 0;
         controls = f2c_token_range_slice(line_range, 2U, close);
         tail_begin = close + 1U;
-        if (tail_begin < line_range.count &&
-            line_range.tokens[tail_begin].kind == F2C_TOKEN_COMMA)
+        if (tail_begin < line_range.count && line_range.tokens[tail_begin].kind == F2C_TOKEN_COMMA)
             ++tail_begin;
         tail = f2c_token_range_slice(line_range, tail_begin, line_range.count);
     } else if (position_statement(statement->kind)) {

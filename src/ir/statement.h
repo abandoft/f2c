@@ -124,6 +124,7 @@ typedef struct F2cIoControl {
     F2cSourceSpan span;
     F2cFormat *format;
     F2cSourceSpan format_span;
+    F2cFormatError format_error;
     int asterisk;
 } F2cIoControl;
 

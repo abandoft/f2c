@@ -118,6 +118,10 @@ static void test_print_semantics(void) {
                                  "  print fmt=*, value\n"
                                  "  print 1 + 2, value\n"
                                  "  print fmt, value\n"
+                                 "  print '(I)', value\n"
+                                 "  print 999, value\n"
+                                 "  print 100, value\n"
+                                 "100 format(I)\n"
                                  "end program invalid_print\n";
     F2cOptions options = {"invalid_print.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
@@ -129,6 +133,18 @@ static void test_print_semantics(void) {
                     "PRINT FMT= INTEGER value must be a statement label or a variable defined by "
                     "ASSIGN",
                     "PRINT rejects arbitrary and unassigned INTEGER format expressions");
+    expect_contains(result.diagnostics,
+                    "invalid constant PRINT FORMAT: invalid edit descriptor field",
+                    "constant CHARACTER formats are parsed and validated before code generation");
+    expect_contains(result.diagnostics,
+                    "PRINT FORMAT label 999 does not identify a valid FORMAT statement",
+                    "missing FORMAT statement labels are rejected during semantic binding");
+    expect_contains(result.diagnostics,
+                    "PRINT FORMAT label 100 does not identify a valid FORMAT statement",
+                    "references to malformed FORMAT statements are rejected");
+    expect_contains(result.diagnostics,
+                    "invalid FORMAT specification: invalid edit descriptor field",
+                    "malformed labeled FORMAT statements retain their own syntax diagnostic");
     expect(result.diagnostics == NULL ||
                strstr(result.diagnostics, "out of memory while parsing statement IR") == NULL,
            "malformed PRINT syntax is never misreported as allocation failure");
@@ -153,8 +169,7 @@ static void test_print_codegen(void) {
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
     expect(result.error_count == 0U,
            "literal, labeled, and runtime CHARACTER PRINT formats lower without diagnostics");
-    expect_contains(result.code,
-                    "f2c_format_initialize(&f2c_io_format, stdout, \"(A,1X,I3)\"",
+    expect_contains(result.code, "f2c_format_initialize(&f2c_io_format, stdout, \"(A,1X,I3)\"",
                     "PRINT character literals use the shared formatted transfer engine");
     expect_contains(result.code, "f2c_format_initialize(&f2c_io_format, stdout, \"(3(i2,1x))\"",
                     "PRINT statement labels resolve through the shared format engine");
@@ -164,8 +179,7 @@ static void test_print_codegen(void) {
                     "formatted PRINT implied-DO items lower through the structured item tree");
     expect_contains(result.code, "switch ((int32_t)(assigned_format))",
                     "assigned FORMAT variables lower to an explicit runtime selector");
-    expect_contains(result.code,
-                    "case 200: f2c_io_format_text = \"('assigned',1x,i2)\"",
+    expect_contains(result.code, "case 200: f2c_io_format_text = \"('assigned',1x,i2)\"",
                     "assigned FORMAT selectors contain only their resolved FORMAT labels");
     f2c_result_free(&result);
 }

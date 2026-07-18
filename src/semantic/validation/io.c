@@ -1,5 +1,7 @@
 #include "semantic/validation/private.h"
 
+#include "ast/format.h"
+
 #include <ctype.h>
 #include <string.h>
 
@@ -130,17 +132,15 @@ static int io_control_supported(F2cStatementKind statement_kind, F2cIoControlKin
                control_kind == F2C_IO_CONTROL_IOMSG || control_kind == F2C_IO_CONTROL_EXIST ||
                control_kind == F2C_IO_CONTROL_OPENED || control_kind == F2C_IO_CONTROL_NUMBER ||
                control_kind == F2C_IO_CONTROL_NAMED || control_kind == F2C_IO_CONTROL_NAME ||
-               control_kind == F2C_IO_CONTROL_ACCESS ||
-               control_kind == F2C_IO_CONTROL_SEQUENTIAL ||
+               control_kind == F2C_IO_CONTROL_ACCESS || control_kind == F2C_IO_CONTROL_SEQUENTIAL ||
                control_kind == F2C_IO_CONTROL_DIRECT || control_kind == F2C_IO_CONTROL_FORM ||
                control_kind == F2C_IO_CONTROL_FORMATTED ||
-               control_kind == F2C_IO_CONTROL_UNFORMATTED ||
-               control_kind == F2C_IO_CONTROL_RECL || control_kind == F2C_IO_CONTROL_NEXTREC ||
-               control_kind == F2C_IO_CONTROL_BLANK ||
+               control_kind == F2C_IO_CONTROL_UNFORMATTED || control_kind == F2C_IO_CONTROL_RECL ||
+               control_kind == F2C_IO_CONTROL_NEXTREC || control_kind == F2C_IO_CONTROL_BLANK ||
                control_kind == F2C_IO_CONTROL_POSITION || control_kind == F2C_IO_CONTROL_ACTION ||
                control_kind == F2C_IO_CONTROL_READ || control_kind == F2C_IO_CONTROL_WRITE ||
-               control_kind == F2C_IO_CONTROL_READWRITE ||
-               control_kind == F2C_IO_CONTROL_DELIM || control_kind == F2C_IO_CONTROL_PAD;
+               control_kind == F2C_IO_CONTROL_READWRITE || control_kind == F2C_IO_CONTROL_DELIM ||
+               control_kind == F2C_IO_CONTROL_PAD;
     return 0;
 }
 
@@ -165,13 +165,28 @@ static int scalar_type(const F2cExpr *expression, Type type) {
     return expression != NULL && expression->type == type && expression->rank == 0U;
 }
 
-static int statement_assigns_format_label(const F2cStatement *statement, const char *name) {
+static const F2cStatement *find_format_statement(const Unit *unit, const char *label) {
+    size_t index;
+    if (unit == NULL || label == NULL)
+        return NULL;
+    for (index = 0U; index < unit->statement_count; ++index) {
+        const F2cStatement *statement = &unit->statements[index];
+        if (statement->kind == F2C_STMT_FORMAT && statement->name != NULL &&
+            strcmp(statement->name, label) == 0)
+            return statement;
+    }
+    return NULL;
+}
+
+static int statement_assigns_format_label(const Unit *unit, const F2cStatement *statement,
+                                          const char *name) {
     if (statement == NULL || name == NULL)
         return 0;
     if (statement->kind == F2C_STMT_ASSIGN_LABEL && statement->name != NULL &&
-        strcmp(statement->name, name) == 0 && statement->label_count == 1U)
+        strcmp(statement->name, name) == 0 && statement->label_count == 1U &&
+        find_format_statement(unit, statement->labels[0]) != NULL)
         return 1;
-    return statement_assigns_format_label(statement->nested, name);
+    return statement_assigns_format_label(unit, statement->nested, name);
 }
 
 static int unit_assigns_format_label(const Unit *unit, const char *name) {
@@ -179,9 +194,66 @@ static int unit_assigns_format_label(const Unit *unit, const char *name) {
     if (unit == NULL || name == NULL)
         return 0;
     for (index = 0U; index < unit->statement_count; ++index)
-        if (statement_assigns_format_label(&unit->statements[index], name))
+        if (statement_assigns_format_label(unit, &unit->statements[index], name))
             return 1;
     return 0;
+}
+
+static F2cSourceSpan format_error_span(const F2cIoControl *control) {
+    F2cSourceSpan span = control->format_span;
+    if (span.begin.line != 0U && span.begin.line == span.end.line) {
+        span.begin.column += control->format_error.offset;
+        span.end = span.begin;
+        ++span.end.column;
+    }
+    return span;
+}
+
+static int bind_constant_format(Context *context, Unit *unit, const F2cStatement *statement,
+                                F2cIoControl *control) {
+    const F2cExpr *value = control->value;
+    const char *statement_name = io_statement_name(statement->kind);
+    const F2cStatement *definition;
+    f2c_format_free(control->format);
+    control->format = NULL;
+    memset(&control->format_error, 0, sizeof(control->format_error));
+    if (value == NULL)
+        return 0;
+    if (value->type == TYPE_CHARACTER && value->kind != F2C_EXPR_STRING_LITERAL)
+        return 1;
+    if (value->type == TYPE_CHARACTER) {
+        control->format_span = value->span;
+        control->format =
+            f2c_format_parse_character_literal(value->text, &value->span, &control->format_error);
+        if (control->format == NULL) {
+            const F2cSourceSpan span = format_error_span(control);
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &span, 1,
+                                     "invalid constant %s FORMAT: %s", statement_name,
+                                     f2c_format_error_message(control->format_error.code));
+            return 0;
+        }
+        control->format->validated = 1;
+        return 1;
+    }
+    if (value->type != TYPE_INTEGER || value->kind != F2C_EXPR_INTEGER_LITERAL)
+        return 1;
+    definition = find_format_statement(unit, value->text);
+    if (definition == NULL || definition->format == NULL || !definition->format_syntax_valid) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &value->span, 1,
+                                 "%s FORMAT label %s does not identify a valid FORMAT statement",
+                                 statement_name, value->text != NULL ? value->text : "<unknown>");
+        return 0;
+    }
+    control->format = f2c_format_clone(definition->format);
+    if (control->format == NULL) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_INTERNAL, &value->span, 1,
+                                 "out of memory while binding %s FORMAT label %s", statement_name,
+                                 value->text);
+        return 0;
+    }
+    control->format->validated = 1;
+    control->format_span = definition->format_span;
+    return 1;
 }
 
 static int inquiry_logical_result(F2cIoControlKind kind) {
@@ -206,7 +278,7 @@ static int inquiry_character_result(F2cIoControlKind kind) {
 }
 
 static void validate_io_control_type(Context *context, Unit *unit, const F2cStatement *statement,
-                                     const F2cIoControl *control, F2cIoControlKind semantic_kind) {
+                                     F2cIoControl *control, F2cIoControlKind semantic_kind) {
     const F2cExpr *value = control->value;
     const size_t column = f2c_validation_expression_start_column(statement->text, value);
     const char *statement_name = io_statement_name(statement->kind);
@@ -241,9 +313,11 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
             return;
         }
         if (scalar_type(value, TYPE_CHARACTER)) {
+            (void)bind_constant_format(context, unit, statement, control);
             return;
         }
         if (scalar_type(value, TYPE_INTEGER) && value->kind == F2C_EXPR_INTEGER_LITERAL) {
+            (void)bind_constant_format(context, unit, statement, control);
             return;
         }
         if (scalar_type(value, TYPE_INTEGER) && value->kind == F2C_EXPR_NAME && value->definable &&
@@ -292,22 +366,19 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
                               "%s IOMSG= must be a definable scalar CHARACTER variable",
                               statement_name);
         }
-    } else if (statement->kind == F2C_STMT_INQUIRE &&
-               inquiry_logical_result(semantic_kind)) {
+    } else if (statement->kind == F2C_STMT_INQUIRE && inquiry_logical_result(semantic_kind)) {
         if (control->asterisk || !scalar_type(value, TYPE_LOGICAL) || !value->definable) {
             f2c_diagnostic_at(context, statement->line, column, 1,
                               "INQUIRE %s= must be a definable scalar LOGICAL variable",
                               io_control_name(semantic_kind));
         }
-    } else if (statement->kind == F2C_STMT_INQUIRE &&
-               inquiry_integer_result(semantic_kind)) {
+    } else if (statement->kind == F2C_STMT_INQUIRE && inquiry_integer_result(semantic_kind)) {
         if (control->asterisk || !scalar_type(value, TYPE_INTEGER) || !value->definable) {
             f2c_diagnostic_at(context, statement->line, column, 1,
                               "INQUIRE %s= must be a definable scalar INTEGER variable",
                               io_control_name(semantic_kind));
         }
-    } else if (statement->kind == F2C_STMT_INQUIRE &&
-               inquiry_character_result(semantic_kind)) {
+    } else if (statement->kind == F2C_STMT_INQUIRE && inquiry_character_result(semantic_kind)) {
         if (control->asterisk || !scalar_type(value, TYPE_CHARACTER) || !value->definable) {
             f2c_diagnostic_at(context, statement->line, column, 1,
                               "INQUIRE %s= must be a definable scalar CHARACTER variable",
@@ -321,9 +392,8 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
     } else if (semantic_kind == F2C_IO_CONTROL_ADVANCE || semantic_kind == F2C_IO_CONTROL_FILE ||
                semantic_kind == F2C_IO_CONTROL_STATUS || semantic_kind == F2C_IO_CONTROL_FORM ||
                semantic_kind == F2C_IO_CONTROL_ACCESS || semantic_kind == F2C_IO_CONTROL_ACTION ||
-               semantic_kind == F2C_IO_CONTROL_BLANK ||
-               semantic_kind == F2C_IO_CONTROL_POSITION || semantic_kind == F2C_IO_CONTROL_DELIM ||
-               semantic_kind == F2C_IO_CONTROL_PAD) {
+               semantic_kind == F2C_IO_CONTROL_BLANK || semantic_kind == F2C_IO_CONTROL_POSITION ||
+               semantic_kind == F2C_IO_CONTROL_DELIM || semantic_kind == F2C_IO_CONTROL_PAD) {
         if (control->asterisk || !scalar_type(value, TYPE_CHARACTER)) {
             f2c_diagnostic_at(context, statement->line, column, 1,
                               "%s %s= must be a scalar CHARACTER expression", statement_name,
@@ -332,8 +402,7 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
     }
 }
 
-static const F2cIoControl *find_io_control(const F2cStatement *statement,
-                                          F2cIoControlKind kind) {
+static const F2cIoControl *find_io_control(const F2cStatement *statement, F2cIoControlKind kind) {
     size_t index;
     for (index = 0U; index < statement->control_count; ++index)
         if (statement->io_controls[index].kind == kind)
@@ -394,8 +463,8 @@ static void validate_character_choices(Context *context, const F2cStatement *sta
     if (control != NULL && character_control_value(control, value, sizeof(value)) &&
         !value_in_choices(value, choices, choice_count)) {
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &control->span, 1,
-                                 "%s %s= has invalid value '%s'", io_statement_name(statement->kind),
-                                 io_control_name(kind), value);
+                                 "%s %s= has invalid value '%s'",
+                                 io_statement_name(statement->kind), io_control_name(kind), value);
     }
 }
 
