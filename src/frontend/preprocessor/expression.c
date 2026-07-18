@@ -709,7 +709,7 @@ static IntegerValue parse_multiplicative(ExpressionParser *parser, int evaluate)
             }
             left = unsigned_integer(operation == '*' ? l * r : operation == '/' ? l / r : l % r);
         } else {
-            int64_t result;
+            int64_t result = 0;
             if ((operation == '/' || operation == '%') && right.signed_value == 0) {
                 expression_error_at(parser, operation_at,
                                     "division by zero in preprocessor condition");
