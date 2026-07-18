@@ -452,8 +452,8 @@ static void test_blas_style_subroutine(void) {
                     "the internal implementation preserves Fortran alias optimization");
     expect_contains(result.code, "dy[(((int32_t)(iy)) - (1))]",
                     "Fortran one-based array is rebased with an integer subscript");
-    expect_contains(result.code, "int64_t f2c_do_count_",
-                    "dynamic unit-stride loops retain the optimizer-friendly wide trip counter");
+    expect_contains(result.code, "int32_t f2c_do_count_",
+                    "positive dynamic unit-stride loops use a proven native-width trip counter");
     f2c_result_free(&result);
 }
 

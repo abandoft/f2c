@@ -23,18 +23,13 @@ static int do_count_fits_default_integer(const F2cStatement *statement) {
         statement->left == NULL || statement->left->type_kind != f2c_default_kind(TYPE_INTEGER) ||
         statement->step->kind != F2C_EXPR_INTEGER_LITERAL || statement->step->text == NULL)
         return 0;
-    if (statement->right->kind == F2C_EXPR_INTEGER_LITERAL && statement->right->text != NULL &&
-        statement->limit != NULL && statement->limit->kind == F2C_EXPR_INTEGER_LITERAL &&
-        statement->limit->text != NULL && strcmp(statement->right->text, "1") == 0 &&
-        strcmp(statement->step->text, "1") == 0)
-        return 1;
     step = strtoll(statement->step->text, &end, 10);
     if (end == statement->step->text || *end != '\0')
         return 0;
     if (step == 1 && statement->right->kind == F2C_EXPR_INTEGER_LITERAL &&
         statement->right->text != NULL) {
         start = strtoll(statement->right->text, &end, 10);
-        if (end != statement->right->text && *end == '\0' && start >= 2 && start <= INT32_MAX)
+        if (end != statement->right->text && *end == '\0' && start >= 1 && start <= INT32_MAX)
             return 1;
     }
     return step <= -3 || step >= 3;
