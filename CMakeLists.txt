@@ -87,6 +87,9 @@ set(
     src/codegen/io/control/print.c
     src/codegen/io/control/private.h
     src/codegen/io/format.c
+    src/codegen/io/format/parser.c
+    src/codegen/io/format/program.c
+    src/codegen/io/format/state.c
     src/codegen/io/format_control.c
     src/codegen/io/formatted.c
     src/codegen/io/namelist.c

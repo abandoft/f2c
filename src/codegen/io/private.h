@@ -7,6 +7,9 @@ void f2c_io_indent(Buffer *output, int depth);
 char *f2c_io_emit_item_expression(Unit *unit, const F2cIoItem *item);
 char *f2c_io_emit_required_expression(Unit *unit, const F2cExpr *expression);
 char *f2c_io_c_string_literal(const char *text, size_t length);
+void f2c_io_emit_format_state_support(Context *context);
+void f2c_io_emit_format_program_support(Context *context);
+void f2c_io_emit_format_text_parser_support(Context *context);
 int f2c_io_emit_format_program(Context *context, const F2cFormat *format, const char *name,
                                int depth);
 F2cTypeBinding *f2c_io_defined_binding(F2cDerivedType *derived, F2cDefinedIoKind kind);
@@ -28,8 +31,7 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
                          int depth);
 void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *item, int input,
                                 const char *unit_number, int depth);
-int f2c_io_emit_formatted_transfer(Context *context, Unit *unit,
-                                   const F2cStatement *statement,
+int f2c_io_emit_formatted_transfer(Context *context, Unit *unit, const F2cStatement *statement,
                                    const F2cIoControl *format_control, const char *file,
                                    const char *unit_number, int input,
                                    const char *advance_expression, const char *size_target,
