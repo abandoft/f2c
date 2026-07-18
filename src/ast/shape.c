@@ -411,15 +411,26 @@ int f2c_ast_token_has_suffix(const F2cToken *token, const char *suffix) {
            strncmp(token->begin + token->length - length, suffix, length) == 0;
 }
 
-Type f2c_ast_literal_kind_type(AstParser *parser, const F2cToken *token) {
+static char *literal_kind_name(const F2cToken *token) {
     const char *underscore = (const char *)memchr(token->begin, '_', token->length);
-    char *kind_name;
-    Symbol *kind_symbol;
+    const char *quote;
     size_t length;
     if (underscore == NULL || underscore + 1 >= token->begin + token->length)
-        return TYPE_UNKNOWN;
+        return NULL;
+    if (token->kind == F2C_TOKEN_STRING) {
+        quote = f2c_character_literal_quote(token->begin);
+        if (quote == NULL || quote <= token->begin || quote > token->begin + token->length ||
+            quote[-1] != '_')
+            return NULL;
+        return f2c_strdup_n(token->begin, (size_t)(quote - token->begin - 1));
+    }
     length = (size_t)((token->begin + token->length) - (underscore + 1));
-    kind_name = f2c_strdup_n(underscore + 1, length);
+    return f2c_strdup_n(underscore + 1, length);
+}
+
+Type f2c_ast_literal_kind_type(AstParser *parser, const F2cToken *token) {
+    char *kind_name = literal_kind_name(token);
+    Symbol *kind_symbol;
     if (kind_name == NULL)
         return TYPE_UNKNOWN;
     kind_symbol = f2c_find_symbol(parser->unit, kind_name);
@@ -443,16 +454,10 @@ Type f2c_ast_literal_kind_type(AstParser *parser, const F2cToken *token) {
 }
 
 int f2c_ast_literal_kind_value(AstParser *parser, const F2cToken *token, Type literal_type) {
-    const char *underscore = (const char *)memchr(token->begin, '_', token->length);
-    char *kind_name;
+    char *kind_name = literal_kind_name(token);
     Symbol *kind_symbol;
     char *end = NULL;
     long value;
-    size_t length;
-    if (underscore == NULL || underscore + 1 >= token->begin + token->length)
-        return f2c_default_kind(literal_type);
-    length = (size_t)((token->begin + token->length) - (underscore + 1));
-    kind_name = f2c_strdup_n(underscore + 1, length);
     if (kind_name == NULL)
         return f2c_default_kind(literal_type);
     value = strtol(kind_name, &end, 10);

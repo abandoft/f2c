@@ -508,6 +508,8 @@ static F2cExpr *parse_primary(AstParser *parser) {
     } else if (token.kind == F2C_TOKEN_STRING || token.kind == F2C_TOKEN_HOLLERITH) {
         expression =
             f2c_expr_new(F2C_EXPR_STRING_LITERAL, TYPE_CHARACTER, token.begin, token.length);
+        if (expression != NULL)
+            expression->type_kind = f2c_ast_literal_kind_value(parser, &token, TYPE_CHARACTER);
         f2c_ast_next_token(parser);
     } else if (token.kind == F2C_TOKEN_BOZ) {
         expression =
@@ -919,9 +921,8 @@ static F2cExpr *parse_expression_stream(AstParser *parser, const char *source,
         }
         if (result != NULL && result->source_offset != SIZE_MAX) {
             if (parser->token_count != 0U) {
-                result->span =
-                    f2c_source_span_cover(&parser->tokens[0].span,
-                                          &parser->tokens[parser->token_count - 1U].span);
+                result->span = f2c_source_span_cover(
+                    &parser->tokens[0].span, &parser->tokens[parser->token_count - 1U].span);
             } else {
                 result->span.begin.line = 1U;
                 result->span.begin.column = result->source_offset + 1U;
