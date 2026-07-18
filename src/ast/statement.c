@@ -457,26 +457,6 @@ static void parse_call(Unit *unit, F2cStatement *statement) {
         statement->kind = F2C_STMT_MOVE_ALLOC;
 }
 
-static void parse_print_statement(Unit *unit, F2cStatement *statement) {
-    char *comma = strchr(statement->text, ',');
-    if (comma != NULL)
-        parse_item_list(unit, statement, comma + 1, 0);
-}
-
-static void build_io_item_ir(Unit *unit, F2cStatement *statement) {
-    size_t i;
-    if (statement->item_count == 0U)
-        return;
-    statement->io_items = (F2cIoItem *)calloc(statement->item_count, sizeof(*statement->io_items));
-    if (statement->io_items == NULL)
-        return;
-    for (i = 0U; i < statement->item_count; ++i) {
-        if (!f2c_statement_parse_io_item(unit, statement->items[i], &statement->io_items[i]))
-            return;
-        ++statement->io_item_count;
-    }
-}
-
 static char *find_pointer_assignment(char *text) {
     F2cTokenStream lexer;
     int parenthesis_depth = 0;
@@ -603,18 +583,13 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         if (open != NULL)
             parse_item_list(unit, statement, open, 1);
     }
-    if ((statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
-         statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
-         statement->kind == F2C_STMT_BACKSPACE || statement->kind == F2C_STMT_ENDFILE ||
-         statement->kind == F2C_STMT_INQUIRE || statement->kind == F2C_STMT_CLOSE) &&
-        !f2c_statement_parse_io(unit, token_line, body_start, statement)) {
-        free(owned_syntax_text);
-        return 0;
-    }
+    if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
+        statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
+        statement->kind == F2C_STMT_BACKSPACE || statement->kind == F2C_STMT_ENDFILE ||
+        statement->kind == F2C_STMT_INQUIRE || statement->kind == F2C_STMT_CLOSE)
+        (void)f2c_statement_parse_io(unit, token_line, body_start, statement);
     if (statement->kind == F2C_STMT_PRINT)
-        parse_print_statement(unit, statement);
-    if (statement->kind == F2C_STMT_PRINT)
-        build_io_item_ir(unit, statement);
+        (void)f2c_statement_parse_print(unit, token_line, body_start, statement);
     if (statement->kind == F2C_STMT_DATA &&
         !f2c_statement_parse_data(unit, token_line, body_start, statement)) {
         free(owned_syntax_text);

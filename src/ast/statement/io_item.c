@@ -100,15 +100,3 @@ int f2c_statement_parse_io_item_tokens(Unit *unit, F2cTokenRange range, F2cIoIte
     f2c_statement_free_io_item(item);
     return 0;
 }
-
-int f2c_statement_parse_io_item(Unit *unit, const char *text, F2cIoItem *item) {
-    Line line;
-    F2cTokenRange range;
-    int result;
-    if (text == NULL || item == NULL || !f2c_statement_tokenize_transient(text, 1U, &line))
-        return 0;
-    range = f2c_line_token_range(&line, 0U, line.token_count);
-    result = f2c_statement_parse_io_item_tokens(unit, range, item);
-    f2c_statement_release_transient(&line);
-    return result;
-}

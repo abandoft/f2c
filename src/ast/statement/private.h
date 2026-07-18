@@ -10,10 +10,11 @@ void f2c_statement_parse_label(Unit *unit, F2cStatement *statement);
 int f2c_statement_parse_arithmetic_labels(F2cStatement *statement);
 char **f2c_statement_split_arguments(const char *text, size_t *count);
 void f2c_statement_free_io_item(F2cIoItem *item);
-int f2c_statement_parse_io_item(Unit *unit, const char *text, F2cIoItem *item);
 int f2c_statement_parse_io_item_tokens(Unit *unit, F2cTokenRange range, F2cIoItem *item);
 int f2c_statement_parse_io(Unit *unit, const Line *line, size_t body_start,
                            F2cStatement *statement);
+int f2c_statement_parse_print(Unit *unit, const Line *line, size_t body_start,
+                              F2cStatement *statement);
 char *f2c_statement_matching_parenthesis(char *open);
 F2cExpr *f2c_statement_parse_parenthesized_tokens(Unit *unit, const Line *line, size_t begin,
                                                   char **tail);

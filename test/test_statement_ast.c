@@ -395,11 +395,31 @@ int main(void) {
            "READ owns control-list and item ASTs");
     f2c_statement_free(&statement);
 
-    expect(f2c_parse_statement(&unit, "print *, x, n", 23U, &statement), "PRINT parses");
-    expect(statement.kind == F2C_STMT_PRINT && statement.item_count == 2U &&
+    expect(f2c_parse_statement(&unit, "print '(A,1X,F6.2)', 'x,y', (work(n,1), n=1,2)", 23U,
+                               &statement),
+           "formatted PRINT parses");
+    expect(statement.kind == F2C_STMT_PRINT && statement.io_syntax_valid &&
+               statement.control_count == 1U && statement.io_controls != NULL &&
+               statement.io_controls[0].kind == F2C_IO_CONTROL_FMT &&
+               statement.io_controls[0].value != NULL &&
+               statement.io_controls[0].value->kind == F2C_EXPR_STRING_LITERAL &&
+               statement.item_count == 2U && statement.io_item_count == 2U &&
                statement.arguments != NULL && statement.arguments[0] != NULL &&
-               statement.arguments[1] != NULL,
-           "PRINT owns its output-item ASTs");
+               statement.io_items[1].implied_do && statement.io_items[1].child_count == 1U,
+           "PRINT owns its format, comma-safe output items, and implied-DO ASTs");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "print *", 23U, &statement), "empty PRINT parses");
+    expect(statement.kind == F2C_STMT_PRINT && statement.io_syntax_valid &&
+               statement.control_count == 1U && statement.io_controls[0].asterisk &&
+               statement.item_count == 0U && statement.io_item_count == 0U,
+           "PRINT without an output-item list retains its list-directed format AST");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "print *,", 23U, &statement),
+           "malformed PRINT remains representable");
+    expect(statement.kind == F2C_STMT_PRINT && !statement.io_syntax_valid,
+           "a trailing PRINT comma is retained as an explicit syntax failure");
     f2c_statement_free(&statement);
 
     expect(f2c_parse_statement(&unit, "write(*,*) (work(n, 1), n=1, 2)", 24U, &statement),

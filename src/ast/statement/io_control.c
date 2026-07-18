@@ -215,3 +215,37 @@ int f2c_statement_parse_io(Unit *unit, const Line *line, size_t body_start,
     statement->io_syntax_valid = 1;
     return 1;
 }
+
+int f2c_statement_parse_print(Unit *unit, const Line *line, size_t body_start,
+                              F2cStatement *statement) {
+    F2cTokenRange line_range;
+    F2cTokenRange format;
+    F2cTokenRange items = {0};
+    size_t comma;
+    size_t format_end;
+    if (unit == NULL || line == NULL || statement == NULL || body_start >= line->token_count)
+        return 0;
+    line_range = f2c_line_token_range(line, body_start, line->token_count);
+    if (line_range.count < 2U)
+        return 0;
+    comma = f2c_token_range_find_top_level(line_range, 1U, F2C_TOKEN_COMMA, NULL);
+    format_end = comma == SIZE_MAX ? line_range.count : comma;
+    format = f2c_token_range_slice(line_range, 1U, format_end);
+    if (format.count == 0U || !f2c_token_range_balanced(format.tokens, format.count))
+        return 0;
+    statement->io_controls = (F2cIoControl *)calloc(1U, sizeof(*statement->io_controls));
+    if (statement->io_controls == NULL)
+        return 0;
+    statement->control_count = 1U;
+    if (!parse_control(unit, format, &statement->io_controls[0]) ||
+        statement->io_controls[0].kind != F2C_IO_CONTROL_POSITIONAL)
+        return 0;
+    statement->io_controls[0].kind = F2C_IO_CONTROL_FMT;
+    if (comma != SIZE_MAX) {
+        items = f2c_token_range_slice(line_range, comma + 1U, line_range.count);
+        if (items.count == 0U || !parse_io_items(unit, items, statement))
+            return 0;
+    }
+    statement->io_syntax_valid = 1;
+    return 1;
+}
