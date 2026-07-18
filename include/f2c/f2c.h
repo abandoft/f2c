@@ -1,6 +1,8 @@
 #ifndef F2C_F2C_H
 #define F2C_F2C_H
 
+#include "f2c/version.h"
+
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -18,10 +20,6 @@ extern "C" {
 #else
 #define F2C_API
 #endif
-
-#define F2C_VERSION_MAJOR 1
-#define F2C_VERSION_MINOR 3
-#define F2C_VERSION_PATCH 0
 
 #define F2C_DEFAULT_MAX_INPUT_BYTES ((size_t)512U * 1024U * 1024U)
 #define F2C_DEFAULT_MAX_PREPROCESSED_BYTES ((size_t)512U * 1024U * 1024U)

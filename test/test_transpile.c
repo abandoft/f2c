@@ -59,9 +59,14 @@ static void expect_not_contains(const char *text, const char *needle, const char
 }
 
 static void test_version_contract(void) {
-    expect(F2C_VERSION_MAJOR == 1 && F2C_VERSION_MINOR == 3 && F2C_VERSION_PATCH == 0,
-           "public version macros match the CMake project version");
-    expect(strcmp(f2c_version(), "1.3.0") == 0,
+    char macro_version[32];
+    const int written = snprintf(macro_version, sizeof(macro_version), "%d.%d.%d",
+                                 F2C_VERSION_MAJOR, F2C_VERSION_MINOR, F2C_VERSION_PATCH);
+    expect(written > 0 && (size_t)written < sizeof(macro_version),
+           "public numeric version macros form a bounded semantic version");
+    expect(strcmp(macro_version, F2C_VERSION_STRING) == 0,
+           "public numeric and string version macros agree");
+    expect(strcmp(f2c_version(), F2C_VERSION_STRING) == 0,
            "runtime version matches the public compile-time version");
 }
 

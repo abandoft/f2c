@@ -1,8 +1,25 @@
 cmake_minimum_required(VERSION 3.20)
 
+file(
+    STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/f2c/version.h"
+    F2C_VERSION_DEFINITION
+    REGEX "^#define F2C_VERSION_STRING \"[0-9]+\\.[0-9]+\\.[0-9]+\"$"
+    LIMIT_COUNT 1
+)
+string(
+    REGEX REPLACE
+    "^#define F2C_VERSION_STRING \"([^\"]+)\"$"
+    "\\1"
+    F2C_PROJECT_VERSION
+    "${F2C_VERSION_DEFINITION}"
+)
+if(NOT F2C_PROJECT_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR "include/f2c/version.h does not define a valid F2C_VERSION_STRING")
+endif()
+
 project(
     f2c
-    VERSION 1.4.0
+    VERSION "${F2C_PROJECT_VERSION}"
     DESCRIPTION "A modern, high-performance F2C"
     LANGUAGES C
 )
@@ -162,7 +179,6 @@ function(f2c_configure_core_target target)
         ${target}
         PRIVATE
             F2C_BUILDING_LIBRARY
-            F2C_VERSION="${PROJECT_VERSION}"
     )
     target_include_directories(
         ${target}
