@@ -848,6 +848,22 @@ static char *restricted_body_name(const Unit *unit) {
     return f2c_buffer_take(&result);
 }
 
+static int needs_stable_procedure_boundary(const Unit *unit) {
+    /* GCC's LTO cost model already keeps large numerical kernels out of their
+     * callers.  Preserve a boundary for smaller loop-bearing procedures whose
+     * full duplication would otherwise inflate every generated caller. */
+    const size_t automatic_inline_statement_limit = 96U;
+    size_t statement;
+    if (unit->statement_count > automatic_inline_statement_limit)
+        return 0;
+    for (statement = 0U; statement < unit->statement_count; ++statement) {
+        const F2cStatementKind kind = unit->statements[statement].kind;
+        if (kind == F2C_STMT_DO || kind == F2C_STMT_DO_WHILE)
+            return 1;
+    }
+    return 0;
+}
+
 static void emit_wrapper_arguments(Buffer *output, Unit *unit) {
     const int character_result = unit->kind == UNIT_FUNCTION &&
                                  unit->return_type == TYPE_CHARACTER &&
@@ -887,7 +903,8 @@ static void emit_restricted_wrapper(Buffer *output, Unit *unit, const char *body
     f2c_buffer_append(output, "static ");
     f2c_unit_emit_named_signature(output, unit, body_name, 1);
     f2c_buffer_append(output, ";\n");
-    f2c_buffer_append(output, "F2C_NOINLINE ");
+    if (needs_stable_procedure_boundary(unit))
+        f2c_buffer_append(output, "F2C_NOINLINE ");
     f2c_unit_emit_signature(output, unit);
     f2c_buffer_append(output, " {\n    ");
     if (returns_value)

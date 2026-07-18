@@ -54,6 +54,10 @@ static void expect_contains(const char *text, const char *needle, const char *me
     expect(text != NULL && strstr(text, needle) != NULL, message);
 }
 
+static void expect_not_contains(const char *text, const char *needle, const char *message) {
+    expect(text == NULL || strstr(text, needle) == NULL, message);
+}
+
 static void test_version_contract(void) {
     expect(F2C_VERSION_MAJOR == 1 && F2C_VERSION_MINOR == 3 && F2C_VERSION_PATCH == 0,
            "public version macros match the CMake project version");
@@ -472,6 +476,45 @@ static void test_blas_style_subroutine(void) {
                     "Fortran one-based array uses a pointer-width rebased offset");
     expect_contains(result.code, "int32_t f2c_do_count_",
                     "positive dynamic unit-stride loops use a proven native-width trip counter");
+    f2c_result_free(&result);
+}
+
+static void test_large_kernel_lto_policy(void) {
+    char source[8192];
+    size_t used;
+    size_t statement;
+    F2cOptions options = {"large_kernel.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result;
+    int written = snprintf(source, sizeof(source),
+                           "subroutine large_kernel(n, value)\n"
+                           "  integer :: n, i\n"
+                           "  real :: value\n"
+                           "  do i = 1, n\n");
+    expect(written > 0 && (size_t)written < sizeof(source),
+           "large-kernel policy fixture header fits its source buffer");
+    if (written <= 0 || (size_t)written >= sizeof(source))
+        return;
+    used = (size_t)written;
+    for (statement = 0U; statement < 100U; ++statement) {
+        written = snprintf(source + used, sizeof(source) - used, "    value = value + 1.0\n");
+        if (written <= 0 || (size_t)written >= sizeof(source) - used)
+            break;
+        used += (size_t)written;
+    }
+    written = snprintf(source + used, sizeof(source) - used,
+                       "  end do\n"
+                       "end subroutine large_kernel\n");
+    expect(statement == 100U && written > 0 && (size_t)written < sizeof(source) - used,
+           "large-kernel policy fixture fits its source buffer");
+    if (statement != 100U || written <= 0 || (size_t)written >= sizeof(source) - used)
+        return;
+    used += (size_t)written;
+    result = f2c_transpile(source, used, &options);
+    expect(result.error_count == 0U, "large numerical kernel translates without errors");
+    expect_not_contains(result.code, "F2C_NOINLINE void large_kernel(",
+                        "large kernels remain available to the LTO cost model");
+    expect_contains(result.code, "f2c_restricted_body_large_kernel",
+                    "large kernels retain their optimizer-only restricted body");
     f2c_result_free(&result);
 }
 
@@ -2979,6 +3022,7 @@ int main(void) {
     test_program_and_control_flow();
     test_wide_do_trip_count();
     test_blas_style_subroutine();
+    test_large_kernel_lto_policy();
     test_nested_loop_optimization_hints();
     test_fixed_form_continuation();
     test_fixed_form_spaced_exponent();
