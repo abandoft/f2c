@@ -1,5 +1,7 @@
 #include "semantic/validation/private.h"
 
+#include "ast/format.h"
+
 #include <ctype.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -181,6 +183,23 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &statement->span, 1,
                                  "unsupported Fortran statement: %s", statement->text);
     }
+    if (statement->kind == F2C_STMT_FORMAT) {
+        if (!statement->format_syntax_valid || statement->format == NULL) {
+            F2cSourceSpan span = statement->format_span;
+            if (span.begin.line != 0U && span.begin.line == span.end.line) {
+                span.begin.column += statement->format_error.offset;
+                span.end = span.begin;
+                ++span.end.column;
+            } else {
+                span = statement->span;
+            }
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &span, 1,
+                                     "invalid FORMAT specification: %s",
+                                     f2c_format_error_message(statement->format_error.code));
+        } else {
+            statement->format->validated = 1;
+        }
+    }
     if (!statement->construct_syntax_valid) {
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &statement->span, 1,
                                  "malformed construct name or control target syntax");
@@ -272,10 +291,10 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
                                      &statement->io_items[i]);
     }
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
-        statement->kind == F2C_STMT_PRINT ||
-        statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
-        statement->kind == F2C_STMT_BACKSPACE || statement->kind == F2C_STMT_ENDFILE ||
-        statement->kind == F2C_STMT_INQUIRE || statement->kind == F2C_STMT_CLOSE)
+        statement->kind == F2C_STMT_PRINT || statement->kind == F2C_STMT_OPEN ||
+        statement->kind == F2C_STMT_REWIND || statement->kind == F2C_STMT_BACKSPACE ||
+        statement->kind == F2C_STMT_ENDFILE || statement->kind == F2C_STMT_INQUIRE ||
+        statement->kind == F2C_STMT_CLOSE)
         f2c_validation_io_statement(context, unit, statement);
     if (statement->nested != NULL)
         validate_statement(context, unit, statement->nested);

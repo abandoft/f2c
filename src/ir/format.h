@@ -76,6 +76,28 @@ typedef struct F2cFormat {
     int validated;
 } F2cFormat;
 
+typedef enum F2cFormatErrorCode {
+    F2C_FORMAT_ERROR_NONE,
+    F2C_FORMAT_ERROR_MEMORY,
+    F2C_FORMAT_ERROR_EXPECTED_LEFT_PARENTHESIS,
+    F2C_FORMAT_ERROR_EXPECTED_RIGHT_PARENTHESIS,
+    F2C_FORMAT_ERROR_EXPECTED_ITEM,
+    F2C_FORMAT_ERROR_INVALID_REPEAT,
+    F2C_FORMAT_ERROR_INVALID_NUMBER,
+    F2C_FORMAT_ERROR_UNTERMINATED_LITERAL,
+    F2C_FORMAT_ERROR_INVALID_HOLLERITH,
+    F2C_FORMAT_ERROR_INVALID_DESCRIPTOR,
+    F2C_FORMAT_ERROR_INVALID_DESCRIPTOR_FIELD,
+    F2C_FORMAT_ERROR_INVALID_DT_LIST,
+    F2C_FORMAT_ERROR_TRAILING_TEXT,
+    F2C_FORMAT_ERROR_BUDGET
+} F2cFormatErrorCode;
+
+typedef struct F2cFormatError {
+    F2cFormatErrorCode code;
+    size_t offset;
+} F2cFormatError;
+
 F2cFormat *f2c_format_clone(const F2cFormat *format);
 void f2c_format_free(F2cFormat *format);
 

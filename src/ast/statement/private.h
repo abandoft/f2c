@@ -6,7 +6,7 @@
 int f2c_statement_parse_data(Unit *unit, const Line *line, size_t body_start,
                              F2cStatement *statement);
 void f2c_statement_free_data_group(F2cDataGroup *group);
-void f2c_statement_parse_label(Unit *unit, F2cStatement *statement);
+void f2c_statement_parse_label(Unit *unit, const Line *line, F2cStatement *statement);
 int f2c_statement_parse_arithmetic_labels(F2cStatement *statement);
 char **f2c_statement_split_arguments(const char *text, size_t *count);
 void f2c_statement_free_io_item(F2cIoItem *item);

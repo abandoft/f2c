@@ -605,7 +605,7 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         return 0;
     }
     if (statement->kind == F2C_STMT_LABEL)
-        f2c_statement_parse_label(unit, statement);
+        f2c_statement_parse_label(unit, token_line, statement);
     if (!f2c_statement_parse_construct_syntax(token_line, body_start, statement)) {
         free(owned_syntax_text);
         return 0;

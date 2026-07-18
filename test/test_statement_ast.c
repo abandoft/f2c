@@ -348,8 +348,7 @@ int main(void) {
            "ENDFILE owns canonical keyword controls and bound expressions");
     f2c_statement_free(&statement);
 
-    expect(f2c_parse_statement(&unit, "inquire(unit=9, opened=done, number=n)", 20U,
-                               &statement),
+    expect(f2c_parse_statement(&unit, "inquire(unit=9, opened=done, number=n)", 20U, &statement),
            "INQUIRE parses");
     expect(statement.kind == F2C_STMT_INQUIRE && statement.io_syntax_valid &&
                statement.control_count == 3U &&
@@ -422,6 +421,24 @@ int main(void) {
            "a trailing PRINT comma is retained as an explicit syntax failure");
     f2c_statement_free(&statement);
 
+    expect(f2c_parse_statement(&unit, "100 format(2(I4,1X),A)", 23U, &statement),
+           "labeled FORMAT parses");
+    expect(statement.kind == F2C_STMT_FORMAT && statement.name != NULL &&
+               strcmp(statement.name, "100") == 0 && statement.format_syntax_valid &&
+               statement.format != NULL && statement.format->root.child_count == 2U &&
+               statement.format->root.children[0].kind == F2C_FORMAT_GROUP &&
+               statement.format->root.children[0].repeat == 2U,
+           "labeled FORMAT owns a canonical-token-derived descriptor AST");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "110 format(I)", 23U, &statement),
+           "malformed labeled FORMAT remains representable");
+    expect(statement.kind == F2C_STMT_FORMAT && !statement.format_syntax_valid &&
+               statement.format == NULL &&
+               statement.format_error.code == F2C_FORMAT_ERROR_INVALID_DESCRIPTOR_FIELD,
+           "malformed FORMAT retains a structured syntax error for semantic diagnostics");
+    f2c_statement_free(&statement);
+
     expect(f2c_parse_statement(&unit, "write(*,*) (work(n, 1), n=1, 2)", 24U, &statement),
            "I/O implied DO parses");
     expect(statement.kind == F2C_STMT_WRITE && statement.io_item_count == 1U &&
@@ -436,8 +453,7 @@ int main(void) {
                                25U, &statement),
            "DATA groups parse");
     expect(statement.kind == F2C_STMT_DATA && statement.data_syntax_valid &&
-               statement.data_group_count == 2U &&
-               statement.data_groups[0].target_count == 1U &&
+               statement.data_group_count == 2U && statement.data_groups[0].target_count == 1U &&
                statement.data_groups[0].value_count == 2U &&
                statement.data_groups[0].values[0].repeat != NULL &&
                statement.data_groups[0].values[0].repeat->kind == F2C_EXPR_INTEGER_LITERAL &&

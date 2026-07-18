@@ -112,7 +112,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                        "internal compiler error: code generation received untyped statement IR");
         return 0;
     }
-    if (statement->kind == F2C_STMT_EMPTY || statement->kind == F2C_STMT_DECLARATION) {
+    if (statement->kind == F2C_STMT_EMPTY || statement->kind == F2C_STMT_DECLARATION ||
+        statement->kind == F2C_STMT_FORMAT) {
         return 1;
     }
     if (statement->kind == F2C_STMT_END_WHERE) {

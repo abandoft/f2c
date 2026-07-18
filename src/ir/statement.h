@@ -47,6 +47,7 @@ typedef enum F2cStatementKind {
     F2C_STMT_CYCLE,
     F2C_STMT_EXIT,
     F2C_STMT_CONTINUE,
+    F2C_STMT_FORMAT,
     F2C_STMT_ASSIGN_LABEL,
     F2C_STMT_GOTO,
     F2C_STMT_ASSIGNED_GOTO,
@@ -122,6 +123,7 @@ typedef struct F2cIoControl {
     F2cExpr *value;
     F2cSourceSpan span;
     F2cFormat *format;
+    F2cSourceSpan format_span;
     int asterisk;
 } F2cIoControl;
 
@@ -179,6 +181,7 @@ struct F2cStatement {
     F2cExpr *step;
     F2cExpr *allocation_character_length;
     F2cFormat *format;
+    F2cSourceSpan format_span;
     F2cDerivedType *guard_type;
     Unit *resolved_procedure;
     struct F2cStatement *construct_owner;
@@ -193,6 +196,8 @@ struct F2cStatement {
     int case_syntax_valid;
     int data_syntax_valid;
     int io_syntax_valid;
+    int format_syntax_valid;
+    F2cFormatError format_error;
     int construct_syntax_valid;
 };
 
