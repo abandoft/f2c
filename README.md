@@ -53,6 +53,22 @@ Source form is automatic by default. `.f`, `.for`, and `.ftn` use fixed form; mo
 such as `.f90` use free form. `--free-form` and `--fixed-form` override detection when a file name
 does not describe its physical layout. `--comments` retains source lines as generated C comments.
 
+Conditional preprocessing is explicit and case-sensitive. Use `-DNAME` or `-DNAME=EXPR` to
+provide a definition and `-UNAME` to remove an earlier command-line definition, for example:
+
+```sh
+build/f2c -I include -DUSE_ISNAN=1 source.F90 -o output.c
+```
+
+The built-in contract supports object-like `#define` expansion, `#undef`, `#if`, `#ifdef`,
+`#ifndef`, `#elif`, `#else`, `#endif`, `#include`, `#line`, numeric line markers, and standard
+Fortran `INCLUDE`. Integer conditions implement normal precedence and short-circuit evaluation.
+Macro diagnostics retain both expansion and definition spelling ranges. Function-like macros are
+still rejected with a source-positioned error. No project- or platform-specific feature macro is
+implicitly guessed. API and CLI definitions apply to every project input, while definitions made
+inside a source file remain local to that input. `-I` configures CLI include directories; quoted
+includes search the including file's directory first.
+
 Run `build/f2c --help` for the complete CLI reference.
 
 ## Library API
@@ -85,14 +101,26 @@ config.structure_size = sizeof(config);
 config.limits.max_input_bytes = 64U * 1024U * 1024U;
 config.limits.max_output_bytes = 128U * 1024U * 1024U;
 
+F2cPreprocessorDefinition definitions[] = {{"USE_ISNAN", "1"}};
+config.preprocessor_definitions = definitions;
+config.preprocessor_definition_count = 1U;
+
+/* Optional: provide #include/INCLUDE sources without binding the library to a file system. */
+config.include_resolver = resolve_include;
+config.include_release = release_include;
+config.include_user_data = resolver_context;
+
 F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
 ```
 
-A zero limit selects the corresponding `F2C_DEFAULT_*` value. Budgets cover aggregate input bytes,
+A zero limit selects the corresponding `F2C_DEFAULT_*` value. Budgets cover aggregate input and
+retained preprocessed bytes, conditional definitions, macro/include depth and include count,
 logical lines, canonical tokens, expression AST nodes and depth, constant-evaluation work,
 diagnostics, diagnostic bytes, and each generated code/header artifact. Limit failures return no
-partial generated C. A synchronous `F2cDiagnosticCallback` can additionally consume structured
-diagnostic categories, severity, source ranges, and messages without parsing the text rendering.
+partial generated C. Include resolution is request-local and callback-driven, so the core library
+does not require a file system. A synchronous `F2cDiagnosticCallback` can additionally consume
+structured diagnostic categories, severity, expansion/spelling source ranges, and messages
+without parsing the text rendering.
 `structure_size` must equal `sizeof(F2cConfig)`. The project has not frozen a public ABI yet, so
 older or larger configuration layouts are rejected and all fields belong to the current API.
 
@@ -100,8 +128,9 @@ older or larger configuration layouts are rejected and all fields belong to the 
 
 The currently tested implementation includes:
 
-- normalized free and fixed source forms, continuations, labels, preprocessing used by LAPACK,
-  program units, internal procedures, modules, host association, and `USE` association;
+- normalized free and fixed source forms, continuations, labels, bounded object-macro and
+  conditional preprocessing, callback-provided includes, line remapping, program units, internal
+  procedures, modules, host association, and `USE` association;
 - intrinsic numeric, logical, CHARACTER, and complex types; explicit and implicit typing; typed
   expressions, array constructors, sections, vector subscripts, reductions, and selected
   transformational intrinsics;
@@ -135,7 +164,7 @@ The pinned Reference LAPACK corpus currently provides these automated gates:
 - all four INSTALL checks and 52,512 S/D/C/Z RFP checks matched against native Fortran;
 - official BLAS Level 1/2/3, complete S/D/C/Z LIN, and all 80 EIG input suites differentially
   checked against the same pinned native build;
-- exhaustive internal audit artifacts for 100 numerical drivers and 5,807,941 union records;
+- exhaustive internal audit artifacts for 100 numerical drivers and 5,807,798 union records;
 - a 71-case generated-C/native-Fortran performance matrix with a per-case 1.05 ratio ceiling.
 
 The exhaustive audit intentionally records finite rounding differences, unmatched internal
