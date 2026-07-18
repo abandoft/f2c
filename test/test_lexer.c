@@ -97,6 +97,65 @@ static void test_legacy_and_literal_boundaries(void) {
     expect(lexer.error_at == NULL, "legacy and modern literal tokens coexist without ambiguity");
 }
 
+static void test_literal_kind_and_boz_validation(void) {
+    static const char *const valid_boz[] = {"b'101001'", "o\"707\"", "z'00aF'", "x\"Ff\""};
+    static const char *const invalid_boz[] = {"b''", "b'102'", "o'8'", "z'0g'", "x'+'", "z'123"};
+    F2cTokenStream lexer;
+    Unit unit;
+    F2cExpr *literal;
+    char *generated;
+    size_t index;
+    int supported = 0;
+
+    for (index = 0U; index < sizeof(valid_boz) / sizeof(valid_boz[0]); ++index) {
+        f2c_token_stream_init(&lexer, valid_boz[index], 1U, 1U);
+        f2c_token_stream_next(&lexer);
+        expect(lexer.token.kind == F2C_TOKEN_BOZ,
+               "each valid BOZ base alphabet produces one canonical token");
+        f2c_token_stream_next(&lexer);
+        expect(lexer.token.kind == F2C_TOKEN_END && lexer.error_at == NULL,
+               "a valid BOZ literal consumes its complete spelling");
+    }
+    for (index = 0U; index < sizeof(invalid_boz) / sizeof(invalid_boz[0]); ++index) {
+        f2c_token_stream_init(&lexer, invalid_boz[index], 1U, 1U);
+        f2c_token_stream_next(&lexer);
+        expect(lexer.token.kind == F2C_TOKEN_INVALID && lexer.error_at != NULL,
+               "invalid BOZ digits are rejected by the canonical lexer");
+    }
+
+    memset(&unit, 0, sizeof(unit));
+    literal = f2c_parse_expression_ast(&unit, "1_'AbC'", NULL);
+    generated = f2c_emit_expression_ast(&unit, literal, &supported);
+    expect(literal != NULL && literal->kind == F2C_EXPR_STRING_LITERAL && literal->type_kind == 1,
+           "a numeric character kind prefix is retained on the typed expression");
+    expect(supported && generated != NULL && strcmp(generated, "\"AbC\"") == 0,
+           "a character kind prefix does not leak into or alter the literal payload");
+    free(generated);
+    f2c_expr_free(literal);
+
+    f2c_token_stream_init(&lexer, "left.eq.right .and. .not.done", 1U, 1U);
+    f2c_token_stream_next(&lexer);
+    expect(lexer.token.kind == F2C_TOKEN_IDENTIFIER,
+           "an identifier adjacent to a dotted operator retains its boundary");
+    f2c_token_stream_next(&lexer);
+    expect(lexer.token.kind == F2C_TOKEN_OPERATOR && f2c_token_equals(&lexer.token, ".eq."),
+           "a no-blank relational dotted operator is recognized exactly");
+    f2c_token_stream_next(&lexer);
+    expect(lexer.token.kind == F2C_TOKEN_IDENTIFIER,
+           "the right operand adjacent to a dotted operator retains its boundary");
+    f2c_token_stream_next(&lexer);
+    expect(lexer.token.kind == F2C_TOKEN_OPERATOR && f2c_token_equals(&lexer.token, ".and."),
+           "a no-blank logical dotted operator is recognized exactly");
+
+    f2c_token_stream_init(&lexer, "42_int64 1.25_real64", 1U, 1U);
+    f2c_token_stream_next(&lexer);
+    expect(lexer.token.kind == F2C_TOKEN_NUMBER && f2c_token_equals(&lexer.token, "42_int64"),
+           "an integer kind suffix remains part of one numeric token");
+    f2c_token_stream_next(&lexer);
+    expect(lexer.token.kind == F2C_TOKEN_NUMBER && f2c_token_equals(&lexer.token, "1.25_real64"),
+           "a real kind suffix remains part of one numeric token");
+}
+
 static void test_shared_argument_and_expression_lexing(void) {
     static const char arguments[] = "(first, call(1, 'x,y'), [2, 3], , last)";
     Unit unit;
@@ -280,6 +339,7 @@ static void test_statement_syntax_predicates(void) {
 int main(void) {
     test_complete_statement_tokens();
     test_legacy_and_literal_boundaries();
+    test_literal_kind_and_boz_validation();
     test_shared_argument_and_expression_lexing();
     test_pretokenized_expression_path();
     test_token_cursor_and_ranges();
