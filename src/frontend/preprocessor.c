@@ -615,6 +615,9 @@ int f2c_preprocessor_process_buffer(Preprocessor *preprocessor, const char *sour
     const size_t saved_depth = preprocessor->include_depth;
     const PreprocessorIncludeFrame *saved_include_parent = preprocessor->include_parent;
     const size_t saved_conditional_base = preprocessor->conditional_base;
+    const char saved_continued_character_quote = preprocessor->continued_character_quote;
+    const size_t saved_continued_hollerith_characters =
+        preprocessor->continued_hollerith_characters;
     const size_t conditional_base = preprocessor->conditional_count;
     PreprocessorIncludeFrame frame;
     size_t offset = 0U;
@@ -633,6 +636,8 @@ int f2c_preprocessor_process_buffer(Preprocessor *preprocessor, const char *sour
     preprocessor->include_depth = depth;
     preprocessor->include_parent = &frame;
     preprocessor->conditional_base = conditional_base;
+    preprocessor->continued_character_quote = '\0';
+    preprocessor->continued_hollerith_characters = 0U;
     if (length >= 3U && (unsigned char)source[0] == 0xEFU && (unsigned char)source[1] == 0xBBU &&
         (unsigned char)source[2] == 0xBFU)
         offset = 3U;
@@ -738,6 +743,8 @@ cleanup:
     preprocessor->include_depth = saved_depth;
     preprocessor->include_parent = saved_include_parent;
     preprocessor->conditional_base = saved_conditional_base;
+    preprocessor->continued_character_quote = saved_continued_character_quote;
+    preprocessor->continued_hollerith_characters = saved_continued_hollerith_characters;
     return succeeded;
 }
 

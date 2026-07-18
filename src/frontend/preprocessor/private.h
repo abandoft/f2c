@@ -40,6 +40,8 @@ typedef struct Preprocessor {
     F2cSourceForm source_form;
     size_t include_depth;
     const struct PreprocessorIncludeFrame *include_parent;
+    char continued_character_quote;
+    size_t continued_hollerith_characters;
     int active;
 } Preprocessor;
 
