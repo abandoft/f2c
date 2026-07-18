@@ -291,6 +291,29 @@ static void test_token_cursor_and_ranges(void) {
            "a token cursor rejects an inconsistent null token buffer");
 }
 
+static void test_top_level_token_ranges(void) {
+    static const char source[] = "alpha, call(beta, gamma), 'delta,epsilon'";
+    Line line = tokenized_line(source);
+    F2cTokenRange *items = NULL;
+    size_t count = 0U;
+    size_t comma;
+    char *middle;
+    F2cTokenRange range =
+        {source, sizeof(source) - 1U, line.tokens, line.token_count};
+    expect(f2c_token_range_split_top_level(range, F2C_TOKEN_COMMA, NULL, &items, &count) &&
+               count == 3U,
+           "top-level token splitting ignores nested and quoted commas");
+    middle = count == 3U ? f2c_token_range_text(items[1]) : NULL;
+    expect(middle != NULL && strcmp(middle, "call(beta, gamma)") == 0,
+           "split token ranges retain exact nested source spelling");
+    comma = f2c_token_range_find_top_level(range, 0U, F2C_TOKEN_COMMA, NULL);
+    expect(comma != SIZE_MAX && comma == items[0].count,
+           "top-level token search returns a stable token-relative position");
+    free(middle);
+    free(items);
+    release_tokenized_line(&line);
+}
+
 static void test_statement_syntax_predicates(void) {
     Line module = tokenized_line("module numerics");
     Line module_procedure = tokenized_line("module procedure solve");
@@ -343,6 +366,7 @@ int main(void) {
     test_shared_argument_and_expression_lexing();
     test_pretokenized_expression_path();
     test_token_cursor_and_ranges();
+    test_top_level_token_ranges();
     test_statement_syntax_predicates();
     if (failures != 0) {
         fprintf(stderr, "%d lexer test(s) failed\n", failures);

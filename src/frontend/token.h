@@ -124,6 +124,12 @@ int f2c_token_cursor_consume(F2cTokenCursor *cursor, F2cTokenKind kind, const ch
 int f2c_token_range_balanced(const F2cToken *tokens, size_t count);
 int f2c_token_matching_delimiter(const F2cToken *tokens, size_t count, size_t open_index,
                                  size_t *close_index);
+F2cTokenRange f2c_token_range_slice(F2cTokenRange range, size_t begin, size_t end);
+size_t f2c_token_range_find_top_level(F2cTokenRange range, size_t start, F2cTokenKind kind,
+                                      const char *text);
+int f2c_token_range_split_top_level(F2cTokenRange range, F2cTokenKind separator_kind,
+                                    const char *separator_text, F2cTokenRange **items,
+                                    size_t *count);
 char *f2c_token_range_text(F2cTokenRange range);
 int f2c_hollerith_payload(const char *text, const char **payload, size_t *length);
 const char *f2c_character_literal_quote(const char *text);

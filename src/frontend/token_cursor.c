@@ -209,6 +209,87 @@ int f2c_token_range_balanced(const F2cToken *tokens, size_t count) {
     return 1;
 }
 
+F2cTokenRange f2c_token_range_slice(F2cTokenRange range, size_t begin, size_t end) {
+    F2cTokenRange result = {0};
+    if (begin > end || end > range.count || (range.count != 0U && range.tokens == NULL))
+        return result;
+    result.source = range.source;
+    result.source_length = range.source_length;
+    result.tokens = begin < end ? range.tokens + begin : NULL;
+    result.count = end - begin;
+    return result;
+}
+
+size_t f2c_token_range_find_top_level(F2cTokenRange range, size_t start, F2cTokenKind kind,
+                                      const char *text) {
+    size_t index = start;
+    if (start > range.count || (range.count != 0U && range.tokens == NULL))
+        return SIZE_MAX;
+    while (index < range.count) {
+        const F2cToken *token = &range.tokens[index];
+        size_t close;
+        if (left_delimiter(token->kind)) {
+            if (!f2c_token_matching_delimiter(range.tokens, range.count, index, &close))
+                return SIZE_MAX;
+            index = close + 1U;
+            continue;
+        }
+        if (right_delimiter(token->kind))
+            return SIZE_MAX;
+        if (token->kind == kind && (text == NULL || f2c_token_equals(token, text)))
+            return index;
+        ++index;
+    }
+    return SIZE_MAX;
+}
+
+int f2c_token_range_split_top_level(F2cTokenRange range, F2cTokenKind separator_kind,
+                                    const char *separator_text, F2cTokenRange **items,
+                                    size_t *count) {
+    F2cTokenRange *result = NULL;
+    size_t result_count = 0U;
+    size_t capacity = 0U;
+    size_t begin = 0U;
+    if (items == NULL || count == NULL || range.count == 0U || range.tokens == NULL ||
+        !f2c_token_range_balanced(range.tokens, range.count))
+        return 0;
+    *items = NULL;
+    *count = 0U;
+    while (begin < range.count) {
+        const F2cTokenRange tail = f2c_token_range_slice(range, begin, range.count);
+        const size_t relative =
+            f2c_token_range_find_top_level(tail, 0U, separator_kind, separator_text);
+        const size_t end = relative == SIZE_MAX ? range.count : begin + relative;
+        F2cTokenRange *replacement;
+        size_t next;
+        if (end == begin)
+            goto failed;
+        if (result_count == capacity) {
+            next = capacity == 0U ? 4U : capacity * 2U;
+            if (next < capacity || next > SIZE_MAX / sizeof(*result))
+                goto failed;
+            replacement = (F2cTokenRange *)realloc(result, next * sizeof(*result));
+            if (replacement == NULL)
+                goto failed;
+            result = replacement;
+            capacity = next;
+        }
+        result[result_count++] = f2c_token_range_slice(range, begin, end);
+        if (relative == SIZE_MAX)
+            break;
+        begin = end + 1U;
+        if (begin == range.count)
+            goto failed;
+    }
+    *items = result;
+    *count = result_count;
+    return 1;
+
+failed:
+    free(result);
+    return 0;
+}
+
 char *f2c_token_range_text(F2cTokenRange range) {
     uintptr_t source;
     uintptr_t source_end;
