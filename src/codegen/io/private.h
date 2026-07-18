@@ -26,5 +26,11 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
                          int depth);
 void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *item, int input,
                                 const char *unit_number, int depth);
+int f2c_io_emit_formatted_transfer(Context *context, Unit *unit,
+                                   const F2cStatement *statement,
+                                   const F2cIoControl *format_control, const char *file,
+                                   const char *unit_number, int input,
+                                   const char *advance_expression, const char *size_target,
+                                   const char *status_target, int depth);
 
 #endif

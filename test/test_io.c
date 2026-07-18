@@ -135,10 +135,38 @@ static void test_print_semantics(void) {
     f2c_result_free(&result);
 }
 
+static void test_print_codegen(void) {
+    static const char source[] = "program print_codegen\n"
+                                 "  implicit none\n"
+                                 "  integer :: iterator\n"
+                                 "  character(16) :: runtime_format\n"
+                                 "  runtime_format = '(A,1X,I3)'\n"
+                                 "  print '(A,1X,I3)', 'literal', 7\n"
+                                 "  print 100, (iterator, iterator=1,3)\n"
+                                 "  print runtime_format, 'runtime', 9\n"
+                                 "100 format(3(I2,1X))\n"
+                                 "end program print_codegen\n";
+    F2cOptions options = {"print_codegen.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count == 0U,
+           "literal, labeled, and runtime CHARACTER PRINT formats lower without diagnostics");
+    expect_contains(result.code,
+                    "f2c_format_initialize(&f2c_io_format, stdout, \"(A,1X,I3)\"",
+                    "PRINT character literals use the shared formatted transfer engine");
+    expect_contains(result.code, "f2c_format_initialize(&f2c_io_format, stdout, \"(3(i2,1x))\"",
+                    "PRINT statement labels resolve through the shared format engine");
+    expect_contains(result.code, "runtime_format, (size_t)(16)",
+                    "runtime CHARACTER PRINT formats preserve their explicit Fortran length");
+    expect_contains(result.code, "for (iterator = 1;",
+                    "formatted PRINT implied-DO items lower through the structured item tree");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_file_control_semantics();
     test_file_control_codegen();
     test_print_semantics();
+    test_print_codegen();
     if (failures != 0) {
         fprintf(stderr, "%d I/O semantic test(s) failed\n", failures);
         return 1;
