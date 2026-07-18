@@ -58,10 +58,19 @@ struct F2cExpr {
 
 typedef void (*F2cExpressionVisitor)(F2cExpr *expression, void *state);
 
+typedef struct F2cIntegerSubstitution {
+    const Symbol *symbol;
+    const char *name;
+    int64_t value;
+} F2cIntegerSubstitution;
+
 F2cExpr *f2c_parse_expression_ast(Unit *unit, const char *expression, const char **error_at);
 F2cExpr *f2c_parse_expression_tokens(Unit *unit, const F2cToken *tokens, size_t token_count,
                                      const char *source, const char **error_at);
 F2cExpr *f2c_expr_new_absent(Type type, size_t rank);
+F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
+                                            const F2cIntegerSubstitution *substitutions,
+                                            size_t substitution_count);
 void f2c_expr_free(F2cExpr *expression);
 Type f2c_expression_type(Unit *unit, const char *expression);
 int f2c_expression_is_designator(Unit *unit, const char *expression);

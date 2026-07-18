@@ -456,6 +456,35 @@ static void test_nested_expression_source_ranges(void) {
     f2c_expr_free(expression);
 }
 
+static void test_integer_substitution_clone(void) {
+    Symbol symbols[1];
+    Unit unit;
+    F2cExpr *expression;
+    F2cExpr *clone;
+    F2cIntegerSubstitution substitution;
+    int64_t value = 0;
+    const char *error_at = NULL;
+    memset(&unit, 0, sizeof(unit));
+    add_symbol(symbols, 0U, "i", TYPE_INTEGER, 0U, 0);
+    unit.symbols = symbols;
+    unit.symbol_count = 1U;
+    expression = f2c_parse_expression_ast(&unit, "i * 2 + 1", &error_at);
+    substitution.symbol = &symbols[0];
+    substitution.name = "i";
+    substitution.value = 3;
+    clone = f2c_expr_clone_substitute_integers(expression, &substitution, 1U);
+    expect(expression != NULL && error_at == NULL && clone != NULL &&
+               f2c_evaluate_integer_constant(&unit, clone, &value) && value == 7,
+           "typed AST cloning substitutes implied-DO integers structurally");
+    expect(expression != NULL && expression->children[0]->children[0]->kind == F2C_EXPR_NAME,
+           "integer substitution never mutates the canonical source AST");
+    expect(clone != NULL && clone->span.begin.line == expression->span.begin.line &&
+               clone->source_offset == expression->source_offset,
+           "substituted ASTs preserve source and typed metadata");
+    f2c_expr_free(clone);
+    f2c_expr_free(expression);
+}
+
 int main(void) {
     test_kind_shape_and_value_category();
     test_typed_numeric_tree();
@@ -469,6 +498,7 @@ int main(void) {
     test_bracket_aware_argument_splitting();
     test_malformed_expression_locations();
     test_nested_expression_source_ranges();
+    test_integer_substitution_clone();
     if (failures != 0) {
         fprintf(stderr, "%d AST test(s) failed\n", failures);
         return 1;
