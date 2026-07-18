@@ -2,6 +2,7 @@
 #define F2C_IR_STATEMENT_H
 
 #include "ir/expression.h"
+#include "ir/format.h"
 
 typedef enum F2cStatementKind {
     F2C_STMT_INVALID,
@@ -120,6 +121,7 @@ typedef struct F2cIoControl {
     char *keyword;
     F2cExpr *value;
     F2cSourceSpan span;
+    F2cFormat *format;
     int asterisk;
 } F2cIoControl;
 
@@ -176,6 +178,7 @@ struct F2cStatement {
     F2cExpr *limit;
     F2cExpr *step;
     F2cExpr *allocation_character_length;
+    F2cFormat *format;
     F2cDerivedType *guard_type;
     Unit *resolved_procedure;
     struct F2cStatement *construct_owner;

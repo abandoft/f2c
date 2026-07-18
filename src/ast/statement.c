@@ -701,6 +701,7 @@ void f2c_statement_free(F2cStatement *statement) {
         F2cIoControl *control = &statement->io_controls[--statement->control_count];
         free(control->keyword);
         f2c_expr_free(control->value);
+        f2c_format_free(control->format);
     }
     free(statement->io_controls);
     while (statement->io_item_count != 0U)
@@ -723,6 +724,7 @@ void f2c_statement_free(F2cStatement *statement) {
     f2c_expr_free(statement->limit);
     f2c_expr_free(statement->step);
     f2c_expr_free(statement->allocation_character_length);
+    f2c_format_free(statement->format);
     while (statement->label_count != 0U)
         free(statement->labels[--statement->label_count]);
     free(statement->labels);
