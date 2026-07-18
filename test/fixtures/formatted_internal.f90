@@ -2,6 +2,7 @@ program formatted_internal
   implicit none
   character(len=80) :: record
   character(len=2) :: word
+  character(len=16) :: runtime_format
   integer :: count
   integer :: status
   real :: scale
@@ -31,7 +32,8 @@ program formatted_internal
   third = 5
   write(record, '(*(I0,:,","))') first, second, third
   if (record(1:5) /= '2,3,5') stop 3
-  write(record, '(*I0)', iostat=status) first
+  runtime_format = '(*I0)'
+  write(record, runtime_format, iostat=status) first
   if (status == 0) stop 4
   scale = 1.1920929e-7
   write(record, '(1P,E9.1)') scale
