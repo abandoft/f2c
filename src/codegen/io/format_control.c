@@ -102,8 +102,7 @@ static int append_assigned_format(Context *context, Unit *unit, AssignedFormats 
             free(literal);
             return 0;
         }
-        resized = (AssignedFormatCase *)realloc(formats->items,
-                                                capacity * sizeof(*formats->items));
+        resized = (AssignedFormatCase *)realloc(formats->items, capacity * sizeof(*formats->items));
         if (resized == NULL) {
             free(literal);
             return 0;
@@ -146,8 +145,7 @@ static int emit_assigned_format_selection(Context *context, Unit *unit,
     if (selector == NULL || formats.count == 0U)
         goto cleanup;
     f2c_io_indent(&context->output, depth);
-    f2c_buffer_append(&context->output,
-                      "const char *f2c_io_format_text = NULL;\n");
+    f2c_buffer_append(&context->output, "const char *f2c_io_format_text = NULL;\n");
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "size_t f2c_io_format_length = 0U;\n");
     f2c_io_indent(&context->output, depth);
@@ -174,8 +172,7 @@ cleanup:
     return result;
 }
 
-int f2c_io_emit_formatted_transfer(Context *context, Unit *unit,
-                                   const F2cStatement *statement,
+int f2c_io_emit_formatted_transfer(Context *context, Unit *unit, const F2cStatement *statement,
                                    const F2cIoControl *format_control, const char *file,
                                    const char *unit_number, int input,
                                    const char *advance_expression, const char *size_target,
@@ -200,15 +197,13 @@ int f2c_io_emit_formatted_transfer(Context *context, Unit *unit,
     format_text = constant_format(context, unit, format_control, &format_length);
     if (format_text != NULL) {
         format_literal = f2c_io_c_string_literal(format_text, format_length);
-    } else if (format_control->value != NULL &&
-               format_control->value->type == TYPE_CHARACTER) {
+    } else if (format_control->value != NULL && format_control->value->type == TYPE_CHARACTER) {
         format_value = f2c_io_emit_required_expression(unit, format_control->value);
-        format_pointer = format_value != NULL
-                             ? f2c_character_source_pointer(unit, format_control->value,
-                                                            format_value)
-                             : NULL;
-        format_length_expression =
-            f2c_character_length_expression(unit, format_control->value);
+        format_pointer =
+            format_value != NULL
+                ? f2c_character_source_pointer(unit, format_control->value, format_value)
+                : NULL;
+        format_length_expression = f2c_character_length_expression(unit, format_control->value);
     }
     if ((!assigned_format && format_literal == NULL &&
          (format_pointer == NULL || format_length_expression == NULL)) ||
@@ -230,15 +225,14 @@ int f2c_io_emit_formatted_transfer(Context *context, Unit *unit,
     f2c_buffer_append(&context->output, "f2c_format_state f2c_io_format;\n");
     f2c_io_indent(&context->output, depth);
     (void)snprintf(constant_format_length, sizeof(constant_format_length), "%zuU", format_length);
-    f2c_buffer_printf(
-        &context->output, "f2c_format_initialize(&f2c_io_format, %s, %s, (size_t)(%s), %s);\n",
-        file,
-        assigned_format ? "f2c_io_format_text"
-                        : (format_literal != NULL ? format_literal : format_pointer),
-        assigned_format ? "f2c_io_format_length"
-                        : (format_literal != NULL ? constant_format_length
-                                                  : format_length_expression),
-        input ? "true" : "false");
+    f2c_buffer_printf(&context->output,
+                      "f2c_format_initialize(&f2c_io_format, %s, %s, (size_t)(%s), %s);\n", file,
+                      assigned_format ? "f2c_io_format_text"
+                                      : (format_literal != NULL ? format_literal : format_pointer),
+                      assigned_format ? "f2c_io_format_length"
+                                      : (format_literal != NULL ? constant_format_length
+                                                                : format_length_expression),
+                      input ? "true" : "false");
     for (index = 0U; index < statement->io_item_count; ++index)
         f2c_io_emit_formatted_item(context, unit, &statement->io_items[index], input, unit_number,
                                    depth);
