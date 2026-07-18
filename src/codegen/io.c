@@ -61,16 +61,17 @@ char *f2c_io_c_string_literal(const char *text, size_t length) {
 
 static char *unquote_fortran_string(const char *text, size_t *length_out) {
     Buffer result = {0};
-    const size_t length = text != NULL ? strlen(text) : 0U;
-    const char quote = length != 0U ? text[0] : '\0';
+    const char *quote_begin = f2c_character_literal_quote(text);
+    const size_t length = quote_begin != NULL ? strlen(quote_begin) : 0U;
+    const char quote = length != 0U ? quote_begin[0] : '\0';
     size_t i;
     *length_out = 0U;
-    if (length < 2U || (quote != '\'' && quote != '"') || text[length - 1U] != quote)
+    if (length < 2U || (quote != '\'' && quote != '"') || quote_begin[length - 1U] != quote)
         return NULL;
     for (i = 1U; i + 1U < length; ++i) {
-        if (text[i] == quote && i + 2U < length && text[i + 1U] == quote)
+        if (quote_begin[i] == quote && i + 2U < length && quote_begin[i + 1U] == quote)
             ++i;
-        f2c_buffer_append_n(&result, &text[i], 1U);
+        f2c_buffer_append_n(&result, &quote_begin[i], 1U);
     }
     *length_out = result.length;
     return f2c_buffer_take(&result);

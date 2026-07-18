@@ -219,8 +219,9 @@ char *f2c_expression_integer_literal(const F2cExpr *expression) {
 
 char *f2c_expression_string_literal(const char *text) {
     Buffer result = {0};
-    const char quote = text != NULL && text[0] != '\0' ? text[0] : '\'';
-    const size_t length = text != NULL ? strlen(text) : 0U;
+    const char *quote_begin = f2c_character_literal_quote(text);
+    char quote = quote_begin != NULL ? *quote_begin : '\'';
+    size_t length = quote_begin != NULL ? strlen(quote_begin) : 0U;
     const char *hollerith = text;
     unsigned long long hollerith_length = 0ULL;
     size_t i;
@@ -250,8 +251,8 @@ char *f2c_expression_string_literal(const char *text) {
         return f2c_buffer_take(&result);
     }
     for (i = 1U; i + 1U < length; ++i) {
-        char c = text[i];
-        if (c == quote && i + 1U < length - 1U && text[i + 1U] == quote)
+        char c = quote_begin[i];
+        if (c == quote && i + 1U < length - 1U && quote_begin[i + 1U] == quote)
             ++i;
         if (c == '\\' || c == '"')
             f2c_buffer_append(&result, "\\");
