@@ -24,6 +24,8 @@ program data_statement
   if (next_array_value() /= 12) stop 11
   if (next_complex_value() /= 1.0) stop 12
   if (next_complex_value() /= 2.0) stop 13
+  if (next_intrinsic_value() /= 10) stop 14
+  if (next_intrinsic_value() /= 11) stop 15
 
 contains
 
@@ -50,4 +52,13 @@ contains
     next_complex_value = real(state)
     state = state + (1.0, 0.0)
   end function next_complex_value
+
+  integer function next_intrinsic_value()
+    implicit none
+    integer, parameter :: initial = abs(-9)
+    integer :: state
+    data state / initial /
+    state = state + 1
+    next_intrinsic_value = state
+  end function next_intrinsic_value
 end program data_statement

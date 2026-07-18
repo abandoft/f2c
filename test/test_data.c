@@ -40,14 +40,30 @@ static void test_valid_data_semantics(void) {
     expect(result.error_count == 0U && result.code != NULL,
            "nested, repeated, multi-group DATA reaches typed C17 emission");
     expect(result.code != NULL && strstr(result.code, "matrix[") != NULL &&
-               strstr(result.code, "vector[1] = 5;") != NULL &&
-               strstr(result.code, "mixed[1] = 7;") != NULL &&
+               strstr(result.code, " = {5, 5}") != NULL &&
+               strstr(result.code, " = {6, 7}") != NULL &&
                strstr(result.code, "static int32_t tail = 8;") != NULL,
-           "validated implied-DO and repeated values expand in Fortran order");
+           "validated whole-array and repeated values become ordered static initializers");
     expect(result.code != NULL && strstr(result.code, "static bool f2c_data_initialized_") != NULL,
            "non-scalar DATA lowering is protected by one-time procedure initialization");
     expect(result.code != NULL && strstr(result.code, "a/b,c") != NULL,
            "character DATA payload delimiters survive canonical token parsing");
+    f2c_result_free(&result);
+}
+
+static void test_non_c_constant_static_fallback(void) {
+    static const char source[] = "subroutine guarded_data\n"
+                                 "  integer, parameter :: initial = abs(-9)\n"
+                                 "  integer :: state\n"
+                                 "  data state / initial /\n"
+                                 "  state = state + 1\n"
+                                 "end subroutine guarded_data\n";
+    F2cResult result = transpile("guarded_data.f90", source);
+    expect(result.error_count == 0U && result.code != NULL,
+           "intrinsic initialization constants retain a valid runtime fallback");
+    expect(result.code != NULL && strstr(result.code, "static int32_t state = {0};") != NULL &&
+               strstr(result.code, "static bool f2c_data_initialized_") != NULL,
+           "non-C-constant DATA expressions do not enter static C initializers");
     f2c_result_free(&result);
 }
 
@@ -112,6 +128,7 @@ static void test_data_diagnostics(void) {
 
 int main(void) {
     test_valid_data_semantics();
+    test_non_c_constant_static_fallback();
     test_data_diagnostics();
     if (failures != 0)
         fprintf(stderr, "%d DATA semantic test(s) failed\n", failures);
