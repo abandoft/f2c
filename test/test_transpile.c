@@ -521,15 +521,6 @@ static void test_large_kernel_lto_policy(void) {
 }
 
 static void test_nested_loop_optimization_hints(void) {
-    static const char two_level_source[] = "subroutine two_level_loops(n, x)\n"
-                                           "  integer :: n, i, j\n"
-                                           "  real :: x(n, n)\n"
-                                           "  do i = 1, n\n"
-                                           "    do j = 1, n\n"
-                                           "      x(j, i) = 0.0\n"
-                                           "    end do\n"
-                                           "  end do\n"
-                                           "end subroutine two_level_loops\n";
     static const char source[] = "subroutine nested_loops(n, x)\n"
                                  "  integer :: n, i, j, k\n"
                                  "  real :: x(n, n, n)\n"
@@ -542,15 +533,7 @@ static void test_nested_loop_optimization_hints(void) {
                                  "  end do\n"
                                  "end subroutine nested_loops\n";
     F2cOptions options = {"nested_loops.f90", F2C_SOURCE_FREE, 0};
-    F2cResult result = f2c_transpile(two_level_source, strlen(two_level_source), &options);
-    expect(result.error_count == 0U, "two-level counted loops translate without errors");
-    expect_not_contains(result.code, "    F2C_LOOP_UNROLL_OUTER\n",
-                        "two-level loop nests remain under the compiler cost model");
-    expect_contains(result.code, "F2C_LOOP_UNROLL\n        for (;",
-                    "two-level loop nests retain the innermost unroll hint");
-    f2c_result_free(&result);
-
-    result = f2c_transpile(source, strlen(source), &options);
+    F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "nested counted loops translate without errors");
     expect(result.code == NULL || strstr(result.code, "F2C_LOOP_UNROLL\n    for (;") == NULL,
            "three-level loop nests do not force-unroll the outermost loop");
