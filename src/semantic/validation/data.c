@@ -200,6 +200,16 @@ static int symbol_supports_static_data(const Symbol *symbol) {
            symbol->type != TYPE_DERIVED;
 }
 
+static void mark_data_storage_saved(Unit *unit, Symbol *symbol) {
+    size_t remaining = unit != NULL ? unit->symbol_count : 0U;
+    while (symbol != NULL) {
+        symbol->saved = 1;
+        if (symbol->alias_to == NULL || remaining-- == 0U)
+            return;
+        symbol = f2c_find_symbol(unit, symbol->alias_to);
+    }
+}
+
 static void free_initializers(F2cExpr **initializers, size_t count) {
     size_t index;
     if (initializers == NULL)
@@ -397,7 +407,7 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
             if (static_array < 0)
                 return 0;
         }
-        symbol->saved = 1;
+        mark_data_storage_saved(validation->unit, symbol);
         if (!add_size(&validation->target_count, extent)) {
             f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_RESOURCE_LIMIT,
                                      &target->span, 1,
