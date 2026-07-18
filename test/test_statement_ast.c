@@ -383,7 +383,8 @@ int main(void) {
     expect(f2c_parse_statement(&unit, "data work / 3*1.0, 2.0 /, (work(1,n), n=1,2) / 4.0, 5.0 /",
                                25U, &statement),
            "DATA groups parse");
-    expect(statement.kind == F2C_STMT_DATA && statement.data_group_count == 2U &&
+    expect(statement.kind == F2C_STMT_DATA && statement.data_syntax_valid &&
+               statement.data_group_count == 2U &&
                statement.data_groups[0].target_count == 1U &&
                statement.data_groups[0].value_count == 2U &&
                statement.data_groups[0].values[0].repeat != NULL &&
@@ -393,6 +394,20 @@ int main(void) {
                statement.data_groups[1].targets[0].implied_do &&
                statement.data_groups[1].targets[0].child_count == 1U,
            "DATA owns groups, repetition expressions, values, and implied-DO targets");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "data text / 'a/b,c' /", 26U, &statement),
+           "DATA character delimiters parse from tokens");
+    expect(statement.kind == F2C_STMT_DATA && statement.data_syntax_valid &&
+               statement.data_group_count == 1U && statement.data_groups[0].value_count == 1U &&
+               strcmp(statement.data_groups[0].values[0].text, "'a/b,c'") == 0,
+           "slashes and commas inside character values never split DATA groups");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "data first / 1 / second / 2 /", 27U, &statement),
+           "malformed DATA remains representable for diagnostics");
+    expect(statement.kind == F2C_STMT_DATA && !statement.data_syntax_valid,
+           "missing DATA group separators are retained as explicit syntax failure");
     f2c_statement_free(&statement);
 
     if (failures != 0) {

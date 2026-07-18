@@ -108,6 +108,8 @@ typedef struct F2cDataValue {
     char *text;
     F2cExpr *expression;
     F2cExpr *repeat;
+    F2cSourceSpan span;
+    uint64_t repeat_count;
 } F2cDataValue;
 
 typedef struct F2cDataGroup {
@@ -115,6 +117,10 @@ typedef struct F2cDataGroup {
     size_t target_count;
     F2cDataValue *values;
     size_t value_count;
+    F2cSourceSpan span;
+    size_t expanded_target_count;
+    size_t expanded_value_count;
+    int counts_valid;
 } F2cDataGroup;
 
 typedef struct F2cCaseRange {
@@ -163,6 +169,7 @@ struct F2cStatement {
     int unroll_hint;
     int case_default;
     int case_syntax_valid;
+    int data_syntax_valid;
     int construct_syntax_valid;
 };
 

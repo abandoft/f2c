@@ -724,8 +724,11 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
         statement->kind == F2C_STMT_PRINT)
         build_io_item_ir(unit, statement);
-    if (statement->kind == F2C_STMT_DATA)
-        f2c_statement_parse_data(unit, statement);
+    if (statement->kind == F2C_STMT_DATA &&
+        !f2c_statement_parse_data(unit, token_line, body_start, statement)) {
+        free(owned_syntax_text);
+        return 0;
+    }
     syntax_line = *token_line;
     if (syntax_line.tokens != NULL)
         syntax_line.tokens += body_start;
@@ -853,16 +856,7 @@ void f2c_statement_free(F2cStatement *statement) {
     free(statement->io_items);
     while (statement->data_group_count != 0U) {
         F2cDataGroup *group = &statement->data_groups[--statement->data_group_count];
-        size_t i;
-        for (i = 0U; i < group->target_count; ++i)
-            f2c_statement_free_io_item(&group->targets[i]);
-        free(group->targets);
-        for (i = 0U; i < group->value_count; ++i) {
-            free(group->values[i].text);
-            f2c_expr_free(group->values[i].expression);
-            f2c_expr_free(group->values[i].repeat);
-        }
-        free(group->values);
+        f2c_statement_free_data_group(group);
     }
     free(statement->data_groups);
     while (statement->case_range_count != 0U) {
