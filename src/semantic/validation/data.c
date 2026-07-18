@@ -209,6 +209,112 @@ static void free_initializers(F2cExpr **initializers, size_t count) {
     free(initializers);
 }
 
+static int array_element_offset(DataValidation *validation, const F2cExpr *target, size_t *offset,
+                                size_t *element_count) {
+    const Symbol *symbol = target != NULL ? target->symbol : NULL;
+    size_t stride = 1U;
+    size_t result = 0U;
+    size_t dimension;
+    if (target == NULL || target->kind != F2C_EXPR_ARRAY_REFERENCE || symbol == NULL ||
+        symbol->rank == 0U || target->rank != 0U || target->child_count != symbol->rank ||
+        symbol->shape.rank != symbol->rank)
+        return 0;
+    for (dimension = 0U; dimension < symbol->rank; ++dimension) {
+        const F2cShapeDimension *shape = &symbol->shape.dimensions[dimension];
+        F2cExpr *subscript;
+        int64_t value;
+        uint64_t distance;
+        size_t extent;
+        if (!shape->lower_known || !shape->extent_known || shape->extent > (uint64_t)SIZE_MAX)
+            return 0;
+        subscript = f2c_expr_clone_substitute_integers(
+            target->children[dimension], validation->bindings.items, validation->bindings.count);
+        if (subscript == NULL ||
+            !f2c_evaluate_integer_constant(validation->unit, subscript, &value)) {
+            f2c_expr_free(subscript);
+            f2c_diagnostic_span_code(
+                validation->context, F2C_DIAGNOSTIC_SEMANTIC,
+                target->children[dimension] != NULL ? &target->children[dimension]->span
+                                                    : &target->span,
+                1, "DATA array subscript must be constant after implied-DO substitution");
+            return -1;
+        }
+        f2c_expr_free(subscript);
+        distance = (uint64_t)value - (uint64_t)shape->lower;
+        if (value < shape->lower || distance >= shape->extent) {
+            f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
+                                     "DATA array subscript is outside the declared bounds of '%s'",
+                                     symbol->name);
+            return -1;
+        }
+        extent = (size_t)shape->extent;
+        if ((size_t)distance > (SIZE_MAX - result) / stride ||
+            (extent != 0U && stride > SIZE_MAX / extent)) {
+            f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_RESOURCE_LIMIT,
+                                     &target->span, 1,
+                                     "DATA array offset exceeds the supported size range");
+            return -1;
+        }
+        result += (size_t)distance * stride;
+        stride *= extent;
+    }
+    *offset = result;
+    *element_count = stride;
+    return 1;
+}
+
+static int attach_array_element_initializer(DataValidation *validation, F2cIoItem *item,
+                                            F2cExpr *target, const F2cExpr *value) {
+    Symbol *symbol = target != NULL ? target->symbol : NULL;
+    F2cExpr **initializers;
+    size_t offset;
+    size_t count;
+    int mapped;
+    if (target == NULL || target->kind != F2C_EXPR_ARRAY_REFERENCE || target->rank != 0U)
+        return 0;
+    mapped = array_element_offset(validation, target, &offset, &count);
+    if (mapped <= 0)
+        return mapped;
+    if (!expansion_within_budget(validation, (uint64_t)count))
+        return -1;
+    if (!symbol_supports_static_data(symbol) || !expression_has_static_c_form(value, 0U)) {
+        item->data_static_initializer = -1;
+        return 0;
+    }
+    if (symbol->data_element_initializers == NULL) {
+        initializers = (F2cExpr **)calloc(count, sizeof(*initializers));
+        if (initializers == NULL) {
+            f2c_diagnostic_code(validation->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                                validation->statement->line, 1,
+                                "out of memory lowering DATA initializer for '%s'", symbol->name);
+            return -1;
+        }
+        symbol->data_element_initializers = initializers;
+        symbol->data_element_initializer_count = count;
+    } else if (symbol->data_element_initializer_count != count) {
+        f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
+                                 "inconsistent DATA shape for array '%s'", symbol->name);
+        return -1;
+    }
+    if (symbol->data_element_initializers[offset] != NULL) {
+        f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
+                                 "DATA element of '%s' is initialized more than once",
+                                 symbol->name);
+        return -1;
+    }
+    symbol->data_element_initializers[offset] = f2c_expr_clone_substitute_integers(
+        value, validation->bindings.items, validation->bindings.count);
+    if (symbol->data_element_initializers[offset] == NULL) {
+        f2c_diagnostic_code(validation->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                            validation->statement->line, 1,
+                            "out of memory lowering DATA initializer for '%s'", symbol->name);
+        return -1;
+    }
+    if (item->data_static_initializer >= 0)
+        item->data_static_initializer = 1;
+    return 1;
+}
+
 static int attach_scalar_initializer(DataValidation *validation, F2cIoItem *item, F2cExpr *target,
                                      const F2cExpr *value) {
     Symbol *symbol = target != NULL ? target->symbol : NULL;
@@ -279,7 +385,8 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
         if (!expansion_within_budget(validation, (uint64_t)extent))
             return 0;
         if (symbol->initializer != NULL || symbol->initializer_expression != NULL ||
-            symbol->data_initializer) {
+            symbol->data_initializer ||
+            (target->kind == F2C_EXPR_NAME && symbol->data_element_initializers != NULL)) {
             f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
                                      "DATA target '%s' already has an initializer", symbol->name);
             return 0;
@@ -318,6 +425,11 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
                 }
                 if (extent == 1U && element == 0U && target->rank == 0U &&
                     attach_scalar_initializer(validation, item, target, value) < 0) {
+                    free_initializers(array_initializers, extent);
+                    return 0;
+                }
+                if (extent == 1U && element == 0U &&
+                    attach_array_element_initializer(validation, item, target, value) < 0) {
                     free_initializers(array_initializers, extent);
                     return 0;
                 }
