@@ -37,13 +37,8 @@ static void annotate_loop_hints(Unit *unit) {
         if (statement_begins_loop(statement)) {
             size_t ancestor;
             for (ancestor = 0U; ancestor < loop_count; ++ancestor)
-                unit->statements[loops[ancestor]].loop_hint = F2C_LOOP_HINT_NONE;
-            if (statement->kind == F2C_STMT_DO) {
-                if (loop_count != 0U &&
-                    unit->statements[loops[loop_count - 1U]].kind == F2C_STMT_DO)
-                    unit->statements[loops[loop_count - 1U]].loop_hint = F2C_LOOP_HINT_OUTER_UNROLL;
-                statement->loop_hint = F2C_LOOP_HINT_INNER_UNROLL;
-            }
+                unit->statements[loops[ancestor]].unroll_hint = 0;
+            statement->unroll_hint = statement->kind == F2C_STMT_DO;
             loops[loop_count++] = i;
         }
         if (statement_begins_block(statement)) {
