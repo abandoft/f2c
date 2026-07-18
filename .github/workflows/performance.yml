@@ -5,11 +5,19 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      diagnostics_only:
-        description: Generate x86 compiler optimization reports without running benchmarks
-        required: false
-        default: false
-        type: boolean
+      scope:
+        description: Performance workload to execute
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - daxpy
+          - dgemv
+          - dgemm
+          - dgetf2
+          - extended
+          - diagnostics
   schedule:
     - cron: "17 2 * * 3"
 
@@ -44,15 +52,20 @@ jobs:
           -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
           && cmake --build build/performance --parallel
       - name: Generate performance code-generation diagnostics
-        if: github.event_name == 'workflow_dispatch' && inputs.diagnostics_only
+        if: github.event_name == 'workflow_dispatch' && inputs.scope == 'diagnostics'
         run: sh test/performance/codegen_report.sh build/performance/f2c
       - name: Run the generated C versus Fortran matrix
-        if: github.event_name != 'workflow_dispatch' || !inputs.diagnostics_only
-        run: sh test/reference_performance_matrix.sh build/performance/f2c
+        if: github.event_name != 'workflow_dispatch' || inputs.scope != 'diagnostics'
+        env:
+          F2C_PERFORMANCE_SCOPE: ${{ inputs.scope || 'full' }}
+        run: >-
+          sh test/reference_performance_matrix.sh
+          build/performance/f2c
+          "$F2C_PERFORMANCE_SCOPE"
       - name: Upload performance reports
         if: >-
           always() &&
-          (github.event_name != 'workflow_dispatch' || !inputs.diagnostics_only)
+          (github.event_name != 'workflow_dispatch' || inputs.scope != 'diagnostics')
         uses: actions/upload-artifact@v7
         with:
           name: f2c-performance-matrix
@@ -60,7 +73,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
       - name: Upload performance code-generation diagnostics
-        if: github.event_name == 'workflow_dispatch' && inputs.diagnostics_only
+        if: github.event_name == 'workflow_dispatch' && inputs.scope == 'diagnostics'
         uses: actions/upload-artifact@v7
         with:
           name: f2c-performance-codegen
