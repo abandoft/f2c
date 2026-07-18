@@ -71,7 +71,7 @@ static void test_file_control_codegen(void) {
     static const char source[] =
         "program file_control_codegen\n"
         "  implicit none\n"
-        "  integer :: status, number\n"
+        "  integer :: status, number, recl, nextrec\n"
         "  logical :: opened\n"
         "  character(32) :: message, name\n"
         "  open(12, file='sample.tmp', status='replace', access='sequential', "
@@ -79,7 +79,8 @@ static void test_file_control_codegen(void) {
         "delim='quote', pad='no', iostat=status, iomsg=message, err=90)\n"
         "  backspace(12, iostat=status, iomsg=message, err=90)\n"
         "  endfile(12, iostat=status, iomsg=message, err=90)\n"
-        "  inquire(unit=12, opened=opened, number=number, name=name, iostat=status, "
+        "  inquire(unit=12, opened=opened, number=number, name=name, recl=recl, "
+        "nextrec=nextrec, iostat=status, "
         "iomsg=message, err=90)\n"
         "  close(12, status='delete', iostat=status, iomsg=message, err=90)\n"
         "  stop\n"

@@ -1,6 +1,6 @@
 program file_control
   implicit none
-  integer :: status, value, number, recl, nextrec
+  integer :: status, value, number
   logical :: exist, opened, named
   character(64) :: name, message
   character(8) :: dynamic_status
@@ -38,8 +38,8 @@ program file_control
 
   inquire(unit=21, exist=exist, opened=opened, number=number, named=named, &
           name=name, access=access, sequential=sequential, direct=direct, &
-          form=form, formatted=formatted, unformatted=unformatted, recl=recl, &
-          nextrec=nextrec, blank=blank, position=position, action=action, &
+          form=form, formatted=formatted, unformatted=unformatted, blank=blank, &
+          position=position, action=action, &
           read=readable, write=writable, readwrite=readwrite, delim=delim, pad=pad, &
           iostat=status, iomsg=message)
   if (status /= 0 .or. .not. exist .or. .not. opened .or. number /= 21) error stop
@@ -47,6 +47,7 @@ program file_control
   if (access /= 'SEQUENTIAL' .or. sequential /= 'YES' .or. direct /= 'NO') error stop
   if (form /= 'FORMATTED' .or. formatted /= 'YES' .or. unformatted /= 'NO') error stop
   if (blank /= 'NULL' .or. action /= 'READWRITE') error stop
+  if (position /= 'APPEND') error stop
   if (readable /= 'YES' .or. writable /= 'YES' .or. readwrite /= 'YES') error stop
   if (delim /= 'QUOTE' .or. pad /= 'YES') error stop
 
