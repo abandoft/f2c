@@ -7,6 +7,8 @@ void f2c_io_indent(Buffer *output, int depth);
 char *f2c_io_emit_item_expression(Unit *unit, const F2cIoItem *item);
 char *f2c_io_emit_required_expression(Unit *unit, const F2cExpr *expression);
 char *f2c_io_c_string_literal(const char *text, size_t length);
+int f2c_io_emit_format_program(Context *context, const F2cFormat *format, const char *name,
+                               int depth);
 F2cTypeBinding *f2c_io_defined_binding(F2cDerivedType *derived, F2cDefinedIoKind kind);
 int f2c_io_emit_defined_io_call(Context *context, const char *value, F2cDerivedType *derived,
                                 F2cDefinedIoKind kind, const char *unit_number, const char *iotype,

@@ -91,6 +91,7 @@ set(
     src/codegen/io/formatted.c
     src/codegen/io/namelist.c
     src/codegen/io/private.h
+    src/codegen/io/program.c
     src/codegen/io/support.c
     src/codegen/lowering.c
     src/codegen/module.c
