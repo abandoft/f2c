@@ -4,6 +4,7 @@
 - Added dynamically sized parsing state for true runtime character formats, removing fixed nesting, literal, DT iotype, and v-list capacities.
 - Completed execution paths for nested and unlimited groups, positioning, scaling, sign and decimal controls, and defined-I/O format metadata.
 - Corrected `E`, `D`, and `G` mantissas, exponents, significant digits, extreme values, and positioned records to match native Fortran output.
+- Fixed temporary AST ownership cleanup after invalid FORMAT descriptors, eliminating a sanitizer-detected parser leak.
 - Added byte-exact native FORMAT differentials, deep and long resource boundaries, strict C17, and sanitizer regression coverage.
 - Revalidated all 3,535 Reference LAPACK sources and all 52,512 RFP numerical differentials on the new format pipeline.
 
