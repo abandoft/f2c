@@ -270,7 +270,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                           "#if defined(__clang__) && defined(__OPTIMIZE__)\n"
                           "#define F2C_LOOP_UNROLL _Pragma(\"clang loop unroll_count(4)\")\n"
                           "#elif defined(__GNUC__) && defined(__OPTIMIZE__)\n"
-                          "#define F2C_LOOP_UNROLL _Pragma(\"GCC unroll 4\")\n"
+                          "#define F2C_LOOP_UNROLL _Pragma(\"GCC unroll 2\")\n"
                           "#else\n"
                           "#define F2C_LOOP_UNROLL\n"
                           "#endif\n"
