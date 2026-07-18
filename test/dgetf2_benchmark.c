@@ -13,6 +13,8 @@ typedef struct Dgetf2Case {
     int repetitions;
 } Dgetf2Case;
 
+enum { F2C_DGETF2_SAMPLE_COUNT = 24 };
+
 void dgetf2(int32_t *, int32_t *, double *, int32_t *, int32_t *, int32_t *);
 void dgetf2_(int32_t *, int32_t *, double *, int32_t *, int32_t *, int32_t *);
 
@@ -74,7 +76,7 @@ static double measure(dgetf2_function function, const Dgetf2Case *test, const do
 
 static int run_case(const Dgetf2Case *test, double *input, double *work, double *reference,
                     int32_t *pivots, int32_t *reference_pivots) {
-    F2cBenchmarkSample samples[F2C_BENCHMARK_SAMPLE_COUNT];
+    F2cBenchmarkSample samples[F2C_DGETF2_SAMPLE_COUNT];
     F2cBenchmarkSample result;
     size_t round;
     if (!verify(test->n, work, reference, pivots, reference_pivots)) {
@@ -99,8 +101,8 @@ static int run_case(const Dgetf2Case *test, double *input, double *work, double 
             generated_second = measure(dgetf2, test, input, work, pivots);
             fortran_second = measure(dgetf2_, test, input, reference, reference_pivots);
         }
-        samples[round] = f2c_benchmark_paired_sample(
-            round, generated_first, fortran_first, fortran_second, generated_second);
+        samples[round] = f2c_benchmark_paired_sample(round, generated_first, fortran_first,
+                                                     fortran_second, generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
     printf("DGETF2 n=%d: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", test->n,
