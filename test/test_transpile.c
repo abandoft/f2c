@@ -1920,15 +1920,10 @@ static void test_structured_data_initializers(void) {
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U,
            "DATA repetition factors, implied DO, and complex values translate");
-    expect_contains(result.code, "table[0] = 1;",
-                    "DATA repetition starts at the first array element");
-    expect_contains(result.code, "table[2] = 1;",
-                    "DATA repetition expands the requested number of values");
-    expect_contains(result.code, "table[3] = 2;", "DATA advances to the next repeated value");
-    expect_contains(result.code, "table[4] = 2;", "DATA fills the complete repeated initializer");
-    expect_contains(result.code, "matrix[", "DATA implied DO emits explicit array targets");
-    expect_contains(result.code, "= 4;", "DATA implied DO consumes its first value");
-    expect_contains(result.code, "= 5;", "DATA implied DO consumes its second value");
+    expect_contains(result.code, "= {1, 1, 1, 2, 2};",
+                    "DATA repetition preserves every value in a static aggregate");
+    expect_contains(result.code, "= {[0] = 4, [2] = 5};",
+                    "DATA implied DO maps sparse elements in Fortran column-major order");
     expect_contains(result.code, "values[0] =",
                     "complex DATA lists beginning with a parenthesis remain separate values");
     expect_contains(result.code,
@@ -1962,8 +1957,8 @@ static void test_internal_procedure_and_file_units(void) {
            "internal procedures, nested DATA implied-DO, and file units translate");
     expect_contains(result.code, "internal_io__scale_value",
                     "internal procedure names are scoped by their host unit");
-    expect_contains(result.code, "] = 4.0f;",
-                    "nested DATA implied-DO expands in Fortran element order");
+    expect_contains(result.code, "= {1.0f, 2.0f, 3.0f, 4.0f};",
+                    "nested DATA implied-DO becomes a column-major static aggregate");
     expect_contains(result.code, "f2c_open_unit",
                     "OPEN uses the generated libc-backed file-unit table");
     expect_contains(result.code, "f2c_rewind_unit", "REWIND targets the opened Fortran unit");
@@ -2558,8 +2553,7 @@ static void test_character_shape_diagnostics(void) {
     F2cOptions options = {"invalid_character.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(data_source, strlen(data_source), &options);
     expect(result.error_count != 0U, "invalid character DATA shape is a hard error");
-    expect_contains(result.diagnostics,
-                    "DATA value count 1 does not match target element count 2",
+    expect_contains(result.diagnostics, "DATA value count 1 does not match target element count 2",
                     "character DATA value-count mismatch is diagnosed before code generation");
     f2c_result_free(&result);
     result = f2c_transpile(local_source, strlen(local_source), &options);
