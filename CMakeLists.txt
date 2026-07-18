@@ -94,6 +94,8 @@ set(
     src/codegen/ownership.c
     src/codegen/statement.c
     src/codegen/statement/select.c
+    src/codegen/statement/private.h
+    src/codegen/statement/target.c
     src/codegen/statement/type_select.c
     src/codegen/statement/where.c
     src/codegen/transform.c
