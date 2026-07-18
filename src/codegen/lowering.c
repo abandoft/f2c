@@ -444,10 +444,21 @@ char *f2c_symbol_dimension_upper(Unit *unit, const Symbol *symbol, size_t dimens
     return f2c_emit_typed_expression(unit, symbol->dimensions[dimension].upper_expression);
 }
 
+static int dimension_lower_constant(Unit *unit, const Symbol *symbol, size_t dimension,
+                                    int64_t *value) {
+    const F2cExpr *expression;
+    if (symbol == NULL || dimension >= symbol->rank || value == NULL ||
+        f2c_symbol_uses_descriptor(symbol))
+        return 0;
+    expression = symbol->dimensions[dimension].lower_expression;
+    return expression != NULL && f2c_evaluate_integer_constant(unit, expression, value);
+}
+
 char *f2c_symbol_dimension_extent(Unit *unit, const Symbol *symbol, size_t dimension) {
     Buffer result = {0};
     char *lower;
     char *upper;
+    int64_t lower_value;
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
     if (f2c_symbol_uses_descriptor(symbol)) {
@@ -462,8 +473,12 @@ char *f2c_symbol_dimension_extent(Unit *unit, const Symbol *symbol, size_t dimen
         free(upper);
         return NULL;
     }
-    f2c_buffer_printf(&result, "((%s) >= (%s) ? (size_t)((%s) - (%s) + 1) : 0U)", upper, lower,
-                      upper, lower);
+    if (dimension_lower_constant(unit, symbol, dimension, &lower_value) && lower_value == 1) {
+        f2c_buffer_printf(&result, "((%s) >= 1 ? (size_t)(%s) : 0U)", upper, upper);
+    } else {
+        f2c_buffer_printf(&result, "((%s) >= (%s) ? (size_t)((%s) - (%s) + 1) : 0U)", upper, lower,
+                          upper, lower);
+    }
     free(lower);
     free(upper);
     return f2c_buffer_take(&result);
@@ -513,6 +528,7 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
             size_t j;
             f2c_buffer_append(&result, " + (");
             for (j = 0U; j < i; ++j) {
+                int64_t lower_value;
                 if (f2c_symbol_uses_descriptor(symbol)) {
                     f2c_buffer_printf(&result, "%s%s_extent_%zu", j == 0U ? "" : " * ",
                                       f2c_symbol_c_name(unit, symbol), j + 1U);
@@ -522,8 +538,13 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
                 char *hi_c;
                 lo_c = f2c_symbol_dimension_lower(unit, symbol, j);
                 hi_c = f2c_symbol_dimension_upper(unit, symbol, j);
-                f2c_buffer_printf(&result, "%s(%s)((%s) - (%s) + 1)", j == 0U ? "" : " * ",
-                                  checked_array ? "size_t" : "ptrdiff_t", hi_c, lo_c);
+                if (dimension_lower_constant(unit, symbol, j, &lower_value) && lower_value == 1) {
+                    f2c_buffer_printf(&result, "%s(%s)(%s)", j == 0U ? "" : " * ",
+                                      checked_array ? "size_t" : "ptrdiff_t", hi_c);
+                } else {
+                    f2c_buffer_printf(&result, "%s(%s)((%s) - (%s) + 1)", j == 0U ? "" : " * ",
+                                      checked_array ? "size_t" : "ptrdiff_t", hi_c, lo_c);
+                }
                 free(lo_c);
                 free(hi_c);
             }
@@ -535,7 +556,16 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
                               "(int64_t)(%s), (size_t)(%s))",
                               indices[i], lower, extent);
         } else {
-            f2c_buffer_printf(&result, "((ptrdiff_t)(%s) - (ptrdiff_t)(%s))", indices[i], lower);
+            int64_t lower_value;
+            const int lower_known = dimension_lower_constant(unit, symbol, i, &lower_value);
+            if (lower_known && lower_value == 0) {
+                f2c_buffer_printf(&result, "((ptrdiff_t)(%s))", indices[i]);
+            } else if (lower_known && lower_value == 1) {
+                f2c_buffer_printf(&result, "((ptrdiff_t)(%s) - 1)", indices[i]);
+            } else {
+                f2c_buffer_printf(&result, "((ptrdiff_t)(%s) - (ptrdiff_t)(%s))", indices[i],
+                                  lower);
+            }
         }
         free(extent);
         free(lower);

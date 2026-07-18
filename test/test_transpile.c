@@ -474,7 +474,7 @@ static void test_blas_style_subroutine(void) {
                     "the public C ABI does not expose optimizer-only alias contracts");
     expect_contains(result.code, "const double *F2C_RESTRICT dx",
                     "the internal implementation preserves Fortran alias optimization");
-    expect_contains(result.code, "dy[((ptrdiff_t)(iy) - (ptrdiff_t)(1))]",
+    expect_contains(result.code, "dy[((ptrdiff_t)(iy) - 1)]",
                     "Fortran one-based array uses a pointer-width rebased offset");
     expect_contains(result.code, "int32_t f2c_do_count_",
                     "positive dynamic unit-stride loops use a proven native-width trip counter");
@@ -558,6 +558,10 @@ static void test_nested_loop_optimization_hints(void) {
                     "the parent of the innermost counted loop receives a small unroll hint");
     expect_contains(result.code, "F2C_LOOP_UNROLL\n            for (;",
                     "the innermost counted loop receives an unroll hint");
+    expect_contains(result.code, "(ptrdiff_t)((*n))",
+                    "known one-based dimensions use canonical pointer-width strides");
+    expect_not_contains(result.code, "((*n)) - (1) + 1",
+                        "known one-based dimensions omit cancelling stride arithmetic");
     f2c_result_free(&result);
 }
 
