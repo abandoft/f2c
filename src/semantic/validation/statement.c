@@ -272,6 +272,7 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
                                      &statement->io_items[i]);
     }
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
+        statement->kind == F2C_STMT_PRINT ||
         statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
         statement->kind == F2C_STMT_BACKSPACE || statement->kind == F2C_STMT_ENDFILE ||
         statement->kind == F2C_STMT_INQUIRE || statement->kind == F2C_STMT_CLOSE)

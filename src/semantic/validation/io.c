@@ -24,6 +24,8 @@ static const char *io_statement_name(F2cStatementKind kind) {
         return "READ";
     case F2C_STMT_WRITE:
         return "WRITE";
+    case F2C_STMT_PRINT:
+        return "PRINT";
     case F2C_STMT_OPEN:
         return "OPEN";
     case F2C_STMT_REWIND:
@@ -93,6 +95,8 @@ static const char *io_control_name(F2cIoControlKind kind) {
 }
 
 static int io_control_supported(F2cStatementKind statement_kind, F2cIoControlKind control_kind) {
+    if (statement_kind == F2C_STMT_PRINT)
+        return control_kind == F2C_IO_CONTROL_FMT;
     if (statement_kind == F2C_STMT_READ)
         return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_FMT ||
                control_kind == F2C_IO_CONTROL_NML || control_kind == F2C_IO_CONTROL_END ||
@@ -146,6 +150,8 @@ static F2cIoControlKind positional_io_control_kind(F2cStatementKind statement_ki
         return F2C_IO_CONTROL_UNIT;
     if ((statement_kind == F2C_STMT_READ || statement_kind == F2C_STMT_WRITE) && position == 1U)
         return F2C_IO_CONTROL_FMT;
+    if (statement_kind == F2C_STMT_PRINT && position == 0U)
+        return F2C_IO_CONTROL_FMT;
     if (statement_kind == F2C_STMT_OPEN && position == 0U)
         return F2C_IO_CONTROL_UNIT;
     if ((statement_kind == F2C_STMT_CLOSE || statement_kind == F2C_STMT_REWIND ||
@@ -157,6 +163,25 @@ static F2cIoControlKind positional_io_control_kind(F2cStatementKind statement_ki
 
 static int scalar_type(const F2cExpr *expression, Type type) {
     return expression != NULL && expression->type == type && expression->rank == 0U;
+}
+
+static int statement_assigns_format_label(const F2cStatement *statement, const char *name) {
+    if (statement == NULL || name == NULL)
+        return 0;
+    if (statement->kind == F2C_STMT_ASSIGN_LABEL && statement->name != NULL &&
+        strcmp(statement->name, name) == 0 && statement->label_count == 1U)
+        return 1;
+    return statement_assigns_format_label(statement->nested, name);
+}
+
+static int unit_assigns_format_label(const Unit *unit, const char *name) {
+    size_t index;
+    if (unit == NULL || name == NULL)
+        return 0;
+    for (index = 0U; index < unit->statement_count; ++index)
+        if (statement_assigns_format_label(&unit->statements[index], name))
+            return 1;
+    return 0;
 }
 
 static int inquiry_logical_result(F2cIoControlKind kind) {
@@ -212,8 +237,25 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
                                   : "");
         }
     } else if (semantic_kind == F2C_IO_CONTROL_FMT) {
-        if (!control->asterisk && !scalar_type(value, TYPE_CHARACTER) &&
-            !scalar_type(value, TYPE_INTEGER)) {
+        if (control->asterisk) {
+            return;
+        }
+        if (scalar_type(value, TYPE_CHARACTER)) {
+            return;
+        }
+        if (scalar_type(value, TYPE_INTEGER) && value->kind == F2C_EXPR_INTEGER_LITERAL) {
+            return;
+        }
+        if (scalar_type(value, TYPE_INTEGER) && value->kind == F2C_EXPR_NAME && value->definable &&
+            unit_assigns_format_label(unit, value->text)) {
+            return;
+        }
+        if (scalar_type(value, TYPE_INTEGER)) {
+            f2c_diagnostic_at(context, statement->line, column, 1,
+                              "%s FMT= INTEGER value must be a statement label or a variable "
+                              "defined by ASSIGN",
+                              statement_name);
+        } else {
             f2c_diagnostic_at(context, statement->line, column, 1,
                               "%s FMT= must be an asterisk, scalar CHARACTER format, or "
                               "statement label",
@@ -460,6 +502,12 @@ void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *sta
     size_t positional_count = 0U;
     size_t i;
     int saw_keyword = 0;
+    if (!statement->io_syntax_valid) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &statement->span, 1,
+                                 "malformed %s control or item-list syntax",
+                                 io_statement_name(statement->kind));
+        return;
+    }
     for (i = 0U; i < statement->control_count; ++i) {
         F2cIoControl *control = &statement->io_controls[i];
         F2cIoControlKind semantic_kind = control->kind;
@@ -514,10 +562,13 @@ void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *sta
         seen[F2C_IO_CONTROL_UNIT] == seen[F2C_IO_CONTROL_FILE]) {
         f2c_diagnostic_at(context, statement->line, 1U, 1,
                           "INQUIRE requires exactly one of UNIT= or FILE=");
-    } else if (statement->kind != F2C_STMT_INQUIRE && !seen[F2C_IO_CONTROL_UNIT]) {
+    } else if (statement->kind != F2C_STMT_INQUIRE && statement->kind != F2C_STMT_PRINT &&
+               !seen[F2C_IO_CONTROL_UNIT]) {
         f2c_diagnostic_at(context, statement->line, 1U, 1,
                           "%s requires UNIT=", io_statement_name(statement->kind));
     }
+    if (statement->kind == F2C_STMT_PRINT && !seen[F2C_IO_CONTROL_FMT])
+        f2c_diagnostic_at(context, statement->line, 1U, 1, "PRINT requires a format specifier");
     if (seen[F2C_IO_CONTROL_FMT] && seen[F2C_IO_CONTROL_NML]) {
         f2c_diagnostic_at(context, statement->line, 1U, 1, "%s cannot specify both FMT= and NML=",
                           io_statement_name(statement->kind));

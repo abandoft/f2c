@@ -110,9 +110,35 @@ static void test_file_control_codegen(void) {
     f2c_result_free(&result);
 }
 
+static void test_print_semantics(void) {
+    static const char source[] = "program invalid_print\n"
+                                 "  implicit none\n"
+                                 "  integer :: fmt, value\n"
+                                 "  print *,\n"
+                                 "  print fmt=*, value\n"
+                                 "  print 1 + 2, value\n"
+                                 "  print fmt, value\n"
+                                 "end program invalid_print\n";
+    F2cOptions options = {"invalid_print.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count >= 4U, "invalid PRINT forms produce independent hard errors");
+    expect(result.code == NULL, "invalid PRINT forms suppress generated C");
+    expect_contains(result.diagnostics, "malformed PRINT control or item-list syntax",
+                    "PRINT syntax failures retain an I/O-specific diagnostic");
+    expect_contains(result.diagnostics,
+                    "PRINT FMT= INTEGER value must be a statement label or a variable defined by "
+                    "ASSIGN",
+                    "PRINT rejects arbitrary and unassigned INTEGER format expressions");
+    expect(result.diagnostics == NULL ||
+               strstr(result.diagnostics, "out of memory while parsing statement IR") == NULL,
+           "malformed PRINT syntax is never misreported as allocation failure");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_file_control_semantics();
     test_file_control_codegen();
+    test_print_semantics();
     if (failures != 0) {
         fprintf(stderr, "%d I/O semantic test(s) failed\n", failures);
         return 1;
