@@ -406,6 +406,21 @@ if(F2C_BUILD_TESTING)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/test/reproducible_output.cmake
     )
 
+    if(UNIX)
+        find_program(F2C_SH_EXECUTABLE sh)
+        if(F2C_SH_EXECUTABLE)
+            add_test(
+                NAME performance_scope_validation
+                COMMAND
+                    ${CMAKE_COMMAND}
+                    -DSH=${F2C_SH_EXECUTABLE}
+                    -DF2C=$<TARGET_FILE:f2c>
+                    -DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/test/reference_performance_matrix.sh
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/test/performance_scope_validation.cmake
+            )
+        endif()
+    endif()
+
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         add_test(

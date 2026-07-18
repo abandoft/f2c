@@ -1,15 +1,29 @@
 #!/usr/bin/env sh
 set -eu
 
-if [ "$#" -ne 1 ]; then
-    echo "usage: $0 /path/to/f2c" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    echo "usage: $0 /path/to/f2c [full|daxpy|dgemv|dgemm|dgetf2|extended]" >&2
     exit 2
 fi
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 f2c=$1
+scope=${2:-full}
+case $scope in
+    full) expected_count=71 ;;
+    daxpy) expected_count=6 ;;
+    dgemv) expected_count=4 ;;
+    dgemm) expected_count=9 ;;
+    dgetf2) expected_count=3 ;;
+    extended) expected_count=49 ;;
+    *)
+        echo "unsupported performance scope: $scope" >&2
+        exit 2
+        ;;
+esac
 work=$root/build/benchmarks/performance-matrix
 raw=$work/raw.log
+rm -rf "$work"
 mkdir -p "$work"
 : >"$raw"
 
@@ -25,11 +39,20 @@ run_benchmark() {
     cat "$output" >>"$raw"
 }
 
-run_benchmark daxpy reference_daxpy_benchmark.sh
-run_benchmark dgemv reference_dgemv_benchmark.sh
-run_benchmark dgemm reference_dgemm_benchmark.sh
-run_benchmark dgetf2 reference_dgetf2_benchmark.sh
-run_benchmark extended-matrix performance/reference_matrix.sh
+case $scope in
+    full)
+        run_benchmark daxpy reference_daxpy_benchmark.sh
+        run_benchmark dgemv reference_dgemv_benchmark.sh
+        run_benchmark dgemm reference_dgemm_benchmark.sh
+        run_benchmark dgetf2 reference_dgetf2_benchmark.sh
+        run_benchmark extended-matrix performance/reference_matrix.sh
+        ;;
+    daxpy) run_benchmark daxpy reference_daxpy_benchmark.sh ;;
+    dgemv) run_benchmark dgemv reference_dgemv_benchmark.sh ;;
+    dgemm) run_benchmark dgemm reference_dgemm_benchmark.sh ;;
+    dgetf2) run_benchmark dgetf2 reference_dgetf2_benchmark.sh ;;
+    extended) run_benchmark extended-matrix performance/reference_matrix.sh ;;
+esac
 
 csv=$work/results.csv
 json=$work/results.json
@@ -40,8 +63,8 @@ awk -F, '
 ' "$raw" >"$csv"
 
 count=$(awk -F, 'NR > 1 { ++count } END { print count + 0 }' "$csv")
-if [ "$count" -ne 71 ]; then
-    echo "performance matrix expected 71 cases, found $count" >&2
+if [ "$count" -ne "$expected_count" ]; then
+    echo "performance scope $scope expected $expected_count cases, found $count" >&2
     exit 1
 fi
 
@@ -56,9 +79,11 @@ awk -F, '
 ' "$csv" >"$json"
 python3 -m json.tool "$json" >/dev/null
 
-awk -F, '
+awk -F, -v scope="$scope" '
     BEGIN {
         print "# f2c performance matrix"
+        print ""
+        print "Scope: `" scope "`"
         print ""
         print "Parity criterion: every generated-C case must be within 5% of the matching Fortran build."
         print ""
