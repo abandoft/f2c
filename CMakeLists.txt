@@ -104,6 +104,7 @@ set(
     src/codegen/unit/private.h
     src/core/config.c
     src/core/cleanup.c
+    src/core/generated/io.c
     src/core/generated/private.h
     src/core/generated/relation.c
     src/core/support.c
