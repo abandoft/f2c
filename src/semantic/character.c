@@ -6,18 +6,24 @@
 #include <string.h>
 
 static size_t string_literal_length(const char *text) {
-    const size_t source_length = text != NULL ? strlen(text) : 0U;
-    const char quote = source_length != 0U ? text[0] : '\0';
+    const char *quote_begin;
+    size_t source_length;
+    char quote;
     const char *payload;
     size_t payload_length;
     size_t length = 0U;
     size_t i;
     if (f2c_hollerith_payload(text, &payload, &payload_length))
         return payload_length;
+    quote_begin = f2c_character_literal_quote(text);
+    if (quote_begin == NULL)
+        return 0U;
+    source_length = strlen(quote_begin);
+    quote = *quote_begin;
     if ((quote != '\'' && quote != '"') || source_length < 2U)
         return 0U;
     for (i = 1U; i + 1U < source_length; ++i) {
-        if (text[i] == quote && i + 1U < source_length - 1U && text[i + 1U] == quote)
+        if (quote_begin[i] == quote && i + 1U < source_length - 1U && quote_begin[i + 1U] == quote)
             ++i;
         ++length;
     }
@@ -60,6 +66,7 @@ static int character_element_count(Unit *unit, const Symbol *symbol, size_t *cou
 
 static char *character_literal_bytes(const char *text, size_t *length) {
     const char *cursor = text;
+    const char *quote_begin;
     const char *payload;
     size_t payload_length;
     char quote;
@@ -72,6 +79,10 @@ static char *character_literal_bytes(const char *text, size_t *length) {
     }
     while (isspace((unsigned char)*cursor))
         ++cursor;
+    quote_begin = f2c_character_literal_quote(cursor);
+    if (quote_begin == NULL)
+        return NULL;
+    cursor = quote_begin;
     quote = *cursor;
     if (quote != '\'' && quote != '"')
         return NULL;

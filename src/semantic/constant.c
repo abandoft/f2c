@@ -38,18 +38,24 @@ static int checked_multiply(int64_t left, int64_t right, int64_t *result) {
 }
 
 static int64_t literal_character_length(const char *text) {
-    const char quote = text != NULL ? text[0] : '\0';
+    const char *quote_begin;
+    char quote;
     int64_t length = 0;
     size_t i;
-    const size_t source_length = text != NULL ? strlen(text) : 0U;
+    size_t source_length;
     const char *payload;
     size_t payload_length;
     if (f2c_hollerith_payload(text, &payload, &payload_length))
         return payload_length <= (size_t)INT64_MAX ? (int64_t)payload_length : -1;
+    quote_begin = f2c_character_literal_quote(text);
+    if (quote_begin == NULL)
+        return -1;
+    quote = *quote_begin;
+    source_length = strlen(quote_begin);
     if ((quote != '\'' && quote != '"') || source_length < 2U)
         return -1;
     for (i = 1U; i + 1U < source_length; ++i) {
-        if (text[i] == quote && i + 1U < source_length - 1U && text[i + 1U] == quote)
+        if (quote_begin[i] == quote && i + 1U < source_length - 1U && quote_begin[i + 1U] == quote)
             ++i;
         ++length;
     }
