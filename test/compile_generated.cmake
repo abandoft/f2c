@@ -90,6 +90,7 @@ foreach(
        many_arguments
        statement_function
        statement_function_single_eval
+       do_semantics
        select_case
        named_constructs
        where_construct
