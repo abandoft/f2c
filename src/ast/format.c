@@ -520,8 +520,10 @@ static int parse_list(FormatParser *parser, F2cFormatNode *parent) {
             set_error(parser, F2C_FORMAT_ERROR_EXPECTED_RIGHT_PARENTHESIS, parser->position);
             return 0;
         }
-        if (!parse_item(parser, &child))
+        if (!parse_item(parser, &child)) {
+            discard_node(&child);
             return 0;
+        }
         if (!append_child(parser, parent, &child)) {
             discard_node(&child);
             return 0;
