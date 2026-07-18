@@ -58,7 +58,8 @@
   直接构建并常量求值 token AST；属性关键字会结合顶层赋值 token 判别，`DIMENSION`、`EXTERNAL`、
   `PARAMETER`、`SAVE` 和 `EQUIVALENCE` 作为合法变量名时不再被误判为声明。`DATA` 的组、重复因子、
   设计子和嵌套隐式 DO 已完全消费 canonical token range；`READ/WRITE`、文件控制语句及其控制项和
-  I/O item 已消费 canonical token range，`PRINT`、旧式控制语句和少量字符串入口仍有文本扫描。
+  I/O item 已消费 canonical token range；`PRINT` 的格式与输出项也已迁移，旧式控制语句和少量
+  字符串入口仍有文本扫描。
   源码归一化层的注释识别、分号拆句和代码大小写处理已经
   改为消费 canonical token，不会在 token 化之前破坏字符或 Hollerith 载荷。
 - [x] 只保留 `frontend/token.h` 定义的 `F2cToken/F2cTokenStream`。表达式 AST 已删除独立的
@@ -239,7 +240,11 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   上述属性，顺序格式化文件控制路径已经执行验证；直接访问 `READ/WRITE REC=`、直接记录边界、
   动作不匹配的无崩溃错误传播和非格式化记录协议仍需完成。
 - [ ] 让 `PRINT`、`READ` 和 `WRITE` 共享同一格式 AST 和执行引擎；验证显式 FORMAT、运行时格式、
-  列表导向、格式回转、嵌套重复组、冒号和空数据列表。
+  列表导向、格式回转、嵌套重复组、冒号和空数据列表。`PRINT` 现已直接消费 canonical token，
+  格式控制、输出项及任意嵌套 implied-DO 均进入结构化 AST，并与 `READ/WRITE` 共用格式状态和
+  formatted item emitter；列表导向、字符字面量、运行时字符、标签和 F77 已赋值 FORMAT、空数据
+  列表及尾随定位语义已有严格 C17 执行和 gfortran 逐字节差分。完整 FORMAT 描述符目前仍由生成
+  代码中的文本状态机解释，尚需迁移为编译期描述符 AST，并补齐全部回转和描述符组合后才能关闭。
 - [ ] 补齐 `I/B/O/Z/F/E/EN/ES/D/G/L/A` 的宽度、精度、指数位数、舍入、符号、比例因子和
   星号溢出规则，并逐字段对比不同原生编译器。
 - [ ] 用内存记录引擎实现内部文件，不再通过 `tmpfile()` 模拟；覆盖字符标量/数组、多记录、
@@ -263,7 +268,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   不得以引入新的独立运行时库解决该问题。
 - [ ] 为数组描述符、I/O、格式、NAMELIST、派生类型复制/终结等生成逻辑建立结构化 emitter，
   替换难以审查的大段 C 字符串模板。文件控制 emitter 已按 common/open/position/inquire 职责拆分，
-  文件单元支持生成也已从总控模块隔离；其余格式、NAMELIST、数组和生命周期模板仍需继续迁移。
+  文件单元支持生成也已从总控模块隔离，格式控制解析与 formatted transfer 已从总控模块提取为
+  共享 emitter；其余格式描述符、NAMELIST、数组和生命周期模板仍需继续迁移。
 - [ ] 建立生成代码可读性规范：稳定命名、源位置注释、确定性声明顺序、合理作用域和格式化；
   对公开接口及有代表性的生成实现使用快照测试。
 - [ ] 记录并限制单个源文件的转译时间、峰值内存、生成 C 大小和生成 C 编译时间。
