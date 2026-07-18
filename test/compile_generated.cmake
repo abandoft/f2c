@@ -70,6 +70,7 @@ foreach(
        dynamic_derived_namelist
        namelist_auto_allocate
        nonadvancing_io
+       file_control
        allocatable_component
        finalization
        block_finalization

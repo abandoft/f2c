@@ -54,6 +54,8 @@ jobs:
         run: sh test/inquiry_differential.sh build/numerical/f2c
       - name: Differential-test transformational intrinsics
         run: sh test/transform_differential.sh build/numerical/f2c
+      - name: Differential-test file control I/O
+        run: sh test/file_control_differential.sh build/numerical/f2c
       - name: Run Reference BLAS/LAPACK smoke test
         run: sh test/reference_lapack_smoke.sh build/numerical/f2c
       - name: Strict-compile all Reference BLAS sources
