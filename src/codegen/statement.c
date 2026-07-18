@@ -15,23 +15,57 @@ static int is_numeric_type(Type type) {
            type == TYPE_COMPLEX || type == TYPE_DOUBLE_COMPLEX;
 }
 
-static int do_count_fits_default_integer(const F2cStatement *statement) {
+static int integer_literal_value(const F2cExpr *expression, long long *value) {
     char *end = NULL;
+    if (expression == NULL || expression->kind != F2C_EXPR_INTEGER_LITERAL ||
+        expression->text == NULL)
+        return 0;
+    *value = strtoll(expression->text, &end, 10);
+    return end != expression->text && *end == '\0';
+}
+
+static int same_scalar_designator(const F2cExpr *left, const F2cExpr *right) {
+    if (left == NULL || right == NULL || left->rank != 0U || right->rank != 0U ||
+        left->kind != F2C_EXPR_NAME || right->kind != F2C_EXPR_NAME)
+        return 0;
+    if (left->symbol != NULL || right->symbol != NULL)
+        return left->symbol != NULL && left->symbol == right->symbol;
+    return left->text != NULL && right->text != NULL && strcmp(left->text, right->text) == 0;
+}
+
+static int relative_do_count_fits_default_integer(const F2cExpr *start, const F2cExpr *finish,
+                                                  long long step) {
+    const F2cExpr *offset = NULL;
+    long long distance;
+    if (finish == NULL || finish->kind != F2C_EXPR_BINARY || finish->text == NULL ||
+        finish->child_count != 2U)
+        return 0;
+    if (step == 1 && strcmp(finish->text, "+") == 0) {
+        if (same_scalar_designator(start, finish->children[0]))
+            offset = finish->children[1];
+        else if (same_scalar_designator(start, finish->children[1]))
+            offset = finish->children[0];
+    } else if (step == -1 && strcmp(finish->text, "-") == 0 &&
+               same_scalar_designator(start, finish->children[0])) {
+        offset = finish->children[1];
+    }
+    return integer_literal_value(offset, &distance) && distance >= 0 && distance < INT32_MAX;
+}
+
+static int do_count_fits_default_integer(const F2cStatement *statement) {
     long long start;
     long long step;
     if (statement == NULL || statement->right == NULL || statement->step == NULL ||
         statement->left == NULL || statement->left->type_kind != f2c_default_kind(TYPE_INTEGER) ||
-        statement->step->kind != F2C_EXPR_INTEGER_LITERAL || statement->step->text == NULL)
-        return 0;
-    step = strtoll(statement->step->text, &end, 10);
-    if (end == statement->step->text || *end != '\0')
+        !integer_literal_value(statement->step, &step))
         return 0;
     if (step == 1 && statement->right->kind == F2C_EXPR_INTEGER_LITERAL &&
-        statement->right->text != NULL) {
-        start = strtoll(statement->right->text, &end, 10);
-        if (end != statement->right->text && *end == '\0' && start >= 1 && start <= INT32_MAX)
+        integer_literal_value(statement->right, &start)) {
+        if (start >= 1 && start <= INT32_MAX)
             return 1;
     }
+    if (relative_do_count_fits_default_integer(statement->right, statement->limit, step))
+        return 1;
     return step <= -3 || step >= 3;
 }
 

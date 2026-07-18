@@ -422,6 +422,22 @@ static void test_wide_do_trip_count(void) {
                         "a unit-stride range starting at two has a proven native-width count");
         f2c_result_free(&positive);
     }
+    {
+        static const char relative_source[] = "subroutine relative_do(first, observed)\n"
+                                              "  integer :: first, observed, i\n"
+                                              "  observed = 0\n"
+                                              "  do i = first, first + 31\n"
+                                              "    observed = observed + 1\n"
+                                              "  end do\n"
+                                              "end subroutine relative_do\n";
+        F2cOptions relative_options = {"relative_do.f90", F2C_SOURCE_FREE, 0};
+        F2cResult relative =
+            f2c_transpile(relative_source, strlen(relative_source), &relative_options);
+        expect(relative.error_count == 0U, "fixed-relative default-integer DO translates");
+        expect_contains(relative.code, "int32_t f2c_do_count_",
+                        "a fixed relative range has a proven native-width trip count");
+        f2c_result_free(&relative);
+    }
 }
 
 static void test_blas_style_subroutine(void) {
