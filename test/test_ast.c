@@ -485,6 +485,22 @@ static void test_integer_substitution_clone(void) {
     f2c_expr_free(expression);
 }
 
+static void test_integer_iteration_counts(void) {
+    uint64_t count = 0U;
+    expect(f2c_integer_iteration_count(1, 9, 2, &count) && count == 5U,
+           "positive implied-DO iteration counts include both reachable endpoints");
+    expect(f2c_integer_iteration_count(9, 1, -2, &count) && count == 5U,
+           "negative implied-DO iteration counts are computed without signed overflow");
+    expect(f2c_integer_iteration_count(3, 1, 1, &count) && count == 0U,
+           "an unreachable implied-DO range has zero iterations");
+    expect(f2c_integer_iteration_count(INT64_MIN, INT64_MAX, INT64_MAX, &count) && count == 3U,
+           "iteration counting handles the complete signed integer domain");
+    expect(!f2c_integer_iteration_count(INT64_MIN, INT64_MAX, 1, &count),
+           "an unrepresentable full-domain iteration count is rejected");
+    expect(!f2c_integer_iteration_count(1, 2, 0, &count),
+           "a zero implied-DO step is rejected before expansion");
+}
+
 int main(void) {
     test_kind_shape_and_value_category();
     test_typed_numeric_tree();
@@ -499,6 +515,7 @@ int main(void) {
     test_malformed_expression_locations();
     test_nested_expression_source_ranges();
     test_integer_substitution_clone();
+    test_integer_iteration_counts();
     if (failures != 0) {
         fprintf(stderr, "%d AST test(s) failed\n", failures);
         return 1;

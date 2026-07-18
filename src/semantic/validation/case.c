@@ -11,40 +11,6 @@ typedef struct CharacterConstant {
     size_t length;
 } CharacterConstant;
 
-static int initialization_constant(const F2cExpr *expression) {
-    size_t i;
-    if (expression == NULL)
-        return 0;
-    switch (expression->kind) {
-    case F2C_EXPR_INTEGER_LITERAL:
-    case F2C_EXPR_REAL_LITERAL:
-    case F2C_EXPR_STRING_LITERAL:
-    case F2C_EXPR_LOGICAL_LITERAL:
-        return 1;
-    case F2C_EXPR_NAME:
-        return expression->symbol != NULL && expression->symbol->parameter;
-    case F2C_EXPR_UNARY:
-    case F2C_EXPR_BINARY:
-        break;
-    case F2C_EXPR_CALL:
-        if (expression->text == NULL || !f2c_is_intrinsic_name(expression->text))
-            return 0;
-        break;
-    case F2C_EXPR_ARRAY_REFERENCE:
-    case F2C_EXPR_SUBSTRING:
-        if (expression->symbol == NULL || !expression->symbol->parameter)
-            return 0;
-        break;
-    default:
-        return 0;
-    }
-    for (i = 0U; i < expression->child_count; ++i) {
-        if (!initialization_constant(expression->children[i]))
-            return 0;
-    }
-    return 1;
-}
-
 static int valid_case_type(Type type) {
     return type == TYPE_INTEGER || type == TYPE_CHARACTER || type == TYPE_LOGICAL;
 }
@@ -72,7 +38,7 @@ static void validate_case_endpoint(Context *context, Unit *unit, F2cStatement *s
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &endpoint->span, 1,
                                  "%s CHARACTER kind does not match SELECT CASE selector kind",
                                  role);
-    } else if (!initialization_constant(endpoint) ||
+    } else if (!f2c_expression_is_initialization_constant(endpoint) ||
                (endpoint->type == TYPE_INTEGER &&
                 !f2c_evaluate_integer_constant(unit, endpoint, &integer_value))) {
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &endpoint->span, 1,

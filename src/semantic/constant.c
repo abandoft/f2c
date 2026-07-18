@@ -220,3 +220,66 @@ int f2c_evaluate_integer_text(Unit *unit, const char *text, int64_t *value) {
     f2c_expr_free(expression);
     return result;
 }
+
+int f2c_expression_is_initialization_constant(const F2cExpr *expression) {
+    size_t index;
+    if (expression == NULL)
+        return 0;
+    switch (expression->kind) {
+    case F2C_EXPR_INTEGER_LITERAL:
+    case F2C_EXPR_REAL_LITERAL:
+    case F2C_EXPR_STRING_LITERAL:
+    case F2C_EXPR_LOGICAL_LITERAL:
+        return 1;
+    case F2C_EXPR_NAME:
+        return expression->symbol != NULL && expression->symbol->parameter;
+    case F2C_EXPR_CALL:
+        if (expression->text == NULL || !f2c_is_intrinsic_name(expression->text))
+            return 0;
+        break;
+    case F2C_EXPR_ARRAY_REFERENCE:
+    case F2C_EXPR_SUBSTRING:
+    case F2C_EXPR_COMPONENT:
+        if (expression->symbol == NULL || !expression->symbol->parameter)
+            return 0;
+        break;
+    case F2C_EXPR_UNARY:
+    case F2C_EXPR_BINARY:
+    case F2C_EXPR_COMPLEX_LITERAL:
+    case F2C_EXPR_ARRAY_CONSTRUCTOR:
+    case F2C_EXPR_KEYWORD_ARGUMENT:
+    case F2C_EXPR_STRUCTURE_CONSTRUCTOR:
+        break;
+    default:
+        return 0;
+    }
+    for (index = 0U; index < expression->child_count; ++index) {
+        if (!f2c_expression_is_initialization_constant(expression->children[index]))
+            return 0;
+    }
+    return 1;
+}
+
+int f2c_integer_iteration_count(int64_t first, int64_t last, int64_t step, uint64_t *count) {
+    uint64_t distance;
+    uint64_t magnitude;
+    uint64_t quotient;
+    if (count == NULL || step == 0)
+        return 0;
+    if ((step > 0 && first > last) || (step < 0 && first < last)) {
+        *count = 0U;
+        return 1;
+    }
+    if (step > 0) {
+        distance = (uint64_t)last - (uint64_t)first;
+        magnitude = (uint64_t)step;
+    } else {
+        distance = (uint64_t)first - (uint64_t)last;
+        magnitude = 0U - (uint64_t)step;
+    }
+    quotient = distance / magnitude;
+    if (quotient == UINT64_MAX)
+        return 0;
+    *count = quotient + 1U;
+    return 1;
+}
