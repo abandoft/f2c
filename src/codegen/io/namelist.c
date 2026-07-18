@@ -25,7 +25,7 @@ void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
     } else if (symbol->type == TYPE_LOGICAL) {
         f2c_io_indent(&context->output, depth);
         if (input) {
-            f2c_buffer_append(&context->output, "{ bool f2c_namelist_logical; ");
+            f2c_buffer_append(&context->output, "{ bool f2c_namelist_logical = false; ");
             f2c_buffer_printf(&context->output,
                               "if (f2c_read_bool(%s, &f2c_namelist_logical) > 0) %s = "
                               "f2c_namelist_logical ? 1 : 0; }\n",
