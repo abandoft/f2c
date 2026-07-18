@@ -81,26 +81,24 @@ static int push_binding(DataBindings *bindings, const F2cExpr *iterator) {
 static int evaluate_bound(DataValidation *validation, const F2cExpr *expression, int64_t *value) {
     F2cExpr *substituted = f2c_expr_clone_substitute_integers(
         expression, validation->bindings.items, validation->bindings.count);
-    const int valid = substituted != NULL &&
-                      f2c_evaluate_integer_constant(validation->unit, substituted, value);
+    const int valid =
+        substituted != NULL && f2c_evaluate_integer_constant(validation->unit, substituted, value);
     f2c_expr_free(substituted);
     return valid;
 }
 
 static int expansion_within_budget(DataValidation *validation, uint64_t iterations) {
     const size_t limit = validation->context->limits.max_constant_steps;
-    if (iterations <= (uint64_t)SIZE_MAX &&
-        (limit == 0U || iterations <= (uint64_t)limit))
+    if (iterations <= (uint64_t)SIZE_MAX && (limit == 0U || iterations <= (uint64_t)limit))
         return 1;
-    f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_RESOURCE_LIMIT,
-                             &validation->group->span, 1,
-                             "DATA implied-DO expansion exceeds the constant-step limit of %zu",
-                             limit);
+    f2c_diagnostic_span_code(
+        validation->context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, &validation->group->span, 1,
+        "DATA implied-DO expansion exceeds the constant-step limit of %zu", limit);
     return 0;
 }
 
-static int implied_do_iterations(DataValidation *validation, const F2cIoItem *item,
-                                 int64_t *first, int64_t *step, uint64_t *iterations) {
+static int implied_do_iterations(DataValidation *validation, const F2cIoItem *item, int64_t *first,
+                                 int64_t *step, uint64_t *iterations) {
     int64_t last;
     if (item->iterator == NULL || item->iterator->kind != F2C_EXPR_NAME ||
         item->iterator->type != TYPE_INTEGER || item->iterator->rank != 0U) {
@@ -129,8 +127,8 @@ static int implied_do_iterations(DataValidation *validation, const F2cIoItem *it
         return 0;
     }
     if (*step == 0) {
-        f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &item->step->span,
-                                 1, "DATA implied-DO step cannot be zero");
+        f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &item->step->span, 1,
+                                 "DATA implied-DO step cannot be zero");
         return 0;
     }
     if (!f2c_integer_iteration_count(*first, last, *step, iterations) ||
@@ -170,6 +168,40 @@ static void validate_value_type(DataValidation *validation, const F2cExpr *targe
     }
 }
 
+static int attach_scalar_initializer(DataValidation *validation, F2cIoItem *item, F2cExpr *target,
+                                     const F2cExpr *value) {
+    Symbol *symbol = target != NULL ? target->symbol : NULL;
+    const char *source;
+    char *initializer;
+    F2cExpr *expression;
+    if (symbol == NULL || target->kind != F2C_EXPR_NAME || target->rank != 0U ||
+        symbol->module_entity || symbol->common_block != NULL || symbol->alias_to != NULL ||
+        symbol->type == TYPE_CHARACTER || symbol->type == TYPE_COMPLEX ||
+        symbol->type == TYPE_DOUBLE_COMPLEX || symbol->type == TYPE_DERIVED)
+        return 0;
+    if (symbol->initializer != NULL || symbol->initializer_expression != NULL) {
+        f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
+                                 "DATA target '%s' already has an initializer", symbol->name);
+        return -1;
+    }
+    source = value->source != NULL ? value->source : value->text;
+    initializer = source != NULL ? f2c_strdup(source) : NULL;
+    expression = f2c_expr_clone_substitute_integers(value, NULL, 0U);
+    if (initializer == NULL || expression == NULL) {
+        free(initializer);
+        f2c_expr_free(expression);
+        f2c_diagnostic_code(validation->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                            validation->statement->line, 1,
+                            "out of memory lowering DATA initializer for '%s'", symbol->name);
+        return -1;
+    }
+    symbol->initializer = initializer;
+    symbol->initializer_expression = expression;
+    symbol->data_initializer = 1;
+    item->data_static_initializer = 1;
+    return 1;
+}
+
 static int validate_target(DataValidation *validation, F2cIoItem *item) {
     size_t child;
     if (!item->implied_do) {
@@ -187,8 +219,8 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
             return 0;
         }
         if (!expression_extent(target, &extent)) {
-            f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span,
-                                     1, "DATA array target must have a constant explicit shape");
+            f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
+                                     "DATA array target must have a constant explicit shape");
             return 0;
         }
         symbol->saved = 1;
@@ -200,8 +232,12 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
         }
         for (element = 0U; element < extent; ++element) {
             const F2cExpr *value = next_value(&validation->values);
-            if (value != NULL)
+            if (value != NULL) {
                 validate_value_type(validation, target, value);
+                if (extent == 1U && element == 0U &&
+                    attach_scalar_initializer(validation, item, target, value) < 0)
+                    return 0;
+            }
         }
         return 1;
     }

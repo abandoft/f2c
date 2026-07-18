@@ -18,4 +18,16 @@ program data_statement
   if (label /= 'a/b,c') stop 5
   if (real(values(1)) /= 1.0 .or. aimag(values(1)) /= 2.0) stop 6
   if (real(values(2)) /= 3.0 .or. aimag(values(2)) /= 4.0) stop 7
+  if (next_value() /= 11) stop 8
+  if (next_value() /= 12) stop 9
+
+contains
+
+  integer function next_value()
+    implicit none
+    integer :: counter
+    data counter / 10 /
+    counter = counter + 1
+    next_value = counter
+  end function next_value
 end program data_statement

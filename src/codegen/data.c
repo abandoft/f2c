@@ -195,7 +195,9 @@ static int emit_data_target(Context *context, Unit *unit, const F2cIoItem *targe
         }
         {
             const F2cExpr *value = next_data_value(cursor);
-            if (value == NULL || !emit_data_assignment(context, unit, substituted, value, depth)) {
+            if (value == NULL ||
+                (!target->data_static_initializer &&
+                 !emit_data_assignment(context, unit, substituted, value, depth))) {
                 f2c_expr_free(substituted);
                 return 0;
             }

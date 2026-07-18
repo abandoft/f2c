@@ -62,6 +62,7 @@ typedef struct F2cIoItem {
     F2cExpr *limit;
     F2cExpr *step;
     int implied_do;
+    int data_static_initializer;
 } F2cIoItem;
 
 typedef enum F2cIoControlKind {

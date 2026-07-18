@@ -73,6 +73,7 @@ struct Symbol {
     char *initializer;
     F2cTokenRange initializer_syntax;
     F2cExpr *initializer_expression;
+    int data_initializer;
     char *alias_to;
     int64_t alias_offset;
     char *common_block;

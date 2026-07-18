@@ -92,6 +92,13 @@ static void test_data_diagnostics(void) {
                    "end program type_mismatch\n",
                    "DATA value type or kind is incompatible with its target",
                    "DATA validates target and initializer types");
+    expect_failure("duplicate_initializer.f90",
+                   "program duplicate_initializer\n"
+                   "  integer :: value = 1\n"
+                   "  data value / 2 /\n"
+                   "end program duplicate_initializer\n",
+                   "DATA target 'value' already has an initializer",
+                   "DATA rejects a second initializer for the same scalar object");
     expect_failure("zero_step.f90",
                    "program zero_step\n"
                    "  integer :: values(2), i\n"
