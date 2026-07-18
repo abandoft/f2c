@@ -70,6 +70,23 @@ static void test_non_c_constant_static_fallback(void) {
     f2c_result_free(&result);
 }
 
+static void test_equivalence_storage_lifetime(void) {
+    static const char source[] = "integer function equivalence_data()\n"
+                                 "  integer :: storage(2), value\n"
+                                 "  equivalence (storage(2), value)\n"
+                                 "  data value / 10 /\n"
+                                 "  value = value + 1\n"
+                                 "  equivalence_data = value\n"
+                                 "end function equivalence_data\n";
+    F2cResult result = transpile("equivalence_data.f90", source);
+    expect(result.error_count == 0U && result.code != NULL,
+           "DATA accepts a supported EQUIVALENCE storage designator");
+    expect(result.code != NULL && strstr(result.code, "static int32_t storage[") != NULL &&
+               strstr(result.code, "static bool f2c_data_initialized_") != NULL,
+           "DATA SAVE semantics propagate from an EQUIVALENCE alias to its storage root");
+    f2c_result_free(&result);
+}
+
 static void test_data_diagnostics(void) {
     expect_failure("missing_separator.f90",
                    "program missing_separator\n"
@@ -153,6 +170,7 @@ static void test_data_diagnostics(void) {
 int main(void) {
     test_valid_data_semantics();
     test_non_c_constant_static_fallback();
+    test_equivalence_storage_lifetime();
     test_data_diagnostics();
     if (failures != 0)
         fprintf(stderr, "%d DATA semantic test(s) failed\n", failures);

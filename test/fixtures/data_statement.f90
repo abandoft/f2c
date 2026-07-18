@@ -28,6 +28,8 @@ program data_statement
   if (next_intrinsic_value() /= 10) stop 14
   if (next_intrinsic_value() /= 11) stop 15
   if (partial(2) /= 9) stop 16
+  if (next_equivalence_value() /= 11) stop 17
+  if (next_equivalence_value() /= 12) stop 18
 
 contains
 
@@ -63,4 +65,13 @@ contains
     state = state + 1
     next_intrinsic_value = state
   end function next_intrinsic_value
+
+  integer function next_equivalence_value()
+    implicit none
+    integer :: storage(2), value
+    equivalence (storage(2), value)
+    data value / 10 /
+    value = value + 1
+    next_equivalence_value = value
+  end function next_equivalence_value
 end program data_statement
