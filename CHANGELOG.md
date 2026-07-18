@@ -1,3 +1,11 @@
+## 1.6.0
+
+- Split macro-definition management into a dedicated, bounded preprocessing module and added in-source function-like macros.
+- Added zero-argument, nested, and variadic macros together with stringizing, token pasting, and macro-redefinition checks.
+- Added backslash-continued preprocessing directive lines and macro-expanded include operands.
+- Completed deterministic 64-bit signed and unsigned `#if` values, character constants, overflow checks, and invalid-operation diagnostics.
+- Added macro-argument resource limits and expanded strict C17, sanitizer, and pinned Reference BLAS/LAPACK regression coverage.
+
 ## 1.5.0
 
 - Migrated external file control statements to the unified token, AST, typed IR, and structured code generation pipeline.
