@@ -362,6 +362,8 @@ static void test_program_and_control_flow(void) {
                     "generated source defaults to reproducible floating-point evaluation");
     expect_contains(result.code, "#define F2C_LOOP_UNROLL",
                     "generated source defines a portable loop optimization hint");
+    expect_contains(result.code, "#define F2C_LOOP_UNROLL_OUTER",
+                    "generated source defines a separate outer-loop optimization hint");
     expect_contains(result.code, "__STDC_VERSION__ < 201710L",
                     "generated source rejects pre-C17 compilation modes");
     expect_contains(result.code, "int main(void)", "PROGRAM maps to C main");
@@ -535,8 +537,8 @@ static void test_nested_loop_optimization_hints(void) {
     expect(result.error_count == 0U, "nested counted loops translate without errors");
     expect(result.code == NULL || strstr(result.code, "F2C_LOOP_UNROLL\n    for (;") == NULL,
            "three-level loop nests do not force-unroll the outermost loop");
-    expect(result.code == NULL || strstr(result.code, "F2C_LOOP_UNROLL\n        for (;") == NULL,
-           "nested loop parents are left to the compiler cost model");
+    expect_contains(result.code, "F2C_LOOP_UNROLL_OUTER\n        for (;",
+                    "the loop surrounding a vectorizable inner loop receives a smaller hint");
     expect_contains(result.code, "F2C_LOOP_UNROLL\n            for (;",
                     "the innermost counted loop receives an unroll hint");
     f2c_result_free(&result);
