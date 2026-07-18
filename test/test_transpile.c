@@ -365,14 +365,16 @@ static void test_program_and_control_flow(void) {
     expect_contains(result.code, "__STDC_VERSION__ < 201710L",
                     "generated source rejects pre-C17 compilation modes");
     expect_contains(result.code, "int main(void)", "PROGRAM maps to C main");
-    expect_contains(result.code, "for (; f2c_do_count_", "DO maps to a counted C loop");
+    expect_contains(result.code, "for (; f2c_do_index_",
+                    "canonical unit-stride DO maps to a widened induction loop");
     expect_contains(result.code, "const int32_t f2c_do_start_",
                     "DO initial value is evaluated exactly once");
     expect_contains(result.code, "const int32_t f2c_do_limit_",
                     "DO limit is evaluated exactly once");
-    expect_contains(result.code, "const int32_t f2c_do_step_", "DO step is evaluated exactly once");
-    expect_contains(result.code, "int32_t f2c_do_count_",
-                    "canonical default-integer DO uses a native-width trip counter");
+    expect_not_contains(result.code, "f2c_do_count_",
+                        "canonical unit-stride DO omits a redundant trip counter");
+    expect_contains(result.code, ": INT32_MIN;",
+                    "canonical DO restores its final control value without signed overflow");
     expect_contains(result.code, "F2C_LOOP_UNROLL\n    for (;",
                     "isolated counted loops receive the portable optimization hint");
     expect_contains(result.code, "F2C_MOD(i, 2)", "MOD intrinsic is preserved without a runtime");
@@ -422,8 +424,10 @@ static void test_wide_do_trip_count(void) {
         F2cResult positive =
             f2c_transpile(positive_source, strlen(positive_source), &positive_options);
         expect(positive.error_count == 0U, "positive-start default-integer DO translates");
-        expect_contains(positive.code, "int32_t f2c_do_count_",
-                        "a unit-stride range starting at two has a proven native-width count");
+        expect_contains(positive.code, "for (; f2c_do_index_",
+                        "a positive literal start uses widened unit-stride induction");
+        expect_not_contains(positive.code, "f2c_do_count_",
+                            "direct unit-stride induction omits a redundant trip counter");
         f2c_result_free(&positive);
     }
     {
@@ -474,8 +478,10 @@ static void test_blas_style_subroutine(void) {
                     "the internal implementation preserves Fortran alias optimization");
     expect_contains(result.code, "dy[((ptrdiff_t)(iy) - 1)]",
                     "Fortran one-based array uses a pointer-width rebased offset");
-    expect_contains(result.code, "int32_t f2c_do_count_",
-                    "positive dynamic unit-stride loops use a proven native-width trip counter");
+    expect_contains(result.code, "for (; f2c_do_index_",
+                    "positive dynamic unit-stride loops use widened induction");
+    expect_not_contains(result.code, "f2c_do_count_",
+                        "BLAS-style unit-stride loops omit a redundant trip counter");
     f2c_result_free(&result);
 }
 
@@ -627,8 +633,8 @@ static void test_legacy_blas_constructs(void) {
     expect(result.error_count == 0U, "legacy labeled DO and DATA translate");
     expect(result.warning_count == 0U, "supported legacy constructs produce no warning");
     expect_contains(result.code, "scale = 2.0e0;", "scalar DATA initializes its target");
-    expect_contains(result.code, "for (; f2c_do_count_",
-                    "labeled DO maps to structured control flow");
+    expect_contains(result.code, "for (; f2c_do_index_",
+                    "labeled unit-stride DO maps to widened structured control flow");
     f2c_result_free(&result);
 }
 

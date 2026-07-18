@@ -69,6 +69,16 @@ static int do_count_fits_default_integer(const F2cStatement *statement) {
     return step <= -3 || step >= 3;
 }
 
+static int is_canonical_positive_unit_do(const F2cStatement *statement) {
+    long long start;
+    long long step;
+    return statement != NULL && statement->left != NULL && statement->right != NULL &&
+           statement->step != NULL && statement->left->type == TYPE_INTEGER &&
+           statement->left->type_kind == f2c_default_kind(TYPE_INTEGER) &&
+           integer_literal_value(statement->right, &start) && start >= 1 && start <= INT32_MAX &&
+           integer_literal_value(statement->step, &step) && step == 1;
+}
+
 static void emit_condition(Buffer *output, const char *condition) {
     const size_t length = strlen(condition);
     if (length >= 2U && condition[0] == '(' && condition[length - 1U] == ')') {
@@ -253,6 +263,18 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
         indent(&context->output, *depth);
         f2c_buffer_append(&context->output, "}\n");
         if (statement->kind == F2C_STMT_END_DO && statement->construct_owner != NULL &&
+            is_canonical_positive_unit_do(statement->construct_owner)) {
+            const size_t loop_id = (size_t)(statement->construct_owner - unit->statements);
+            char *variable = emit_statement_expression(
+                context, unit, statement->construct_owner->left, source_line->number);
+            indent(&context->output, *depth);
+            f2c_buffer_printf(&context->output,
+                              "%s = f2c_do_index_%zu <= (int64_t)INT32_MAX "
+                              "? (int32_t)f2c_do_index_%zu : INT32_MIN;\n",
+                              variable, loop_id, loop_id);
+            free(variable);
+        }
+        if (statement->kind == F2C_STMT_END_DO && statement->construct_owner != NULL &&
             unit_targets_construct(unit, statement->construct_owner, F2C_STMT_EXIT)) {
             const size_t loop_id = (size_t)(statement->construct_owner - unit->statements);
             indent(&context->output, *depth);
@@ -361,6 +383,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             char *step =
                 emit_statement_expression(context, unit, statement->step, source_line->number);
             const size_t loop_id = (size_t)(statement - unit->statements);
+            const int canonical_positive_unit = is_canonical_positive_unit_do(statement);
             if (statement->left->type == TYPE_INTEGER) {
                 const int narrow_count = do_count_fits_default_integer(statement);
                 indent(&context->output, *depth);
@@ -371,31 +394,40 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                 f2c_buffer_printf(&context->output,
                                   "const int32_t f2c_do_limit_%zu = (int32_t)(%s);\n", loop_id,
                                   finish);
-                indent(&context->output, *depth);
-                f2c_buffer_printf(&context->output,
-                                  "const int32_t f2c_do_step_%zu = (int32_t)(%s);\n", loop_id,
-                                  step);
-                indent(&context->output, *depth);
-                f2c_buffer_printf(&context->output, "%s f2c_do_count_%zu = 0;\n",
-                                  narrow_count ? "int32_t" : "int64_t", loop_id);
+                if (!canonical_positive_unit) {
+                    indent(&context->output, *depth);
+                    f2c_buffer_printf(&context->output,
+                                      "const int32_t f2c_do_step_%zu = (int32_t)(%s);\n", loop_id,
+                                      step);
+                }
                 indent(&context->output, *depth);
                 f2c_buffer_printf(&context->output, "%s = f2c_do_start_%zu;\n", variable, loop_id);
-                indent(&context->output, *depth);
-                f2c_buffer_printf(
-                    &context->output,
-                    "if (f2c_do_step_%zu > 0 && %s <= f2c_do_limit_%zu) "
-                    "f2c_do_count_%zu = %s((int64_t)f2c_do_limit_%zu - (int64_t)%s) / "
-                    "(int64_t)f2c_do_step_%zu + 1%s;\n",
-                    loop_id, variable, loop_id, loop_id, narrow_count ? "(int32_t)(" : "", loop_id,
-                    variable, loop_id, narrow_count ? ")" : "");
-                indent(&context->output, *depth);
-                f2c_buffer_printf(
-                    &context->output,
-                    "else if (f2c_do_step_%zu < 0 && %s >= f2c_do_limit_%zu) "
-                    "f2c_do_count_%zu = %s((int64_t)%s - (int64_t)f2c_do_limit_%zu) / "
-                    "-(int64_t)f2c_do_step_%zu + 1%s;\n",
-                    loop_id, variable, loop_id, loop_id, narrow_count ? "(int32_t)(" : "", variable,
-                    loop_id, loop_id, narrow_count ? ")" : "");
+                if (canonical_positive_unit) {
+                    indent(&context->output, *depth);
+                    f2c_buffer_printf(&context->output,
+                                      "int64_t f2c_do_index_%zu = (int64_t)f2c_do_start_%zu;\n",
+                                      loop_id, loop_id);
+                } else {
+                    indent(&context->output, *depth);
+                    f2c_buffer_printf(&context->output, "%s f2c_do_count_%zu = 0;\n",
+                                      narrow_count ? "int32_t" : "int64_t", loop_id);
+                    indent(&context->output, *depth);
+                    f2c_buffer_printf(
+                        &context->output,
+                        "if (f2c_do_step_%zu > 0 && %s <= f2c_do_limit_%zu) "
+                        "f2c_do_count_%zu = %s((int64_t)f2c_do_limit_%zu - (int64_t)%s) / "
+                        "(int64_t)f2c_do_step_%zu + 1%s;\n",
+                        loop_id, variable, loop_id, loop_id, narrow_count ? "(int32_t)(" : "",
+                        loop_id, variable, loop_id, narrow_count ? ")" : "");
+                    indent(&context->output, *depth);
+                    f2c_buffer_printf(
+                        &context->output,
+                        "else if (f2c_do_step_%zu < 0 && %s >= f2c_do_limit_%zu) "
+                        "f2c_do_count_%zu = %s((int64_t)%s - (int64_t)f2c_do_limit_%zu) / "
+                        "-(int64_t)f2c_do_step_%zu + 1%s;\n",
+                        loop_id, variable, loop_id, loop_id, narrow_count ? "(int32_t)(" : "",
+                        variable, loop_id, loop_id, narrow_count ? ")" : "");
+                }
             }
             if (statement->unroll_hint) {
                 indent(&context->output, *depth);
@@ -403,10 +435,17 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             }
             indent(&context->output, *depth);
             if (statement->left->type == TYPE_INTEGER) {
-                f2c_buffer_printf(&context->output,
-                                  "for (; f2c_do_count_%zu > 0; --f2c_do_count_%zu, %s += "
-                                  "f2c_do_step_%zu) {\n",
-                                  loop_id, loop_id, variable, loop_id);
+                if (canonical_positive_unit) {
+                    f2c_buffer_printf(&context->output,
+                                      "for (; f2c_do_index_%zu <= (int64_t)f2c_do_limit_%zu; "
+                                      "++f2c_do_index_%zu) {\n",
+                                      loop_id, loop_id, loop_id);
+                } else {
+                    f2c_buffer_printf(&context->output,
+                                      "for (; f2c_do_count_%zu > 0; --f2c_do_count_%zu, %s += "
+                                      "f2c_do_step_%zu) {\n",
+                                      loop_id, loop_id, variable, loop_id);
+                }
             } else {
                 f2c_buffer_printf(&context->output,
                                   "for (%s = %s; ((%s) >= 0 ? %s <= %s : %s >= %s); %s += "
@@ -415,6 +454,11 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                                   variable, step);
             }
             ++*depth;
+            if (canonical_positive_unit) {
+                indent(&context->output, *depth);
+                f2c_buffer_printf(&context->output, "%s = (int32_t)f2c_do_index_%zu;\n", variable,
+                                  loop_id);
+            }
             free(variable);
             free(start);
             free(finish);
