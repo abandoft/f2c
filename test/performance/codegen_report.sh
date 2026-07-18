@@ -83,6 +83,14 @@ for name in dgemv dgemm dger dtrsm dgetrf dpotrf; do
         -S "$work/$name.c" -o "$work/$name.c.loop.s"
     gfortran -O3 -fopt-info-loop-all="$work/$name.fortran.loop" \
         -S "$work/$name.f" -o "$work/$name.fortran.loop.s"
+    "$c_compiler" -std=c17 -O3 -ffp-contract=fast -DF2C_FP_CONTRACT=1 -DNDEBUG \
+        -fdump-tree-ivopts-details="$work/$name.c.ivopts" \
+        -fdump-tree-optimized="$work/$name.c.optimized" \
+        -c "$work/$name.c" -o /dev/null
+    gfortran -O3 \
+        -fdump-tree-ivopts-details="$work/$name.fortran.ivopts" \
+        -fdump-tree-optimized="$work/$name.fortran.optimized" \
+        -c "$work/$name.f" -o /dev/null
 done
 
 lto=$work/lto
