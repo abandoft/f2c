@@ -169,18 +169,26 @@ static void test_print_codegen(void) {
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
     expect(result.error_count == 0U,
            "literal, labeled, and runtime CHARACTER PRINT formats lower without diagnostics");
-    expect_contains(result.code, "f2c_format_initialize(&f2c_io_format, stdout, \"(A,1X,I3)\"",
-                    "PRINT character literals use the shared formatted transfer engine");
-    expect_contains(result.code, "f2c_format_initialize(&f2c_io_format, stdout, \"(3(i2,1x))\"",
-                    "PRINT statement labels resolve through the shared format engine");
+    expect_contains(result.code,
+                    "static const f2c_format_instruction f2c_io_format_program_6[]",
+                    "PRINT character literals lower to immutable FORMAT programs");
+    expect_contains(result.code,
+                    "f2c_format_initialize_program(&f2c_io_format, stdout, "
+                    "f2c_io_format_program_6",
+                    "PRINT character literals bypass runtime FORMAT text parsing");
+    expect_contains(result.code,
+                    "f2c_format_initialize_program(&f2c_io_format, stdout, "
+                    "f2c_io_format_program_7",
+                    "PRINT statement labels use their bound structured FORMAT program");
     expect_contains(result.code, "runtime_format, (size_t)(16)",
                     "runtime CHARACTER PRINT formats preserve their explicit Fortran length");
     expect_contains(result.code, "for (iterator = 1;",
                     "formatted PRINT implied-DO items lower through the structured item tree");
     expect_contains(result.code, "switch ((int32_t)(assigned_format))",
                     "assigned FORMAT variables lower to an explicit runtime selector");
-    expect_contains(result.code, "case 200: f2c_io_format_text = \"('assigned',1x,i2)\"",
-                    "assigned FORMAT selectors contain only their resolved FORMAT labels");
+    expect_contains(result.code,
+                    "case 200: f2c_io_format_program = f2c_io_assigned_format_10_200",
+                    "assigned FORMAT selectors reference only resolved immutable programs");
     f2c_result_free(&result);
 }
 
