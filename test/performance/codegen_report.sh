@@ -105,4 +105,27 @@ done
 objdump -drwC "$lto/benchmark" >"$lto/benchmark.objdump"
 nm "$lto/benchmark" >"$lto/benchmark.symbols"
 
+link_blas_benchmark() {
+    kernel=$1
+    linked=$work/lto-$kernel
+    mkdir -p "$linked"
+    for dependency in "$kernel" lsame xerbla; do
+        "$c_compiler" -std=c17 -O3 -flto -ffp-contract=fast -DF2C_FP_CONTRACT=1 \
+            -DNDEBUG -c "$work/$dependency.c" -o "$linked/$dependency-c.o"
+        gfortran -O3 -flto -c "$work/$dependency.f" -o "$linked/$dependency-fortran.o"
+    done
+    "$c_compiler" -std=c17 -O3 -flto -DNDEBUG \
+        -c "$root/test/${kernel}_benchmark.c" -o "$linked/benchmark.o"
+    (
+        cd "$linked"
+        gfortran -O3 -flto -save-temps=obj benchmark.o "$kernel-c.o" lsame-c.o xerbla-c.o \
+            "$kernel-fortran.o" lsame-fortran.o xerbla-fortran.o -lm -o benchmark
+    )
+    objdump -drwC "$linked/benchmark" >"$linked/benchmark.objdump"
+    nm "$linked/benchmark" >"$linked/benchmark.symbols"
+}
+
+link_blas_benchmark dgemv
+link_blas_benchmark dgemm
+
 echo "performance code-generation reports: $work"
