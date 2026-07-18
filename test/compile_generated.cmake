@@ -118,7 +118,7 @@ foreach(
     endif()
     if(F2C_MSVC_FRONTEND)
         execute_process(
-            COMMAND ${CC_COMMAND} /std:c17 /W4 "${io_generated}"
+            COMMAND ${CC_COMMAND} /std:c17 /O2 /W4 "${io_generated}"
                     "/Fe${io_executable}.exe"
             RESULT_VARIABLE io_compile_status
             OUTPUT_VARIABLE io_compile_output
@@ -126,7 +126,7 @@ foreach(
         set(io_executable "${io_executable}.exe")
     else()
         execute_process(
-            COMMAND ${CC_COMMAND} -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+            COMMAND ${CC_COMMAND} -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow
                     -Wstrict-prototypes -Wmissing-prototypes -Werror "${io_generated}"
                     -lm -o "${io_executable}"
             RESULT_VARIABLE io_compile_status

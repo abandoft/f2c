@@ -91,6 +91,8 @@ static void test_file_control_codegen(void) {
     expect(result.error_count == 0U, "complete file controls lower without diagnostics");
     expect_contains(result.code, "f2c_open_unit_full",
                     "OPEN lowers every connection property through the file-unit model");
+    expect_contains(result.code, "size_t expected_length = strlen(expected)",
+                    "dynamic file-control options compare against bounded literal lengths");
     expect_contains(result.code, "f2c_backspace_unit",
                     "BACKSPACE lowers to sequential record positioning");
     expect_contains(result.code, "f2c_endfile_unit",
