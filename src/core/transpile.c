@@ -261,10 +261,13 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                                            "#endif\n");
         f2c_buffer_append(&context.output,
                           "\n#if defined(_MSC_VER)\n#define F2C_RESTRICT __restrict\n"
+                          "#define F2C_NOINLINE __declspec(noinline)\n"
                           "#define F2C_UNUSED\n#elif defined(__GNUC__) || defined(__clang__)\n"
                           "#define F2C_RESTRICT restrict\n"
+                          "#define F2C_NOINLINE __attribute__((noinline))\n"
                           "#define F2C_UNUSED __attribute__((unused))\n#else\n"
-                          "#define F2C_RESTRICT restrict\n#define F2C_UNUSED\n#endif\n");
+                          "#define F2C_RESTRICT restrict\n#define F2C_NOINLINE\n"
+                          "#define F2C_UNUSED\n#endif\n");
         f2c_buffer_append(&context.output,
                           "#if !defined(F2C_LOOP_UNROLL)\n"
                           "#if defined(__clang__) && defined(__OPTIMIZE__)\n"

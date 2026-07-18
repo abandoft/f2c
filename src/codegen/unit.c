@@ -887,6 +887,7 @@ static void emit_restricted_wrapper(Buffer *output, Unit *unit, const char *body
     f2c_buffer_append(output, "static ");
     f2c_unit_emit_named_signature(output, unit, body_name, 1);
     f2c_buffer_append(output, ";\n");
+    f2c_buffer_append(output, "F2C_NOINLINE ");
     f2c_unit_emit_signature(output, unit);
     f2c_buffer_append(output, " {\n    ");
     if (returns_value)

@@ -444,6 +444,8 @@ static void test_blas_style_subroutine(void) {
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "BLAS-style subroutine translates without errors");
     expect_contains(result.code, "void daxpy(", "SUBROUTINE maps to a void function");
+    expect_contains(result.code, "F2C_NOINLINE void daxpy(",
+                    "the public procedure boundary remains stable under link-time optimization");
     expect_contains(result.code, "const int32_t *n",
                     "INTENT(IN) scalar uses a const, alias-safe reference");
     expect_contains(result.code, "void daxpy(const int32_t *n",
