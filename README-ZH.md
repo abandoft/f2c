@@ -57,11 +57,13 @@ build/f2c caller.f90 implementation.f90 -o project.c --header project.h
 build/f2c -I include -DUSE_ISNAN=1 source.F90 -o output.c
 ```
 
-内建契约支持对象式 `#define` 正文展开、`#undef`、`#if`、`#ifdef`、`#ifndef`、`#elif`、`#else`、
-`#endif`、`#include`、`#line`、数字行标记及标准 Fortran `INCLUDE`；整数条件具有正常优先级和
-短路求值，宏诊断同时保留展开位置与定义拼写位置。函数式宏仍会产生带源码位置的硬错误。
-转译器不会隐式猜测项目或平台特性宏。API/CLI 定义对项目内每个输入生效，源码内部定义严格限制
-在当前输入内。CLI 使用 `-I` 配置 include 目录；引号 include 会先搜索当前源码所在目录。
+内建契约支持对象式和函数式 `#define` 正文展开、`#undef`、`#if`、`#ifdef`、`#ifndef`、`#elif`、
+`#else`、`#endif`、`#include`、`#line`、数字行标记及标准 Fortran `INCLUDE`。函数式宏支持零参数、
+嵌套参数、可变参数、字符串化、token 粘贴和反斜杠续接的预处理指令逻辑行；include operand
+也可以由宏展开产生。整数条件采用确定性的 64 位有符号/无符号值，支持字符常量、正常优先级和
+短路求值。宏诊断同时保留展开位置与定义拼写位置；不兼容重定义、畸形调用和递归调用均为硬错误。
+转译器不会隐式猜测项目或平台特性宏。API/CLI 定义保持对象式并对项目内每个输入生效，源码内部
+定义严格限制在当前输入内。CLI 使用 `-I` 配置 include 目录；引号 include 会先搜索当前源码所在目录。
 
 完整 CLI 说明见 `build/f2c --help`。
 
@@ -107,12 +109,12 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
 ```
 
 限制字段为零时使用对应的 `F2C_DEFAULT_*` 默认值。预算覆盖项目输入及保留的预处理总字节数、
-条件宏数量、宏/include 深度、include 数量、逻辑行、canonical token、表达式 AST 节点与深度、
-常量求值工作量、诊断数量与字节数，以及分别生成的代码和头文件；超限时不会返回不完整的 C 代码。
-include 解析是请求级回调，因此核心库不依赖文件系统。还可通过同步 `F2cDiagnosticCallback` 获取
-结构化诊断分类、严重级别、展开/拼写源码范围和消息，无需解析文本诊断。`structure_size` 必须等于
-`sizeof(F2cConfig)`。项目尚未冻结公共 ABI，因此旧版或更大的配置布局都会被拒绝，当前结构的
-全部字段均属于唯一有效的 API。
+条件宏数量、宏参数数量、宏/include 深度、include 数量、逻辑行、canonical token、表达式 AST
+节点与深度、常量求值工作量、诊断数量与字节数，以及分别生成的代码和头文件；超限时不会返回
+不完整的 C 代码。include 解析是请求级回调，因此核心库不依赖文件系统。还可通过同步
+`F2cDiagnosticCallback` 获取结构化诊断分类、严重级别、展开/拼写源码范围和消息，无需解析文本
+诊断。`structure_size` 必须等于 `sizeof(F2cConfig)`。项目尚未冻结公共 ABI，因此旧版或更大的配置
+布局都会被拒绝，当前结构的全部字段均属于唯一有效的 API。
 
 ## 支持状态
 

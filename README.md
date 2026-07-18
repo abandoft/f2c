@@ -60,14 +60,18 @@ provide a definition and `-UNAME` to remove an earlier command-line definition, 
 build/f2c -I include -DUSE_ISNAN=1 source.F90 -o output.c
 ```
 
-The built-in contract supports object-like `#define` expansion, `#undef`, `#if`, `#ifdef`,
-`#ifndef`, `#elif`, `#else`, `#endif`, `#include`, `#line`, numeric line markers, and standard
-Fortran `INCLUDE`. Integer conditions implement normal precedence and short-circuit evaluation.
-Macro diagnostics retain both expansion and definition spelling ranges. Function-like macros are
-still rejected with a source-positioned error. No project- or platform-specific feature macro is
-implicitly guessed. API and CLI definitions apply to every project input, while definitions made
-inside a source file remain local to that input. `-I` configures CLI include directories; quoted
-includes search the including file's directory first.
+The built-in contract supports object-like and function-like `#define` expansion, `#undef`, `#if`,
+`#ifdef`, `#ifndef`, `#elif`, `#else`, `#endif`, `#include`, `#line`, numeric line markers, and
+standard Fortran `INCLUDE`. Function-like macros support zero or nested arguments, variadic
+arguments, stringizing, token pasting, and backslash-continued preprocessing directives. Include
+operands may be produced by macro expansion. Integer conditions use deterministic signed and
+unsigned 64-bit values, character constants, normal precedence, and short-circuit evaluation.
+Macro diagnostics retain both expansion and definition spelling ranges; incompatible
+redefinitions and malformed or recursive invocations are hard errors. No project- or
+platform-specific feature macro is implicitly guessed. API and CLI definitions are object-like
+and apply to every project input, while definitions made inside a source file remain local to that
+input. `-I` configures CLI include directories; quoted includes search the including file's
+directory first.
 
 Run `build/f2c --help` for the complete CLI reference.
 
@@ -114,13 +118,13 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
 ```
 
 A zero limit selects the corresponding `F2C_DEFAULT_*` value. Budgets cover aggregate input and
-retained preprocessed bytes, conditional definitions, macro/include depth and include count,
-logical lines, canonical tokens, expression AST nodes and depth, constant-evaluation work,
-diagnostics, diagnostic bytes, and each generated code/header artifact. Limit failures return no
-partial generated C. Include resolution is request-local and callback-driven, so the core library
-does not require a file system. A synchronous `F2cDiagnosticCallback` can additionally consume
-structured diagnostic categories, severity, expansion/spelling source ranges, and messages
-without parsing the text rendering.
+retained preprocessed bytes, conditional definitions, macro arguments, macro/include depth and
+include count, logical lines, canonical tokens, expression AST nodes and depth,
+constant-evaluation work, diagnostics, diagnostic bytes, and each generated code/header artifact.
+Limit failures return no partial generated C. Include resolution is request-local and
+callback-driven, so the core library does not require a file system. A synchronous
+`F2cDiagnosticCallback` can additionally consume structured diagnostic categories, severity,
+expansion/spelling source ranges, and messages without parsing the text rendering.
 `structure_size` must equal `sizeof(F2cConfig)`. The project has not frozen a public ABI yet, so
 older or larger configuration layouts are rejected and all fields belong to the current API.
 
