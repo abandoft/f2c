@@ -40,6 +40,8 @@ jobs:
           && cmake --build build/numerical --parallel
       - name: Differential-test deterministic expressions
         run: sh test/expression_differential.sh build/numerical/f2c
+      - name: Differential-test lexical literal semantics
+        run: sh test/lexical_differential.sh build/numerical/f2c
       - name: Differential-test SELECT CASE semantics
         run: sh test/select_case_differential.sh build/numerical/f2c
       - name: Differential-test named construct control flow
