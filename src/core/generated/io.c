@@ -104,6 +104,8 @@ static void emit_unit_open_close(Buffer *output) {
         "else if (f2c_option_equal(action, action_length, \"write\")) action_value = "
         "F2C_ACTION_WRITE; else if (f2c_option_equal(action, action_length, \"readwrite\")) "
         "action_value = F2C_ACTION_READWRITE; else return false; if "
+        "(f2c_empty_option(form, form_length)) form_value = access_value == "
+        "F2C_ACCESS_DIRECT ? F2C_FORM_UNFORMATTED : F2C_FORM_FORMATTED; else if "
         "(f2c_option_equal(form, form_length, \"formatted\")) form_value = "
         "F2C_FORM_FORMATTED; else if (f2c_option_equal(form, form_length, \"unformatted\")) "
         "form_value = F2C_FORM_UNFORMATTED; else return false; if "
