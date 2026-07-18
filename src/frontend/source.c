@@ -52,21 +52,80 @@ static F2cSourceMapSegment *source_map_slice(const SourceBuffer *buffer, size_t 
     return f2c_source_map_slice(buffer->map.items, buffer->map.count, begin, length, count);
 }
 
-static void strip_comment(char *line) {
-    int quote = 0;
-    char *cursor;
-    for (cursor = line; *cursor != '\0'; ++cursor) {
-        if ((*cursor == '\'' || *cursor == '"') &&
-            (quote == 0 || quote == (unsigned char)*cursor)) {
-            if (quote != 0 && cursor[1] == *cursor) {
-                ++cursor;
-            } else {
-                quote = quote == 0 ? (unsigned char)*cursor : 0;
-            }
-        } else if (*cursor == '!' && quote == 0) {
-            *cursor = '\0';
+static void lowercase_range(char *begin, char *end) {
+    while (begin < end) {
+        *begin = (char)tolower((unsigned char)*begin);
+        ++begin;
+    }
+}
+
+static void normalize_code_case(char *text) {
+    F2cTokenStream stream;
+    char *cursor = text;
+    f2c_token_stream_init(&stream, text, 1U, 1U);
+    for (;;) {
+        const char *protected_begin = NULL;
+        const char *token_end;
+        f2c_token_stream_next(&stream);
+        lowercase_range(cursor, (char *)stream.token.begin);
+        if (stream.token.kind == F2C_TOKEN_END)
             return;
+        token_end = stream.token.begin + stream.token.length;
+        if (stream.token.kind == F2C_TOKEN_STRING)
+            protected_begin = f2c_character_literal_quote(stream.token.begin);
+        else if (stream.token.kind == F2C_TOKEN_HOLLERITH) {
+            size_t payload_length;
+            (void)f2c_hollerith_payload(stream.token.begin, &protected_begin, &payload_length);
         }
+        if (protected_begin != NULL && protected_begin < token_end) {
+            if (stream.token.kind == F2C_TOKEN_STRING)
+                ++protected_begin;
+            lowercase_range((char *)stream.token.begin, (char *)protected_begin);
+        } else {
+            lowercase_range((char *)stream.token.begin, (char *)token_end);
+        }
+        cursor = (char *)token_end;
+    }
+}
+
+static void strip_comment(char *line) {
+    F2cTokenStream stream;
+    f2c_token_stream_init(&stream, line, 1U, 1U);
+    for (;;) {
+        f2c_token_stream_next(&stream);
+        if (stream.token.kind != F2C_TOKEN_END)
+            continue;
+        if (*stream.token.begin == '!')
+            *(char *)stream.token.begin = '\0';
+        return;
+    }
+}
+
+static int trailing_free_continuation(const char *body, size_t length,
+                                      int *character_continuation) {
+    const char *marker;
+    F2cTokenStream stream;
+    if (character_continuation != NULL)
+        *character_continuation = 0;
+    if (length == 0U || body[length - 1U] != '&')
+        return 0;
+    marker = body + length - 1U;
+    f2c_token_stream_init(&stream, body, 1U, 1U);
+    for (;;) {
+        const char *end;
+        f2c_token_stream_next(&stream);
+        if (stream.token.kind == F2C_TOKEN_END)
+            return 1;
+        end = stream.token.begin + stream.token.length;
+        if (marker < stream.token.begin || marker >= end)
+            continue;
+        if (stream.token.kind == F2C_TOKEN_STRING || stream.token.kind == F2C_TOKEN_HOLLERITH)
+            return 0;
+        if (stream.token.kind == F2C_TOKEN_INVALID &&
+            f2c_character_literal_quote(stream.token.begin) != NULL &&
+            character_continuation != NULL)
+            *character_continuation = 1;
+        return 1;
     }
 }
 
@@ -110,23 +169,17 @@ static void normalize_fixed_numeric_blanks(char *line, size_t *columns) {
 }
 
 static int push_logical_statements(Context *context, SourceBuffer *logical, size_t number) {
-    char *cursor = logical->text.data;
-    char *start = cursor;
-    int quote = 0;
+    F2cTokenStream stream;
+    size_t start = 0U;
+    f2c_token_stream_init(&stream, logical->text.data, number, 1U);
     for (;;) {
-        if ((*cursor == '\'' || *cursor == '"') &&
-            (quote == 0 || quote == (unsigned char)*cursor)) {
-            if (quote != 0 && cursor[1] == *cursor)
-                ++cursor;
-            else
-                quote = quote == 0 ? (unsigned char)*cursor : 0;
-        }
-        if ((*cursor == ';' && quote == 0) || *cursor == '\0') {
+        f2c_token_stream_next(&stream);
+        if (stream.token.kind == F2C_TOKEN_SEMICOLON || stream.token.kind == F2C_TOKEN_END) {
             char *part;
             F2cSourceMapSegment *map;
             size_t map_count;
-            size_t begin = (size_t)(start - logical->text.data);
-            size_t end = (size_t)(cursor - logical->text.data);
+            size_t begin = start;
+            size_t end = (size_t)(stream.token.begin - logical->text.data);
             while (begin < end && isspace((unsigned char)logical->text.data[begin]))
                 ++begin;
             while (end > begin && isspace((unsigned char)logical->text.data[end - 1U]))
@@ -153,11 +206,10 @@ static int push_logical_statements(Context *context, SourceBuffer *logical, size
             } else {
                 free(part);
             }
-            if (*cursor == '\0')
+            if (stream.token.kind == F2C_TOKEN_END)
                 break;
-            start = cursor + 1;
+            start = end + stream.token.length;
         }
-        ++cursor;
     }
     source_buffer_discard(logical);
     return 1;
@@ -167,7 +219,7 @@ static int append_logical_line(Context *context, SourceBuffer *logical, size_t n
     if (logical->text.length == 0U) {
         return 1;
     }
-    f2c_lowercase_code(logical->text.data);
+    normalize_code_case(logical->text.data);
     return push_logical_statements(context, logical, number);
 }
 
@@ -180,6 +232,7 @@ static int normalize_preprocessed_source(Context *context, const F2cPreprocessed
     size_t logical_number = 1U;
     SourceBuffer logical = {0};
     int continued = 0;
+    int continued_character = 0;
     logical.source_name = f2c_context_source_name(
         context, context->options != NULL ? context->options->source_name : NULL);
     if (logical.source_name == NULL)
@@ -190,6 +243,7 @@ static int normalize_preprocessed_source(Context *context, const F2cPreprocessed
         char *raw;
         char *body;
         int next_continued = 0;
+        int next_character_continuation = 0;
         while (end < length && source[end] != '\n' && source[end] != '\r') {
             ++end;
         }
@@ -241,7 +295,6 @@ static int normalize_preprocessed_source(Context *context, const F2cPreprocessed
                 body[126] = '\0';
             }
             strip_comment(body);
-            body = f2c_trim(body);
             body_length = strlen(body);
             if (body_length != 0U) {
                 size_t column;
@@ -267,14 +320,15 @@ static int normalize_preprocessed_source(Context *context, const F2cPreprocessed
             }
             if (body_length != 0U && columns != NULL) {
                 size_t character = 0U;
-                if (!source_buffer_separator(&logical, input, line_begin + columns[0] - 1U,
+                if (!next_continued &&
+                    !source_buffer_separator(&logical, input, line_begin + columns[0] - 1U,
                                              line_number, columns[0])) {
                     free(columns);
                     free(raw);
                     source_buffer_discard(&logical);
                     return 0;
                 }
-                if (label_begin < label_end &&
+                if (!next_continued && label_begin < label_end &&
                     (!source_buffer_append_mapped(
                          &logical, raw + label_begin, label_end - label_begin, input,
                          line_begin + label_begin, line_number, label_begin + 1U) ||
@@ -309,7 +363,7 @@ static int normalize_preprocessed_source(Context *context, const F2cPreprocessed
                 body = f2c_trim(body + 1);
             }
             body_length = strlen(body);
-            if (body_length != 0U && body[body_length - 1U] == '&') {
+            if (trailing_free_continuation(body, body_length, &next_character_continuation)) {
                 body[--body_length] = '\0';
                 body = f2c_trim(body);
                 next_continued = 1;
@@ -323,8 +377,9 @@ static int normalize_preprocessed_source(Context *context, const F2cPreprocessed
             }
             if (*body != '\0') {
                 const size_t column = (size_t)(body - raw) + 1U;
-                if (!source_buffer_separator(&logical, input, line_begin + column - 1U, line_number,
-                                             column) ||
+                if ((!continued_character &&
+                     !source_buffer_separator(&logical, input, line_begin + column - 1U,
+                                              line_number, column)) ||
                     !source_buffer_append_mapped(&logical, body, strlen(body), input,
                                                  line_begin + column - 1U, line_number, column)) {
                     free(raw);
@@ -333,6 +388,7 @@ static int normalize_preprocessed_source(Context *context, const F2cPreprocessed
                 }
             }
             continued = next_continued;
+            continued_character = next_character_continuation;
         }
         free(raw);
         if (logical.text.failed) {

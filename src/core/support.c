@@ -120,17 +120,6 @@ char *f2c_trim(char *text) {
     return text;
 }
 
-void f2c_lowercase_code(char *text) {
-    int quote = 0;
-    for (; *text != '\0'; ++text) {
-        if ((*text == '\'' || *text == '"') && (quote == 0 || quote == (unsigned char)*text)) {
-            quote = quote == 0 ? (unsigned char)*text : 0;
-        } else if (quote == 0) {
-            *text = (char)tolower((unsigned char)*text);
-        }
-    }
-}
-
 int f2c_starts_word(const char *text, const char *word) {
     F2cTokenStream source;
     F2cTokenStream expected;
