@@ -28,22 +28,25 @@ static void expect_failure(const char *name, const char *source, const char *dia
 }
 
 static void test_valid_data_semantics(void) {
-    static const char source[] = "program valid_data\n"
-                                 "  integer, parameter :: repeat = 2\n"
-                                 "  integer :: matrix(2,2), vector(2), mixed(2), tail, i, j\n"
-                                 "  character(len=8) :: label\n"
-                                 "  data ((matrix(i,j), i=1,2), j=1,2) / 1, 2, 3, 4 /\n"
-                                 "  data vector / repeat*5 /, label / 'a/b,c' /\n"
-                                 "  data mixed, tail / 6, 7, 8 /\n"
-                                 "end program valid_data\n";
+    static const char source[] =
+        "program valid_data\n"
+        "  integer, parameter :: repeat = 2\n"
+        "  integer :: matrix(2,2), vector(2), mixed(2), partial(3), tail, i, j\n"
+        "  character(len=8) :: label\n"
+        "  data ((matrix(i,j), i=1,2), j=1,2) / 1, 2, 3, 4 /\n"
+        "  data vector / repeat*5 /, label / 'a/b,c' /\n"
+        "  data mixed, tail / 6, 7, 8 /\n"
+        "  data partial(2) / 9 /\n"
+        "end program valid_data\n";
     F2cResult result = transpile("valid_data.f90", source);
     expect(result.error_count == 0U && result.code != NULL,
            "nested, repeated, multi-group DATA reaches typed C17 emission");
     expect(result.code != NULL && strstr(result.code, "matrix[") != NULL &&
                strstr(result.code, " = {5, 5}") != NULL &&
                strstr(result.code, " = {6, 7}") != NULL &&
+               strstr(result.code, " = {[1] = 9}") != NULL &&
                strstr(result.code, "static int32_t tail = 8;") != NULL,
-           "validated whole-array and repeated values become ordered static initializers");
+           "whole-array, partial and repeated values become ordered static initializers");
     expect(result.code != NULL && strstr(result.code, "static bool f2c_data_initialized_") != NULL,
            "non-scalar DATA lowering is protected by one-time procedure initialization");
     expect(result.code != NULL && strstr(result.code, "a/b,c") != NULL,
@@ -124,6 +127,27 @@ static void test_data_diagnostics(void) {
                    "end program zero_step\n",
                    "DATA implied-DO step cannot be zero",
                    "DATA rejects zero-step implied DO expansion");
+    expect_failure("duplicate_element.f90",
+                   "program duplicate_element\n"
+                   "  integer :: values(2)\n"
+                   "  data values(1) / 1 /, values(1) / 2 /\n"
+                   "end program duplicate_element\n",
+                   "DATA element of 'values' is initialized more than once",
+                   "DATA rejects duplicate array-element initialization");
+    expect_failure("out_of_bounds.f90",
+                   "program out_of_bounds\n"
+                   "  integer :: values(2)\n"
+                   "  data values(3) / 1 /\n"
+                   "end program out_of_bounds\n",
+                   "DATA array subscript is outside the declared bounds of 'values'",
+                   "DATA validates constant array subscripts against declared bounds");
+    expect_failure("variable_subscript.f90",
+                   "program variable_subscript\n"
+                   "  integer :: values(2), index\n"
+                   "  data values(index) / 1 /\n"
+                   "end program variable_subscript\n",
+                   "DATA array subscript must be constant after implied-DO substitution",
+                   "DATA rejects array subscripts that are not initialization constants");
 }
 
 int main(void) {

@@ -1,7 +1,7 @@
 program data_statement
   implicit none
   integer, parameter :: repeat = 2
-  integer :: matrix(2,2), vector(2), mixed(2), tail, i, j
+  integer :: matrix(2,2), vector(2), mixed(2), partial(3), tail, i, j
   character(len=8) :: label
   complex :: values(2)
 
@@ -10,6 +10,7 @@ program data_statement
   data mixed, tail / 6, 7, 8 /
   data label / 'a/b,c' /
   data values / (1.0,2.0), (3.0,4.0) /
+  data partial(2) / 9 /
 
   if (any(vector /= [5, 5])) stop 1
   if (any(matrix(:,1) /= [1, 2])) stop 2
@@ -26,6 +27,7 @@ program data_statement
   if (next_complex_value() /= 2.0) stop 13
   if (next_intrinsic_value() /= 10) stop 14
   if (next_intrinsic_value() /= 11) stop 15
+  if (partial(2) /= 9) stop 16
 
 contains
 
