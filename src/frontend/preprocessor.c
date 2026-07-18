@@ -459,6 +459,57 @@ static const char *fortran_include_operand(const char *line, F2cSourceForm form,
     return cursor;
 }
 
+static size_t physical_line_end(const char *source, size_t length, size_t begin) {
+    size_t end = begin;
+    while (end < length && source[end] != '\n' && source[end] != '\r')
+        ++end;
+    return end;
+}
+
+static size_t physical_newline_end(const char *source, size_t length, size_t end) {
+    size_t newline_end = end;
+    if (newline_end < length && source[newline_end] == '\r') {
+        ++newline_end;
+        if (newline_end < length && source[newline_end] == '\n')
+            ++newline_end;
+    } else if (newline_end < length) {
+        ++newline_end;
+    }
+    return newline_end;
+}
+
+static int directive_continues(const char *source, size_t begin, size_t end, size_t newline_end) {
+    return newline_end != end && end > begin && source[end - 1U] == '\\';
+}
+
+static int append_consumed_newlines(Preprocessor *preprocessor, const char *source, size_t begin,
+                                    size_t consumed_end, const char *source_name, size_t first_line,
+                                    Buffer *output, F2cSourceMap *source_map) {
+    size_t cursor = begin;
+    size_t line = first_line;
+    while (cursor < consumed_end) {
+        const size_t end = physical_line_end(source, consumed_end, cursor);
+        const size_t newline_end = physical_newline_end(source, consumed_end, end);
+        if (newline_end != end) {
+            F2cSourcePosition origin = {source_name, line, end - cursor + 1U};
+            if (!f2c_preprocessor_append(preprocessor, output, source_map, source + end,
+                                         newline_end - end, origin, newline_end - end, 1U, origin,
+                                         newline_end - end, 1U, 0))
+                return 0;
+        }
+        if (newline_end == consumed_end)
+            break;
+        if (line == SIZE_MAX) {
+            diagnose_at(preprocessor, F2C_DIAGNOSTIC_RESOURCE_LIMIT, line, 1U,
+                        "source line number exceeds the representable range");
+            return 0;
+        }
+        ++line;
+        cursor = newline_end;
+    }
+    return 1;
+}
+
 int f2c_preprocessor_process_buffer(Preprocessor *preprocessor, const char *source, size_t length,
                                     F2cSourceForm form, const char *source_name, size_t depth,
                                     const PreprocessorIncludeFrame *include_parent, Buffer *output,
@@ -505,25 +556,66 @@ int f2c_preprocessor_process_buffer(Preprocessor *preprocessor, const char *sour
         const size_t begin = offset;
         const size_t mapped_line = preprocessor->current_line;
         const char *mapped_source_name = preprocessor->current_source_name;
-        size_t end = offset;
+        size_t end = physical_line_end(source, length, offset);
         size_t newline_end;
+        size_t consumed_end;
+        size_t physical_line_count = 1U;
         char *physical_line;
         int directive = 0;
-        while (end < length && source[end] != '\n' && source[end] != '\r')
-            ++end;
-        newline_end = end;
-        if (newline_end < length && source[newline_end] == '\r') {
-            ++newline_end;
-            if (newline_end < length && source[newline_end] == '\n')
-                ++newline_end;
-        } else if (newline_end < length) {
-            ++newline_end;
-        }
+        newline_end = physical_newline_end(source, length, end);
+        consumed_end = newline_end;
         physical_line = f2c_strdup_n(source + begin, end - begin);
         if (physical_line == NULL) {
             diagnose_at(preprocessor, F2C_DIAGNOSTIC_OUT_OF_MEMORY, mapped_line, 1U,
                         "out of memory while preprocessing a source line");
             goto cleanup;
+        }
+        if (*skip_space(physical_line) == '#' &&
+            directive_continues(source, begin, end, newline_end)) {
+            Buffer logical = {0};
+            size_t segment_begin = begin;
+            size_t segment_end = end;
+            size_t segment_newline_end = newline_end;
+            logical.limit = preprocessor->context->limits.max_preprocessed_bytes;
+            free(physical_line);
+            physical_line = NULL;
+            for (;;) {
+                const int continues =
+                    directive_continues(source, segment_begin, segment_end, segment_newline_end);
+                const size_t piece_end = continues ? segment_end - 1U : segment_end;
+                f2c_buffer_append_n(&logical, source + segment_begin, piece_end - segment_begin);
+                if (logical.failed || logical.limit_exceeded) {
+                    diagnose_at(preprocessor,
+                                logical.limit_exceeded ? F2C_DIAGNOSTIC_RESOURCE_LIMIT
+                                                       : F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                                mapped_line, 1U,
+                                logical.limit_exceeded
+                                    ? "continued preprocessor directive is too large"
+                                    : "out of memory while joining a preprocessor directive");
+                    free(logical.data);
+                    goto cleanup;
+                }
+                consumed_end = segment_newline_end;
+                if (!continues)
+                    break;
+                segment_begin = segment_newline_end;
+                segment_end = physical_line_end(source, length, segment_begin);
+                segment_newline_end = physical_newline_end(source, length, segment_end);
+                if (physical_line_count == SIZE_MAX) {
+                    diagnose_at(preprocessor, F2C_DIAGNOSTIC_RESOURCE_LIMIT, mapped_line, 1U,
+                                "continued preprocessor directive has too many physical lines");
+                    free(logical.data);
+                    goto cleanup;
+                }
+                ++physical_line_count;
+            }
+            physical_line = f2c_buffer_take(&logical);
+            free(logical.data);
+            if (physical_line == NULL) {
+                diagnose_at(preprocessor, F2C_DIAGNOSTIC_OUT_OF_MEMORY, mapped_line, 1U,
+                            "out of memory while finalizing a continued preprocessor directive");
+                goto cleanup;
+            }
         }
         if (!process_directive(preprocessor, physical_line, mapped_line, &directive)) {
             free(physical_line);
@@ -550,29 +642,22 @@ int f2c_preprocessor_process_buffer(Preprocessor *preprocessor, const char *sour
             }
         }
         free(physical_line);
-        {
-            F2cSourcePosition origin;
-            origin.source_name = mapped_source_name;
-            origin.line = mapped_line;
-            origin.column = end - begin + 1U;
-            if (origin.source_name == NULL ||
-                !f2c_preprocessor_append(preprocessor, output, source_map, source + end,
-                                         newline_end - end, origin, newline_end - end, 1U, origin,
-                                         newline_end - end, 1U, 0))
-                goto cleanup;
-        }
-        offset = newline_end;
+        if (mapped_source_name == NULL ||
+            !append_consumed_newlines(preprocessor, source, begin, consumed_end, mapped_source_name,
+                                      mapped_line, output, source_map))
+            goto cleanup;
+        offset = consumed_end;
         if (preprocessor->location_pending) {
             preprocessor->current_source_name = preprocessor->pending_source_name;
             preprocessor->current_line = preprocessor->pending_line;
             preprocessor->location_pending = 0;
         } else if (offset < length) {
-            if (preprocessor->current_line == SIZE_MAX) {
+            if (physical_line_count > SIZE_MAX - preprocessor->current_line) {
                 diagnose_at(preprocessor, F2C_DIAGNOSTIC_RESOURCE_LIMIT, mapped_line, 1U,
                             "source line number exceeds the representable range");
                 goto cleanup;
             }
-            ++preprocessor->current_line;
+            preprocessor->current_line += physical_line_count;
         }
     }
     if (preprocessor->conditional_count != conditional_base) {
