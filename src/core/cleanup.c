@@ -9,6 +9,9 @@ static void free_symbol(Symbol *symbol) {
     free(symbol->c_name);
     free(symbol->initializer);
     f2c_expr_free(symbol->initializer_expression);
+    for (index = 0U; index < symbol->data_element_initializer_count; ++index)
+        f2c_expr_free(symbol->data_element_initializers[index]);
+    free(symbol->data_element_initializers);
     for (index = 0U; index < symbol->statement_function_argument_count; ++index)
         free(symbol->statement_function_arguments[index]);
     free(symbol->statement_function_arguments);

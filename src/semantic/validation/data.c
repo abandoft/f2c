@@ -91,9 +91,9 @@ static int expansion_within_budget(DataValidation *validation, uint64_t iteratio
     const size_t limit = validation->context->limits.max_constant_steps;
     if (iterations <= (uint64_t)SIZE_MAX && (limit == 0U || iterations <= (uint64_t)limit))
         return 1;
-    f2c_diagnostic_span_code(
-        validation->context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, &validation->group->span, 1,
-        "DATA implied-DO expansion exceeds the constant-step limit of %zu", limit);
+    f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_RESOURCE_LIMIT,
+                             &validation->group->span, 1,
+                             "DATA expansion exceeds the constant-step limit of %zu", limit);
     return 0;
 }
 
@@ -168,6 +168,47 @@ static void validate_value_type(DataValidation *validation, const F2cExpr *targe
     }
 }
 
+static int expression_has_static_c_form(const F2cExpr *expression, size_t depth) {
+    size_t child;
+    if (expression == NULL || depth > 64U)
+        return 0;
+    switch (expression->kind) {
+    case F2C_EXPR_INTEGER_LITERAL:
+    case F2C_EXPR_REAL_LITERAL:
+    case F2C_EXPR_LOGICAL_LITERAL:
+        return 1;
+    case F2C_EXPR_NAME:
+        return expression->symbol != NULL && expression->symbol->parameter &&
+               expression_has_static_c_form(expression->symbol->initializer_expression, depth + 1U);
+    case F2C_EXPR_UNARY:
+    case F2C_EXPR_BINARY:
+        break;
+    default:
+        return 0;
+    }
+    for (child = 0U; child < expression->child_count; ++child)
+        if (!expression_has_static_c_form(expression->children[child], depth + 1U))
+            return 0;
+    return expression->child_count != 0U;
+}
+
+static int symbol_supports_static_data(const Symbol *symbol) {
+    return symbol != NULL && !symbol->module_entity && symbol->common_block == NULL &&
+           symbol->alias_to == NULL && !symbol->allocatable && !symbol->pointer &&
+           !symbol->procedure_pointer && symbol->type != TYPE_CHARACTER &&
+           symbol->type != TYPE_COMPLEX && symbol->type != TYPE_DOUBLE_COMPLEX &&
+           symbol->type != TYPE_DERIVED;
+}
+
+static void free_initializers(F2cExpr **initializers, size_t count) {
+    size_t index;
+    if (initializers == NULL)
+        return;
+    for (index = 0U; index < count; ++index)
+        f2c_expr_free(initializers[index]);
+    free(initializers);
+}
+
 static int attach_scalar_initializer(DataValidation *validation, F2cIoItem *item, F2cExpr *target,
                                      const F2cExpr *value) {
     Symbol *symbol = target != NULL ? target->symbol : NULL;
@@ -175,15 +216,8 @@ static int attach_scalar_initializer(DataValidation *validation, F2cIoItem *item
     char *initializer;
     F2cExpr *expression;
     if (symbol == NULL || target->kind != F2C_EXPR_NAME || target->rank != 0U ||
-        symbol->module_entity || symbol->common_block != NULL || symbol->alias_to != NULL ||
-        symbol->type == TYPE_CHARACTER || symbol->type == TYPE_COMPLEX ||
-        symbol->type == TYPE_DOUBLE_COMPLEX || symbol->type == TYPE_DERIVED)
+        !symbol_supports_static_data(symbol) || !expression_has_static_c_form(value, 0U))
         return 0;
-    if (symbol->initializer != NULL || symbol->initializer_expression != NULL) {
-        f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
-                                 "DATA target '%s' already has an initializer", symbol->name);
-        return -1;
-    }
     source = value->source != NULL ? value->source : value->text;
     initializer = source != NULL ? f2c_strdup(source) : NULL;
     expression = f2c_expr_clone_substitute_integers(value, NULL, 0U);
@@ -202,11 +236,30 @@ static int attach_scalar_initializer(DataValidation *validation, F2cIoItem *item
     return 1;
 }
 
+static int prepare_array_initializers(DataValidation *validation, F2cIoItem *item, F2cExpr *target,
+                                      F2cExpr ***initializers, size_t extent) {
+    Symbol *symbol = target != NULL ? target->symbol : NULL;
+    if (initializers == NULL || extent == 0U || target == NULL || target->kind != F2C_EXPR_NAME ||
+        target->rank == 0U || !symbol_supports_static_data(symbol))
+        return 0;
+    *initializers = (F2cExpr **)calloc(extent, sizeof(**initializers));
+    if (*initializers == NULL) {
+        f2c_diagnostic_code(validation->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                            validation->statement->line, 1,
+                            "out of memory lowering DATA initializer for '%s'", symbol->name);
+        return -1;
+    }
+    item->data_static_initializer = 1;
+    return 1;
+}
+
 static int validate_target(DataValidation *validation, F2cIoItem *item) {
     size_t child;
     if (!item->implied_do) {
         F2cExpr *target = item->expression;
         Symbol *symbol = target != NULL ? target->symbol : NULL;
+        F2cExpr **array_initializers = NULL;
+        int static_array = 0;
         size_t extent;
         size_t element;
         if (target == NULL || !target->definable || target->value_category != F2C_VALUE_VARIABLE ||
@@ -223,6 +276,20 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
                                      "DATA array target must have a constant explicit shape");
             return 0;
         }
+        if (!expansion_within_budget(validation, (uint64_t)extent))
+            return 0;
+        if (symbol->initializer != NULL || symbol->initializer_expression != NULL ||
+            symbol->data_initializer) {
+            f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
+                                     "DATA target '%s' already has an initializer", symbol->name);
+            return 0;
+        }
+        if (target->kind == F2C_EXPR_NAME && target->rank != 0U) {
+            static_array =
+                prepare_array_initializers(validation, item, target, &array_initializers, extent);
+            if (static_array < 0)
+                return 0;
+        }
         symbol->saved = 1;
         if (!add_size(&validation->target_count, extent)) {
             f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_RESOURCE_LIMIT,
@@ -234,10 +301,38 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
             const F2cExpr *value = next_value(&validation->values);
             if (value != NULL) {
                 validate_value_type(validation, target, value);
-                if (extent == 1U && element == 0U &&
-                    attach_scalar_initializer(validation, item, target, value) < 0)
+                if (static_array && expression_has_static_c_form(value, 0U)) {
+                    array_initializers[element] =
+                        f2c_expr_clone_substitute_integers(value, NULL, 0U);
+                    if (array_initializers[element] == NULL) {
+                        f2c_diagnostic_code(validation->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                                            validation->statement->line, 1,
+                                            "out of memory lowering DATA initializer for '%s'",
+                                            symbol->name);
+                        free_initializers(array_initializers, extent);
+                        return 0;
+                    }
+                } else if (static_array) {
+                    item->data_static_initializer = 0;
+                    static_array = 0;
+                }
+                if (extent == 1U && element == 0U && target->rank == 0U &&
+                    attach_scalar_initializer(validation, item, target, value) < 0) {
+                    free_initializers(array_initializers, extent);
                     return 0;
+                }
+            } else if (static_array) {
+                item->data_static_initializer = 0;
+                static_array = 0;
             }
+        }
+        if (target->kind == F2C_EXPR_NAME)
+            symbol->data_initializer = 1;
+        if (static_array) {
+            symbol->data_element_initializers = array_initializers;
+            symbol->data_element_initializer_count = extent;
+        } else {
+            free_initializers(array_initializers, extent);
         }
         return 1;
     }
