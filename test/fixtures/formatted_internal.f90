@@ -2,7 +2,9 @@ program formatted_internal
   implicit none
   character(len=80) :: record
   character(len=2) :: word
-  character(len=16) :: runtime_format
+  character(len=160) :: runtime_format
+  character(len=1104) :: long_format
+  character(len=1100) :: long_record
   integer :: count
   integer :: status
   real :: scale
@@ -10,6 +12,7 @@ program formatted_internal
   integer :: first
   integer :: second
   integer :: third
+  integer :: iterator
 
   count = 42
   scale = 1.25
@@ -35,6 +38,19 @@ program formatted_internal
   runtime_format = '(*I0)'
   write(record, runtime_format, iostat=status) first
   if (status == 0) stop 4
+  write(record, '((((((((((((((((((((((((((((((((((((((((I0))))))))))))))))))))))))))))))))))))))))') first
+  if (record(1:1) /= '2') stop 7
+  runtime_format = '((((((((((((((((((((((((((((((((((((((((I0))))))))))))))))))))))))))))))))))))))))'
+  write(record, runtime_format) first
+  if (record(1:1) /= '2') stop 8
+  long_format = ' '
+  long_format(1:2) = "('"
+  do iterator = 3, 1102
+    long_format(iterator:iterator) = 'x'
+  end do
+  long_format(1103:1104) = "')"
+  write(long_record, long_format)
+  if (long_record(1:1) /= 'x' .or. long_record(1100:1100) /= 'x') stop 9
   scale = 1.1920929e-7
   write(record, '(1P,E9.1)') scale
   if (record(1:9) /= '  1.2E-07') stop 5
