@@ -55,9 +55,9 @@ static void expect_contains(const char *text, const char *needle, const char *me
 }
 
 static void test_version_contract(void) {
-    expect(F2C_VERSION_MAJOR == 1 && F2C_VERSION_MINOR == 3 && F2C_VERSION_PATCH == 1,
+    expect(F2C_VERSION_MAJOR == 1 && F2C_VERSION_MINOR == 3 && F2C_VERSION_PATCH == 0,
            "public version macros match the CMake project version");
-    expect(strcmp(f2c_version(), "1.3.1") == 0,
+    expect(strcmp(f2c_version(), "1.3.0") == 0,
            "runtime version matches the public compile-time version");
 }
 
