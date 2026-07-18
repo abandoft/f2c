@@ -28,19 +28,21 @@ static void expect_failure(const char *name, const char *source, const char *dia
 }
 
 static void test_valid_data_semantics(void) {
-    static const char source[] =
-        "program valid_data\n"
-        "  integer, parameter :: repeat = 2\n"
-        "  integer :: matrix(2,2), vector(2), i, j\n"
-        "  character(len=8) :: label\n"
-        "  data ((matrix(i,j), i=1,2), j=1,2) / 1, 2, 3, 4 /\n"
-        "  data vector / repeat*5 /, label / 'a/b,c' /\n"
-        "end program valid_data\n";
+    static const char source[] = "program valid_data\n"
+                                 "  integer, parameter :: repeat = 2\n"
+                                 "  integer :: matrix(2,2), vector(2), mixed(2), tail, i, j\n"
+                                 "  character(len=8) :: label\n"
+                                 "  data ((matrix(i,j), i=1,2), j=1,2) / 1, 2, 3, 4 /\n"
+                                 "  data vector / repeat*5 /, label / 'a/b,c' /\n"
+                                 "  data mixed, tail / 6, 7, 8 /\n"
+                                 "end program valid_data\n";
     F2cResult result = transpile("valid_data.f90", source);
     expect(result.error_count == 0U && result.code != NULL,
            "nested, repeated, multi-group DATA reaches typed C17 emission");
     expect(result.code != NULL && strstr(result.code, "matrix[") != NULL &&
-               strstr(result.code, "vector[1] = 5;") != NULL,
+               strstr(result.code, "vector[1] = 5;") != NULL &&
+               strstr(result.code, "mixed[1] = 7;") != NULL &&
+               strstr(result.code, "tail = 8;") != NULL,
            "validated implied-DO and repeated values expand in Fortran order");
     expect(result.code != NULL && strstr(result.code, "a/b,c") != NULL,
            "character DATA payload delimiters survive canonical token parsing");

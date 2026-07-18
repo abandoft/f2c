@@ -1,43 +1,37 @@
 #include "internal/f2c.h"
 
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 typedef struct DataCursor {
     const F2cDataGroup *group;
     size_t value_index;
-    int32_t repetitions_left;
+    uint64_t repetitions_left;
     const F2cExpr *current;
 } DataCursor;
 
-typedef struct DataSubstitution {
-    const F2cExpr *iterator;
-    int32_t value;
-} DataSubstitution;
-
 typedef struct DataSubstitutions {
-    DataSubstitution *items;
+    F2cIntegerSubstitution *items;
     size_t count;
     size_t capacity;
 } DataSubstitutions;
 
 static int push_substitution(DataSubstitutions *substitutions, const F2cExpr *iterator) {
-    DataSubstitution *replacement;
+    F2cIntegerSubstitution *replacement;
     size_t capacity;
     if (substitutions->count == substitutions->capacity) {
         capacity = substitutions->capacity == 0U ? 8U : substitutions->capacity * 2U;
         if (capacity < substitutions->capacity || capacity > SIZE_MAX / sizeof(*replacement))
             return 0;
-        replacement =
-            (DataSubstitution *)realloc(substitutions->items, capacity * sizeof(*replacement));
+        replacement = (F2cIntegerSubstitution *)realloc(substitutions->items,
+                                                        capacity * sizeof(*replacement));
         if (replacement == NULL)
             return 0;
         substitutions->items = replacement;
         substitutions->capacity = capacity;
     }
-    substitutions->items[substitutions->count].iterator = iterator;
+    substitutions->items[substitutions->count].symbol = iterator != NULL ? iterator->symbol : NULL;
+    substitutions->items[substitutions->count].name = iterator != NULL ? iterator->text : NULL;
     substitutions->items[substitutions->count].value = 0;
     ++substitutions->count;
     return 1;
@@ -59,96 +53,16 @@ static char *emit_expression(Unit *unit, const F2cExpr *expression) {
     return result;
 }
 
-static int evaluate_integer(Unit *unit, const F2cExpr *expression, int32_t *value) {
-    int64_t evaluated;
-    if (!f2c_evaluate_integer_constant(unit, expression, &evaluated) || evaluated < INT32_MIN ||
-        evaluated > INT32_MAX)
-        return 0;
-    *value = (int32_t)evaluated;
-    return 1;
-}
-
-static F2cExpr *clone_with_integers(const F2cExpr *expression,
-                                    const DataSubstitution *substitutions,
-                                    size_t substitution_count) {
-    F2cExpr *clone;
-    size_t i;
-    if (expression == NULL)
-        return NULL;
-    clone = (F2cExpr *)calloc(1U, sizeof(*clone));
-    if (clone == NULL)
-        return NULL;
-    clone->kind = expression->kind;
-    clone->type = expression->type;
-    clone->rank = expression->rank;
-    clone->definable = expression->definable;
-    clone->symbol = expression->symbol;
-    clone->temporary_index = expression->temporary_index;
-    clone->lowered_c = expression->lowered_c != NULL ? f2c_strdup(expression->lowered_c) : NULL;
-    clone->lowered_extent_c =
-        expression->lowered_extent_c != NULL ? f2c_strdup(expression->lowered_extent_c) : NULL;
-    clone->lowered_character_length_c = expression->lowered_character_length_c != NULL
-                                            ? f2c_strdup(expression->lowered_character_length_c)
-                                            : NULL;
-    if ((expression->lowered_c != NULL && clone->lowered_c == NULL) ||
-        (expression->lowered_extent_c != NULL && clone->lowered_extent_c == NULL) ||
-        (expression->lowered_character_length_c != NULL &&
-         clone->lowered_character_length_c == NULL)) {
-        f2c_expr_free(clone);
-        return NULL;
-    }
-    if (expression->kind == F2C_EXPR_NAME) {
-        for (i = substitution_count; i != 0U; --i) {
-            const F2cExpr *iterator = substitutions[i - 1U].iterator;
-            if (iterator != NULL &&
-                ((expression->symbol != NULL && expression->symbol == iterator->symbol) ||
-                 (expression->text != NULL && iterator->text != NULL &&
-                  strcmp(expression->text, iterator->text) == 0))) {
-                char literal[32];
-                (void)snprintf(literal, sizeof(literal), "%d", (int)substitutions[i - 1U].value);
-                clone->kind = F2C_EXPR_INTEGER_LITERAL;
-                clone->type = TYPE_INTEGER;
-                clone->rank = 0U;
-                clone->definable = 0;
-                clone->symbol = NULL;
-                clone->text = f2c_strdup(literal);
-                return clone;
-            }
-        }
-    }
-    clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
-    if (expression->child_count != 0U) {
-        clone->children = (F2cExpr **)calloc(expression->child_count, sizeof(*clone->children));
-        if (clone->children == NULL) {
-            f2c_expr_free(clone);
-            return NULL;
-        }
-        for (i = 0U; i < expression->child_count; ++i) {
-            clone->children[i] =
-                clone_with_integers(expression->children[i], substitutions, substitution_count);
-            if (clone->children[i] == NULL) {
-                clone->child_count = i;
-                f2c_expr_free(clone);
-                return NULL;
-            }
-            ++clone->child_count;
-        }
-    }
-    return clone;
-}
-
-static const F2cExpr *next_data_value(Unit *unit, DataCursor *cursor) {
-    if (cursor->repetitions_left == 0) {
+static const F2cExpr *next_data_value(DataCursor *cursor) {
+    if (cursor->repetitions_left == 0U) {
         const F2cDataValue *value;
-        int32_t repeat = 1;
         if (cursor->value_index >= cursor->group->value_count)
             return NULL;
         value = &cursor->group->values[cursor->value_index++];
-        if (value->repeat != NULL &&
-            (!evaluate_integer(unit, value->repeat, &repeat) || repeat <= 0))
+        if (value->repeat_count == 0U)
             return NULL;
         cursor->current = value->expression;
-        cursor->repetitions_left = repeat;
+        cursor->repetitions_left = value->repeat_count;
     }
     --cursor->repetitions_left;
     return cursor->current;
@@ -182,109 +96,63 @@ static int emit_data_assignment(Context *context, Unit *unit, const F2cExpr *tar
 }
 
 static int evaluate_substituted_integer(Unit *unit, const F2cExpr *expression,
-                                        const DataSubstitution *substitutions,
-                                        size_t substitution_count, int32_t *value) {
-    F2cExpr *substituted = clone_with_integers(expression, substitutions, substitution_count);
-    const int valid = substituted != NULL && evaluate_integer(unit, substituted, value);
+                                        const F2cIntegerSubstitution *substitutions,
+                                        size_t substitution_count, int64_t *value) {
+    F2cExpr *substituted =
+        f2c_expr_clone_substitute_integers(expression, substitutions, substitution_count);
+    const int valid =
+        substituted != NULL && f2c_evaluate_integer_constant(unit, substituted, value);
     f2c_expr_free(substituted);
     return valid;
 }
 
-static int emit_data_target(Context *context, Unit *unit, const F2cIoItem *target,
-                            DataCursor *cursor, DataSubstitutions *substitutions, int depth) {
-    int32_t first;
-    int32_t last;
-    int32_t step;
-    int64_t current;
-    size_t child;
-    if (!target->implied_do) {
-        const F2cExpr *value = next_data_value(unit, cursor);
-        F2cExpr *substituted;
-        if (value == NULL)
-            return 0;
-        substituted =
-            clone_with_integers(target->expression, substitutions->items, substitutions->count);
-        if (substituted == NULL ||
-            !emit_data_assignment(context, unit, substituted, value, depth)) {
-            f2c_expr_free(substituted);
-            return 0;
-        }
-        f2c_expr_free(substituted);
-        return 1;
-    }
-    if (!evaluate_substituted_integer(unit, target->initial, substitutions->items,
-                                      substitutions->count, &first) ||
-        !evaluate_substituted_integer(unit, target->limit, substitutions->items,
-                                      substitutions->count, &last) ||
-        !evaluate_substituted_integer(unit, target->step, substitutions->items,
-                                      substitutions->count, &step) ||
-        step == 0)
-        return 0;
-    if (!push_substitution(substitutions, target->iterator))
-        return 0;
-    for (current = first; (step > 0 && current <= last) || (step < 0 && current >= last);
-         current += step) {
-        substitutions->items[substitutions->count - 1U].value = (int32_t)current;
-        for (child = 0U; child < target->child_count; ++child) {
-            const F2cIoItem *item = &target->children[child];
-            if (!emit_data_target(context, unit, item, cursor, substitutions, depth)) {
-                --substitutions->count;
-                return 0;
-            }
-        }
-    }
-    --substitutions->count;
-    return 1;
-}
-
-static int symbol_element_count(Unit *unit, const Symbol *symbol, size_t *count) {
+static int expression_element_count(const F2cExpr *expression, size_t *count) {
     size_t result = 1U;
     size_t dimension;
-    for (dimension = 0U; dimension < symbol->rank; ++dimension) {
-        const F2cExpr *lower = symbol->dimensions[dimension].lower_expression;
-        const F2cExpr *upper = symbol->dimensions[dimension].upper_expression;
-        int32_t lower_value = 0;
-        int32_t upper_value = 0;
-        size_t extent;
-        const int valid = evaluate_integer(unit, lower, &lower_value) &&
-                          evaluate_integer(unit, upper, &upper_value) && upper_value >= lower_value;
-        if (!valid)
+    if (expression == NULL || count == NULL || expression->rank == 0U ||
+        expression->shape.rank != expression->rank)
+        return 0;
+    for (dimension = 0U; dimension < expression->rank; ++dimension) {
+        const F2cShapeDimension *shape = &expression->shape.dimensions[dimension];
+        if (!shape->extent_known || shape->extent > (uint64_t)SIZE_MAX ||
+            (shape->extent != 0U && result > SIZE_MAX / (size_t)shape->extent))
             return 0;
-        extent = (size_t)((int64_t)upper_value - (int64_t)lower_value + 1);
-        if (extent != 0U && result > SIZE_MAX / extent)
-            return 0;
-        result *= extent;
+        result *= (size_t)shape->extent;
     }
     *count = result;
     return 1;
 }
 
-static int emit_array_values(Context *context, Unit *unit, Symbol *symbol, DataCursor *cursor,
-                             int depth) {
-    size_t index = 0U;
+static int emit_array_values(Context *context, Unit *unit, const F2cExpr *target,
+                             DataCursor *cursor, int depth) {
+    Symbol *symbol = target != NULL ? target->symbol : NULL;
     size_t element_count;
+    size_t index;
     char *character_length = NULL;
-    const F2cExpr *value;
-    if (!symbol_element_count(unit, symbol, &element_count))
+    if (symbol == NULL || target->kind != F2C_EXPR_NAME ||
+        !expression_element_count(target, &element_count))
         return 0;
-    if (symbol->type == TYPE_CHARACTER)
+    if (symbol->type == TYPE_CHARACTER) {
         character_length =
-            symbol->character_length != NULL
+            symbol->character_length_expression != NULL
                 ? f2c_emit_typed_expression(unit, symbol->character_length_expression)
                 : f2c_strdup("1U");
-    while ((value = next_data_value(unit, cursor)) != NULL) {
-        char *right = emit_expression(unit, value);
-        if (right == NULL || index >= element_count) {
-            free(right);
+        if (character_length == NULL)
+            return 0;
+    }
+    for (index = 0U; index < element_count; ++index) {
+        const F2cExpr *value = next_data_value(cursor);
+        char *right = value != NULL ? emit_expression(unit, value) : NULL;
+        if (right == NULL) {
             free(character_length);
             return 0;
         }
         if (symbol->type == TYPE_CHARACTER) {
-            Buffer target = {0};
+            Buffer pointer = {0};
             char *target_pointer;
-            f2c_buffer_printf(&target, "&%s[(size_t)(%s) * %zuU]", f2c_symbol_c_name(unit, symbol),
+            f2c_buffer_printf(&pointer, "&%s[(size_t)(%s) * %zuU]", f2c_symbol_c_name(unit, symbol),
                               character_length, index);
-            target_pointer = f2c_buffer_take(&target);
+            target_pointer = f2c_buffer_take(&pointer);
             if (!f2c_emit_character_storage_assignment(context, unit, target_pointer,
                                                        character_length, value, right, depth)) {
                 free(target_pointer);
@@ -298,11 +166,68 @@ static int emit_array_values(Context *context, Unit *unit, Symbol *symbol, DataC
             f2c_buffer_printf(&context->output, "%s[%zu] = %s;\n", f2c_symbol_c_name(unit, symbol),
                               index, right);
         }
-        ++index;
         free(right);
     }
     free(character_length);
-    return index == element_count;
+    return 1;
+}
+
+static int emit_data_target(Context *context, Unit *unit, const F2cIoItem *target,
+                            DataCursor *cursor, DataSubstitutions *substitutions, int depth) {
+    int64_t first;
+    int64_t last;
+    int64_t step;
+    int64_t current;
+    uint64_t iterations;
+    uint64_t iteration;
+    size_t child;
+    if (!target->implied_do) {
+        F2cExpr *substituted;
+        substituted = f2c_expr_clone_substitute_integers(target->expression, substitutions->items,
+                                                         substitutions->count);
+        if (substituted == NULL) {
+            return 0;
+        }
+        if (substituted->rank != 0U) {
+            const int emitted = emit_array_values(context, unit, substituted, cursor, depth);
+            f2c_expr_free(substituted);
+            return emitted;
+        }
+        {
+            const F2cExpr *value = next_data_value(cursor);
+            if (value == NULL || !emit_data_assignment(context, unit, substituted, value, depth)) {
+                f2c_expr_free(substituted);
+                return 0;
+            }
+        }
+        f2c_expr_free(substituted);
+        return 1;
+    }
+    if (!evaluate_substituted_integer(unit, target->initial, substitutions->items,
+                                      substitutions->count, &first) ||
+        !evaluate_substituted_integer(unit, target->limit, substitutions->items,
+                                      substitutions->count, &last) ||
+        !evaluate_substituted_integer(unit, target->step, substitutions->items,
+                                      substitutions->count, &step) ||
+        step == 0 || !f2c_integer_iteration_count(first, last, step, &iterations))
+        return 0;
+    if (!push_substitution(substitutions, target->iterator))
+        return 0;
+    current = first;
+    for (iteration = 0U; iteration < iterations; ++iteration) {
+        substitutions->items[substitutions->count - 1U].value = current;
+        for (child = 0U; child < target->child_count; ++child) {
+            const F2cIoItem *item = &target->children[child];
+            if (!emit_data_target(context, unit, item, cursor, substitutions, depth)) {
+                --substitutions->count;
+                return 0;
+            }
+        }
+        if (iteration + 1U < iterations)
+            current += step;
+    }
+    --substitutions->count;
+    return 1;
 }
 
 static void emit_data_group(Context *context, Unit *unit, const F2cDataGroup *group,
@@ -310,37 +235,20 @@ static void emit_data_group(Context *context, Unit *unit, const F2cDataGroup *gr
     DataCursor cursor = {group, 0U, 0, NULL};
     DataSubstitutions substitutions = {0};
     size_t target_index;
-    if (group->target_count == 1U && !group->targets[0].implied_do &&
-        group->targets[0].expression != NULL &&
-        group->targets[0].expression->kind == F2C_EXPR_NAME &&
-        group->targets[0].expression->symbol != NULL &&
-        group->targets[0].expression->symbol->rank != 0U) {
-        if (!emit_array_values(context, unit, group->targets[0].expression->symbol, &cursor, depth))
-            f2c_diagnostic(context, line_number, 1, "invalid DATA array initializer");
+    if (!group->counts_valid) {
+        f2c_diagnostic(context, line_number, 1, "DATA typed IR was not validated");
         return;
     }
     for (target_index = 0U; target_index < group->target_count; ++target_index) {
         const F2cIoItem *target = &group->targets[target_index];
-        if (target->implied_do) {
-            if (!emit_data_target(context, unit, target, &cursor, &substitutions, depth)) {
-                f2c_diagnostic(context, line_number, 1,
-                               "DATA implied-DO bounds or value count are invalid");
-                free(substitutions.items);
-                return;
-            }
-        } else {
-            const F2cExpr *value = next_data_value(unit, &cursor);
-            if (value == NULL ||
-                !emit_data_assignment(context, unit, target->expression, value, depth)) {
-                f2c_diagnostic(context, line_number, 1,
-                               "DATA value count does not match its target list");
-                free(substitutions.items);
-                return;
-            }
+        if (!emit_data_target(context, unit, target, &cursor, &substitutions, depth)) {
+            f2c_diagnostic(context, line_number, 1, "validated DATA IR could not be emitted");
+            free(substitutions.items);
+            return;
         }
     }
     if (cursor_has_values(&cursor))
-        f2c_diagnostic(context, line_number, 1, "DATA value count does not match its target list");
+        f2c_diagnostic(context, line_number, 1, "validated DATA IR retained unconsumed values");
     free(substitutions.items);
 }
 
