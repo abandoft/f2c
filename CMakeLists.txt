@@ -78,7 +78,12 @@ set(
     src/codegen/expression/reduction.c
     src/codegen/expression/statement_function.c
     src/codegen/io.c
-    src/codegen/io/control.c
+    src/codegen/io/control/common.c
+    src/codegen/io/control/inquire.c
+    src/codegen/io/control/open.c
+    src/codegen/io/control/position.c
+    src/codegen/io/control/print.c
+    src/codegen/io/control/private.h
     src/codegen/io/format.c
     src/codegen/io/formatted.c
     src/codegen/io/namelist.c

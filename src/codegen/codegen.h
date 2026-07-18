@@ -88,8 +88,10 @@ void f2c_emit_format_support(Context *context);
 int f2c_emit_print_statement(Context *context, Unit *unit, const F2cStatement *statement,
                              int depth);
 int f2c_emit_open_statement(Context *context, Unit *unit, const F2cStatement *statement, int depth);
-int f2c_emit_rewind_statement(Context *context, Unit *unit, const F2cStatement *statement,
-                              int depth);
+int f2c_emit_position_statement(Context *context, Unit *unit, const F2cStatement *statement,
+                                int depth);
+int f2c_emit_inquire_statement(Context *context, Unit *unit, const F2cStatement *statement,
+                               int depth);
 int f2c_emit_close_statement(Context *context, Unit *unit, const F2cStatement *statement,
                              int depth);
 void f2c_emit_unit(Context *context, Unit *unit);

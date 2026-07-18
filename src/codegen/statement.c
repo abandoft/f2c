@@ -479,9 +479,13 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
     } else if (statement->kind == F2C_STMT_OPEN) {
         if (!f2c_emit_open_statement(context, unit, statement, *depth))
             f2c_diagnostic(context, source_line->number, 1, "malformed OPEN statement");
-    } else if (statement->kind == F2C_STMT_REWIND) {
-        if (!f2c_emit_rewind_statement(context, unit, statement, *depth))
-            f2c_diagnostic(context, source_line->number, 1, "malformed REWIND statement");
+    } else if (statement->kind == F2C_STMT_REWIND || statement->kind == F2C_STMT_BACKSPACE ||
+               statement->kind == F2C_STMT_ENDFILE) {
+        if (!f2c_emit_position_statement(context, unit, statement, *depth))
+            f2c_diagnostic(context, source_line->number, 1, "malformed file positioning statement");
+    } else if (statement->kind == F2C_STMT_INQUIRE) {
+        if (!f2c_emit_inquire_statement(context, unit, statement, *depth))
+            f2c_diagnostic(context, source_line->number, 1, "malformed INQUIRE statement");
     } else if (statement->kind == F2C_STMT_CLOSE) {
         if (!f2c_emit_close_statement(context, unit, statement, *depth))
             f2c_diagnostic(context, source_line->number, 1, "malformed CLOSE statement");
