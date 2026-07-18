@@ -35,22 +35,28 @@ fi
 stage_source() {
     path=$1
     name=$2
-    source=$work/$name.f
-    if [ -f "$local_source/$path/$name.f" ]; then
-        cp "$local_source/$path/$name.f" "$source"
+    extension=${3:-f}
+    source=$work/$name.$extension
+    if [ -f "$local_source/$path/$name.$extension" ]; then
+        cp "$local_source/$path/$name.$extension" "$source"
     else
         curl --fail --location --silent --show-error \
-            "$source_root/$path/$name.f" --output "$source"
+            "$source_root/$path/$name.$extension" --output "$source"
     fi
-    "$f2c" --fixed-form "$source" -o "$work/$name.c"
+    "$f2c" "$source" -o "$work/$name.c"
 }
 
 stage_source BLAS/SRC dgemv
-stage_source BLAS/SRC dgemm
-stage_source SRC dgetrf
-stage_source SRC dpotrf
+for name in ddot dscal dger dtrsm dsyrk dgemm lsame xerbla idamax; do
+    stage_source BLAS/SRC "$name"
+done
+stage_source BLAS/SRC dnrm2 f90
+for name in dgetrf dgetrf2 dlaswp dpotrf dpotrf2 disnan dlaisnan; do
+    stage_source SRC "$name"
+done
+stage_source INSTALL dlamch
 
-for name in dgemv dgemm dgetrf dpotrf; do
+for name in dgemv dgemm dger dtrsm dgetrf dpotrf; do
     "$c_compiler" -std=c17 -O3 -ffp-contract=fast -DF2C_FP_CONTRACT=1 -DNDEBUG \
         -fverbose-asm -fopt-info-vec-all="$work/$name.c.vec" \
         -S "$work/$name.c" -o "$work/$name.c.s"
@@ -69,5 +75,34 @@ for name in dgemv dgemm dgetrf dpotrf; do
     gfortran -O3 -fverbose-asm -fopt-info-vec-all="$work/$name.fortran.vec" \
         -S "$work/$name.f" -o "$work/$name.fortran.s"
 done
+
+lto=$work/lto
+mkdir -p "$lto"
+lto_sources='ddot dnrm2 dscal dger dtrsm dsyrk dgemm lsame xerbla idamax dgetrf dgetrf2 dlaswp dpotrf dpotrf2 disnan dlaisnan dlamch'
+for name in $lto_sources; do
+    extension=f
+    [ "$name" = dnrm2 ] && extension=f90
+    "$c_compiler" -std=c17 -O3 -flto -ffp-contract=fast -DF2C_FP_CONTRACT=1 \
+        -DNDEBUG -c "$work/$name.c" -o "$lto/$name-c.o"
+    gfortran -O3 -flto -c "$work/$name.$extension" -o "$lto/$name-fortran.o"
+done
+for name in matrix level1 level2 level3 lapack; do
+    "$c_compiler" -std=c17 -O3 -flto -DNDEBUG \
+        -c "$root/test/performance/$name.c" -o "$lto/$name.o"
+done
+
+(
+    cd "$lto"
+    set -- matrix.o level1.o level2.o level3.o lapack.o
+    for name in $lto_sources; do
+        set -- "$@" "$name-c.o"
+    done
+    for name in $lto_sources; do
+        set -- "$@" "$name-fortran.o"
+    done
+    gfortran -O3 -flto -save-temps=obj "$@" -lm -o benchmark
+)
+objdump -drwC "$lto/benchmark" >"$lto/benchmark.objdump"
+nm "$lto/benchmark" >"$lto/benchmark.symbols"
 
 echo "performance code-generation reports: $work"
