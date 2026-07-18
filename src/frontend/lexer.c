@@ -134,16 +134,61 @@ static void scan_string(F2cTokenStream *lexer, const char *begin) {
         set_error(lexer, begin);
 }
 
+const char *f2c_character_literal_quote(const char *text) {
+    const char *cursor;
+    if (text == NULL)
+        return NULL;
+    if (*text == '\'' || *text == '"')
+        return text;
+    cursor = text;
+    if (isdigit((unsigned char)*cursor)) {
+        while (isdigit((unsigned char)*cursor))
+            ++cursor;
+        return *cursor == '_' && (cursor[1] == '\'' || cursor[1] == '"') ? cursor + 1 : NULL;
+    }
+    if (!identifier_start(*cursor))
+        return NULL;
+    ++cursor;
+    while (identifier_continue(*cursor))
+        ++cursor;
+    if (cursor <= text + 1 || cursor[-1] != '_' || (*cursor != '\'' && *cursor != '"'))
+        return NULL;
+    return cursor;
+}
+
+static int scan_kind_string(F2cTokenStream *lexer, const char *begin) {
+    const char *quote = f2c_character_literal_quote(begin);
+    if (quote == NULL || quote == begin)
+        return 0;
+    lexer->cursor = quote;
+    scan_string(lexer, begin);
+    return 1;
+}
+
+static int valid_boz_digit(char prefix, char value) {
+    if (prefix == 'b')
+        return value == '0' || value == '1';
+    if (prefix == 'o')
+        return value >= '0' && value <= '7';
+    return isxdigit((unsigned char)value) != 0;
+}
+
 static int scan_boz(F2cTokenStream *lexer, const char *begin) {
     const char prefix = (char)tolower((unsigned char)begin[0]);
     const char quote = begin[1];
     const char *cursor;
+    const char *first_invalid = NULL;
+    size_t digit_count = 0U;
     if ((prefix != 'b' && prefix != 'o' && prefix != 'z' && prefix != 'x') ||
         (quote != '\'' && quote != '"'))
         return 0;
     cursor = begin + 2;
-    while (*cursor != '\0' && *cursor != quote)
+    while (*cursor != '\0' && *cursor != quote) {
+        if (!valid_boz_digit(prefix, *cursor) && first_invalid == NULL)
+            first_invalid = cursor;
+        ++digit_count;
         ++cursor;
+    }
     if (*cursor != quote) {
         lexer->cursor = cursor;
         lexer->token.kind = F2C_TOKEN_INVALID;
@@ -151,7 +196,12 @@ static int scan_boz(F2cTokenStream *lexer, const char *begin) {
         return 1;
     }
     lexer->cursor = cursor + 1;
-    lexer->token.kind = F2C_TOKEN_BOZ;
+    if (digit_count == 0U || first_invalid != NULL) {
+        lexer->token.kind = F2C_TOKEN_INVALID;
+        set_error(lexer, first_invalid != NULL ? first_invalid : begin + 2);
+    } else {
+        lexer->token.kind = F2C_TOKEN_BOZ;
+    }
     return 1;
 }
 
@@ -174,6 +224,11 @@ void f2c_token_stream_next(F2cTokenStream *lexer) {
         return;
     }
     if (identifier_start(*begin)) {
+        if (scan_kind_string(lexer, begin)) {
+            lexer->token.length = (size_t)(lexer->cursor - begin);
+            lexer->token.span.end.column = lexer->token.column + lexer->token.length;
+            return;
+        }
         if (scan_boz(lexer, begin)) {
             lexer->token.length = (size_t)(lexer->cursor - begin);
             lexer->token.span.end.column = lexer->token.column + lexer->token.length;
@@ -185,7 +240,8 @@ void f2c_token_stream_next(F2cTokenStream *lexer) {
         lexer->token.kind = F2C_TOKEN_IDENTIFIER;
     } else if (isdigit((unsigned char)*begin) ||
                (*begin == '.' && isdigit((unsigned char)begin[1]))) {
-        scan_number(lexer, begin);
+        if (!scan_kind_string(lexer, begin))
+            scan_number(lexer, begin);
     } else if (*begin == '\'' || *begin == '"') {
         scan_string(lexer, begin);
     } else if (*begin == '(' && begin[1] == '/') {
@@ -342,8 +398,14 @@ int f2c_tokenize_lines(Context *context) {
                 return 0;
             }
             if (lexer.token.kind == F2C_TOKEN_INVALID) {
-                f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_INVALID_TOKEN, &lexer.token.span,
-                                         1, "invalid token in Fortran source");
+                F2cSourceSpan error_span = lexer.token.span;
+                if (lexer.error_at != NULL && lexer.error_at >= line->text &&
+                    lexer.error_at < line->text + strlen(line->text)) {
+                    error_span =
+                        f2c_line_source_span(line, (size_t)(lexer.error_at - line->text), 1U);
+                }
+                f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_INVALID_TOKEN, &error_span, 1,
+                                         "invalid token in Fortran source");
                 break;
             }
         }

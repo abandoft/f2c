@@ -126,6 +126,7 @@ int f2c_token_matching_delimiter(const F2cToken *tokens, size_t count, size_t op
                                  size_t *close_index);
 char *f2c_token_range_text(F2cTokenRange range);
 int f2c_hollerith_payload(const char *text, const char **payload, size_t *length);
+const char *f2c_character_literal_quote(const char *text);
 int f2c_tokenize_lines(Context *context);
 int f2c_lines_push(Context *context, char *text, size_t number, const F2cOptions *options);
 int f2c_lines_push_mapped(Context *context, char *text, size_t number,
