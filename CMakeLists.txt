@@ -382,6 +382,10 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_data_tests)
     add_test(NAME data_semantics COMMAND f2c_data_tests)
 
+    add_executable(f2c_io_tests test/test_io.c)
+    f2c_configure_test_target(f2c_io_tests)
+    add_test(NAME io_semantics COMMAND f2c_io_tests)
+
     add_executable(f2c_declaration_tests test/test_declaration.c)
     f2c_configure_test_target(f2c_declaration_tests)
     add_test(NAME declaration_semantics COMMAND f2c_declaration_tests)

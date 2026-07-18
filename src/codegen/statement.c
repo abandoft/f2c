@@ -104,7 +104,8 @@ static int statement_targets_label(const F2cStatement *statement, const char *la
     }
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
         statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
-        statement->kind == F2C_STMT_CLOSE) {
+        statement->kind == F2C_STMT_BACKSPACE || statement->kind == F2C_STMT_ENDFILE ||
+        statement->kind == F2C_STMT_INQUIRE || statement->kind == F2C_STMT_CLOSE) {
         for (i = 0U; i < statement->control_count; ++i) {
             const F2cIoControl *control = &statement->io_controls[i];
             const F2cExpr *value = control->value;

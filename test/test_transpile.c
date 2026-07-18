@@ -194,7 +194,7 @@ static void test_resource_limits(void) {
 
     {
         static const char diagnostic_source[] =
-            "program diagnostics\nbackspace 1\nbackspace 2\nend program diagnostics\n";
+            "program diagnostics\npause 1\npause 2\nend program diagnostics\n";
         F2cInput diagnostic_input = {
             diagnostic_source,
             sizeof(diagnostic_source) - 1U,
@@ -2076,7 +2076,7 @@ static void test_list_directed_io(void) {
                         "I/O validation rejects a zero implied-DO step");
         expect_contains(invalid.diagnostics, "END= is not yet supported in WRITE",
                         "unsupported standard controls fail explicitly instead of being ignored");
-        expect_contains(invalid.diagnostics, "OPEN UNIT= must be an asterisk or a scalar INTEGER",
+        expect_contains(invalid.diagnostics, "OPEN UNIT= must be a scalar INTEGER",
                         "OPEN validates the external unit type");
         expect_contains(invalid.diagnostics, "OPEN FILE= must be a scalar CHARACTER expression",
                         "OPEN validates FILE= as CHARACTER");
@@ -2212,12 +2212,12 @@ static void test_local_kind_parameter_semantics(void) {
 static void test_unsupported_semantics_are_errors(void) {
     static const char source[] = "subroutine unsupported(value)\n"
                                  "  real :: value\n"
-                                 "  backspace 1\n"
+                                 "  pause 1\n"
                                  "end subroutine unsupported\n";
     F2cOptions options = {"unsupported.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count != 0U, "unsupported semantic constructs are hard errors");
-    expect_contains(result.diagnostics, "unsupported Fortran statement: backspace 1",
+    expect_contains(result.diagnostics, "unsupported Fortran statement: pause 1",
                     "unsupported construct diagnostic identifies the rejected statement");
     f2c_result_free(&result);
 

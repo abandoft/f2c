@@ -1,5 +1,6 @@
 #include "semantic/validation/private.h"
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -417,6 +418,12 @@ static const char *io_statement_name(F2cStatementKind kind) {
         return "OPEN";
     case F2C_STMT_REWIND:
         return "REWIND";
+    case F2C_STMT_BACKSPACE:
+        return "BACKSPACE";
+    case F2C_STMT_ENDFILE:
+        return "ENDFILE";
+    case F2C_STMT_INQUIRE:
+        return "INQUIRE";
     case F2C_STMT_CLOSE:
         return "CLOSE";
     default:
@@ -425,12 +432,54 @@ static const char *io_statement_name(F2cStatementKind kind) {
 }
 
 static const char *io_control_name(F2cIoControlKind kind) {
-    static const char *const names[] = {
-        "positional", "unknown", "UNIT", "FMT",          "NML",   "END",     "EOR",   "ERR",
-        "IOSTAT",     "IOMSG",   "SIZE", "ADVANCE",      "REC",   "POS",     "FILE",  "STATUS",
-        "ACCESS",     "ACTION",  "FORM", "RECL",         "BLANK", "DECIMAL", "DELIM", "ENCODING",
-        "PAD",        "ROUND",   "SIGN", "ASYNCHRONOUS", "ID",    "NEWUNIT"};
-    return (size_t)kind < sizeof(names) / sizeof(names[0]) ? names[kind] : "unknown";
+    static const char *const names[F2C_IO_CONTROL_READWRITE + 1U] = {
+        [F2C_IO_CONTROL_POSITIONAL] = "positional",
+        [F2C_IO_CONTROL_UNKNOWN] = "unknown",
+        [F2C_IO_CONTROL_UNIT] = "UNIT",
+        [F2C_IO_CONTROL_FMT] = "FMT",
+        [F2C_IO_CONTROL_NML] = "NML",
+        [F2C_IO_CONTROL_END] = "END",
+        [F2C_IO_CONTROL_EOR] = "EOR",
+        [F2C_IO_CONTROL_ERR] = "ERR",
+        [F2C_IO_CONTROL_IOSTAT] = "IOSTAT",
+        [F2C_IO_CONTROL_IOMSG] = "IOMSG",
+        [F2C_IO_CONTROL_SIZE] = "SIZE",
+        [F2C_IO_CONTROL_ADVANCE] = "ADVANCE",
+        [F2C_IO_CONTROL_REC] = "REC",
+        [F2C_IO_CONTROL_POS] = "POS",
+        [F2C_IO_CONTROL_FILE] = "FILE",
+        [F2C_IO_CONTROL_STATUS] = "STATUS",
+        [F2C_IO_CONTROL_ACCESS] = "ACCESS",
+        [F2C_IO_CONTROL_ACTION] = "ACTION",
+        [F2C_IO_CONTROL_FORM] = "FORM",
+        [F2C_IO_CONTROL_RECL] = "RECL",
+        [F2C_IO_CONTROL_BLANK] = "BLANK",
+        [F2C_IO_CONTROL_DECIMAL] = "DECIMAL",
+        [F2C_IO_CONTROL_DELIM] = "DELIM",
+        [F2C_IO_CONTROL_ENCODING] = "ENCODING",
+        [F2C_IO_CONTROL_PAD] = "PAD",
+        [F2C_IO_CONTROL_ROUND] = "ROUND",
+        [F2C_IO_CONTROL_SIGN] = "SIGN",
+        [F2C_IO_CONTROL_ASYNCHRONOUS] = "ASYNCHRONOUS",
+        [F2C_IO_CONTROL_ID] = "ID",
+        [F2C_IO_CONTROL_NEWUNIT] = "NEWUNIT",
+        [F2C_IO_CONTROL_EXIST] = "EXIST",
+        [F2C_IO_CONTROL_OPENED] = "OPENED",
+        [F2C_IO_CONTROL_NUMBER] = "NUMBER",
+        [F2C_IO_CONTROL_NAMED] = "NAMED",
+        [F2C_IO_CONTROL_NAME] = "NAME",
+        [F2C_IO_CONTROL_SEQUENTIAL] = "SEQUENTIAL",
+        [F2C_IO_CONTROL_DIRECT] = "DIRECT",
+        [F2C_IO_CONTROL_FORMATTED] = "FORMATTED",
+        [F2C_IO_CONTROL_UNFORMATTED] = "UNFORMATTED",
+        [F2C_IO_CONTROL_NEXTREC] = "NEXTREC",
+        [F2C_IO_CONTROL_POSITION] = "POSITION",
+        [F2C_IO_CONTROL_READ] = "READ",
+        [F2C_IO_CONTROL_WRITE] = "WRITE",
+        [F2C_IO_CONTROL_READWRITE] = "READWRITE",
+    };
+    return (size_t)kind < sizeof(names) / sizeof(names[0]) && names[kind] != NULL ? names[kind]
+                                                                                  : "unknown";
 }
 
 static int io_control_supported(F2cStatementKind statement_kind, F2cIoControlKind control_kind) {
@@ -448,10 +497,36 @@ static int io_control_supported(F2cStatementKind statement_kind, F2cIoControlKin
     if (statement_kind == F2C_STMT_OPEN)
         return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_FILE ||
                control_kind == F2C_IO_CONTROL_STATUS || control_kind == F2C_IO_CONTROL_ERR ||
-               control_kind == F2C_IO_CONTROL_IOSTAT || control_kind == F2C_IO_CONTROL_FORM;
-    if (statement_kind == F2C_STMT_CLOSE || statement_kind == F2C_STMT_REWIND)
+               control_kind == F2C_IO_CONTROL_IOSTAT || control_kind == F2C_IO_CONTROL_IOMSG ||
+               control_kind == F2C_IO_CONTROL_ACCESS || control_kind == F2C_IO_CONTROL_ACTION ||
+               control_kind == F2C_IO_CONTROL_FORM || control_kind == F2C_IO_CONTROL_RECL ||
+               control_kind == F2C_IO_CONTROL_BLANK || control_kind == F2C_IO_CONTROL_POSITION ||
+               control_kind == F2C_IO_CONTROL_DELIM || control_kind == F2C_IO_CONTROL_PAD;
+    if (statement_kind == F2C_STMT_CLOSE)
+        return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_STATUS ||
+               control_kind == F2C_IO_CONTROL_ERR || control_kind == F2C_IO_CONTROL_IOSTAT ||
+               control_kind == F2C_IO_CONTROL_IOMSG;
+    if (statement_kind == F2C_STMT_REWIND || statement_kind == F2C_STMT_BACKSPACE ||
+        statement_kind == F2C_STMT_ENDFILE)
         return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_ERR ||
-               control_kind == F2C_IO_CONTROL_IOSTAT;
+               control_kind == F2C_IO_CONTROL_IOSTAT || control_kind == F2C_IO_CONTROL_IOMSG;
+    if (statement_kind == F2C_STMT_INQUIRE)
+        return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_FILE ||
+               control_kind == F2C_IO_CONTROL_ERR || control_kind == F2C_IO_CONTROL_IOSTAT ||
+               control_kind == F2C_IO_CONTROL_IOMSG || control_kind == F2C_IO_CONTROL_EXIST ||
+               control_kind == F2C_IO_CONTROL_OPENED || control_kind == F2C_IO_CONTROL_NUMBER ||
+               control_kind == F2C_IO_CONTROL_NAMED || control_kind == F2C_IO_CONTROL_NAME ||
+               control_kind == F2C_IO_CONTROL_ACCESS ||
+               control_kind == F2C_IO_CONTROL_SEQUENTIAL ||
+               control_kind == F2C_IO_CONTROL_DIRECT || control_kind == F2C_IO_CONTROL_FORM ||
+               control_kind == F2C_IO_CONTROL_FORMATTED ||
+               control_kind == F2C_IO_CONTROL_UNFORMATTED ||
+               control_kind == F2C_IO_CONTROL_RECL || control_kind == F2C_IO_CONTROL_NEXTREC ||
+               control_kind == F2C_IO_CONTROL_BLANK ||
+               control_kind == F2C_IO_CONTROL_POSITION || control_kind == F2C_IO_CONTROL_ACTION ||
+               control_kind == F2C_IO_CONTROL_READ || control_kind == F2C_IO_CONTROL_WRITE ||
+               control_kind == F2C_IO_CONTROL_READWRITE ||
+               control_kind == F2C_IO_CONTROL_DELIM || control_kind == F2C_IO_CONTROL_PAD;
     return 0;
 }
 
@@ -463,13 +538,36 @@ static F2cIoControlKind positional_io_control_kind(F2cStatementKind statement_ki
         return F2C_IO_CONTROL_FMT;
     if (statement_kind == F2C_STMT_OPEN && position == 0U)
         return F2C_IO_CONTROL_UNIT;
-    if ((statement_kind == F2C_STMT_CLOSE || statement_kind == F2C_STMT_REWIND) && position == 0U)
+    if ((statement_kind == F2C_STMT_CLOSE || statement_kind == F2C_STMT_REWIND ||
+         statement_kind == F2C_STMT_BACKSPACE || statement_kind == F2C_STMT_ENDFILE) &&
+        position == 0U)
         return F2C_IO_CONTROL_UNIT;
     return F2C_IO_CONTROL_UNKNOWN;
 }
 
 static int scalar_type(const F2cExpr *expression, Type type) {
     return expression != NULL && expression->type == type && expression->rank == 0U;
+}
+
+static int inquiry_logical_result(F2cIoControlKind kind) {
+    return kind == F2C_IO_CONTROL_EXIST || kind == F2C_IO_CONTROL_OPENED ||
+           kind == F2C_IO_CONTROL_NAMED;
+}
+
+static int inquiry_integer_result(F2cIoControlKind kind) {
+    return kind == F2C_IO_CONTROL_NUMBER || kind == F2C_IO_CONTROL_RECL ||
+           kind == F2C_IO_CONTROL_NEXTREC;
+}
+
+static int inquiry_character_result(F2cIoControlKind kind) {
+    return kind == F2C_IO_CONTROL_NAME || kind == F2C_IO_CONTROL_ACCESS ||
+           kind == F2C_IO_CONTROL_SEQUENTIAL || kind == F2C_IO_CONTROL_DIRECT ||
+           kind == F2C_IO_CONTROL_FORM || kind == F2C_IO_CONTROL_FORMATTED ||
+           kind == F2C_IO_CONTROL_UNFORMATTED || kind == F2C_IO_CONTROL_BLANK ||
+           kind == F2C_IO_CONTROL_POSITION || kind == F2C_IO_CONTROL_ACTION ||
+           kind == F2C_IO_CONTROL_READ || kind == F2C_IO_CONTROL_WRITE ||
+           kind == F2C_IO_CONTROL_READWRITE || kind == F2C_IO_CONTROL_DELIM ||
+           kind == F2C_IO_CONTROL_PAD;
 }
 
 static void validate_io_control_type(Context *context, Unit *unit, const F2cStatement *statement,
@@ -484,9 +582,9 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
                                   "%s UNIT= cannot be an asterisk", statement_name);
             }
         } else if (value != NULL && value->type == TYPE_CHARACTER) {
-            if (statement->kind == F2C_STMT_OPEN) {
+            if (statement->kind != F2C_STMT_READ && statement->kind != F2C_STMT_WRITE) {
                 f2c_diagnostic_at(context, statement->line, column, 1,
-                                  "OPEN UNIT= must be an asterisk or a scalar INTEGER");
+                                  "%s UNIT= must be a scalar INTEGER", statement_name);
             } else if (value->rank > 1U || (value->rank == 1U && value->kind != F2C_EXPR_NAME) ||
                        value->value_category != F2C_VALUE_VARIABLE ||
                        (statement->kind == F2C_STMT_WRITE && !value->definable)) {
@@ -498,7 +596,10 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
             }
         } else if (!scalar_type(value, TYPE_INTEGER)) {
             f2c_diagnostic_at(context, statement->line, column, 1,
-                              "%s UNIT= must be an asterisk or a scalar INTEGER", statement_name);
+                              "%s UNIT= must be %sa scalar INTEGER", statement_name,
+                              statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE
+                                  ? "an asterisk or "
+                                  : "");
         }
     } else if (semantic_kind == F2C_IO_CONTROL_FMT) {
         if (!control->asterisk && !scalar_type(value, TYPE_CHARACTER) &&
@@ -539,13 +640,172 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
                               "%s IOMSG= must be a definable scalar CHARACTER variable",
                               statement_name);
         }
+    } else if (statement->kind == F2C_STMT_INQUIRE &&
+               inquiry_logical_result(semantic_kind)) {
+        if (control->asterisk || !scalar_type(value, TYPE_LOGICAL) || !value->definable) {
+            f2c_diagnostic_at(context, statement->line, column, 1,
+                              "INQUIRE %s= must be a definable scalar LOGICAL variable",
+                              io_control_name(semantic_kind));
+        }
+    } else if (statement->kind == F2C_STMT_INQUIRE &&
+               inquiry_integer_result(semantic_kind)) {
+        if (control->asterisk || !scalar_type(value, TYPE_INTEGER) || !value->definable) {
+            f2c_diagnostic_at(context, statement->line, column, 1,
+                              "INQUIRE %s= must be a definable scalar INTEGER variable",
+                              io_control_name(semantic_kind));
+        }
+    } else if (statement->kind == F2C_STMT_INQUIRE &&
+               inquiry_character_result(semantic_kind)) {
+        if (control->asterisk || !scalar_type(value, TYPE_CHARACTER) || !value->definable) {
+            f2c_diagnostic_at(context, statement->line, column, 1,
+                              "INQUIRE %s= must be a definable scalar CHARACTER variable",
+                              io_control_name(semantic_kind));
+        }
+    } else if (semantic_kind == F2C_IO_CONTROL_RECL) {
+        if (control->asterisk || !scalar_type(value, TYPE_INTEGER)) {
+            f2c_diagnostic_at(context, statement->line, column, 1,
+                              "%s RECL= must be a scalar INTEGER expression", statement_name);
+        }
     } else if (semantic_kind == F2C_IO_CONTROL_ADVANCE || semantic_kind == F2C_IO_CONTROL_FILE ||
-               semantic_kind == F2C_IO_CONTROL_STATUS || semantic_kind == F2C_IO_CONTROL_FORM) {
+               semantic_kind == F2C_IO_CONTROL_STATUS || semantic_kind == F2C_IO_CONTROL_FORM ||
+               semantic_kind == F2C_IO_CONTROL_ACCESS || semantic_kind == F2C_IO_CONTROL_ACTION ||
+               semantic_kind == F2C_IO_CONTROL_BLANK ||
+               semantic_kind == F2C_IO_CONTROL_POSITION || semantic_kind == F2C_IO_CONTROL_DELIM ||
+               semantic_kind == F2C_IO_CONTROL_PAD) {
         if (control->asterisk || !scalar_type(value, TYPE_CHARACTER)) {
             f2c_diagnostic_at(context, statement->line, column, 1,
                               "%s %s= must be a scalar CHARACTER expression", statement_name,
                               io_control_name(semantic_kind));
         }
+    }
+}
+
+static const F2cIoControl *find_io_control(const F2cStatement *statement,
+                                          F2cIoControlKind kind) {
+    size_t index;
+    for (index = 0U; index < statement->control_count; ++index)
+        if (statement->io_controls[index].kind == kind)
+            return &statement->io_controls[index];
+    return NULL;
+}
+
+static int character_control_value(const F2cIoControl *control, char *value, size_t capacity) {
+    const char *text = control != NULL && control->value != NULL ? control->value->text : NULL;
+    const char *quote = text != NULL ? f2c_character_literal_quote(text) : NULL;
+    char delimiter;
+    size_t length = 0U;
+    size_t begin = 0U;
+    size_t end;
+    if (quote == NULL || control->value->kind != F2C_EXPR_STRING_LITERAL || capacity == 0U)
+        return 0;
+    delimiter = *quote;
+    ++quote;
+    while (*quote != '\0') {
+        unsigned char character;
+        if (*quote == delimiter) {
+            if (quote[1] != delimiter)
+                break;
+            character = (unsigned char)delimiter;
+            quote += 2;
+        } else {
+            character = (unsigned char)*quote++;
+        }
+        if (length + 1U >= capacity)
+            return 0;
+        value[length++] = (char)tolower(character);
+    }
+    while (begin < length && value[begin] == ' ')
+        ++begin;
+    end = length;
+    while (end > begin && value[end - 1U] == ' ')
+        --end;
+    if (begin != 0U && end > begin)
+        memmove(value, value + begin, end - begin);
+    length = end - begin;
+    value[length] = '\0';
+    return 1;
+}
+
+static int value_in_choices(const char *value, const char *const *choices, size_t count) {
+    size_t index;
+    for (index = 0U; index < count; ++index)
+        if (strcmp(value, choices[index]) == 0)
+            return 1;
+    return 0;
+}
+
+static void validate_character_choices(Context *context, const F2cStatement *statement,
+                                       F2cIoControlKind kind, const char *const *choices,
+                                       size_t choice_count) {
+    const F2cIoControl *control = find_io_control(statement, kind);
+    char value[32];
+    if (control != NULL && character_control_value(control, value, sizeof(value)) &&
+        !value_in_choices(value, choices, choice_count)) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &control->span, 1,
+                                 "%s %s= has invalid value '%s'", io_statement_name(statement->kind),
+                                 io_control_name(kind), value);
+    }
+}
+
+static void validate_file_control_relations(Context *context, Unit *unit,
+                                            const F2cStatement *statement,
+                                            const unsigned char *seen) {
+    static const char *const open_status[] = {"old", "new", "scratch", "replace", "unknown"};
+    static const char *const close_status[] = {"keep", "delete"};
+    static const char *const access[] = {"sequential", "direct"};
+    static const char *const action[] = {"read", "write", "readwrite"};
+    static const char *const form[] = {"formatted", "unformatted"};
+    static const char *const blank[] = {"null", "zero"};
+    static const char *const position[] = {"asis", "rewind", "append"};
+    static const char *const delim[] = {"apostrophe", "quote", "none"};
+    static const char *const yes_no[] = {"yes", "no"};
+    const F2cIoControl *status = find_io_control(statement, F2C_IO_CONTROL_STATUS);
+    const F2cIoControl *access_control = find_io_control(statement, F2C_IO_CONTROL_ACCESS);
+    const F2cIoControl *recl = find_io_control(statement, F2C_IO_CONTROL_RECL);
+    char status_value[32];
+    char access_value[32];
+    int64_t recl_value;
+    if (statement->kind == F2C_STMT_CLOSE) {
+        validate_character_choices(context, statement, F2C_IO_CONTROL_STATUS, close_status,
+                                   sizeof(close_status) / sizeof(close_status[0]));
+        return;
+    }
+    if (statement->kind != F2C_STMT_OPEN)
+        return;
+    validate_character_choices(context, statement, F2C_IO_CONTROL_STATUS, open_status,
+                               sizeof(open_status) / sizeof(open_status[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_ACCESS, access,
+                               sizeof(access) / sizeof(access[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_ACTION, action,
+                               sizeof(action) / sizeof(action[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_FORM, form,
+                               sizeof(form) / sizeof(form[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_BLANK, blank,
+                               sizeof(blank) / sizeof(blank[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_POSITION, position,
+                               sizeof(position) / sizeof(position[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_DELIM, delim,
+                               sizeof(delim) / sizeof(delim[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_PAD, yes_no,
+                               sizeof(yes_no) / sizeof(yes_no[0]));
+    if (recl != NULL && recl->value != NULL &&
+        f2c_evaluate_integer_constant(unit, recl->value, &recl_value) && recl_value <= 0) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &recl->span, 1,
+                                 "OPEN RECL= must be positive");
+    }
+    if (status != NULL && character_control_value(status, status_value, sizeof(status_value)) &&
+        strcmp(status_value, "scratch") == 0 && seen[F2C_IO_CONTROL_FILE]) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &status->span, 1,
+                                 "OPEN STATUS='SCRATCH' cannot specify FILE=");
+    }
+    if (access_control != NULL &&
+        character_control_value(access_control, access_value, sizeof(access_value))) {
+        if (strcmp(access_value, "direct") == 0 && !seen[F2C_IO_CONTROL_RECL])
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &access_control->span, 1,
+                                     "OPEN ACCESS='DIRECT' requires RECL=");
+        if (strcmp(access_value, "sequential") == 0 && seen[F2C_IO_CONTROL_RECL])
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &access_control->span, 1,
+                                     "OPEN RECL= is valid only with ACCESS='DIRECT'");
     }
 }
 
@@ -586,7 +846,7 @@ static void validate_io_item_semantics(Context *context, Unit *unit, const F2cSt
 }
 
 void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *statement) {
-    unsigned char seen[F2C_IO_CONTROL_NEWUNIT + 1U] = {0};
+    unsigned char seen[F2C_IO_CONTROL_READWRITE + 1U] = {0};
     size_t positional_count = 0U;
     size_t i;
     int saw_keyword = 0;
@@ -640,7 +900,11 @@ void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *sta
         }
         validate_io_control_type(context, unit, statement, control, semantic_kind);
     }
-    if (!seen[F2C_IO_CONTROL_UNIT]) {
+    if (statement->kind == F2C_STMT_INQUIRE &&
+        seen[F2C_IO_CONTROL_UNIT] == seen[F2C_IO_CONTROL_FILE]) {
+        f2c_diagnostic_at(context, statement->line, 1U, 1,
+                          "INQUIRE requires exactly one of UNIT= or FILE=");
+    } else if (statement->kind != F2C_STMT_INQUIRE && !seen[F2C_IO_CONTROL_UNIT]) {
         f2c_diagnostic_at(context, statement->line, 1U, 1,
                           "%s requires UNIT=", io_statement_name(statement->kind));
     }
@@ -656,6 +920,7 @@ void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *sta
     if ((seen[F2C_IO_CONTROL_EOR] || seen[F2C_IO_CONTROL_SIZE]) && !seen[F2C_IO_CONTROL_ADVANCE]) {
         f2c_diagnostic_at(context, statement->line, 1U, 1, "EOR= and SIZE= require ADVANCE='NO'");
     }
+    validate_file_control_relations(context, unit, statement, seen);
     for (i = 0U; i < statement->io_item_count; ++i)
         validate_io_item_semantics(context, unit, statement, &statement->io_items[i],
                                    statement->kind == F2C_STMT_READ);

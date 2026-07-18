@@ -68,7 +68,9 @@ static void collect_statement_features(F2cStatement *statement, F2cRequiredFeatu
         return;
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
         statement->kind == F2C_STMT_PRINT || statement->kind == F2C_STMT_OPEN ||
-        statement->kind == F2C_STMT_REWIND || statement->kind == F2C_STMT_CLOSE)
+        statement->kind == F2C_STMT_REWIND || statement->kind == F2C_STMT_BACKSPACE ||
+        statement->kind == F2C_STMT_ENDFILE || statement->kind == F2C_STMT_INQUIRE ||
+        statement->kind == F2C_STMT_CLOSE)
         features->io = 1;
     if (statement->kind == F2C_STMT_CALL && statement->name != NULL &&
         strcmp(statement->name, "random_number") == 0)
