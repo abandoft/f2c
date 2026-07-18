@@ -219,7 +219,7 @@ if(BUILD_SHARED_LIBS)
     target_compile_definitions(f2c_core PUBLIC F2C_SHARED)
 endif()
 
-set(F2C_CLI_SOURCES src/cli/io.c src/cli/io.h src/cli/main.c)
+set(F2C_CLI_SOURCES src/cli/include.c src/cli/include.h src/cli/io.c src/cli/io.h src/cli/main.c)
 add_executable(f2c ${F2C_CLI_SOURCES})
 target_compile_features(f2c PRIVATE c_std_17)
 target_link_libraries(f2c PRIVATE f2c::core)
