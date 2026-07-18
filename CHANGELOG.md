@@ -1,3 +1,12 @@
+## 1.5.0
+
+- Migrated external file control statements to the unified token, AST, typed IR, and structured code generation pipeline.
+- Completed `OPEN` and `CLOSE` handling for file status, access, action, form, position, character controls, and file disposition.
+- Added sequential-file `BACKSPACE` and physical `ENDFILE` truncation using only portable C17 facilities.
+- Added `INQUIRE` by unit or file name with connection state, capability, and file-property results.
+- Unified `IOSTAT`, `IOMSG`, and `ERR` handling for file control statements and added pre-emission semantic validation.
+- Expanded strict C17, sanitizer, execution, gfortran differential, and numerical-validation CI coverage.
+
 ## 1.4.0
 
 - Migrated `DATA` statements to the unified token, AST, and typed IR pipeline, including multiple groups, repetition factors, and arbitrarily nested implied DO loops.
