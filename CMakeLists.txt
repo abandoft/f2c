@@ -147,6 +147,7 @@ set(
     src/semantic/validation/allocation.c
     src/semantic/validation/case.c
     src/semantic/validation/construct.c
+    src/semantic/validation/data.c
     src/semantic/validation/expression.c
     src/semantic/validation/private.h
     src/semantic/validation/procedure.c
@@ -358,6 +359,10 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_storage_tests test/test_storage.c)
     f2c_configure_test_target(f2c_storage_tests)
     add_test(NAME storage_semantics COMMAND f2c_storage_tests)
+
+    add_executable(f2c_data_tests test/test_data.c)
+    f2c_configure_test_target(f2c_data_tests)
+    add_test(NAME data_semantics COMMAND f2c_data_tests)
 
     add_executable(f2c_declaration_tests test/test_declaration.c)
     f2c_configure_test_target(f2c_declaration_tests)

@@ -570,7 +570,7 @@ static void test_fixed_form_continuation(void) {
 }
 
 static void test_fixed_form_spaced_exponent(void) {
-    static const char source[] = "      SUBROUTINE SPACED_EXPONENT(X)\n"
+    static const char source[] = "      SUBROUTINE SPACED_EXPONENT()\n"
                                  "      REAL X\n"
                                  "      DATA X / -1. E0 /\n"
                                  "      END\n";
@@ -2558,8 +2558,9 @@ static void test_character_shape_diagnostics(void) {
     F2cOptions options = {"invalid_character.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(data_source, strlen(data_source), &options);
     expect(result.error_count != 0U, "invalid character DATA shape is a hard error");
-    expect_contains(result.diagnostics, "invalid DATA array initializer",
-                    "character DATA value-count mismatch is diagnosed");
+    expect_contains(result.diagnostics,
+                    "DATA value count 1 does not match target element count 2",
+                    "character DATA value-count mismatch is diagnosed before code generation");
     f2c_result_free(&result);
     result = f2c_transpile(local_source, strlen(local_source), &options);
     expect(result.error_count != 0U, "invalid assumed-length local is a hard error");

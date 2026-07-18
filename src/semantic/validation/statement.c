@@ -177,7 +177,6 @@ static void validate_pointer_statement(Context *context, const F2cStatement *sta
 
 static void validate_statement(Context *context, Unit *unit, F2cStatement *statement) {
     size_t i;
-    size_t j;
     if (statement->kind == F2C_STMT_INVALID) {
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &statement->span, 1,
                                  "unsupported Fortran statement: %s", statement->text);
@@ -212,6 +211,7 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
                                     statement->step);
     validate_control_flow_statement(context, unit, statement);
     f2c_validation_case_statement(context, unit, statement);
+    f2c_validation_data_statement(context, unit, statement);
     f2c_validation_where_statement(context, statement);
     validate_pointer_statement(context, statement);
     f2c_validation_intrinsic_assignment(context, statement);
@@ -275,24 +275,6 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
         statement->kind == F2C_STMT_CLOSE)
         f2c_validation_io_statement(context, unit, statement);
-    for (i = 0U; i < statement->data_group_count; ++i) {
-        F2cDataGroup *group = &statement->data_groups[i];
-        for (j = 0U; j < group->target_count; ++j)
-            f2c_validation_io_item(context, statement->line, statement->text, &group->targets[j]);
-        for (j = 0U; j < group->target_count; ++j)
-            f2c_validation_io_item_calls(context, unit, statement->line, statement->text,
-                                         &group->targets[j]);
-        for (j = 0U; j < group->value_count; ++j) {
-            f2c_validation_report_parse_error(context, statement->line, statement->text,
-                                              group->values[j].repeat, "DATA repeat");
-            f2c_validation_report_parse_error(context, statement->line, statement->text,
-                                              group->values[j].expression, "DATA value");
-            f2c_validation_expression_calls(context, unit, statement->line, statement->text,
-                                            group->values[j].repeat);
-            f2c_validation_expression_calls(context, unit, statement->line, statement->text,
-                                            group->values[j].expression);
-        }
-    }
     if (statement->nested != NULL)
         validate_statement(context, unit, statement->nested);
     statement->state = F2C_IR_TYPED;
