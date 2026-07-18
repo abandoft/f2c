@@ -45,6 +45,7 @@ int f2c_initialize_context_limits(Context *context, const F2cConfig *config) {
     context->limits.max_parse_depth = F2C_DEFAULT_MAX_PARSE_DEPTH;
     context->limits.max_preprocessor_definitions = F2C_DEFAULT_MAX_PREPROCESSOR_DEFINITIONS;
     context->limits.max_macro_expansion_depth = F2C_DEFAULT_MAX_MACRO_EXPANSION_DEPTH;
+    context->limits.max_macro_arguments = F2C_DEFAULT_MAX_MACRO_ARGUMENTS;
     context->limits.max_include_depth = F2C_DEFAULT_MAX_INCLUDE_DEPTH;
     context->limits.max_include_files = F2C_DEFAULT_MAX_INCLUDE_FILES;
     context->limits.max_constant_steps = F2C_DEFAULT_MAX_CONSTANT_STEPS;
@@ -69,6 +70,7 @@ int f2c_initialize_context_limits(Context *context, const F2cConfig *config) {
                         config->limits.max_preprocessor_definitions);
             apply_limit(&context->limits.max_macro_expansion_depth,
                         config->limits.max_macro_expansion_depth);
+            apply_limit(&context->limits.max_macro_arguments, config->limits.max_macro_arguments);
             apply_limit(&context->limits.max_include_depth, config->limits.max_include_depth);
             apply_limit(&context->limits.max_include_files, config->limits.max_include_files);
             apply_limit(&context->limits.max_constant_steps, config->limits.max_constant_steps);

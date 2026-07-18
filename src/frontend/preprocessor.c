@@ -44,117 +44,9 @@ static void diagnose_name(Preprocessor *preprocessor, F2cDiagnosticCode code, si
 }
 
 static void discard_preprocessor(Preprocessor *preprocessor) {
-    size_t index;
-    for (index = 0U; index < preprocessor->macro_count; ++index) {
-        free(preprocessor->macros[index].name);
-        free(preprocessor->macros[index].value);
-    }
-    free(preprocessor->macros);
+    f2c_preprocessor_discard_macros(preprocessor);
     free(preprocessor->conditionals);
     memset(preprocessor, 0, sizeof(*preprocessor));
-}
-
-size_t f2c_preprocessor_find_macro(const Preprocessor *preprocessor, const char *name,
-                                   size_t length) {
-    size_t index;
-    if (preprocessor->macros == NULL)
-        return SIZE_MAX;
-    for (index = 0U; index < preprocessor->macro_count; ++index) {
-        const PreprocessorMacro *macro = &preprocessor->macros[index];
-        if (macro->name_length == length && strncmp(macro->name, name, length) == 0)
-            return index;
-    }
-    return SIZE_MAX;
-}
-
-static int reserve_macros(Preprocessor *preprocessor) {
-    PreprocessorMacro *replacement;
-    size_t capacity;
-    if (preprocessor->macro_count < preprocessor->macro_capacity)
-        return 1;
-    capacity = preprocessor->macro_capacity == 0U ? 8U : preprocessor->macro_capacity * 2U;
-    if (capacity < preprocessor->macro_capacity || capacity > SIZE_MAX / sizeof(*replacement))
-        return 0;
-    replacement =
-        (PreprocessorMacro *)realloc(preprocessor->macros, capacity * sizeof(*replacement));
-    if (replacement == NULL)
-        return 0;
-    preprocessor->macros = replacement;
-    preprocessor->macro_capacity = capacity;
-    return 1;
-}
-
-static int valid_macro_name(const char *name, size_t length) {
-    size_t index;
-    if (length == 0U || !identifier_start(name[0]))
-        return 0;
-    for (index = 1U; index < length; ++index) {
-        if (!identifier_continue(name[index]))
-            return 0;
-    }
-    return 1;
-}
-
-static int set_macro(Preprocessor *preprocessor, const char *name, size_t name_length,
-                     const char *value, size_t value_length, size_t line, size_t column,
-                     const char *definition_source_name, size_t definition_column,
-                     F2cDiagnosticCode invalid_code) {
-    const size_t existing = f2c_preprocessor_find_macro(preprocessor, name, name_length);
-    char *owned_name = NULL;
-    char *owned_value;
-    if (!valid_macro_name(name, name_length)) {
-        diagnose_name(preprocessor, invalid_code, line, column, "invalid preprocessor name", name,
-                      name_length);
-        return 0;
-    }
-    owned_value = f2c_strdup_n(value, value_length);
-    if (existing == SIZE_MAX)
-        owned_name = f2c_strdup_n(name, name_length);
-    if (owned_value == NULL || (existing == SIZE_MAX && owned_name == NULL)) {
-        free(owned_name);
-        free(owned_value);
-        diagnose_at(preprocessor, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, column,
-                    "out of memory while defining a preprocessor name");
-        return 0;
-    }
-    if (existing != SIZE_MAX && preprocessor->macros != NULL) {
-        free(preprocessor->macros[existing].value);
-        preprocessor->macros[existing].value = owned_value;
-        preprocessor->macros[existing].value_length = value_length;
-        preprocessor->macros[existing].definition_source_name = definition_source_name;
-        preprocessor->macros[existing].definition_line = line;
-        preprocessor->macros[existing].definition_column = definition_column;
-        return 1;
-    }
-    if (preprocessor->macro_count >= preprocessor->context->limits.max_preprocessor_definitions) {
-        free(owned_name);
-        free(owned_value);
-        diagnose_at(preprocessor, F2C_DIAGNOSTIC_RESOURCE_LIMIT, line, column,
-                    "preprocessor definition limit exceeded");
-        return 0;
-    }
-    if (!reserve_macros(preprocessor)) {
-        free(owned_name);
-        free(owned_value);
-        diagnose_at(preprocessor, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, column,
-                    "out of memory while growing the preprocessor definition table");
-        return 0;
-    }
-    preprocessor->macros[preprocessor->macro_count++] = (PreprocessorMacro){
-        owned_name, name_length,      owned_value, value_length, definition_source_name,
-        line,       definition_column};
-    return 1;
-}
-
-static void undefine_macro(Preprocessor *preprocessor, const char *name, size_t length) {
-    const size_t index = f2c_preprocessor_find_macro(preprocessor, name, length);
-    if (index == SIZE_MAX)
-        return;
-    free(preprocessor->macros[index].name);
-    free(preprocessor->macros[index].value);
-    --preprocessor->macro_count;
-    if (index != preprocessor->macro_count)
-        preprocessor->macros[index] = preprocessor->macros[preprocessor->macro_count];
 }
 
 static int initialize_preprocessor(Preprocessor *preprocessor, Context *context) {
@@ -219,8 +111,9 @@ static int initialize_preprocessor(Preprocessor *preprocessor, Context *context)
                         "out of memory while recording a preprocessor definition location");
             return 0;
         }
-        if (!set_macro(preprocessor, definition->name, name_length, value, value_length, 1U, 1U,
-                       definition_source_name, 1U, F2C_DIAGNOSTIC_INVALID_ARGUMENT))
+        if (!f2c_preprocessor_define_object(preprocessor, definition->name, name_length, value,
+                                            value_length, 1U, 1U, definition_source_name, 1U,
+                                            F2C_DIAGNOSTIC_INVALID_ARGUMENT))
             return 0;
     }
     return 1;
@@ -380,39 +273,6 @@ static int process_endif(Preprocessor *preprocessor, const char *rest, size_t li
     return 1;
 }
 
-static int process_define(Preprocessor *preprocessor, const char *rest, size_t line,
-                          size_t column) {
-    const char *name = skip_space(rest);
-    const char *end;
-    const char *value;
-    if (!identifier_start(*name)) {
-        diagnose_at(preprocessor, F2C_DIAGNOSTIC_SYNTAX, line, column,
-                    "expected a name after #define");
-        return 0;
-    }
-    end = name + 1;
-    while (identifier_continue(*end))
-        ++end;
-    if (*end == '(') {
-        diagnose_name(preprocessor, F2C_DIAGNOSTIC_UNSUPPORTED, line,
-                      column + (size_t)(name - rest), "function-like macro is not supported", name,
-                      (size_t)(end - name));
-        return 0;
-    }
-    value = skip_space(end);
-    {
-        const char *source_name = preprocessor->current_source_name;
-        if (source_name == NULL) {
-            diagnose_at(preprocessor, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, column,
-                        "out of memory while recording a preprocessor definition location");
-            return 0;
-        }
-        return set_macro(preprocessor, name, (size_t)(end - name), value, strlen(value), line,
-                         column + (size_t)(name - rest), source_name,
-                         column + (size_t)(value - rest), F2C_DIAGNOSTIC_SYNTAX);
-    }
-}
-
 static int process_line_directive(Preprocessor *preprocessor, const char *rest, size_t line,
                                   size_t column) {
     const char *cursor = skip_space(rest);
@@ -522,7 +382,7 @@ static int process_directive(Preprocessor *preprocessor, const char *line_text, 
     if (!preprocessor->active)
         return 1;
     if (word_equal(directive, directive_length, "define"))
-        return process_define(preprocessor, rest, line_number, rest_column);
+        return f2c_preprocessor_process_define(preprocessor, rest, line_number, rest_column);
     if (word_equal(directive, directive_length, "line"))
         return process_line_directive(preprocessor, rest, line_number, rest_column);
     if (word_equal(directive, directive_length, "include"))
@@ -532,7 +392,7 @@ static int process_directive(Preprocessor *preprocessor, const char *line_text, 
         size_t length;
         if (!parse_name_operand(preprocessor, rest, line_number, rest_column, &name, &length))
             return 0;
-        undefine_macro(preprocessor, name, length);
+        f2c_preprocessor_undefine(preprocessor, name, length);
         return 1;
     }
     if (word_equal(directive, directive_length, "error")) {

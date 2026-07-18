@@ -29,6 +29,7 @@ extern "C" {
 #define F2C_DEFAULT_MAX_PARSE_DEPTH ((size_t)512U)
 #define F2C_DEFAULT_MAX_PREPROCESSOR_DEFINITIONS ((size_t)1024U * 1024U)
 #define F2C_DEFAULT_MAX_MACRO_EXPANSION_DEPTH ((size_t)256U)
+#define F2C_DEFAULT_MAX_MACRO_ARGUMENTS ((size_t)4096U)
 #define F2C_DEFAULT_MAX_INCLUDE_DEPTH ((size_t)256U)
 #define F2C_DEFAULT_MAX_INCLUDE_FILES ((size_t)65536U)
 #define F2C_DEFAULT_MAX_CONSTANT_STEPS ((size_t)16U * 1024U * 1024U)
@@ -108,7 +109,8 @@ typedef struct F2cInput {
  * A case-sensitive object-like definition used by conditional preprocessing.
  * A null value is equivalent to "1". Definitions may be referenced by #if,
  * #ifdef, #ifndef and #elif, and are expanded as object-like macros in active
- * Fortran source. Function-like macros are not part of this contract.
+ * Fortran source. In-source #define directives may additionally declare
+ * function-like macros; request-level initial definitions remain object-like.
  */
 typedef struct F2cPreprocessorDefinition {
     const char *name;
@@ -169,6 +171,8 @@ typedef struct F2cLimits {
     size_t max_preprocessor_definitions;
     /** Maximum recursive expansion depth while evaluating #if expressions. */
     size_t max_macro_expansion_depth;
+    /** Maximum formal parameters or actual arguments in one function-like macro. */
+    size_t max_macro_arguments;
     /** Maximum recursive #include depth. */
     size_t max_include_depth;
     /** Maximum number of resolved include files across the request. */

@@ -139,6 +139,7 @@ set(
     src/frontend/procedure.c
     src/frontend/preprocessor.c
     src/frontend/preprocessor.h
+    src/frontend/preprocessor/definition.c
     src/frontend/preprocessor/expansion.c
     src/frontend/preprocessor/expression.c
     src/frontend/preprocessor/include.c
