@@ -1,3 +1,11 @@
+## 1.4.0
+
+- Migrated `DATA` statements to the unified token, AST, and typed IR pipeline, including multiple groups, repetition factors, and arbitrarily nested implied DO loops.
+- Added pre-emission semantic validation for initialization constants, types and kinds, element counts, array bounds, duplicate initialization, and resource limits.
+- Corrected one-time initialization and `SAVE` lifetime semantics for scalars, arrays, characters, complex values, and `EQUIVALENCE` storage roots.
+- Lowered portable scalar, whole-array, partial-array, and implied-DO initialization to efficient, readable C17 static initializers.
+- Expanded strict C17, repeated-call, negative-diagnostic, and pinned Reference BLAS/LAPACK official numerical differential coverage.
+
 ## 1.3.0
 
 - Added a dedicated, bounded conditional preprocessor with dynamic nesting, complete integer expression evaluation, and recursive object-macro expansion.
