@@ -26,7 +26,8 @@ void f2c_io_emit_format_state_support(Context *context) {
         "size_t scratch_iotype_capacity; int32_t *scratch_v_list; size_t "
         "scratch_v_list_count; size_t scratch_v_list_capacity; int input; int scale; int "
         "sign_plus; int blank_zero; int decimal_comma; int rounding; size_t column; size_t "
-        "pending_spaces; long record_start; int status; int finishing; int record_ended; "
+        "record_extent; size_t pending_spaces; long record_start; int status; int finishing; "
+        "int record_ended; "
         "size_t transferred; } f2c_format_state;\n");
     f2c_buffer_append(
         &context->output,
@@ -75,8 +76,9 @@ void f2c_io_emit_format_state_support(Context *context) {
         "state->scratch_v_list[state->scratch_v_list_count++] = value; return 1; }\n"
         "static inline F2C_UNUSED void f2c_format_initialize_common(f2c_format_state *state, "
         "FILE *file, bool input) { memset(state, 0, sizeof(*state)); state->file = file; "
-        "state->input = input ? 1 : 0; state->column = 1U; state->status = file != NULL ? 1 : "
-        "0; state->record_start = file != NULL ? ftell(file) : -1L; }\n"
+        "state->input = input ? 1 : 0; state->column = 1U; state->record_extent = 1U; "
+        "state->status = file != NULL ? 1 : 0; state->record_start = file != NULL ? ftell(file) "
+        ": -1L; }\n"
         "static inline F2C_UNUSED void f2c_format_initialize(f2c_format_state *state, FILE "
         "*file, const char *text, size_t length, bool input) { size_t position = 0U; "
         "f2c_format_initialize_common(state, file, input); if (text == NULL && length != 0U) { "
