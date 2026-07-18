@@ -64,6 +64,12 @@ typedef struct F2cIoItem {
     int implied_do;
 } F2cIoItem;
 
+typedef enum F2cLoopHint {
+    F2C_LOOP_HINT_NONE,
+    F2C_LOOP_HINT_INNER_UNROLL,
+    F2C_LOOP_HINT_OUTER_UNROLL
+} F2cLoopHint;
+
 typedef enum F2cIoControlKind {
     F2C_IO_CONTROL_POSITIONAL,
     F2C_IO_CONTROL_UNKNOWN,
@@ -160,7 +166,7 @@ struct F2cStatement {
     F2cStatement *nested;
     int block;
     int error_stop;
-    int unroll_hint;
+    F2cLoopHint loop_hint;
     int case_default;
     int case_syntax_valid;
     int construct_syntax_valid;
