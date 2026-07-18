@@ -55,6 +55,7 @@ endif()
 foreach(
     io_fixture
     IN ITEMS
+       print_formats
        formatted_internal
        formatted_record_input
        namelist_internal
@@ -137,9 +138,23 @@ foreach(
         message(FATAL_ERROR
                 "${io_fixture} generated C17 did not compile: ${io_compile_error}${io_compile_output}")
     endif()
-    execute_process(COMMAND "${io_executable}" RESULT_VARIABLE io_run_status)
+    execute_process(
+        COMMAND "${io_executable}"
+        RESULT_VARIABLE io_run_status
+        OUTPUT_VARIABLE io_run_output
+        ERROR_VARIABLE io_run_error)
     if(NOT io_run_status EQUAL 0)
-        message(FATAL_ERROR "${io_fixture} generated executable failed")
+        message(FATAL_ERROR
+                "${io_fixture} generated executable failed: ${io_run_error}")
+    endif()
+    if(io_fixture STREQUAL "print_formats")
+        string(REPLACE "\r\n" "\n" io_run_output "${io_run_output}")
+        set(print_formats_expected
+            "LITERAL   7\nLABEL  1  2  3\nRUNTIME   9\n\n")
+        if(NOT io_run_output STREQUAL print_formats_expected)
+            message(FATAL_ERROR
+                    "PRINT format output differs from Fortran semantics: [${io_run_output}]")
+        endif()
     endif()
 endforeach()
 
