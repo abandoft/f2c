@@ -28,8 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建成功；本轮严格 Release 与 ASan/UBSan Debug 的 CTest 均为 29/29，架构边界
-  检查已经作为独立测试运行。
+  构建基线已经建立；本轮严格 Release CTest 为 30/30，架构边界检查作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -57,8 +56,9 @@
   类型声明的 type/kind/length 选择器、属性、实体、维度和初始化，以及程序单元头和 `IMPLICIT`
   映射/符号发现均消费 canonical token，并把规格表达式范围保存到语义模型。`EQUIVALENCE` 下标
   直接构建并常量求值 token AST；属性关键字会结合顶层赋值 token 判别，`DIMENSION`、`EXTERNAL`、
-  `PARAMETER`、`SAVE` 和 `EQUIVALENCE` 作为合法变量名时不再被误判为声明。`DATA`、旧式控制语句、
-  I/O 和少量字符串入口仍有文本扫描。源码归一化层的注释识别、分号拆句和代码大小写处理已经
+  `PARAMETER`、`SAVE` 和 `EQUIVALENCE` 作为合法变量名时不再被误判为声明。`DATA` 的组、重复因子、
+  设计子和嵌套隐式 DO 已完全消费 canonical token range；旧式控制语句、I/O 和少量字符串入口仍有
+  文本扫描。源码归一化层的注释识别、分号拆句和代码大小写处理已经
   改为消费 canonical token，不会在 token 化之前破坏字符或 Hollerith 载荷。
 - [x] 只保留 `frontend/token.h` 定义的 `F2cToken/F2cTokenStream`。表达式 AST 已删除独立的
   `AstTokenKind/AstToken`，`ast/token_stream.c` 只负责表达式上下文的 token 约束，不再实现第二套
@@ -71,7 +71,8 @@
   展开不会侵入续行载荷。非法 BOZ 会按基数验证数字并定位具体错误字符。LF、CRLF、UTF-8 BOM、
   无末尾换行和嵌入 NUL 均有 API/预处理回归；生成端与 gfortran 字面量差分及严格 C17 执行已进入
   数值 CI。本轮固定 Reference LAPACK 的 155 个 BLAS 和 3,535 个 LAPACK 源文件继续全部严格编译，
-  DGESV、INSTALL 与 52,512 条 RFP 数值差分通过。
+  DGESV、INSTALL、52,512 条 RFP、146 个 BLAS 结果组与 262,388 次 BLAS 调用、200 个 LIN 结果组
+  及四种精度 80 套 EIG 输入均通过生成 C/原生 Fortran 差分。
 - [ ] 将当前面向 LAPACK 的简化预处理逻辑替换为明确的预处理契约：要么完整支持所承诺的
   `#define/#if/#include/#line` 子集及宏来源，要么要求调用方预处理并对未支持指令给出硬错误。
   固定 16 层嵌套数组和 `USE_ISNAN` 特例判断已经删除；独立预处理模块现使用动态条件栈、
@@ -152,8 +153,14 @@
   引擎，覆盖嵌套构造值和隐式 DO。独立负向语义测试、严格 C17 执行夹具及 gfortran 逐行差分已
   加入数值验证 CI；本任务仍因其他程序单元和过程属性组合未完成而保持未关闭。
 - [ ] 完成显式/隐式接口、关键字与可选实参、过程实参、交替返回、字符隐藏长度和存储序列关联。
+- [x] `DATA` 已建立 canonical token → 语句 AST → typed IR → emitter 的完整路径；语义阶段展开重复
+  因子和任意嵌套隐式 DO，验证初始化常量、类型/kind、精确元素数、常量下标、边界、重复初始化与
+  资源预算。局部标量、整数组和部分/隐式 DO 数组元素可直接生成 C17 静态初始化器；CHARACTER、
+  COMPLEX 及不能表示为 C 常量表达式的合法值使用过程入口的一次性初始化区。`SAVE` 生命周期会沿
+  `EQUIVALENCE` 传播到实际根存储，重复调用执行回归和固定 BLAS/LAPACK 全量差分均已覆盖。
 - [ ] 完成命名及空白 `COMMON`、`EQUIVALENCE`、`DATA` 和 `SAVE` 的布局、初始化顺序、重叠与
-  跨程序单元一致性。目前空白 `COMMON` 会产生硬错误。
+  跨程序单元一致性。目前空白 `COMMON` 会产生硬错误；模块 `DATA`、`BLOCK DATA`、异类型
+  `EQUIVALENCE` 存储单元以及跨语句的任意重叠区间仍需纳入统一项目级存储布局，因此本项不关闭。
 - [ ] 完成模块 `PUBLIC/PRIVATE`、`ONLY`、重命名、泛型接口、运算符/赋值泛型和模块过程，移除
   `LA_CONSTANTS` 特例及“派生类型不能重命名”的限制。
 - [ ] 对缺失的非 intrinsic 模块建立明确策略；不能把无法解析的 `USE` 静默当成普通外部过程。
