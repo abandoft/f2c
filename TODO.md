@@ -28,7 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建成功；本轮静态 Debug、静态 Release 与 ASan/UBSan Debug 的 CTest 均为 27/27，架构边界
+  构建成功；本轮严格 Release 与 ASan/UBSan Debug 的 CTest 均为 29/29，架构边界
   检查已经作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
@@ -58,15 +58,20 @@
   映射/符号发现均消费 canonical token，并把规格表达式范围保存到语义模型。`EQUIVALENCE` 下标
   直接构建并常量求值 token AST；属性关键字会结合顶层赋值 token 判别，`DIMENSION`、`EXTERNAL`、
   `PARAMETER`、`SAVE` 和 `EQUIVALENCE` 作为合法变量名时不再被误判为声明。`DATA`、旧式控制语句、
-  I/O 和少量字符串入口仍有文本扫描。
+  I/O 和少量字符串入口仍有文本扫描。源码归一化层的注释识别、分号拆句和代码大小写处理已经
+  改为消费 canonical token，不会在 token 化之前破坏字符或 Hollerith 载荷。
 - [x] 只保留 `frontend/token.h` 定义的 `F2cToken/F2cTokenStream`。表达式 AST 已删除独立的
   `AstTokenKind/AstToken`，`ast/token_stream.c` 只负责表达式上下文的 token 约束，不再实现第二套
   词法规则；预分词表达式和语句的源码 span 已由单元测试覆盖。公共的有界 token cursor、源码
   range 和混合定界符匹配已经建立，且不存在固定 64 层嵌套上限。
 - [x] 建立显式 `source → syntax program → typed program → C emitter` 编排入口；编译上下文、程序
   单元和语句分别记录阶段，emitter 会拒绝未经过语义验证的 unit 或 statement IR。
-- [ ] 完成字符字面量、Hollerith、BOZ、kind 后缀、无空格点运算符和固定格式列边界的标准测试
-  矩阵；同时覆盖 LF、CRLF、UTF-8 BOM、无末尾换行和嵌入 NUL 的诊断。
+- [x] 字符字面量、Hollerith、BOZ、kind 前缀/后缀、无空格点运算符和固定格式列边界已有正向、
+  负向及端到端测试矩阵；自由格式字符续行和固定格式跨卡片字符/Hollerith 载荷保持原字节，宏
+  展开不会侵入续行载荷。非法 BOZ 会按基数验证数字并定位具体错误字符。LF、CRLF、UTF-8 BOM、
+  无末尾换行和嵌入 NUL 均有 API/预处理回归；生成端与 gfortran 字面量差分及严格 C17 执行已进入
+  数值 CI。本轮固定 Reference LAPACK 的 155 个 BLAS 和 3,535 个 LAPACK 源文件继续全部严格编译，
+  DGESV、INSTALL 与 52,512 条 RFP 数值差分通过。
 - [ ] 将当前面向 LAPACK 的简化预处理逻辑替换为明确的预处理契约：要么完整支持所承诺的
   `#define/#if/#include/#line` 子集及宏来源，要么要求调用方预处理并对未支持指令给出硬错误。
   固定 16 层嵌套数组和 `USE_ISNAN` 特例判断已经删除；独立预处理模块现使用动态条件栈、
