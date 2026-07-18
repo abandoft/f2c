@@ -41,8 +41,8 @@ static int emit_v_lists(Context *context, const F2cFormatNode *node, const char 
         f2c_buffer_printf(&context->output, "static const int32_t %s_v_list_%zu[] = {", name,
                           *v_list_index);
         for (index = 0U; index < node->v_list_count; ++index)
-            f2c_buffer_printf(&context->output, "%s%" PRId32,
-                              index == 0U ? "" : ", ", node->v_list[index]);
+            f2c_buffer_printf(&context->output, "%s%" PRId32, index == 0U ? "" : ", ",
+                              node->v_list[index]);
         f2c_buffer_append(&context->output, "};\n");
         ++*v_list_index;
     }
@@ -89,13 +89,34 @@ static int runtime_control(const F2cFormatNode *node) {
     return node->control;
 }
 
+static char *instruction_text(const F2cFormatNode *node, size_t *length) {
+    Buffer iotype = {0};
+    char *text;
+    char *literal;
+    *length = node->text_length;
+    if (node->kind != F2C_FORMAT_DATA || node->code[0] != 'D' || node->code[1] != 'T')
+        return node->text != NULL ? f2c_io_c_string_literal(node->text, node->text_length) : NULL;
+    f2c_buffer_append(&iotype, "DT");
+    if (node->text != NULL)
+        f2c_buffer_append_n(&iotype, node->text, node->text_length);
+    *length = iotype.length;
+    text = f2c_buffer_take(&iotype);
+    if (text == NULL)
+        return NULL;
+    literal = f2c_io_c_string_literal(text, *length);
+    free(text);
+    return literal;
+}
+
 static int emit_instruction(Context *context, const F2cFormatNode *node, const char *name,
                             size_t *v_list_index, int depth, const char *override_opcode) {
-    char *literal = node->text != NULL ? f2c_io_c_string_literal(node->text, node->text_length)
-                                       : NULL;
+    size_t text_length;
+    char *literal = instruction_text(node, &text_length);
     char *owned_v_list = NULL;
     const char *v_list = "NULL";
-    if (node->text != NULL && literal == NULL)
+    const int requires_text = node->text != NULL || (node->kind == F2C_FORMAT_DATA &&
+                                                     node->code[0] == 'D' && node->code[1] == 'T');
+    if (requires_text && literal == NULL)
         return 0;
     if (node->v_list_count != 0U) {
         owned_v_list = v_list_name(name, *v_list_index);
@@ -106,16 +127,16 @@ static int emit_instruction(Context *context, const F2cFormatNode *node, const c
         v_list = owned_v_list;
     }
     f2c_io_indent(&context->output, depth);
-    f2c_buffer_printf(
-        &context->output,
-        "{.opcode = %s, .repeat = %" PRIu32 "U, .unlimited = %s, .control = %d, "
-        ".code = {'%c', '%c', '\\0'}, .width = %d, .digits = %d, .exponent = %d, "
-        ".text = %s, .text_length = %zuU, .v_list = %s, .v_list_count = %zuU},\n",
-        override_opcode != NULL ? override_opcode : opcode(node->kind),
-        node->repeat != 0U ? node->repeat : 1U, node->unlimited ? "true" : "false",
-        runtime_control(node), node->code[0] != '\0' ? node->code[0] : ' ',
-        node->code[1] != '\0' ? node->code[1] : ' ', node->width, node->digits, node->exponent,
-        literal != NULL ? literal : "NULL", node->text_length, v_list, node->v_list_count);
+    f2c_buffer_printf(&context->output,
+                      "{.opcode = %s, .repeat = %" PRIu32 "U, .unlimited = %s, .control = %d, "
+                      ".code = {'%c', '%c', '\\0'}, .width = %d, .digits = %d, .exponent = %d, "
+                      ".text = %s, .text_length = %zuU, .v_list = %s, .v_list_count = %zuU},\n",
+                      override_opcode != NULL ? override_opcode : opcode(node->kind),
+                      node->repeat != 0U ? node->repeat : 1U, node->unlimited ? "true" : "false",
+                      runtime_control(node), node->code[0] != '\0' ? node->code[0] : ' ',
+                      node->code[1] != '\0' ? node->code[1] : ' ', node->width, node->digits,
+                      node->exponent, literal != NULL ? literal : "NULL", text_length, v_list,
+                      node->v_list_count);
     if (node->v_list_count != 0U)
         ++*v_list_index;
     free(owned_v_list);
@@ -154,10 +175,14 @@ int f2c_io_emit_format_program(Context *context, const F2cFormat *format, const 
     v_list_index = 0U;
     f2c_io_indent(&context->output, depth);
     f2c_buffer_printf(&context->output, "static const f2c_format_instruction %s[] = {\n", name);
+    if (count == 0U) {
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output, "{.opcode = F2C_FORMAT_OP_COLON},\n");
+    }
     for (index = 0U; index < format->root.child_count; ++index)
         if (!emit_nodes(context, &format->root.children[index], name, &v_list_index, depth + 1))
             return 0;
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "};\n");
-    return count != 0U && !context->output.failed;
+    return !context->output.failed;
 }
