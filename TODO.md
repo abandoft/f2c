@@ -28,7 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建基线已经建立；本轮严格 CTest 为 31/31，架构边界检查作为独立测试运行。
+  构建基线已经建立；本轮普通与 ASan/UBSan 严格 CTest 均为 32/32，架构边界检查作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -58,8 +58,8 @@
   直接构建并常量求值 token AST；属性关键字会结合顶层赋值 token 判别，`DIMENSION`、`EXTERNAL`、
   `PARAMETER`、`SAVE` 和 `EQUIVALENCE` 作为合法变量名时不再被误判为声明。`DATA` 的组、重复因子、
   设计子和嵌套隐式 DO 已完全消费 canonical token range；`READ/WRITE`、文件控制语句及其控制项和
-  I/O item 已消费 canonical token range；`PRINT` 的格式与输出项也已迁移，旧式控制语句和少量
-  字符串入口仍有文本扫描。
+  I/O item、`PRINT` 的格式与输出项以及带标签的 `FORMAT` 语句均已消费 canonical token range；
+  旧式控制语句和少量字符串入口仍有文本扫描。
   源码归一化层的注释识别、分号拆句和代码大小写处理已经
   改为消费 canonical token，不会在 token 化之前破坏字符或 Hollerith 载荷。
 - [x] 只保留 `frontend/token.h` 定义的 `F2cToken/F2cTokenStream`。表达式 AST 已删除独立的
@@ -239,14 +239,20 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   `BLANK`、`PAD`、`DELIM`、`POSITION` 和所有对应 `IOSTAT/IOMSG/ERR/END/EOR` 状态。连接状态现保存
   上述属性，顺序格式化文件控制路径已经执行验证；直接访问 `READ/WRITE REC=`、直接记录边界、
   动作不匹配的无崩溃错误传播和非格式化记录协议仍需完成。
-- [ ] 让 `PRINT`、`READ` 和 `WRITE` 共享同一格式 AST 和执行引擎；验证显式 FORMAT、运行时格式、
-  列表导向、格式回转、嵌套重复组、冒号和空数据列表。`PRINT` 现已直接消费 canonical token，
-  格式控制、输出项及任意嵌套 implied-DO 均进入结构化 AST，并与 `READ/WRITE` 共用格式状态和
-  formatted item emitter；列表导向、字符字面量、运行时字符、标签和 F77 已赋值 FORMAT、空数据
-  列表及尾随定位语义已有严格 C17 执行和 gfortran 逐字节差分。完整 FORMAT 描述符目前仍由生成
-  代码中的文本状态机解释，尚需迁移为编译期描述符 AST，并补齐全部回转和描述符组合后才能关闭。
+- [x] `PRINT`、`READ` 和 `WRITE` 的显式格式共用 canonical token → FORMAT AST → typed IR →
+  formatted item emitter；常量字符、标签和 F77 已赋值 FORMAT 均在编译期生成只读 C17 指令表，
+  不再扫描源码行或在运行时重新解析常量文本。真正的运行时 CHARACTER 格式使用同一描述符接口的
+  有界动态解析路径。嵌套组、无限组、冒号、空数据列表、literal、定位/比例/符号/空白/小数/舍入
+  控制和 DT 元数据均有结构化节点；运行帧、DT iotype/v-list 和动态 literal 不再有 32、128、1,024
+  等固定截断。40 层静态/动态嵌套、1,100 字节 literal、40 项 DT v-list、严格生成 C17 和 gfortran
+  逐字节差分均已进入测试，固定 Reference LAPACK 3,535 文件、DGESV、INSTALL 和 52,512 项 RFP
+  差分在本轮实现上重新通过。
 - [ ] 补齐 `I/B/O/Z/F/E/EN/ES/D/G/L/A` 的宽度、精度、指数位数、舍入、符号、比例因子和
-  星号溢出规则，并逐字段对比不同原生编译器。
+  星号溢出规则，并逐字段对比不同原生编译器。当前原生差分矩阵已覆盖整数基数、`F/E/D/G`、
+  符号、比例、小数点/小数逗号、定位、嵌套、动态和标签格式；`E/D` 的 0P 规范化、三位指数省略
+  标记、极大/极小双精度和 `G` 有效数字/尾随空白已经匹配 gfortran。仍需完成所有 `EN/ES`、显式
+  指数位、六种 ROUND 模式、舍入进位边界、特殊值、超宽输入字段及全部描述符交叉组合。
+  标准规定的最右嵌套组 FORMAT 回转点及其与非前进 I/O、冒号和无限组的全部组合也尚需逐项差分。
 - [ ] 用内存记录引擎实现内部文件，不再通过 `tmpfile()` 模拟；覆盖字符标量/数组、多记录、
   非前进状态、PAD 和文件位置，确保 Web/mobile 无文件系统环境可运行。
 - [ ] 完成 F90 NAMELIST 的大小写、重复值、子串/数组段、派生对象扩展和错误恢复；动态分配必须
@@ -269,7 +275,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 为数组描述符、I/O、格式、NAMELIST、派生类型复制/终结等生成逻辑建立结构化 emitter，
   替换难以审查的大段 C 字符串模板。文件控制 emitter 已按 common/open/position/inquire 职责拆分，
   文件单元支持生成也已从总控模块隔离，格式控制解析与 formatted transfer 已从总控模块提取为
-  共享 emitter；其余格式描述符、NAMELIST、数组和生命周期模板仍需继续迁移。
+  共享 emitter；FORMAT 支持进一步按 state/parser/program/real 分责，AST→静态指令表 emitter 独立，
+  但字段输入输出、NAMELIST、数组和生命周期模板仍需继续迁移。
 - [ ] 建立生成代码可读性规范：稳定命名、源位置注释、确定性声明顺序、合理作用域和格式化；
   对公开接口及有代表性的生成实现使用快照测试。
 - [ ] 记录并限制单个源文件的转译时间、峰值内存、生成 C 大小和生成 C 编译时间。
