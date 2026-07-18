@@ -576,86 +576,6 @@ static void parse_print_statement(Unit *unit, F2cStatement *statement) {
         parse_item_list(unit, statement, comma + 1, 0);
 }
 
-static void free_io_item(F2cIoItem *item) {
-    size_t i;
-    if (item == NULL)
-        return;
-    free(item->text);
-    f2c_expr_free(item->expression);
-    for (i = 0U; i < item->child_count; ++i)
-        free_io_item(&item->children[i]);
-    free(item->children);
-    f2c_expr_free(item->iterator);
-    f2c_expr_free(item->initial);
-    f2c_expr_free(item->limit);
-    f2c_expr_free(item->step);
-    memset(item, 0, sizeof(*item));
-}
-
-int f2c_statement_parse_io_item(Unit *unit, const char *text, F2cIoItem *item) {
-    char *copy = f2c_strdup(text);
-    char *clean = copy != NULL ? f2c_trim(copy) : NULL;
-    char **parts = NULL;
-    size_t count = 0U;
-    size_t control;
-    size_t i;
-    if (clean == NULL)
-        return 0;
-    item->text = f2c_strdup(clean);
-    if (*clean == '(') {
-        char *close = f2c_statement_matching_parenthesis(clean);
-        char *after = close != NULL ? f2c_trim(close + 1) : NULL;
-        if (close != NULL && after != NULL && *after == '\0') {
-            parts = f2c_split_arguments(clean, &count);
-            for (control = 0U; control < count; ++control) {
-                if (f2c_find_assignment(parts[control]) != NULL)
-                    break;
-            }
-            if (control < count && control + 1U < count) {
-                char *equals = f2c_find_assignment(parts[control]);
-                *equals = '\0';
-                item->implied_do = 1;
-                item->child_count = control;
-                item->children =
-                    control != 0U ? (F2cIoItem *)calloc(control, sizeof(*item->children)) : NULL;
-                if (control != 0U && item->children == NULL)
-                    goto failed;
-                for (i = 0U; i < control; ++i) {
-                    if (!f2c_statement_parse_io_item(unit, parts[i], &item->children[i]))
-                        goto failed;
-                }
-                item->iterator = f2c_parse_expression_ast(unit, f2c_trim(parts[control]), NULL);
-                item->initial = f2c_parse_expression_ast(unit, f2c_trim(equals + 1), NULL);
-                item->limit = f2c_parse_expression_ast(unit, f2c_trim(parts[control + 1U]), NULL);
-                item->step = f2c_parse_expression_ast(
-                    unit, control + 2U < count ? f2c_trim(parts[control + 2U]) : "1", NULL);
-                if (item->iterator == NULL || item->initial == NULL || item->limit == NULL ||
-                    item->step == NULL)
-                    goto failed;
-                while (count != 0U)
-                    free(parts[--count]);
-                free(parts);
-                free(copy);
-                return 1;
-            }
-        }
-    }
-    item->expression = f2c_parse_expression_ast(unit, clean, NULL);
-    while (count != 0U)
-        free(parts[--count]);
-    free(parts);
-    free(copy);
-    return item->expression != NULL;
-
-failed:
-    while (count != 0U)
-        free(parts[--count]);
-    free(parts);
-    free(copy);
-    free_io_item(item);
-    return 0;
-}
-
 static void build_io_item_ir(Unit *unit, F2cStatement *statement) {
     size_t i;
     if (statement->item_count == 0U)
@@ -929,13 +849,13 @@ void f2c_statement_free(F2cStatement *statement) {
     }
     free(statement->io_controls);
     while (statement->io_item_count != 0U)
-        free_io_item(&statement->io_items[--statement->io_item_count]);
+        f2c_statement_free_io_item(&statement->io_items[--statement->io_item_count]);
     free(statement->io_items);
     while (statement->data_group_count != 0U) {
         F2cDataGroup *group = &statement->data_groups[--statement->data_group_count];
         size_t i;
         for (i = 0U; i < group->target_count; ++i)
-            free_io_item(&group->targets[i]);
+            f2c_statement_free_io_item(&group->targets[i]);
         free(group->targets);
         for (i = 0U; i < group->value_count; ++i) {
             free(group->values[i].text);
