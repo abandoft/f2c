@@ -278,17 +278,6 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                           "#define F2C_LOOP_UNROLL\n"
                           "#endif\n"
                           "#endif\n");
-        f2c_buffer_append(&context.output,
-                          "#if !defined(F2C_LOOP_UNROLL_OUTER)\n"
-                          "#if defined(__clang__) && defined(__OPTIMIZE__)\n"
-                          "#define F2C_LOOP_UNROLL_OUTER _Pragma(\"clang loop "
-                          "unroll_count(2)\")\n"
-                          "#elif defined(__GNUC__) && defined(__OPTIMIZE__)\n"
-                          "#define F2C_LOOP_UNROLL_OUTER _Pragma(\"GCC unroll 2\")\n"
-                          "#else\n"
-                          "#define F2C_LOOP_UNROLL_OUTER\n"
-                          "#endif\n"
-                          "#endif\n");
         f2c_buffer_append(
             &context.output,
             "/* Preserve the legacy Fortran ABI when a read-only actual is passed through an "
