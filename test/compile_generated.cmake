@@ -492,6 +492,45 @@ if(NOT implicit_run_status EQUAL 0)
 endif()
 find_program(F2C_GFORTRAN NAMES gfortran)
 if(F2C_GFORTRAN)
+    foreach(print_oracle IN ITEMS print_formats assigned_format)
+        set(print_native_executable "${BINARY_DIR}/native_${print_oracle}_test")
+        set(print_source "${SOURCE_DIR}/test/fixtures/${print_oracle}.f90")
+        set(print_standard f2018)
+        set(print_warnings -Wall -Wextra -Werror)
+        if(print_oracle STREQUAL "assigned_format")
+            set(print_source "${SOURCE_DIR}/test/fixtures/${print_oracle}.f")
+            set(print_standard legacy)
+            list(APPEND print_warnings -Wno-unused-label)
+        endif()
+        execute_process(
+            COMMAND "${F2C_GFORTRAN}" "-std=${print_standard}" ${print_warnings}
+                    "${print_source}" -o "${print_native_executable}"
+            RESULT_VARIABLE print_native_compile_status
+            OUTPUT_VARIABLE print_native_compile_output
+            ERROR_VARIABLE print_native_compile_error)
+        if(NOT print_native_compile_status EQUAL 0)
+            message(FATAL_ERROR
+                    "native ${print_oracle} oracle did not compile: ${print_native_compile_error}${print_native_compile_output}")
+        endif()
+        execute_process(
+            COMMAND "${print_native_executable}"
+            RESULT_VARIABLE print_native_run_status
+            OUTPUT_VARIABLE print_native_output)
+        execute_process(
+            COMMAND "${BINARY_DIR}/generated_${print_oracle}_test"
+            RESULT_VARIABLE print_generated_run_status
+            OUTPUT_VARIABLE print_generated_output)
+        string(REPLACE "\r\n" "\n" print_native_output "${print_native_output}")
+        string(REPLACE "\r\n" "\n" print_generated_output "${print_generated_output}")
+        if(NOT print_native_run_status EQUAL 0 OR NOT print_generated_run_status EQUAL 0)
+            message(FATAL_ERROR "${print_oracle} differential executable failed")
+        endif()
+        if(NOT print_generated_output STREQUAL print_native_output)
+            message(FATAL_ERROR
+                    "generated/native ${print_oracle} mismatch: generated='${print_generated_output}' native='${print_native_output}'")
+        endif()
+    endforeach()
+
     set(implicit_native_executable "${BINARY_DIR}/native_implicit_mapping_test")
     execute_process(
         COMMAND "${F2C_GFORTRAN}" -std=f2018 -Wall -Wextra -Werror
