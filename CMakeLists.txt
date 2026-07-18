@@ -89,6 +89,7 @@ set(
     src/codegen/io/format.c
     src/codegen/io/format/parser.c
     src/codegen/io/format/program.c
+    src/codegen/io/format/real.c
     src/codegen/io/format/state.c
     src/codegen/io/format_control.c
     src/codegen/io/formatted.c

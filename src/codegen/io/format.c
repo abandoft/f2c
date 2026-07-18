@@ -56,6 +56,7 @@ void f2c_emit_format_support(Context *context) {
         "state->column = target; } }\n");
     f2c_io_emit_format_program_support(context);
     f2c_io_emit_format_text_parser_support(context);
+    f2c_io_emit_format_real_support(context);
     f2c_buffer_append(
         &context->output,
         "static inline F2C_UNUSED int f2c_format_integer_descriptor(const "
@@ -98,20 +99,11 @@ void f2c_emit_format_support(Context *context) {
         "(length != 0U) field[i++] = digits[--length]; f2c_format_field(state, field, i, "
         "descriptor.width); } }\n"
         "static inline F2C_UNUSED void f2c_format_write_real(f2c_format_state *state, double "
-        "value) { f2c_format_descriptor descriptor; char field[256]; int precision; char style; "
-        "int length; size_t i; if (!f2c_format_next(state, &descriptor)) return; if "
-        "(!f2c_format_real_descriptor(&descriptor)) { state->status = 0; return; } precision = "
-        "descriptor.digits > 0 ? descriptor.digits : 6; style = descriptor.code[0] == 'F' ? 'f' "
-        ": (descriptor.code[0] == 'G' ? 'G' : 'E'); if (style == 'f') value *= "
-        "pow(10.0, (double)state->scale); "
-        "if (style == 'f') length = snprintf(field, sizeof(field), state->sign_plus ? \"%+.*f\" : "
-        "\"%.*f\", precision, value); else if (style == 'G') length = snprintf(field, "
-        "sizeof(field), state->sign_plus ? \"%+.*G\" : \"%.*G\", precision, value); else length "
-        "= snprintf(field, sizeof(field), state->sign_plus ? \"%+.*E\" : \"%.*E\", precision, "
-        "value); if (length < 0) { state->status = 0; return; } if (descriptor.code[0] == 'D') "
-        "for (i = 0U; i < (size_t)length; ++i) if (field[i] == 'E') field[i] = 'D'; if "
-        "(state->decimal_comma) for (i = 0U; i < (size_t)length; ++i) if (field[i] == '.') "
-        "field[i] = ','; f2c_format_field(state, field, (size_t)length, descriptor.width); }\n");
+        "value) { f2c_format_descriptor descriptor; char *field; size_t length; if "
+        "(!f2c_format_next(state, &descriptor)) return; if "
+        "(!f2c_format_real_descriptor(&descriptor)) { state->status = 0; return; } field = "
+        "f2c_format_render_real(state, &descriptor, value, &length); if (field == NULL) return; "
+        "f2c_format_field(state, field, length, descriptor.width); free(field); }\n");
     f2c_buffer_append(
         &context->output,
         "static inline F2C_UNUSED void f2c_format_write_logical(f2c_format_state *state, bool "
