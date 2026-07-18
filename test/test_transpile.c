@@ -3024,6 +3024,17 @@ static void test_tokenized_use_association(void) {
     f2c_result_free(&result);
 }
 
+static void test_malformed_character_prefix_cleanup(void) {
+    static const char source[] = "character(f,)";
+    F2cOptions options = {"malformed_character_prefix.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.diagnostics != NULL,
+           "a malformed CHARACTER function prefix produces a managed diagnostic result");
+    expect(result.error_count != 0U,
+           "a malformed CHARACTER selector cannot be accepted as a program unit");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_version_contract();
     test_empty_source();
@@ -3076,6 +3087,7 @@ int main(void) {
     test_token_driven_scope_and_reference_boundaries();
     test_statement_function_typed_lowering();
     test_tokenized_use_association();
+    test_malformed_character_prefix_cleanup();
     test_implicit_mapping_semantics();
     test_control_flow_semantics();
     test_select_case_semantics();

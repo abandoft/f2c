@@ -93,21 +93,24 @@ int f2c_parse_unit_header_tokens(const Line *line, Unit *unit) {
             ++index;
             continue;
         }
-        if (prefix == TYPE_UNKNOWN &&
-            f2c_parse_type_spec_tokens(NULL, NULL, line, index, &candidate)) {
-            prefix = candidate.type;
-            unit->return_kind = candidate.kind;
-            if (candidate.character_length != NULL) {
-                unit->result_character_length = candidate.character_length;
-                candidate.character_length = NULL;
+        if (prefix == TYPE_UNKNOWN) {
+            const int parsed = f2c_parse_type_spec_tokens(NULL, NULL, line, index, &candidate);
+            if (parsed) {
+                prefix = candidate.type;
+                unit->return_kind = candidate.kind;
+                if (candidate.character_length != NULL) {
+                    unit->result_character_length = candidate.character_length;
+                    candidate.character_length = NULL;
+                }
+                if (candidate.derived_type_name != NULL) {
+                    unit->result_derived_type_name = candidate.derived_type_name;
+                    candidate.derived_type_name = NULL;
+                }
+                index = candidate.end;
             }
-            if (candidate.derived_type_name != NULL) {
-                unit->result_derived_type_name = candidate.derived_type_name;
-                candidate.derived_type_name = NULL;
-            }
-            index = candidate.end;
             f2c_release_type_spec(&candidate);
-            continue;
+            if (parsed)
+                continue;
         }
         break;
     }
