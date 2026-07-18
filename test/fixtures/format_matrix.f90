@@ -8,6 +8,7 @@ program format_matrix
   write(*, '(SP,I4,SS,1X,L3,1X,A5)') 42, .true., 'xy'
   write(*, '(2(I3,1X),":",I0)') 1, 2, 3
   write(*, '(1P,E12.4,1X,0P,F8.2)') 1.25, 1.25
+  write(*, '(D16.6,1X,D16.6)') 1.7976931348623157d308, 2.2250738585072014d-308
   write(*, '(DC,F8.2,DP,1X,F8.2)') 1.25, 1.25
   write(*, '(A,T6,A,TL2,A,TR1,A)') 'A', 'B', 'C', 'D'
   write(*, runtime_format) 7, 'dynamic'
