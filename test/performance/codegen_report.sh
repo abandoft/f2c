@@ -117,7 +117,10 @@ done
     for name in $lto_sources; do
         set -- "$@" "$name-fortran.o"
     done
-    gfortran -O3 -flto -save-temps=obj "$@" -lm -o benchmark
+    gfortran -O3 -flto -save-temps=obj \
+        -fdump-tree-ivopts-details=benchmark.lto.ivopts \
+        -fdump-tree-optimized-details=benchmark.lto.optimized \
+        "$@" -lm -o benchmark
 )
 objdump -drwC "$lto/benchmark" >"$lto/benchmark.objdump"
 nm "$lto/benchmark" >"$lto/benchmark.symbols"
@@ -135,7 +138,10 @@ link_blas_benchmark() {
         -c "$root/test/${kernel}_benchmark.c" -o "$linked/benchmark.o"
     (
         cd "$linked"
-        gfortran -O3 -flto -save-temps=obj benchmark.o "$kernel-c.o" lsame-c.o xerbla-c.o \
+        gfortran -O3 -flto -save-temps=obj \
+            -fdump-tree-ivopts-details=benchmark.lto.ivopts \
+            -fdump-tree-optimized-details=benchmark.lto.optimized \
+            benchmark.o "$kernel-c.o" lsame-c.o xerbla-c.o \
             "$kernel-fortran.o" lsame-fortran.o xerbla-fortran.o -lm -o benchmark
     )
     objdump -drwC "$linked/benchmark" >"$linked/benchmark.objdump"
