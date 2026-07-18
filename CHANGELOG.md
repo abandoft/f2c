@@ -1,3 +1,7 @@
+## 1.3.1
+
+- Fixed a portability issue where the preprocessor tests lacked the `SIZE_MAX` declaration in strict LLVM/Linux builds.
+
 ## 1.3.0
 
 - Added a dedicated, bounded conditional preprocessor with dynamic nesting, complete integer expression evaluation, and recursive object-macro expansion.

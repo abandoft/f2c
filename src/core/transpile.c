@@ -961,7 +961,7 @@ void f2c_result_free(F2cResult *result) {
 }
 
 #ifndef F2C_VERSION
-#define F2C_VERSION "1.3.0"
+#define F2C_VERSION "1.3.1"
 #endif
 
 const char *f2c_version(void) { return F2C_VERSION; }
