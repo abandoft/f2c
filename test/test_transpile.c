@@ -450,8 +450,8 @@ static void test_blas_style_subroutine(void) {
                     "the public C ABI does not expose optimizer-only alias contracts");
     expect_contains(result.code, "const double *F2C_RESTRICT dx",
                     "the internal implementation preserves Fortran alias optimization");
-    expect_contains(result.code, "dy[(((int32_t)(iy)) - (1))]",
-                    "Fortran one-based array is rebased with an integer subscript");
+    expect_contains(result.code, "dy[((ptrdiff_t)(iy) - (ptrdiff_t)(1))]",
+                    "Fortran one-based array uses a pointer-width rebased offset");
     expect_contains(result.code, "int32_t f2c_do_count_",
                     "positive dynamic unit-stride loops use a proven native-width trip counter");
     f2c_result_free(&result);

@@ -472,6 +472,7 @@ char *f2c_symbol_dimension_extent(Unit *unit, const Symbol *symbol, size_t dimen
 char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count) {
     Buffer result = {0};
     char *character_length = NULL;
+    const int checked_array = !symbol->argument && !symbol->allocatable && !symbol->pointer;
     size_t i;
     f2c_buffer_printf(&result, "%s[", f2c_symbol_c_name(unit, symbol));
     if (symbol->type == TYPE_CHARACTER) {
@@ -507,8 +508,7 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
         char *lower =
             i < symbol->rank ? f2c_symbol_dimension_lower(unit, symbol, i) : f2c_strdup("1");
         char *extent = i < symbol->rank ? f2c_symbol_dimension_extent(unit, symbol, i) : NULL;
-        const int checked =
-            !symbol->argument && !symbol->allocatable && !symbol->pointer && extent != NULL;
+        const int checked = checked_array && extent != NULL;
         if (i != 0U) {
             size_t j;
             f2c_buffer_append(&result, " + (");
@@ -522,7 +522,8 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
                 char *hi_c;
                 lo_c = f2c_symbol_dimension_lower(unit, symbol, j);
                 hi_c = f2c_symbol_dimension_upper(unit, symbol, j);
-                f2c_buffer_printf(&result, "%s((%s) - (%s) + 1)", j == 0U ? "" : " * ", hi_c, lo_c);
+                f2c_buffer_printf(&result, "%s(%s)((%s) - (%s) + 1)", j == 0U ? "" : " * ",
+                                  checked_array ? "size_t" : "ptrdiff_t", hi_c, lo_c);
                 free(lo_c);
                 free(hi_c);
             }
@@ -534,7 +535,7 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
                               "(int64_t)(%s), (size_t)(%s))",
                               indices[i], lower, extent);
         } else {
-            f2c_buffer_printf(&result, "(((int32_t)(%s)) - (%s))", indices[i], lower);
+            f2c_buffer_printf(&result, "((ptrdiff_t)(%s) - (ptrdiff_t)(%s))", indices[i], lower);
         }
         free(extent);
         free(lower);
