@@ -91,6 +91,7 @@ foreach(
        statement_function
        statement_function_single_eval
        do_semantics
+       lexical_literals
        select_case
        named_constructs
        where_construct
