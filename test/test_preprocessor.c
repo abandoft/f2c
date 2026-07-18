@@ -263,6 +263,42 @@ static void test_source_macro_literal_boundaries(void) {
     expect_contains(result.code, "\"VALUE\"",
                     "character literal contents are never interpreted as macro tokens");
     f2c_result_free(&result);
+
+    {
+        static const char continued[] = "#define CdEf CORRUPTED\n"
+                                        "subroutine continued_literal(text)\n"
+                                        "character(len=8) :: text\n"
+                                        "text = 'Ab!;&\n"
+                                        "&CdEf' ! trailing comment\n"
+                                        "end subroutine continued_literal\n";
+        result = translate(continued, &config);
+        expect(result.error_count == 0U,
+               "macro expansion tracks character literal state across free-form continuation");
+        expect_contains(result.code, "\"Ab!;CdEf\"",
+                        "continued character payload is protected from macro expansion");
+        expect(result.code == NULL || strstr(result.code, "CORRUPTED") == NULL,
+               "macro names inside a continued literal never expand");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char fixed[] = "#define CdE CORRUPTED\n"
+                                    "      SUBROUTINE FIXED_LITERAL(TEXT)\n"
+                                    "      CHARACTER*8 TEXT\n"
+                                    "      TEXT = 8HAb!;&\n"
+                                    "     1CdE\n"
+                                    "      END\n";
+        F2cInput input = {
+            fixed, sizeof(fixed) - 1U, {"literal_macro_boundary.F", F2C_SOURCE_FIXED, 0}};
+        result = f2c_transpile_project_config(&input, 1U, &config);
+        expect(result.error_count == 0U,
+               "macro expansion tracks Hollerith payload state across fixed-form continuation");
+        expect_contains(result.code, "\"Ab!;&CdE\"",
+                        "continued fixed-form Hollerith payload is protected from macros");
+        expect(result.code == NULL || strstr(result.code, "CORRUPTED") == NULL,
+               "macro names inside split Hollerith payload never expand");
+        f2c_result_free(&result);
+    }
 }
 
 static void test_case_sensitive_dynamic_nesting(void) {
