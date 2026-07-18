@@ -20,6 +20,10 @@ program data_statement
   if (real(values(2)) /= 3.0 .or. aimag(values(2)) /= 4.0) stop 7
   if (next_value() /= 11) stop 8
   if (next_value() /= 12) stop 9
+  if (next_array_value() /= 11) stop 10
+  if (next_array_value() /= 12) stop 11
+  if (next_complex_value() /= 1.0) stop 12
+  if (next_complex_value() /= 2.0) stop 13
 
 contains
 
@@ -30,4 +34,20 @@ contains
     counter = counter + 1
     next_value = counter
   end function next_value
+
+  integer function next_array_value()
+    implicit none
+    integer :: counters(2)
+    data counters / 10, 20 /
+    counters(1) = counters(1) + 1
+    next_array_value = counters(1)
+  end function next_array_value
+
+  real function next_complex_value()
+    implicit none
+    complex :: state
+    data state / (1.0, 2.0) /
+    next_complex_value = real(state)
+    state = state + (1.0, 0.0)
+  end function next_complex_value
 end program data_statement

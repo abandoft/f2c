@@ -938,6 +938,7 @@ void f2c_emit_unit(Context *context, Unit *unit) {
     emit_statement_function_temporaries(&context->output, unit);
     emit_character_temporaries(&context->output, unit);
     emit_unused_suppression(&context->output, unit);
+    f2c_emit_unit_data_initializers(context, unit, depth);
     for (i = unit->begin + 1U; i < unit->end; ++i) {
         const size_t statement_index = i - unit->begin - 1U;
         if (!f2c_unit_line_is_active(unit, &context->lines.items[i]))

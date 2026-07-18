@@ -42,8 +42,10 @@ static void test_valid_data_semantics(void) {
     expect(result.code != NULL && strstr(result.code, "matrix[") != NULL &&
                strstr(result.code, "vector[1] = 5;") != NULL &&
                strstr(result.code, "mixed[1] = 7;") != NULL &&
-               strstr(result.code, "tail = 8;") != NULL,
+               strstr(result.code, "static int32_t tail = 8;") != NULL,
            "validated implied-DO and repeated values expand in Fortran order");
+    expect(result.code != NULL && strstr(result.code, "static bool f2c_data_initialized_") != NULL,
+           "non-scalar DATA lowering is protected by one-time procedure initialization");
     expect(result.code != NULL && strstr(result.code, "a/b,c") != NULL,
            "character DATA payload delimiters survive canonical token parsing");
     f2c_result_free(&result);

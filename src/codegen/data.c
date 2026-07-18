@@ -72,6 +72,29 @@ static int cursor_has_values(const DataCursor *cursor) {
     return cursor->repetitions_left != 0 || cursor->value_index < cursor->group->value_count;
 }
 
+static int data_item_requires_runtime_initialization(const F2cIoItem *item) {
+    size_t child;
+    if (item == NULL)
+        return 1;
+    if (!item->implied_do)
+        return item->expression == NULL || item->expression->rank != 0U ||
+               !item->data_static_initializer;
+    for (child = 0U; child < item->child_count; ++child)
+        if (data_item_requires_runtime_initialization(&item->children[child]))
+            return 1;
+    return 0;
+}
+
+static int data_group_requires_runtime_initialization(const F2cDataGroup *group) {
+    size_t target;
+    if (group == NULL)
+        return 1;
+    for (target = 0U; target < group->target_count; ++target)
+        if (data_item_requires_runtime_initialization(&group->targets[target]))
+            return 1;
+    return 0;
+}
+
 static int emit_data_assignment(Context *context, Unit *unit, const F2cExpr *target,
                                 const F2cExpr *value, int depth) {
     Symbol *symbol = target != NULL ? target->symbol : NULL;
@@ -232,36 +255,74 @@ static int emit_data_target(Context *context, Unit *unit, const F2cIoItem *targe
     return 1;
 }
 
-static void emit_data_group(Context *context, Unit *unit, const F2cDataGroup *group,
-                            size_t line_number, int depth) {
+static int emit_data_group_contents(Context *context, Unit *unit, const F2cDataGroup *group,
+                                    size_t line_number, int depth) {
     DataCursor cursor = {group, 0U, 0, NULL};
     DataSubstitutions substitutions = {0};
     size_t target_index;
     if (!group->counts_valid) {
         f2c_diagnostic(context, line_number, 1, "DATA typed IR was not validated");
-        return;
+        return 0;
     }
     for (target_index = 0U; target_index < group->target_count; ++target_index) {
         const F2cIoItem *target = &group->targets[target_index];
         if (!emit_data_target(context, unit, target, &cursor, &substitutions, depth)) {
             f2c_diagnostic(context, line_number, 1, "validated DATA IR could not be emitted");
             free(substitutions.items);
-            return;
+            return 0;
         }
     }
-    if (cursor_has_values(&cursor))
+    if (cursor_has_values(&cursor)) {
         f2c_diagnostic(context, line_number, 1, "validated DATA IR retained unconsumed values");
+        free(substitutions.items);
+        return 0;
+    }
     free(substitutions.items);
+    return 1;
 }
 
-void f2c_emit_data_statement(Context *context, Unit *unit, const F2cStatement *statement,
-                             int depth) {
-    size_t i;
+static void emit_data_statement_initializers(Context *context, Unit *unit,
+                                             const F2cStatement *statement, size_t *identifier,
+                                             int depth) {
+    size_t group_index;
+    if (statement != NULL && statement->kind == F2C_STMT_LABEL) {
+        emit_data_statement_initializers(context, unit, statement->nested, identifier, depth);
+        return;
+    }
+    if (statement == NULL || statement->kind != F2C_STMT_DATA)
+        return;
     if (statement->data_group_count == 0U) {
         f2c_diagnostic(context, statement->line, 1, "malformed DATA statement: %s",
                        statement->text);
         return;
     }
-    for (i = 0U; i < statement->data_group_count; ++i)
-        emit_data_group(context, unit, &statement->data_groups[i], statement->line, depth);
+    for (group_index = 0U; group_index < statement->data_group_count; ++group_index) {
+        const F2cDataGroup *group = &statement->data_groups[group_index];
+        const size_t current = (*identifier)++;
+        if (data_group_requires_runtime_initialization(group)) {
+            indent(&context->output, depth);
+            f2c_buffer_printf(&context->output, "static bool f2c_data_initialized_%zu = false;\n",
+                              current);
+            indent(&context->output, depth);
+            f2c_buffer_printf(&context->output, "if (!f2c_data_initialized_%zu) {\n", current);
+            if (emit_data_group_contents(context, unit, group, statement->line, depth + 1)) {
+                indent(&context->output, depth + 1);
+                f2c_buffer_printf(&context->output, "f2c_data_initialized_%zu = true;\n", current);
+            }
+            indent(&context->output, depth);
+            f2c_buffer_append(&context->output, "}\n");
+        } else {
+            (void)emit_data_group_contents(context, unit, group, statement->line, depth);
+        }
+    }
+}
+
+void f2c_emit_unit_data_initializers(Context *context, Unit *unit, int depth) {
+    size_t statement_index;
+    size_t identifier = 0U;
+    if (context == NULL || unit == NULL)
+        return;
+    for (statement_index = 0U; statement_index < unit->statement_count; ++statement_index)
+        emit_data_statement_initializers(context, unit, &unit->statements[statement_index],
+                                         &identifier, depth);
 }

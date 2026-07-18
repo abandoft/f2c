@@ -61,8 +61,7 @@ int f2c_emit_elsewhere(Context *context, Unit *unit, const F2cStatement *stateme
 int f2c_emit_where_end(Context *context, Unit *unit, const F2cStatement *statement, int *depth);
 int f2c_emit_where_assignment(Context *context, Unit *unit, const F2cStatement *statement,
                               int depth);
-void f2c_emit_data_statement(Context *context, Unit *unit, const F2cStatement *statement,
-                             int depth);
+void f2c_emit_unit_data_initializers(Context *context, Unit *unit, int depth);
 int f2c_emit_rank2_section_assignment(Context *context, Unit *unit, const F2cExpr *left,
                                       const F2cExpr *right, int depth);
 int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExpr *left,
