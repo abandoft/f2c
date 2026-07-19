@@ -215,12 +215,6 @@ void f2c_finalize_module_accessibility(Context *context, Unit *module) {
         size_t index;
         int resolved = 0;
         int duplicate_reported = 0;
-        if (strchr(entry->key, '(') != NULL) {
-            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &entry->span, 1,
-                                     "generic access identifier '%s' has no generic binding",
-                                     entry->key);
-            continue;
-        }
         symbol = f2c_find_symbol(module, entry->key);
         if (symbol != NULL) {
             resolved = 1;
