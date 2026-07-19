@@ -91,6 +91,7 @@ set(
     src/codegen/descriptor/private.h
     src/codegen/descriptor/view.c
     src/codegen/expression.c
+    src/codegen/expression/bit.c
     src/codegen/expression/call.c
     src/codegen/expression/inquiry.c
     src/codegen/expression/private.h

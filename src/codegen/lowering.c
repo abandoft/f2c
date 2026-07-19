@@ -400,9 +400,6 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
         f2c_buffer_append(&result, "0");
     } else if (strcmp(name, "omp_get_num_threads") == 0) {
         f2c_buffer_append(&result, "1");
-    } else if (strcmp(name, "iand") == 0) {
-        f2c_buffer_printf(&result, "((int32_t)(%s) & (int32_t)(%s))", count >= 1U ? args[0] : "0",
-                          count >= 2U ? args[1] : "0");
     } else if (strcmp(name, "transfer") == 0) {
         f2c_buffer_printf(&result, "F2C_TRANSFER(%s, %s)", count >= 1U ? args[0] : "0",
                           count >= 2U ? args[1] : "0");

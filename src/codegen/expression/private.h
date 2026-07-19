@@ -16,6 +16,7 @@ void f2c_expression_free_arguments(char **arguments, Type *types, size_t count);
 int f2c_expression_children(Unit *unit, const F2cExpr *expression, char ***arguments_out,
                             Type **types_out);
 char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported);
+char *f2c_expression_bit_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *supported);
 int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, char **count,
                               char **stride, int *supported);

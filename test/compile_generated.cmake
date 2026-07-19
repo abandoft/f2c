@@ -115,6 +115,7 @@ foreach(
        where_construct
        elemental_procedure
        array_inquiry
+       bit_intrinsics
        descriptor_temporary
        equivalence_group
        declaration_matrix
