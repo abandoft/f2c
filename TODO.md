@@ -237,8 +237,16 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   gfortran 差分已进入测试与 CI；`INQUIRE(IOLENGTH=)`、更完整错误分类及后续标准控制项仍未完成。
 - [ ] 完成顺序/直接访问、格式化/非格式化记录、`REC`、`RECL`、`ACCESS`、`ACTION`、`STATUS`、
   `BLANK`、`PAD`、`DELIM`、`POSITION` 和所有对应 `IOSTAT/IOMSG/ERR/END/EOR` 状态。连接状态现保存
-  上述属性，顺序格式化文件控制路径已经执行验证；直接访问 `READ/WRITE REC=`、直接记录边界、
-  动作不匹配的无崩溃错误传播和非格式化记录协议仍需完成。
+  上述属性，记录传输路径已经覆盖直接访问 `READ/WRITE REC=`、定长记录边界、动作/格式/访问
+  不匹配的无崩溃错误传播，以及顺序非格式化记录协议。仍需补齐所有控制项和错误状态的标准组合、
+  非连续数组表达式的无格式传输，以及 stream access、异步 I/O 和跨编译器二进制文件互操作策略。
+- [x] 生成端使用统一 transfer/stream/record 状态机执行顺序与直接、格式化与非格式化记录传输；
+  `UNIT` 和 `REC` 表达式只求值一次，`IOSTAT/IOMSG/ERR/END/EOR` 在清理记录和内部文件注册后分支。
+  直接文件使用经过溢出检查的 `(REC-1)*RECL` 定位，格式化记录支持空格填充、斜杠编辑和 FORMAT
+  回转跨记录，非格式化记录补零；缺失记录、非法记录号和 `NEXTREC` 已有执行回归。顺序非格式化
+  文件使用固定 8 字节小端长度首尾标记，读取时验证损坏记录，`BACKSPACE` 按记录边界定位。
+  已实现标量 kind、复数、逻辑、字符、固定数组、隐式 DO、静态组件派生对象和定义 I/O 的二进制
+  传输；严格 C17、ASan/UBSan、损坏文件回归及 gfortran 逐记录差分均已进入数值验证 CI。
 - [x] `PRINT`、`READ` 和 `WRITE` 的显式格式共用 canonical token → FORMAT AST → typed IR →
   formatted item emitter；常量字符、标签和 F77 已赋值 FORMAT 均在编译期生成只读 C17 指令表，
   不再扫描源码行或在运行时重新解析常量文本。真正的运行时 CHARACTER 格式使用同一描述符接口的
@@ -408,7 +416,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 完成可分配哑实参/函数结果、可分配派生组件、动态多态分配、`SOURCE/MOLD`、`MOVE_ALLOC`
   和深复制/移动的异常安全语义。
 - [ ] 完成定义 I/O、完整派生类型 NAMELIST、`FLUSH`、异步 I/O、`WAIT`、stream access、
-  `NEWUNIT` 和外部文件非前进 I/O 的全部边界语义。
+  `NEWUNIT` 和外部文件非前进 I/O 的全部边界语义。当前定义格式化/非格式化绑定已接入统一记录
+  状态机，未定义 I/O 的静态组件派生对象可按声明顺序传输；动态组件必须使用适用绑定并在生成前
+  验证，但完整继承分派、派生类型数组动态组件和跨实现二进制互操作仍未完成。
 - [ ] 完成 `ASSOCIATE`、`BLOCK`、`DO CONCURRENT`、`FORALL`、子模块、C interoperability、IEEE
   模块和后续 transformational/inquiry intrinsic。
 - [ ] 在确定产品标准范围后再规划 coarray、team、event、lock、atomic 等并行语言特性；不能将
