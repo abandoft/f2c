@@ -126,6 +126,53 @@ int main(void) {
            "counted DO owns variable, initial, limit, and step ASTs");
     f2c_statement_free(&statement);
 
+    expect(f2c_parse_statement(&unit, "do 0010, n = 1, 10, 2", 15U, &statement),
+           "labeled counted DO parses from canonical tokens");
+    expect(statement.kind == F2C_STMT_DO && statement.terminal_label != NULL &&
+               strcmp(statement.terminal_label, "10") == 0 &&
+               statement.terminal_label_span.begin.line == 15U && statement.left != NULL &&
+               statement.right != NULL && statement.limit != NULL && statement.step != NULL,
+           "labeled DO owns a canonical terminal label, exact span, and bound ASTs");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "do", 15U, &statement), "uncontrolled DO parses");
+    expect(statement.kind == F2C_STMT_DO && statement.control_syntax_valid &&
+               statement.left == NULL && statement.terminal_label == NULL,
+           "uncontrolled DO is explicit loop IR rather than a malformed counted loop");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "do 20 while (.not.done)", 15U, &statement),
+           "labeled DO WHILE parses");
+    expect(statement.kind == F2C_STMT_DO_WHILE && statement.terminal_label != NULL &&
+               strcmp(statement.terminal_label, "20") == 0 && statement.expression != NULL &&
+               statement.expression->type == TYPE_LOGICAL,
+           "labeled DO WHILE owns its label and logical condition AST");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "do n = 1,", 15U, &statement),
+           "malformed counted DO remains representable");
+    expect(statement.kind == F2C_STMT_DO && !statement.control_syntax_valid,
+           "missing counted DO bounds are retained as an explicit control-syntax failure");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "if (x) 10, 20", 15U, &statement),
+           "malformed arithmetic IF remains representable");
+    expect(statement.kind == F2C_STMT_ARITHMETIC_IF && !statement.control_syntax_valid,
+           "arithmetic IF with fewer than three labels retains its attempted statement kind");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "assign 100 n", 15U, &statement),
+           "malformed ASSIGN remains representable");
+    expect(statement.kind == F2C_STMT_ASSIGN_LABEL && !statement.control_syntax_valid,
+           "ASSIGN without TO is retained as an explicit control-syntax failure");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "goto () n", 15U, &statement),
+           "malformed computed GOTO remains representable");
+    expect(statement.kind == F2C_STMT_GOTO && !statement.control_syntax_valid,
+           "an empty computed GOTO target list is retained as a control-syntax failure");
+    f2c_statement_free(&statement);
+
     expect(f2c_parse_statement(&unit, "outer: do n = 1, 10, 2", 15U, &statement),
            "named counted DO parses");
     expect(statement.kind == F2C_STMT_DO && statement.construct_syntax_valid &&
@@ -266,6 +313,14 @@ int main(void) {
            "computed GOTO owns labels and selector AST");
     f2c_statement_free(&statement);
 
+    expect(f2c_parse_statement(&unit, "goto (0010, 020, 30) n", 16U, &statement),
+           "computed GOTO accepts its standard optional separator");
+    expect(statement.kind == F2C_STMT_GOTO && statement.control_syntax_valid &&
+               statement.label_count == 3U && strcmp(statement.labels[0], "10") == 0 &&
+               strcmp(statement.labels[1], "20") == 0 && statement.expression != NULL,
+           "computed GOTO canonicalizes labels and owns a token-derived selector AST");
+    f2c_statement_free(&statement);
+
     expect(f2c_parse_statement(&unit, "go to 90", 17U, &statement), "direct GOTO parses");
     expect(statement.kind == F2C_STMT_GOTO && statement.name != NULL &&
                strcmp(statement.name, "90") == 0,
@@ -312,11 +367,24 @@ int main(void) {
            "MOVE_ALLOC owns a dedicated typed statement node and argument ASTs");
     f2c_statement_free(&statement);
 
-    expect(f2c_parse_statement(&unit, "20 continue", 19U, &statement), "labeled statement parses");
+    expect(f2c_parse_statement(&unit, "00020 continue", 19U, &statement),
+           "labeled statement parses");
     expect(statement.kind == F2C_STMT_LABEL && statement.name != NULL &&
                strcmp(statement.name, "20") == 0 && statement.nested != NULL &&
                statement.nested->kind == F2C_STMT_CONTINUE,
-           "label owns its normalized target and nested statement IR");
+           "label owns its canonical target and token-derived nested statement IR");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "00000 continue", 19U, &statement),
+           "an invalid all-zero label remains representable");
+    expect(statement.kind == F2C_STMT_LABEL && !statement.control_syntax_valid,
+           "statement label zero is retained as an explicit control-syntax failure");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "123456 continue", 19U, &statement),
+           "an overlong statement label remains representable");
+    expect(statement.kind == F2C_STMT_LABEL && !statement.control_syntax_valid,
+           "statement labels longer than five digits are rejected by the token AST");
     f2c_statement_free(&statement);
 
     expect(f2c_parse_statement(&unit, "close(9)", 20U, &statement), "CLOSE parses");
