@@ -12,22 +12,37 @@ file(
 
 foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
     file(READ "${PRODUCTION_FILE}" CONTENT)
+    file(RELATIVE_PATH RELATIVE_FILE "${SOURCE_DIR}" "${PRODUCTION_FILE}")
     string(REGEX MATCHALL "\n" LINE_BREAKS "${CONTENT}")
     list(LENGTH LINE_BREAKS LINE_COUNT)
     math(EXPR LINE_COUNT "${LINE_COUNT} + 1")
     if(LINE_COUNT GREATER 1000)
-        file(RELATIVE_PATH RELATIVE_FILE "${SOURCE_DIR}" "${PRODUCTION_FILE}")
         message(FATAL_ERROR "${RELATIVE_FILE} has ${LINE_COUNT} lines; split it by responsibility")
     endif()
     if(
         PRODUCTION_FILE MATCHES "/src/codegen/"
         AND CONTENT MATCHES "f2c_parse_expression_ast[ \t\r\n]*\\("
     )
-        file(RELATIVE_PATH RELATIVE_FILE "${SOURCE_DIR}" "${PRODUCTION_FILE}")
         message(FATAL_ERROR "${RELATIVE_FILE} reparses source expressions in the emitter")
     endif()
+    if(CONTENT MATCHES "f2c_parse_expression_ast[ \t\r\n]*\\(")
+        if(
+            NOT RELATIVE_FILE STREQUAL "src/ast/parser.c"
+            AND NOT RELATIVE_FILE STREQUAL "src/ir/expression.h"
+        )
+            message(
+                FATAL_ERROR
+                "${RELATIVE_FILE} bypasses the canonical source-token expression parser"
+            )
+        endif()
+    endif()
+    if(
+        CONTENT MATCHES
+            "f2c_(identifier|split_arguments|split_actual_arguments|split_comma_list|starts_word|evaluate_integer_text|expression_type|expression_is_designator)[ \t\r\n]*\\("
+    )
+        message(FATAL_ERROR "${RELATIVE_FILE} restores a removed source-text parser")
+    endif()
     if(CONTENT MATCHES "netlib-f2c")
-        file(RELATIVE_PATH RELATIVE_FILE "${SOURCE_DIR}" "${PRODUCTION_FILE}")
         message(FATAL_ERROR "${RELATIVE_FILE} references the archived netlib-f2c tree")
     endif()
 endforeach()
