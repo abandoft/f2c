@@ -322,6 +322,9 @@ static void test_intrinsic_type_registry(void) {
     F2cExpr array_argument;
     F2cExpr scalar_argument;
     F2cExpr *rank_arguments[3];
+    Unit unit;
+    F2cExpr *character_call;
+    const char *error_at = NULL;
     const F2cIntrinsicSignature *mod_signature;
     expect(f2c_resolve_intrinsic_type("sqrt", real_argument, 1U) == TYPE_REAL,
            "generic SQRT preserves REAL kind");
@@ -339,6 +342,9 @@ static void test_intrinsic_type_registry(void) {
     expect(f2c_find_intrinsic("ishftc") != NULL &&
                f2c_find_intrinsic("ishftc")->id == F2C_INTRINSIC_ISHFTC,
            "bit intrinsics have stable typed-IR identities");
+    expect(f2c_find_intrinsic("verify") != NULL &&
+               f2c_find_intrinsic("verify")->id == F2C_INTRINSIC_VERIFY,
+           "character intrinsics have stable typed-IR identities");
     expect(f2c_resolve_intrinsic_rank("bit_size", kind_arguments, 1U) == 0U,
            "BIT_SIZE is scalar even when its model argument is not elemental");
     mod_signature = f2c_find_intrinsic("mod");
@@ -347,16 +353,31 @@ static void test_intrinsic_type_registry(void) {
            "intrinsic registry owns the MOD arity contract");
     memset(&array_argument, 0, sizeof(array_argument));
     memset(&scalar_argument, 0, sizeof(scalar_argument));
+    array_argument.type = TYPE_CHARACTER;
+    array_argument.type_kind = 1;
     array_argument.rank = 2U;
     rank_arguments[0] = &array_argument;
     rank_arguments[1] = &scalar_argument;
     rank_arguments[2] = &scalar_argument;
-    expect(f2c_resolve_intrinsic_rank("len", rank_arguments, 1U) == 2U,
-           "elemental LEN rank is derived from its value argument");
+    expect(f2c_resolve_intrinsic_rank("len", rank_arguments, 1U) == 0U,
+           "inquiry LEN is scalar even when its character argument is an array");
+    expect(f2c_resolve_intrinsic_rank("adjustl", rank_arguments, 1U) == 2U,
+           "elemental character intrinsics derive rank from their value argument");
+    expect(f2c_resolve_intrinsic_rank("trim", rank_arguments, 1U) == 0U,
+           "transformational TRIM requires and returns a scalar");
     expect(f2c_resolve_intrinsic_rank("kind", rank_arguments, 1U) == 0U,
            "inquiry KIND has a scalar result for an array model");
     expect(f2c_resolve_intrinsic_rank("transfer", rank_arguments, 3U) == 1U,
            "TRANSFER with SIZE has a rank-one result");
+    memset(&unit, 0, sizeof(unit));
+    character_call = f2c_parse_expression_ast(
+        &unit, "index(substring='R', string='FORTRAN', kind=8)", &error_at);
+    expect(character_call != NULL && error_at == NULL &&
+               character_call->intrinsic == F2C_INTRINSIC_INDEX &&
+               character_call->type == TYPE_INTEGER && character_call->type_kind == 8 &&
+               character_call->rank == 0U,
+           "character search keyword association determines typed integer result kind");
+    f2c_expr_free(character_call);
 }
 
 static void test_fixed_form_spaced_operator_emission(void) {

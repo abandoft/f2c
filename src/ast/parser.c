@@ -312,6 +312,13 @@ static F2cExpr *parse_postfix(AstParser *parser, const F2cToken *name_token) {
         if (signature != NULL && signature->kind_rule != F2C_INTRINSIC_KIND_DEFAULT)
             expression->type_kind = f2c_resolve_intrinsic_kind(
                 expression->text, expression->children, expression->child_count);
+        if (signature != NULL && signature->kind_rule == F2C_INTRINSIC_KIND_OPTIONAL) {
+            const F2cExpr *kind_argument = f2c_ast_intrinsic_argument(
+                expression, "kind", signature->maximum_arguments - 1U);
+            const int selected_kind = f2c_ast_kind_value_from_argument(kind_argument);
+            if (selected_kind != 0)
+                expression->type_kind = selected_kind;
+        }
     } else if (symbol != NULL) {
         expression->type = symbol->type;
         expression->type_kind = symbol->kind != 0 ? symbol->kind : f2c_default_kind(symbol->type);

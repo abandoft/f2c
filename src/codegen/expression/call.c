@@ -588,7 +588,7 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         return emit_type_bound_call(unit, expression, supported);
     if (expression->symbol != NULL && expression->symbol->statement_function)
         return f2c_expression_statement_function(unit, expression, supported);
-    if (expression->intrinsic != F2C_INTRINSIC_NONE &&
+    if (f2c_intrinsic_is_bit(expression->intrinsic) &&
         expression->intrinsic != F2C_INTRINSIC_MVBITS)
         return f2c_expression_bit_intrinsic(unit, expression, supported);
     if (expression->text != NULL && strcmp(expression->text, "present") == 0 &&

@@ -40,7 +40,7 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
         features->complex_values = 1;
     if (expression->kind != F2C_EXPR_CALL || expression->text == NULL)
         return;
-    if (expression->intrinsic != F2C_INTRINSIC_NONE)
+    if (f2c_intrinsic_is_bit(expression->intrinsic))
         features->bit_intrinsic = 1;
     name = expression->text;
     if (strcmp(name, "mod") == 0)

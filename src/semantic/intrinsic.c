@@ -11,16 +11,22 @@
 #define FIRST_RANK(name, minimum, maximum, type)                                                   \
     {name, minimum, maximum, type, F2C_INTRINSIC_RANK_FIRST, F2C_INTRINSIC_NONE,                    \
      F2C_INTRINSIC_KIND_DEFAULT}
-#define BIT_ELEMENTAL(name, minimum, maximum, type, id, kind)                                      \
+#define TYPED_ELEMENTAL(name, minimum, maximum, type, id, kind)                                    \
     {name, minimum, maximum, type, F2C_INTRINSIC_RANK_ELEMENTAL, id, kind}
-#define BIT_SCALAR(name, minimum, maximum, type, id, kind)                                         \
+#define TYPED_SCALAR(name, minimum, maximum, type, id, kind)                                       \
     {name, minimum, maximum, type, F2C_INTRINSIC_RANK_SCALAR, id, kind}
 
 static const F2cIntrinsicSignature intrinsic_signatures[] = {
     ELEMENTAL("abs", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE),
     ELEMENTAL("abs1", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE),
     ELEMENTAL("abssq", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE),
+    TYPED_ELEMENTAL("achar", 1U, 2U, F2C_INTRINSIC_TYPE_CHARACTER, F2C_INTRINSIC_ACHAR,
+                    F2C_INTRINSIC_KIND_OPTIONAL),
     ELEMENTAL("acos", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_ELEMENTAL("adjustl", 1U, 1U, F2C_INTRINSIC_TYPE_CHARACTER, F2C_INTRINSIC_ADJUSTL,
+                    F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("adjustr", 1U, 1U, F2C_INTRINSIC_TYPE_CHARACTER, F2C_INTRINSIC_ADJUSTR,
+                    F2C_INTRINSIC_KIND_FIRST),
     ELEMENTAL("alog", 1U, 1U, F2C_INTRINSIC_TYPE_REAL),
     SCALAR("allocated", 1U, 1U, F2C_INTRINSIC_TYPE_LOGICAL),
     SCALAR("associated", 1U, 2U, F2C_INTRINSIC_TYPE_LOGICAL),
@@ -28,10 +34,10 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
     ELEMENTAL("asin", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("atan", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("atan2", 2U, 2U, F2C_INTRINSIC_TYPE_COMMON),
-    BIT_SCALAR("bit_size", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_BIT_SIZE,
-               F2C_INTRINSIC_KIND_FIRST),
-    BIT_ELEMENTAL("btest", 2U, 2U, F2C_INTRINSIC_TYPE_LOGICAL, F2C_INTRINSIC_BTEST,
-                  F2C_INTRINSIC_KIND_DEFAULT),
+    TYPED_SCALAR("bit_size", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_BIT_SIZE,
+                 F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("btest", 2U, 2U, F2C_INTRINSIC_TYPE_LOGICAL, F2C_INTRINSIC_BTEST,
+                    F2C_INTRINSIC_KIND_DEFAULT),
     SCALAR("all", 1U, 2U, F2C_INTRINSIC_TYPE_LOGICAL),
     SCALAR("any", 1U, 2U, F2C_INTRINSIC_TYPE_LOGICAL),
     ELEMENTAL("cabs", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE),
@@ -39,7 +45,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
     ELEMENTAL("cabs2", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE),
     ELEMENTAL("cdabs", 1U, 1U, F2C_INTRINSIC_TYPE_DOUBLE),
     ELEMENTAL("ceiling", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
-    ELEMENTAL("char", 1U, 2U, F2C_INTRINSIC_TYPE_CHARACTER),
+    TYPED_ELEMENTAL("char", 1U, 2U, F2C_INTRINSIC_TYPE_CHARACTER, F2C_INTRINSIC_CHAR,
+                    F2C_INTRINSIC_KIND_OPTIONAL),
     ELEMENTAL("cmplx", 1U, 3U, F2C_INTRINSIC_TYPE_COMPLEX),
     SCALAR("count", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER),
     FIRST_RANK("cshift", 2U, 3U, F2C_INTRINSIC_TYPE_FIRST),
@@ -66,31 +73,38 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
     ELEMENTAL("floor", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
     SCALAR("findloc", 2U, 6U, F2C_INTRINSIC_TYPE_INTEGER),
     SCALAR("huge", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
-    BIT_ELEMENTAL("iand", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IAND,
-                  F2C_INTRINSIC_KIND_FIRST),
-    BIT_ELEMENTAL("ibclr", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IBCLR,
-                  F2C_INTRINSIC_KIND_FIRST),
-    BIT_ELEMENTAL("ibits", 3U, 3U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IBITS,
-                  F2C_INTRINSIC_KIND_FIRST),
-    BIT_ELEMENTAL("ibset", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IBSET,
-                  F2C_INTRINSIC_KIND_FIRST),
-    ELEMENTAL("ichar", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
+    TYPED_ELEMENTAL("iachar", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IACHAR,
+                    F2C_INTRINSIC_KIND_OPTIONAL),
+    TYPED_ELEMENTAL("iand", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IAND,
+                    F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("ibclr", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IBCLR,
+                    F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("ibits", 3U, 3U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IBITS,
+                    F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("ibset", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IBSET,
+                    F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("ichar", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_ICHAR,
+                    F2C_INTRINSIC_KIND_OPTIONAL),
     ELEMENTAL("idnint", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER),
-    BIT_ELEMENTAL("ieor", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IEOR,
-                  F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("ieor", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IEOR,
+                    F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("index", 2U, 4U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_INDEX,
+                    F2C_INTRINSIC_KIND_OPTIONAL),
     ELEMENTAL("int", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
-    BIT_ELEMENTAL("ior", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IOR,
-                  F2C_INTRINSIC_KIND_FIRST),
-    BIT_ELEMENTAL("ishft", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_ISHFT,
-                  F2C_INTRINSIC_KIND_FIRST),
-    BIT_ELEMENTAL("ishftc", 2U, 3U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_ISHFTC,
-                  F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("ior", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_IOR,
+                    F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("ishft", 2U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_ISHFT,
+                    F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("ishftc", 2U, 3U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_ISHFTC,
+                    F2C_INTRINSIC_KIND_FIRST),
     ELEMENTAL("isnan", 1U, 1U, F2C_INTRINSIC_TYPE_LOGICAL),
     SCALAR("kind", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER),
     SCALAR("lbound", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER),
     ELEMENTAL("la_isnan", 1U, 1U, F2C_INTRINSIC_TYPE_LOGICAL),
-    FIRST_RANK("len", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
-    ELEMENTAL("len_trim", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
+    TYPED_SCALAR("len", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_LEN,
+                 F2C_INTRINSIC_KIND_OPTIONAL),
+    TYPED_ELEMENTAL("len_trim", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER,
+                    F2C_INTRINSIC_LEN_TRIM, F2C_INTRINSIC_KIND_OPTIONAL),
     ELEMENTAL("log", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("log10", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     SCALAR("matmul", 2U, 2U, F2C_INTRINSIC_TYPE_COMMON),
@@ -104,8 +118,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
     SCALAR("minval", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("mod", 2U, 2U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("nint", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
-    BIT_ELEMENTAL("not", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_NOT,
-                  F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("not", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_NOT,
+                    F2C_INTRINSIC_KIND_FIRST),
     SCALAR("null", 0U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     SCALAR("omp_get_num_threads", 0U, 0U, F2C_INTRINSIC_TYPE_INTEGER),
     SCALAR("omp_get_thread_num", 0U, 0U, F2C_INTRINSIC_TYPE_INTEGER),
@@ -116,6 +130,10 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
     SCALAR("random_number", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("real", 1U, 2U, F2C_INTRINSIC_TYPE_REAL),
     SCALAR("reshape", 2U, 4U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_SCALAR("repeat", 2U, 2U, F2C_INTRINSIC_TYPE_CHARACTER, F2C_INTRINSIC_REPEAT,
+                 F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("scan", 2U, 4U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_SCAN,
+                    F2C_INTRINSIC_KIND_OPTIONAL),
     SCALAR("shape", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER),
     ELEMENTAL("sign", 2U, 2U, F2C_INTRINSIC_TYPE_FIRST),
     ELEMENTAL("sin", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
@@ -126,18 +144,22 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
     ELEMENTAL("tan", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     SCALAR("tiny", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     SCALAR("transpose", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_SCALAR("trim", 1U, 1U, F2C_INTRINSIC_TYPE_CHARACTER, F2C_INTRINSIC_TRIM,
+                 F2C_INTRINSIC_KIND_FIRST),
     {"transfer", 2U, 3U, F2C_INTRINSIC_TYPE_MOLD, F2C_INTRINSIC_RANK_MOLD, F2C_INTRINSIC_NONE,
      F2C_INTRINSIC_KIND_DEFAULT},
     SCALAR("unpack", 3U, 3U, F2C_INTRINSIC_TYPE_FIRST),
     SCALAR("ubound", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER),
+    TYPED_ELEMENTAL("verify", 2U, 4U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_VERIFY,
+                    F2C_INTRINSIC_KIND_OPTIONAL),
     FIRST_RANK("eoshift", 2U, 4U, F2C_INTRINSIC_TYPE_FIRST),
 };
 
 #undef ELEMENTAL
 #undef SCALAR
 #undef FIRST_RANK
-#undef BIT_ELEMENTAL
-#undef BIT_SCALAR
+#undef TYPED_ELEMENTAL
+#undef TYPED_SCALAR
 
 static const F2cExpr *argument_value(const F2cExpr *argument) {
     if (argument != NULL && argument->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
@@ -177,6 +199,74 @@ int f2c_is_intrinsic_name(const char *name) { return f2c_find_intrinsic(name) !=
 
 int f2c_is_intrinsic_subroutine(const char *name) {
     return name != NULL && strcmp(name, "mvbits") == 0;
+}
+
+int f2c_intrinsic_is_bit(F2cIntrinsicId intrinsic) {
+    switch (intrinsic) {
+    case F2C_INTRINSIC_BIT_SIZE:
+    case F2C_INTRINSIC_BTEST:
+    case F2C_INTRINSIC_IAND:
+    case F2C_INTRINSIC_IBCLR:
+    case F2C_INTRINSIC_IBITS:
+    case F2C_INTRINSIC_IBSET:
+    case F2C_INTRINSIC_IEOR:
+    case F2C_INTRINSIC_IOR:
+    case F2C_INTRINSIC_ISHFT:
+    case F2C_INTRINSIC_ISHFTC:
+    case F2C_INTRINSIC_NOT:
+    case F2C_INTRINSIC_MVBITS:
+        return 1;
+    case F2C_INTRINSIC_NONE:
+    case F2C_INTRINSIC_ACHAR:
+    case F2C_INTRINSIC_ADJUSTL:
+    case F2C_INTRINSIC_ADJUSTR:
+    case F2C_INTRINSIC_CHAR:
+    case F2C_INTRINSIC_IACHAR:
+    case F2C_INTRINSIC_ICHAR:
+    case F2C_INTRINSIC_INDEX:
+    case F2C_INTRINSIC_LEN:
+    case F2C_INTRINSIC_LEN_TRIM:
+    case F2C_INTRINSIC_REPEAT:
+    case F2C_INTRINSIC_SCAN:
+    case F2C_INTRINSIC_TRIM:
+    case F2C_INTRINSIC_VERIFY:
+    default:
+        return 0;
+    }
+}
+
+int f2c_intrinsic_is_character(F2cIntrinsicId intrinsic) {
+    switch (intrinsic) {
+    case F2C_INTRINSIC_ACHAR:
+    case F2C_INTRINSIC_ADJUSTL:
+    case F2C_INTRINSIC_ADJUSTR:
+    case F2C_INTRINSIC_CHAR:
+    case F2C_INTRINSIC_IACHAR:
+    case F2C_INTRINSIC_ICHAR:
+    case F2C_INTRINSIC_INDEX:
+    case F2C_INTRINSIC_LEN:
+    case F2C_INTRINSIC_LEN_TRIM:
+    case F2C_INTRINSIC_REPEAT:
+    case F2C_INTRINSIC_SCAN:
+    case F2C_INTRINSIC_TRIM:
+    case F2C_INTRINSIC_VERIFY:
+        return 1;
+    case F2C_INTRINSIC_NONE:
+    case F2C_INTRINSIC_BIT_SIZE:
+    case F2C_INTRINSIC_BTEST:
+    case F2C_INTRINSIC_IAND:
+    case F2C_INTRINSIC_IBCLR:
+    case F2C_INTRINSIC_IBITS:
+    case F2C_INTRINSIC_IBSET:
+    case F2C_INTRINSIC_IEOR:
+    case F2C_INTRINSIC_IOR:
+    case F2C_INTRINSIC_ISHFT:
+    case F2C_INTRINSIC_ISHFTC:
+    case F2C_INTRINSIC_NOT:
+    case F2C_INTRINSIC_MVBITS:
+    default:
+        return 0;
+    }
 }
 
 static Type absolute_result(Type type) {
@@ -333,7 +423,20 @@ int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size
         return 0;
     if (signature->kind_rule == F2C_INTRINSIC_KIND_DEFAULT)
         return f2c_default_kind(f2c_resolve_intrinsic_type(name, NULL, 0U));
-    first = f2c_intrinsic_argument(arguments, count, "i", 0U);
-    return first != NULL && first->type_kind != 0 ? first->type_kind
-                                                  : f2c_default_kind(TYPE_INTEGER);
+    if (signature->kind_rule == F2C_INTRINSIC_KIND_OPTIONAL)
+        return f2c_default_kind(signature->type_rule == F2C_INTRINSIC_TYPE_CHARACTER
+                                    ? TYPE_CHARACTER
+                                    : TYPE_INTEGER);
+    first = f2c_intrinsic_argument(
+        arguments, count,
+        signature->id == F2C_INTRINSIC_ADJUSTL || signature->id == F2C_INTRINSIC_ADJUSTR ||
+                signature->id == F2C_INTRINSIC_REPEAT || signature->id == F2C_INTRINSIC_TRIM
+            ? "string"
+            : "i",
+        0U);
+    return first != NULL && first->type_kind != 0
+               ? first->type_kind
+               : f2c_default_kind(signature->type_rule == F2C_INTRINSIC_TYPE_CHARACTER
+                                      ? TYPE_CHARACTER
+                                      : TYPE_INTEGER);
 }
