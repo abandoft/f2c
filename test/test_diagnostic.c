@@ -342,6 +342,48 @@ static void test_duplicate_access_span(void) {
     f2c_result_free(&result);
 }
 
+static void test_missing_module_procedure_span(void) {
+    static const char source[] = "module exact_generic_provider\n"
+                                 "  interface apply\n"
+                                 "    module procedure missing_specific\n"
+                                 "  end interface apply\n"
+                                 "end module exact_generic_provider\n";
+    DiagnosticCapture capture = {.needle = "is not defined in module"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "an unresolved MODULE PROCEDURE specific suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "an unresolved MODULE PROCEDURE specific emits one typed semantic diagnostic");
+    expect(capture.begin.line == 3U && capture.begin.column == 22U && capture.end.line == 3U &&
+               capture.end.column == 38U,
+           "an unresolved MODULE PROCEDURE diagnostic selects the exact specific name");
+    f2c_result_free(&result);
+}
+
+static void test_duplicate_module_procedure_span(void) {
+    static const char source[] = "module exact_duplicate_generic\n"
+                                 "  interface apply\n"
+                                 "    module procedure implementation\n"
+                                 "    module procedure implementation\n"
+                                 "  end interface apply\n"
+                                 "contains\n"
+                                 "  integer function implementation(value)\n"
+                                 "    integer, intent(in) :: value\n"
+                                 "    implementation = value\n"
+                                 "  end function implementation\n"
+                                 "end module exact_duplicate_generic\n";
+    DiagnosticCapture capture = {.needle = "appears more than once"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "a repeated MODULE PROCEDURE specific suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "a repeated MODULE PROCEDURE specific emits one typed semantic diagnostic");
+    expect(capture.begin.line == 4U && capture.begin.column == 22U && capture.end.line == 4U &&
+               capture.end.column == 36U,
+           "a repeated MODULE PROCEDURE diagnostic selects the second binding token");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_keyword_association_span();
     test_call_designator_span();
@@ -358,6 +400,8 @@ int main(void) {
     test_module_cycle_use_span();
     test_private_use_remote_span();
     test_duplicate_access_span();
+    test_missing_module_procedure_span();
+    test_duplicate_module_procedure_span();
     if (failures != 0) {
         fprintf(stderr, "%d diagnostic span test(s) failed\n", failures);
         return 1;
