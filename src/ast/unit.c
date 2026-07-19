@@ -345,3 +345,32 @@ F2cUnitEndParseStatus f2c_parse_unit_end_syntax(const Line *line, F2cUnitEndSynt
     }
     return F2C_UNIT_END_PARSED;
 }
+
+F2cModuleHeaderParseStatus f2c_parse_module_header_syntax(const Line *line,
+                                                          F2cModuleHeaderSyntax *syntax) {
+    size_t start;
+    if (syntax == NULL)
+        return F2C_MODULE_HEADER_INVALID;
+    memset(syntax, 0, sizeof(*syntax));
+    if (line == NULL || line->token_count == 0U)
+        return F2C_MODULE_HEADER_NOT_MATCHED;
+    start = line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U : 0U;
+    if (!f2c_line_token_equals(line, start, "module"))
+        return F2C_MODULE_HEADER_NOT_MATCHED;
+    if (f2c_line_token_equals(line, start + 1U, "procedure") ||
+        f2c_line_token_equals(line, start + 1U, "subroutine") ||
+        f2c_line_token_equals(line, start + 1U, "function"))
+        return F2C_MODULE_HEADER_NOT_MATCHED;
+    syntax->span = f2c_source_span_cover(&line->tokens[start].span,
+                                         &line->tokens[line->token_count - 1U].span);
+    if (start + 1U >= line->token_count || line->tokens[start + 1U].kind != F2C_TOKEN_IDENTIFIER) {
+        syntax->error_token = &line->tokens[start];
+        return F2C_MODULE_HEADER_INVALID;
+    }
+    syntax->name = &line->tokens[start + 1U];
+    if (start + 2U != line->token_count) {
+        syntax->error_token = &line->tokens[start + 2U];
+        return F2C_MODULE_HEADER_INVALID;
+    }
+    return F2C_MODULE_HEADER_PARSED;
+}

@@ -67,9 +67,23 @@ typedef struct F2cUnitEndSyntax {
     const F2cToken *error_token;
 } F2cUnitEndSyntax;
 
+typedef enum F2cModuleHeaderParseStatus {
+    F2C_MODULE_HEADER_NOT_MATCHED,
+    F2C_MODULE_HEADER_PARSED,
+    F2C_MODULE_HEADER_INVALID
+} F2cModuleHeaderParseStatus;
+
+typedef struct F2cModuleHeaderSyntax {
+    F2cSourceSpan span;
+    const F2cToken *name;
+    const F2cToken *error_token;
+} F2cModuleHeaderSyntax;
+
 F2cUnitHeaderParseStatus f2c_parse_unit_header_syntax(const Line *line,
                                                       F2cUnitHeaderSyntax *syntax);
 void f2c_unit_header_syntax_discard(F2cUnitHeaderSyntax *syntax);
 F2cUnitEndParseStatus f2c_parse_unit_end_syntax(const Line *line, F2cUnitEndSyntax *syntax);
+F2cModuleHeaderParseStatus f2c_parse_module_header_syntax(const Line *line,
+                                                          F2cModuleHeaderSyntax *syntax);
 
 #endif
