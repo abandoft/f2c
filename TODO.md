@@ -28,7 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建基线已经建立；本轮普通与 ASan/UBSan 严格 CTest 均为 33/33，架构边界检查作为独立测试运行。
+  构建基线已经建立；本轮普通与 ASan/UBSan 严格 CTest 均为 35/35，架构边界检查作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -67,8 +67,11 @@
   `RETURN`、普通赋值和指针赋值现同样直接从 canonical token range 构建 AST；关键字实参、分配
   类型说明、停止码及赋值两端均保留精确物理 span。`f2c_identifier`、全部 `f2c_split_*`、
   `f2c_starts_word`、整数文本求值器和表达式文本查询包装器已经从生产代码删除；架构测试禁止在
-  parser 之外重新调用原始文本表达式入口，也禁止恢复这些旧解析器。该任务仍因程序单元、部分
-  声明/属性和其他旧式规格语句中的手写文本扫描尚未全部迁移而保持未关闭。
+  parser 之外重新调用原始文本表达式入口，也禁止恢复这些旧解析器。`PROGRAM`、`SUBROUTINE`、
+  `FUNCTION` 和 `MODULE` 头、前缀、哑实参、`RESULT`、`PROCEDURE(interface)` 声明及程序单元
+  终止语句现均先建立结构化语法 AST，再降级到语义模型；开闭类型与名称会在生成前校验，续行
+  token 和错误 token 的精确物理 span 已有回归，架构门禁禁止恢复旧式头部和终止谓词。该任务仍因
+  `USE`、部分声明/属性和其他旧式规格语句中的手写扫描尚未全部迁移而保持未关闭。
   源码归一化层的注释识别、分号拆句和代码大小写处理已经
   改为消费 canonical token，不会在 token 化之前破坏字符或 Hollerith 载荷。
 - [x] 只保留 `frontend/token.h` 定义的 `F2cToken/F2cTokenStream`。表达式 AST 已删除独立的
@@ -156,9 +159,13 @@
 - [ ] 将声明语法解析与符号/语义分析彻底分离，统一检查重复或冲突的类型、属性、初始化、
   `SAVE`、`PARAMETER`、`TARGET`、`POINTER`、`ALLOCATABLE`、`EXTERNAL` 和 `INTRINSIC`。当前
   `declaration/type.c`、`entity.c`、`dimension.c` 已承担 token 语法解析，重复属性、重复 shape、
-  冲突类型和非法指针初始化会硬失败；仍需把所有属性组合和跨声明一致性集中到独立语义阶段。
+  冲突类型和非法指针初始化会硬失败；`PROCEDURE(interface)` 的接口、属性和实体列表也已使用独立
+  语法 AST，并在降级阶段执行接口绑定和属性语义检查。仍需把所有属性组合和跨声明一致性集中到
+  独立语义阶段。
 - [ ] 补齐 `PROGRAM`、`MODULE`、`BLOCK DATA`、`SUBROUTINE`、`FUNCTION`、`ENTRY`、内部过程
-  和任意层宿主关联；验证 `RECURSIVE`、`PURE`、`ELEMENTAL` 等过程属性。用户定义
+  和任意层宿主关联；验证 `RECURSIVE`、`PURE`、`ELEMENTAL` 等过程属性。现有程序单元与模块的
+  头部、名称、过程前缀、哑实参、函数结果及终止语句已保存精确范围，并验证开闭类型和名称；模块
+  扫描不会再把内部过程终止语句误当作模块终止。用户定义
   `ELEMENTAL` 函数和子程序现已在 typed IR 上保存具体过程绑定，并检查标量哑实参、`INTENT`、
   禁止的 `ALLOCATABLE/POINTER` 属性、标量函数结果、显式接口属性一致性以及数组实参逐维合形；
   数组实际参数会把 rank、动态 extent 和 shape 传播到函数结果，标量实参按元素广播。代码生成
