@@ -431,12 +431,40 @@ int main(void) {
            "labeled FORMAT owns a canonical-token-derived descriptor AST");
     f2c_statement_free(&statement);
 
+    expect(f2c_parse_statement(&unit,
+                               "99999 format(/' Test of subprogram number',I3,12X,A6)", 23U,
+                               &statement),
+           "labeled FORMAT beginning with a record descriptor parses");
+    expect(statement.kind == F2C_STMT_FORMAT && statement.format_syntax_valid &&
+               statement.format != NULL && statement.format->root.child_count == 5U &&
+               statement.format->root.children[0].kind == F2C_FORMAT_RECORD &&
+               statement.format->root.children[3].kind == F2C_FORMAT_SPACE,
+           "FORMAT context distinguishes a leading record descriptor from array syntax");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "99998 format(/1X/)", 23U, &statement),
+           "FORMAT parses leading and trailing record descriptors without token ambiguity");
+    expect(statement.kind == F2C_STMT_FORMAT && statement.format_syntax_valid &&
+               statement.format != NULL && statement.format->root.child_count == 3U &&
+               statement.format->root.children[0].kind == F2C_FORMAT_RECORD &&
+               statement.format->root.children[2].kind == F2C_FORMAT_RECORD,
+           "FORMAT-specific grammar owns slash-parenthesis interpretation");
+    f2c_statement_free(&statement);
+
     expect(f2c_parse_statement(&unit, "110 format(I)", 23U, &statement),
            "malformed labeled FORMAT remains representable");
     expect(statement.kind == F2C_STMT_FORMAT && !statement.format_syntax_valid &&
                statement.format == NULL &&
                statement.format_error.code == F2C_FORMAT_ERROR_INVALID_DESCRIPTOR_FIELD,
            "malformed FORMAT retains a structured syntax error for semantic diagnostics");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "120 format", 23U, &statement),
+           "missing labeled FORMAT body remains representable");
+    expect(statement.kind == F2C_STMT_FORMAT && !statement.format_syntax_valid &&
+               statement.format == NULL &&
+               statement.format_error.code == F2C_FORMAT_ERROR_EXPECTED_LEFT_PARENTHESIS,
+           "missing FORMAT bodies retain a non-success structured syntax error");
     f2c_statement_free(&statement);
 
     expect(f2c_parse_statement(&unit, "write(*,*) (work(n, 1), n=1, 2)", 24U, &statement),

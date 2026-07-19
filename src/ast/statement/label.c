@@ -10,7 +10,6 @@ void f2c_statement_parse_label(Unit *unit, const Line *line, F2cStatement *state
     F2cTokenRange tail;
     F2cSourceSpan format_span = {0};
     char *text;
-    size_t close;
     if (line == NULL || line->token_count == 0U || line->tokens[0].kind != F2C_TOKEN_NUMBER) {
         statement->kind = F2C_STMT_INVALID;
         return;
@@ -23,10 +22,11 @@ void f2c_statement_parse_label(Unit *unit, const Line *line, F2cStatement *state
     if (line->tokens[1].kind == F2C_TOKEN_IDENTIFIER &&
         f2c_token_equals(&line->tokens[1], "format")) {
         statement->kind = F2C_STMT_FORMAT;
-        if (line->token_count < 4U || line->tokens[2].kind != F2C_TOKEN_LEFT_PAREN ||
-            !f2c_token_matching_delimiter(line->tokens, line->token_count, 2U, &close) ||
-            close + 1U != line->token_count)
+        if (line->token_count < 3U) {
+            statement->format_span = line->tokens[1].span;
+            statement->format_error.code = F2C_FORMAT_ERROR_EXPECTED_LEFT_PARENTHESIS;
             return;
+        }
         tail = f2c_line_token_range(line, 2U, line->token_count);
         format_span.begin = tail.tokens[0].span.begin;
         format_span.end = tail.tokens[tail.count - 1U].span.end;
