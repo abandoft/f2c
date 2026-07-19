@@ -212,8 +212,8 @@ F2cDerivedType *f2c_find_derived_type(Unit *unit, const char *name) {
             return &unit->derived_types[i];
     }
     for (i = 0U; i < unit->imported_derived_type_count; ++i) {
-        if (strcmp(unit->imported_derived_types[i]->name, name) == 0)
-            return unit->imported_derived_types[i];
+        if (strcmp(unit->imported_derived_types[i].local_name, name) == 0)
+            return unit->imported_derived_types[i].type;
     }
     return NULL;
 }
