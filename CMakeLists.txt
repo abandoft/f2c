@@ -226,7 +226,9 @@ set(
     src/semantic/validation/data.c
     src/semantic/validation/expression.c
     src/semantic/validation/io.c
-    src/semantic/validation/intrinsic.c
+    src/semantic/validation/intrinsic/arguments.c
+    src/semantic/validation/intrinsic/arguments.h
+    src/semantic/validation/intrinsic/bit.c
     src/semantic/validation/lifetime.c
     src/semantic/validation/private.h
     src/semantic/validation/procedure.c
