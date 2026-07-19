@@ -58,6 +58,19 @@ static void expect_not_contains(const char *text, const char *needle, const char
     expect(text == NULL || strstr(text, needle) == NULL, message);
 }
 
+static size_t count_occurrences(const char *text, const char *needle) {
+    size_t count = 0U;
+    size_t needle_length;
+    if (text == NULL || needle == NULL || needle[0] == '\0')
+        return 0U;
+    needle_length = strlen(needle);
+    while ((text = strstr(text, needle)) != NULL) {
+        ++count;
+        text += needle_length;
+    }
+    return count;
+}
+
 static void test_version_contract(void) {
     char macro_version[32];
     const int written = snprintf(macro_version, sizeof(macro_version), "%d.%d.%d",
@@ -3274,6 +3287,422 @@ static void test_tokenized_use_association(void) {
     }
 }
 
+static void test_module_accessibility_semantics(void) {
+    static const char provider[] = "module access_provider\n"
+                                   "  implicit none\n"
+                                   "  private\n"
+                                   "  public :: visible_proc\n"
+                                   "  integer, parameter, public :: exposed = 7\n"
+                                   "  integer, parameter :: hidden = 11\n"
+                                   "  type, public :: public_record\n"
+                                   "    integer :: value\n"
+                                   "  end type public_record\n"
+                                   "  type :: hidden_record\n"
+                                   "    integer :: value\n"
+                                   "  end type hidden_record\n"
+                                   "contains\n"
+                                   "  integer function visible_proc(value)\n"
+                                   "    integer, intent(in) :: value\n"
+                                   "    visible_proc = value + 1\n"
+                                   "  end function visible_proc\n"
+                                   "  integer function hidden_proc(value)\n"
+                                   "    integer, intent(in) :: value\n"
+                                   "    hidden_proc = value - 1\n"
+                                   "  end function hidden_proc\n"
+                                   "end module access_provider\n";
+    static const char public_consumer[] =
+        "subroutine public_consumer(result)\n"
+        "  use access_provider, only: exposed, public_record, visible_proc\n"
+        "  implicit none\n"
+        "  integer, intent(out) :: result\n"
+        "  type(public_record) :: item\n"
+        "  item%value = exposed\n"
+        "  result = visible_proc(item%value)\n"
+        "end subroutine public_consumer\n";
+    static const char hidden_entity_consumer[] = "subroutine hidden_entity_consumer(result)\n"
+                                                 "  use access_provider, only: hidden\n"
+                                                 "  integer, intent(out) :: result\n"
+                                                 "  result = hidden\n"
+                                                 "end subroutine hidden_entity_consumer\n";
+    static const char hidden_type_consumer[] = "subroutine hidden_type_consumer()\n"
+                                               "  use access_provider, only: hidden_record\n"
+                                               "  type(hidden_record) :: item\n"
+                                               "end subroutine hidden_type_consumer\n";
+    static const char hidden_procedure_consumer[] = "subroutine hidden_procedure_consumer(result)\n"
+                                                    "  use access_provider, only: hidden_proc\n"
+                                                    "  integer, intent(out) :: result\n"
+                                                    "  result = hidden_proc(3)\n"
+                                                    "end subroutine hidden_procedure_consumer\n";
+    static const char no_only_consumer[] = "subroutine no_only_consumer(result)\n"
+                                           "  use access_provider\n"
+                                           "  implicit none\n"
+                                           "  integer, intent(out) :: result\n"
+                                           "  integer :: hidden\n"
+                                           "  hidden = 4\n"
+                                           "  result = visible_proc(exposed) + hidden\n"
+                                           "end subroutine no_only_consumer\n";
+    F2cInput inputs[] = {
+        {provider, sizeof(provider) - 1U, {"access_provider.f90", F2C_SOURCE_FREE, 0}},
+        {public_consumer,
+         sizeof(public_consumer) - 1U,
+         {"public_consumer.f90", F2C_SOURCE_FREE, 0}},
+    };
+    F2cResult result = f2c_transpile_project(inputs, 2U);
+    expect(result.error_count == 0U,
+           "a default-private module exports explicit public entities, types, and procedures");
+    expect_contains(result.code, "f2c_type_access_provider_public_record",
+                    "a public derived type retains its provider C17 identity");
+    expect_contains(result.code, "f2c_module_access_provider_visible_proc",
+                    "a public module procedure is callable through USE association");
+    expect(count_occurrences(result.code, "f2c_module_access_provider_hidden =") == 1U,
+           "a private module constant retains exactly one provider-owned definition");
+    f2c_result_free(&result);
+
+    inputs[1].source = no_only_consumer;
+    inputs[1].length = sizeof(no_only_consumer) - 1U;
+    inputs[1].options.source_name = "no_only_consumer.f90";
+    result = f2c_transpile_project(inputs, 2U);
+    expect(result.error_count == 0U,
+           "USE without ONLY imports public names while leaving private names available locally");
+    expect_contains(result.code, "hidden = 4",
+                    "a consumer may declare a local entity with a provider's private name");
+    f2c_result_free(&result);
+
+    inputs[1].source = hidden_entity_consumer;
+    inputs[1].length = sizeof(hidden_entity_consumer) - 1U;
+    inputs[1].options.source_name = "hidden_entity_consumer.f90";
+    result = f2c_transpile_project(inputs, 2U);
+    expect(result.code == NULL && result.error_count != 0U,
+           "an explicit ONLY import cannot bypass default PRIVATE accessibility");
+    expect_contains(result.diagnostics, "module entity 'hidden' is PRIVATE",
+                    "private entity imports report the inaccessible remote name");
+    f2c_result_free(&result);
+
+    inputs[1].source = hidden_type_consumer;
+    inputs[1].length = sizeof(hidden_type_consumer) - 1U;
+    inputs[1].options.source_name = "hidden_type_consumer.f90";
+    result = f2c_transpile_project(inputs, 2U);
+    expect(result.code == NULL && result.error_count != 0U,
+           "an explicit ONLY import cannot bypass derived-type privacy");
+    expect_contains(result.diagnostics, "derived type 'hidden_record' is PRIVATE",
+                    "private type imports produce a type-specific diagnostic");
+    f2c_result_free(&result);
+
+    inputs[1].source = hidden_procedure_consumer;
+    inputs[1].length = sizeof(hidden_procedure_consumer) - 1U;
+    inputs[1].options.source_name = "hidden_procedure_consumer.f90";
+    result = f2c_transpile_project(inputs, 2U);
+    expect(result.code == NULL && result.error_count != 0U,
+           "an explicit ONLY import cannot bypass module-procedure privacy");
+    expect_contains(result.diagnostics, "module procedure 'hidden_proc' is PRIVATE",
+                    "private procedure imports produce a procedure-specific diagnostic");
+    f2c_result_free(&result);
+
+    {
+        static const char named_private_provider[] = "module named_private_provider\n"
+                                                     "  private :: hidden\n"
+                                                     "  integer :: visible = 5\n"
+                                                     "  integer :: hidden = 2\n"
+                                                     "  type, private :: hidden_type\n"
+                                                     "    integer :: value\n"
+                                                     "  end type hidden_type\n"
+                                                     "end module named_private_provider\n";
+        static const char named_private_consumer[] = "subroutine named_private_consumer(result)\n"
+                                                     "  use named_private_provider\n"
+                                                     "  integer, intent(out) :: result\n"
+                                                     "  integer :: hidden\n"
+                                                     "  hidden = 3\n"
+                                                     "  result = visible + hidden\n"
+                                                     "end subroutine named_private_consumer\n";
+        static const char hidden_type_import[] = "subroutine hidden_type_import()\n"
+                                                 "  use named_private_provider, only: hidden_type\n"
+                                                 "  type(hidden_type) :: value\n"
+                                                 "end subroutine hidden_type_import\n";
+        F2cInput named_inputs[] = {
+            {named_private_provider,
+             sizeof(named_private_provider) - 1U,
+             {"named_private_provider.f90", F2C_SOURCE_FREE, 0}},
+            {named_private_consumer,
+             sizeof(named_private_consumer) - 1U,
+             {"named_private_consumer.f90", F2C_SOURCE_FREE, 0}},
+        };
+        result = f2c_transpile_project(named_inputs, 2U);
+        expect(result.error_count == 0U,
+               "a named PRIVATE statement overrides default PUBLIC module accessibility");
+        expect_contains(result.code, "f2c_module_named_private_provider_visible",
+                        "default PUBLIC entities remain visible through an unrestricted USE");
+        f2c_result_free(&result);
+
+        named_inputs[1].source = hidden_type_import;
+        named_inputs[1].length = sizeof(hidden_type_import) - 1U;
+        named_inputs[1].options.source_name = "hidden_type_import.f90";
+        result = f2c_transpile_project(named_inputs, 2U);
+        expect(result.code == NULL && result.error_count != 0U,
+               "a PRIVATE derived-type attribute overrides default PUBLIC accessibility");
+        expect_contains(result.diagnostics, "derived type 'hidden_type' is PRIVATE",
+                        "derived-type access attributes participate in USE visibility checks");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char private_attribute_provider[] = "module private_attribute_provider\n"
+                                                         "  integer, private :: hidden = 2\n"
+                                                         "  integer :: visible = 5\n"
+                                                         "end module private_attribute_provider\n";
+        static const char private_attribute_consumer[] =
+            "subroutine private_attribute_consumer(result)\n"
+            "  use private_attribute_provider, only: hidden\n"
+            "  integer, intent(out) :: result\n"
+            "  result = hidden\n"
+            "end subroutine private_attribute_consumer\n";
+        F2cInput attribute_inputs[] = {
+            {private_attribute_provider,
+             sizeof(private_attribute_provider) - 1U,
+             {"private_attribute_provider.f90", F2C_SOURCE_FREE, 0}},
+            {private_attribute_consumer,
+             sizeof(private_attribute_consumer) - 1U,
+             {"private_attribute_consumer.f90", F2C_SOURCE_FREE, 0}},
+        };
+        result = f2c_transpile_project(attribute_inputs, 2U);
+        expect(result.code == NULL && result.error_count != 0U,
+               "a PRIVATE entity attribute overrides the module's default PUBLIC access");
+        expect_contains(result.diagnostics, "module entity 'hidden' is PRIVATE",
+                        "entity access attributes participate in USE visibility checks");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char procedure_entity_provider[] =
+            "module procedure_entity_provider\n"
+            "  implicit none\n"
+            "  abstract interface\n"
+            "    integer function operation(value)\n"
+            "      integer, intent(in) :: value\n"
+            "    end function operation\n"
+            "  end interface\n"
+            "  procedure(operation), public :: public_callback\n"
+            "  procedure(operation), private :: private_callback\n"
+            "end module procedure_entity_provider\n";
+        static const char public_procedure_entity_consumer[] =
+            "subroutine public_procedure_entity_consumer()\n"
+            "  use procedure_entity_provider, only: public_callback\n"
+            "end subroutine public_procedure_entity_consumer\n";
+        static const char private_procedure_entity_consumer[] =
+            "subroutine private_procedure_entity_consumer()\n"
+            "  use procedure_entity_provider, only: private_callback\n"
+            "end subroutine private_procedure_entity_consumer\n";
+        F2cInput procedure_inputs[] = {
+            {procedure_entity_provider,
+             sizeof(procedure_entity_provider) - 1U,
+             {"procedure_entity_provider.f90", F2C_SOURCE_FREE, 0}},
+            {public_procedure_entity_consumer,
+             sizeof(public_procedure_entity_consumer) - 1U,
+             {"public_procedure_entity_consumer.f90", F2C_SOURCE_FREE, 0}},
+        };
+        result = f2c_transpile_project(procedure_inputs, 2U);
+        expect(result.error_count == 0U,
+               "a PUBLIC PROCEDURE entity attribute exposes its explicit interface");
+        f2c_result_free(&result);
+
+        procedure_inputs[1].source = private_procedure_entity_consumer;
+        procedure_inputs[1].length = sizeof(private_procedure_entity_consumer) - 1U;
+        procedure_inputs[1].options.source_name = "private_procedure_entity_consumer.f90";
+        result = f2c_transpile_project(procedure_inputs, 2U);
+        expect(result.code == NULL && result.error_count != 0U,
+               "a PRIVATE PROCEDURE entity attribute blocks explicit USE association");
+        expect_contains(result.diagnostics, "module entity 'private_callback' is PRIVATE",
+                        "PROCEDURE entity accessibility participates in module visibility");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char storage_provider[] = "module storage_provider\n"
+                                               "  integer :: state = 3\n"
+                                               "end module storage_provider\n";
+        static const char storage_wrapper[] = "module storage_wrapper\n"
+                                              "  use storage_provider, only: state\n"
+                                              "  private\n"
+                                              "  public :: state\n"
+                                              "end module storage_wrapper\n";
+        static const char storage_consumer[] = "subroutine storage_consumer(result)\n"
+                                               "  use storage_provider, only: state\n"
+                                               "  use storage_wrapper, only: state\n"
+                                               "  integer, intent(out) :: result\n"
+                                               "  state = state + 1\n"
+                                               "  result = state\n"
+                                               "end subroutine storage_consumer\n";
+        F2cInput storage_inputs[] = {
+            {storage_consumer,
+             sizeof(storage_consumer) - 1U,
+             {"storage_consumer.f90", F2C_SOURCE_FREE, 0}},
+            {storage_wrapper,
+             sizeof(storage_wrapper) - 1U,
+             {"storage_wrapper.f90", F2C_SOURCE_FREE, 0}},
+            {storage_provider,
+             sizeof(storage_provider) - 1U,
+             {"storage_provider.f90", F2C_SOURCE_FREE, 0}},
+        };
+        result = f2c_transpile_project(storage_inputs, 3U);
+        expect(result.error_count == 0U,
+               "the same ultimate entity may arrive through direct and re-exported USE paths");
+        expect_contains(result.code, "f2c_module_storage_provider_state",
+                        "re-exported state retains its defining module's storage identity");
+        expect_not_contains(result.code, "f2c_module_storage_wrapper_state",
+                            "re-exporting a USE-associated entity never emits duplicate storage");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char first_provider[] = "module first_conflict_provider\n"
+                                             "  integer :: shared = 1\n"
+                                             "end module first_conflict_provider\n";
+        static const char second_provider[] = "module second_conflict_provider\n"
+                                              "  integer :: shared = 2\n"
+                                              "end module second_conflict_provider\n";
+        static const char conflict_consumer[] = "subroutine conflict_consumer(result)\n"
+                                                "  use first_conflict_provider\n"
+                                                "  use second_conflict_provider\n"
+                                                "  integer, intent(out) :: result\n"
+                                                "  result = shared\n"
+                                                "end subroutine conflict_consumer\n";
+        F2cInput conflict_inputs[] = {
+            {first_provider,
+             sizeof(first_provider) - 1U,
+             {"first_conflict_provider.f90", F2C_SOURCE_FREE, 0}},
+            {second_provider,
+             sizeof(second_provider) - 1U,
+             {"second_conflict_provider.f90", F2C_SOURCE_FREE, 0}},
+            {conflict_consumer,
+             sizeof(conflict_consumer) - 1U,
+             {"conflict_consumer.f90", F2C_SOURCE_FREE, 0}},
+        };
+        result = f2c_transpile_project(conflict_inputs, 3U);
+        expect(result.code == NULL && result.error_count != 0U,
+               "different USE-associated entities cannot silently overwrite one local name");
+        expect_contains(result.diagnostics, "conflicting entity name 'shared'",
+                        "ambiguous unrestricted USE association reports the colliding local name");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char keyword_entities[] = "subroutine access_named_entities(result)\n"
+                                               "  integer, intent(out) :: result\n"
+                                               "  integer :: public, private\n"
+                                               "  public = 2\n"
+                                               "  private = 3\n"
+                                               "  result = public + private\n"
+                                               "end subroutine access_named_entities\n";
+        F2cOptions options = {"access_named_entities.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(keyword_entities, sizeof(keyword_entities) - 1U, &options);
+        expect(result.error_count == 0U,
+               "PUBLIC and PRIVATE remain valid nonreserved ordinary entity names");
+        expect_contains(result.code, "public = 2",
+                        "a PUBLIC-named assignment is not consumed as an access statement");
+        expect_contains(result.code, "private = 3",
+                        "a PRIVATE-named assignment remains an ordinary C assignment");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char duplicate_default[] = "module duplicate_default\n"
+                                                "  private\n"
+                                                "  public\n"
+                                                "end module duplicate_default\n";
+        F2cOptions options = {"duplicate_default.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(duplicate_default, sizeof(duplicate_default) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "a module cannot specify default accessibility more than once");
+        expect_contains(result.diagnostics, "default accessibility is specified more than once",
+                        "duplicate module defaults produce an actionable semantic diagnostic");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char duplicate_entity_access[] = "module duplicate_entity_access\n"
+                                                      "  integer, public :: value\n"
+                                                      "  private :: value\n"
+                                                      "end module duplicate_entity_access\n";
+        F2cOptions options = {"duplicate_entity_access.f90", F2C_SOURCE_FREE, 0};
+        result =
+            f2c_transpile(duplicate_entity_access, sizeof(duplicate_entity_access) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "entity accessibility cannot be specified by both an attribute and a statement");
+        expect_contains(result.diagnostics, "accessibility of 'value' is specified more than once",
+                        "duplicate entity accessibility is diagnosed after name resolution");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char invalid_scope[] = "subroutine invalid_access_scope(value)\n"
+                                            "  integer, public :: value\n"
+                                            "end subroutine invalid_access_scope\n";
+        F2cOptions options = {"invalid_access_scope.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(invalid_scope, sizeof(invalid_scope) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "PUBLIC and PRIVATE declaration attributes are rejected outside modules");
+        expect_contains(result.diagnostics, "declaration attributes are valid only in a module",
+                        "invalid access-attribute scopes are diagnosed at the attribute");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char invalid_statement_scope[] =
+            "subroutine invalid_access_statement_scope()\n"
+            "  private\n"
+            "end subroutine invalid_access_statement_scope\n";
+        F2cOptions options = {"invalid_access_statement_scope.f90", F2C_SOURCE_FREE, 0};
+        result =
+            f2c_transpile(invalid_statement_scope, sizeof(invalid_statement_scope) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "standalone access statements are rejected outside modules");
+        expect_contains(result.diagnostics, "access statements are valid only in a module",
+                        "invalid access-statement scopes produce an explicit semantic diagnostic");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char late_access[] = "subroutine late_access()\n"
+                                          "  integer :: value\n"
+                                          "  value = 1\n"
+                                          "  public :: value\n"
+                                          "end subroutine late_access\n";
+        F2cOptions options = {"late_access.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(late_access, sizeof(late_access) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "access statements cannot appear after executable statements");
+        expect_contains(result.diagnostics, "must appear in the specification part",
+                        "late access statements are rejected at their canonical AST node");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char unknown_access[] = "module unknown_access\n"
+                                             "  public :: missing\n"
+                                             "end module unknown_access\n";
+        F2cOptions options = {"unknown_access.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(unknown_access, sizeof(unknown_access) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "module access identifiers must resolve to declared entities");
+        expect_contains(result.diagnostics, "is not declared in module 'unknown_access'",
+                        "unresolved access identifiers produce a module-qualified diagnostic");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char conflicting_attributes[] = "module conflicting_access_attributes\n"
+                                                     "  integer, public, private :: value\n"
+                                                     "end module conflicting_access_attributes\n";
+        F2cOptions options = {"conflicting_access_attributes.f90", F2C_SOURCE_FREE, 0};
+        result =
+            f2c_transpile(conflicting_attributes, sizeof(conflicting_attributes) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "an entity cannot carry conflicting access attributes");
+        expect_contains(result.diagnostics, "both PUBLIC and PRIVATE attributes",
+                        "conflicting entity accessibility is rejected during declaration lowering");
+        f2c_result_free(&result);
+    }
+}
+
 static void test_derived_type_use_association(void) {
     static const char dependent[] = "module type_consumer\n"
                                     "  use type_provider, only: alias => original\n"
@@ -3456,6 +3885,7 @@ int main(void) {
     test_token_driven_scope_and_reference_boundaries();
     test_statement_function_typed_lowering();
     test_tokenized_use_association();
+    test_module_accessibility_semantics();
     test_derived_type_use_association();
     test_malformed_character_prefix_cleanup();
     test_implicit_mapping_semantics();
