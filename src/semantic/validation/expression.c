@@ -1,5 +1,7 @@
 #include "semantic/validation/private.h"
 
+#include "ast/declaration/designator.h"
+
 #include <ctype.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -418,11 +420,120 @@ static void validate_structure_constructor(Context *context, size_t line,
     free(assigned);
 }
 
+static void apply_function_result(F2cExpr *expression, Unit *definition) {
+    Symbol *result;
+    const F2cExpr *array_argument = NULL;
+    size_t argument;
+    if (expression == NULL || definition == NULL || definition->kind != UNIT_FUNCTION)
+        return;
+    result = definition->result_name != NULL ? f2c_find_symbol(definition, definition->result_name)
+                                             : NULL;
+    expression->type = definition->return_type;
+    expression->type_kind = definition->return_kind;
+    expression->derived_type = result != NULL ? result->derived_type : NULL;
+    expression->rank = result != NULL ? result->rank : 0U;
+    if (result != NULL)
+        expression->shape = result->shape;
+    if (!definition->elemental)
+        return;
+    for (argument = 0U; argument < expression->child_count; ++argument) {
+        const F2cExpr *value = f2c_validation_actual_value(expression->children[argument]);
+        if (value != NULL && value->kind != F2C_EXPR_ABSENT_ARGUMENT && value->rank != 0U) {
+            array_argument = value;
+            break;
+        }
+    }
+    if (array_argument != NULL) {
+        expression->rank = array_argument->rank;
+        expression->shape = array_argument->shape;
+        expression->shape.kind = F2C_SHAPE_EXPRESSION;
+    } else {
+        expression->rank = 0U;
+        memset(&expression->shape, 0, sizeof(expression->shape));
+        expression->shape.kind = F2C_SHAPE_SCALAR;
+    }
+}
+
+static void bind_specific_expression(Unit *unit, F2cExpr *expression, Unit *definition) {
+    char *resolved;
+    Symbol *resolved_symbol;
+    if (unit == NULL || expression == NULL || definition == NULL || definition->name == NULL ||
+        definition->interface_abstract ||
+        (expression->text != NULL && strcmp(expression->text, definition->name) == 0))
+        return;
+    resolved = f2c_strdup(definition->name);
+    if (resolved == NULL)
+        return;
+    resolved_symbol = f2c_find_symbol(unit, definition->name);
+    free(expression->text);
+    expression->text = resolved;
+    if (resolved_symbol != NULL) {
+        expression->symbol = resolved_symbol;
+    } else if (expression->symbol != NULL &&
+               strcmp(f2c_symbol_c_name(unit, expression->symbol), definition->name) != 0) {
+        expression->symbol = NULL;
+    }
+}
+
+static int intrinsic_operator_key(const char *key) {
+    static const char *const keys[] = {
+        "operator(+)",    "operator(-)",     "operator(*)",      "operator(/)",
+        "operator(**)",   "operator(//)",    "operator(==)",     "operator(/=)",
+        "operator(<)",    "operator(<=)",    "operator(>)",      "operator(>=)",
+        "operator(.eq.)", "operator(.ne.)",  "operator(.lt.)",   "operator(.le.)",
+        "operator(.gt.)", "operator(.ge.)",  "operator(.not.)",  "operator(.and.)",
+        "operator(.or.)", "operator(.eqv.)", "operator(.neqv.)",
+    };
+    size_t index;
+    for (index = 0U; index < sizeof(keys) / sizeof(keys[0]); ++index) {
+        if (strcmp(key, keys[index]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+static int resolve_operator(Context *context, Unit *unit, size_t line, const char *statement_text,
+                            F2cExpr *expression) {
+    char *generic_name;
+    Unit *definition;
+    int handled = 0;
+    int required;
+    if (expression == NULL || expression->text == NULL ||
+        (expression->kind != F2C_EXPR_UNARY && expression->kind != F2C_EXPR_BINARY))
+        return 0;
+    generic_name = f2c_generic_operator_key(expression->text);
+    if (generic_name == NULL) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &expression->span, 1,
+                                 "out of memory resolving operator generic");
+        return 1;
+    }
+    required = !intrinsic_operator_key(generic_name);
+    definition = f2c_validation_generic_specific(context, unit, line, generic_name,
+                                                 &expression->span, expression->children,
+                                                 expression->child_count, 0, required, &handled);
+    if (definition != NULL) {
+        definition = f2c_validation_procedure_call(
+            context, unit, line, statement_text, generic_name, &expression->span,
+            &expression->children, NULL, &expression->child_count, 0);
+        expression->child_capacity = expression->child_count;
+        expression->resolved_procedure = definition;
+        apply_function_result(expression, definition);
+        bind_specific_expression(unit, expression, definition);
+    }
+    free(generic_name);
+    return handled;
+}
+
 void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                                      const char *statement_text, F2cExpr *expression) {
     size_t i;
+    int operator_handled;
     if (expression == NULL)
         return;
+    for (i = 0U; i < expression->child_count; ++i)
+        f2c_validation_expression_calls(context, unit, line, statement_text,
+                                        expression->children[i]);
+    operator_handled = resolve_operator(context, unit, line, statement_text, expression);
     validate_substring_semantics(context, unit, line, statement_text, expression);
     if (expression->kind == F2C_EXPR_ARRAY_REFERENCE && expression->symbol != NULL) {
         for (i = 0U; i < expression->child_count; ++i) {
@@ -455,7 +566,7 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
     }
     if (expression->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR)
         validate_structure_constructor(context, line, statement_text, expression);
-    if (expression->kind == F2C_EXPR_BINARY && expression->child_count == 2U) {
+    if (!operator_handled && expression->kind == F2C_EXPR_BINARY && expression->child_count == 2U) {
         size_t dimension;
         if (f2c_validation_shapes_mismatch(expression->children[0], expression->children[1],
                                            &dimension)) {
@@ -553,57 +664,9 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
             &expression->children, NULL, &expression->child_count, 0);
         expression->child_capacity = expression->child_count;
         expression->resolved_procedure = definition;
-        if (definition != NULL && definition->kind == UNIT_FUNCTION) {
-            Symbol *result = definition->result_name != NULL
-                                 ? f2c_find_symbol(definition, definition->result_name)
-                                 : NULL;
-            expression->type = definition->return_type;
-            expression->type_kind = definition->return_kind;
-            expression->derived_type = result != NULL ? result->derived_type : NULL;
-            expression->rank = result != NULL ? result->rank : 0U;
-            if (result != NULL)
-                expression->shape = result->shape;
-            if (definition->elemental) {
-                const F2cExpr *array_argument = NULL;
-                for (i = 0U; i < expression->child_count; ++i) {
-                    const F2cExpr *argument = f2c_validation_actual_value(expression->children[i]);
-                    if (argument != NULL && argument->kind != F2C_EXPR_ABSENT_ARGUMENT &&
-                        argument->rank != 0U) {
-                        array_argument = argument;
-                        break;
-                    }
-                }
-                if (array_argument != NULL) {
-                    expression->rank = array_argument->rank;
-                    expression->shape = array_argument->shape;
-                    expression->shape.kind = F2C_SHAPE_EXPRESSION;
-                } else {
-                    expression->rank = 0U;
-                    memset(&expression->shape, 0, sizeof(expression->shape));
-                    expression->shape.kind = F2C_SHAPE_SCALAR;
-                }
-            }
-        }
-        if (definition != NULL && definition->name != NULL && !definition->interface_abstract &&
-            strcmp(expression->text, definition->name) != 0) {
-            char *resolved = f2c_strdup(definition->name);
-            if (resolved != NULL) {
-                Symbol *resolved_symbol = f2c_find_symbol(unit, definition->name);
-                free(expression->text);
-                expression->text = resolved;
-                if (resolved_symbol != NULL) {
-                    expression->symbol = resolved_symbol;
-                } else if (expression->symbol != NULL &&
-                           strcmp(f2c_symbol_c_name(unit, expression->symbol), definition->name) !=
-                               0) {
-                    expression->symbol = NULL;
-                }
-            }
-        }
+        apply_function_result(expression, definition);
+        bind_specific_expression(unit, expression, definition);
     }
-    for (i = 0U; i < expression->child_count; ++i)
-        f2c_validation_expression_calls(context, unit, line, statement_text,
-                                        expression->children[i]);
 }
 
 void f2c_validation_io_item_calls(Context *context, Unit *unit, size_t line,
