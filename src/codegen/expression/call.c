@@ -567,10 +567,22 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
     char **arguments = NULL;
     Type *types = NULL;
     Buffer result = {0};
+    const Unit *resolved = expression->resolved_procedure != NULL &&
+                                   !expression->resolved_procedure->interface_abstract
+                               ? expression->resolved_procedure
+                               : NULL;
+    const Symbol *resolved_result = resolved != NULL && resolved->result_name != NULL
+                                        ? f2c_find_symbol((Unit *)resolved, resolved->result_name)
+                                        : NULL;
     const char *callee =
-        expression->symbol != NULL ? f2c_symbol_c_name(unit, expression->symbol) : expression->text;
+        resolved != NULL && resolved->name != NULL
+            ? resolved->name
+            : (expression->symbol != NULL ? f2c_symbol_c_name(unit, expression->symbol)
+                                          : expression->text);
     const int allocatable_result =
-        expression->symbol != NULL && expression->symbol->external_result_allocatable;
+        resolved_result != NULL
+            ? resolved_result->allocatable
+            : (expression->symbol != NULL && expression->symbol->external_result_allocatable);
     size_t i;
     if (expression->symbol != NULL && expression->symbol->type_bound)
         return emit_type_bound_call(unit, expression, supported);
@@ -869,9 +881,16 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         f2c_buffer_printf(&result, "%s(", callee != NULL ? callee : "");
     }
     for (i = 0U; i < expression->child_count; ++i) {
-        char *actual = expression->symbol != NULL &&
-                               i < expression->symbol->external_parameter_count &&
-                               expression->symbol->external_parameter_descriptor[i]
+        const Symbol *resolved_dummy =
+            resolved != NULL && i < resolved->argument_count
+                ? f2c_find_symbol((Unit *)resolved, resolved->arguments[i])
+                : NULL;
+        const int descriptor =
+            resolved_dummy != NULL
+                ? f2c_symbol_uses_descriptor(resolved_dummy)
+                : (expression->symbol != NULL && i < expression->symbol->external_parameter_count &&
+                   expression->symbol->external_parameter_descriptor[i]);
+        char *actual = descriptor
                            ? emit_descriptor_actual(unit, expression->children[i], supported)
                            : emit_external_actual(unit, expression->children[i], arguments[i]);
         char *bridged;

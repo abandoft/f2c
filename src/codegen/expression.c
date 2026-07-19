@@ -205,6 +205,9 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
     }
     if (expression->lowered_c != NULL)
         return f2c_strdup(expression->lowered_c);
+    if (expression->resolved_procedure != NULL &&
+        (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY))
+        return f2c_expression_call(unit, expression, supported);
     switch (expression->kind) {
     case F2C_EXPR_INTEGER_LITERAL:
         if (expression->text != NULL &&
