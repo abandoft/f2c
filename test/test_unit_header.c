@@ -188,12 +188,36 @@ static void test_unit_end_ast(void) {
     parsed_line_discard(&parsed);
 }
 
+static void test_module_header_ast(void) {
+    ParsedLine parsed;
+    F2cModuleHeaderSyntax syntax;
+    expect(parsed_line_init(&parsed, "120 module numerics"), "labeled module header tokenizes");
+    expect(f2c_parse_module_header_syntax(&parsed.line, &syntax) == F2C_MODULE_HEADER_PARSED &&
+               syntax.name != NULL && f2c_token_equals(syntax.name, "numerics") &&
+               syntax.span.begin.column == 5U && syntax.span.end.column == 20U,
+           "module header AST retains its exact name and statement span");
+    parsed_line_discard(&parsed);
+
+    expect(parsed_line_init(&parsed, "module procedure solve"),
+           "MODULE PROCEDURE statement tokenizes");
+    expect(f2c_parse_module_header_syntax(&parsed.line, &syntax) == F2C_MODULE_HEADER_NOT_MATCHED,
+           "MODULE PROCEDURE is not mistaken for a module header");
+    parsed_line_discard(&parsed);
+
+    expect(parsed_line_init(&parsed, "module numerics junk"), "invalid module header tokenizes");
+    expect(f2c_parse_module_header_syntax(&parsed.line, &syntax) == F2C_MODULE_HEADER_INVALID &&
+               syntax.error_token != NULL && f2c_token_equals(syntax.error_token, "junk"),
+           "module header AST rejects trailing syntax at the first unconsumed token");
+    parsed_line_discard(&parsed);
+}
+
 int main(void) {
     test_function_header_ast();
     test_header_lowering();
     test_legacy_alternate_return_ast();
     test_invalid_headers();
     test_unit_end_ast();
+    test_module_header_ast();
     if (failures != 0) {
         fprintf(stderr, "%d unit-header test(s) failed\n", failures);
         return 1;

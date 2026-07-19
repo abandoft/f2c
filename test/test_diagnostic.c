@@ -217,6 +217,21 @@ static void test_module_end_name_span(void) {
     f2c_result_free(&result);
 }
 
+static void test_module_header_span(void) {
+    static const char source[] = "module alpha junk\n"
+                                 "end module alpha\n";
+    DiagnosticCapture capture = {.needle = "MODULE statement requires exactly one valid name"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "malformed module header suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SYNTAX,
+           "malformed module header emits one typed syntax diagnostic");
+    expect(capture.begin.line == 1U && capture.begin.column == 14U && capture.end.line == 1U &&
+               capture.end.column == 18U,
+           "module-header diagnostics use the first unconsumed token span");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_keyword_association_span();
     test_call_designator_span();
@@ -227,6 +242,7 @@ int main(void) {
     test_unit_end_name_span();
     test_unit_end_kind_span();
     test_module_end_name_span();
+    test_module_header_span();
     if (failures != 0) {
         fprintf(stderr, "%d diagnostic span test(s) failed\n", failures);
         return 1;
