@@ -283,6 +283,62 @@ static Unit *find_generic_specific(Unit *host, const char *generic_name,
     return NULL;
 }
 
+static void validate_special_generic_specific(Context *context, Unit *procedure,
+                                              size_t diagnostic_line) {
+    const char *generic = procedure->interface_generic_name;
+    size_t argument;
+    if (generic == NULL)
+        return;
+    if (strncmp(generic, "operator(", strlen("operator(")) == 0) {
+        if (procedure->kind != UNIT_FUNCTION || procedure->argument_count < 1U ||
+            procedure->argument_count > 2U) {
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &procedure->name_span, 1,
+                "specific procedure '%s' for '%s' must be a function with one or two dummy "
+                "arguments",
+                interface_specific_name(procedure), generic);
+            return;
+        }
+        for (argument = 0U; argument < procedure->argument_count; ++argument) {
+            Symbol *dummy = f2c_find_symbol(procedure, procedure->arguments[argument]);
+            if (dummy == NULL || dummy->intent != F2C_INTENT_IN || dummy->optional) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, &procedure->name_span, 1,
+                    "dummy argument %zu of operator specific '%s' must be non-OPTIONAL with "
+                    "INTENT(IN)",
+                    argument + 1U, interface_specific_name(procedure));
+            }
+        }
+    } else if (strcmp(generic, "assignment(=)") == 0) {
+        Symbol *left;
+        Symbol *right;
+        if (procedure->kind != UNIT_SUBROUTINE || procedure->argument_count != 2U) {
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &procedure->name_span, 1,
+                "specific procedure '%s' for defined assignment must be a subroutine with two "
+                "dummy arguments",
+                interface_specific_name(procedure));
+            return;
+        }
+        left = f2c_find_symbol(procedure, procedure->arguments[0]);
+        right = f2c_find_symbol(procedure, procedure->arguments[1]);
+        if (left == NULL || (left->intent != F2C_INTENT_OUT && left->intent != F2C_INTENT_INOUT) ||
+            left->optional)
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &procedure->name_span, 1,
+                "first dummy of defined assignment specific '%s' must be non-OPTIONAL with "
+                "INTENT(OUT) or INTENT(INOUT)",
+                interface_specific_name(procedure));
+        if (right == NULL || right->intent != F2C_INTENT_IN || right->optional)
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &procedure->name_span, 1,
+                "second dummy of defined assignment specific '%s' must be non-OPTIONAL with "
+                "INTENT(IN)",
+                interface_specific_name(procedure));
+    }
+    (void)diagnostic_line;
+}
+
 static int store_interface_signature(Context *context, Unit *host, Unit *procedure,
                                      size_t diagnostic_line) {
     Unit *previous = find_local_interface(host, interface_visible_name(procedure));
@@ -303,6 +359,7 @@ static int store_interface_signature(Context *context, Unit *host, Unit *procedu
                        "generic interface '%s' cannot mix functions and subroutines",
                        interface_visible_name(procedure));
     }
+    validate_special_generic_specific(context, procedure, diagnostic_line);
     if (!interface_units_push(host, *procedure)) {
         f2c_free_unit(procedure);
         f2c_diagnostic(context, diagnostic_line, 1,
