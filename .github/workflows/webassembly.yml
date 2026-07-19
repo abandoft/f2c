@@ -36,6 +36,20 @@ jobs:
           -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
       - name: Build
         run: cmake --build build/wasm --parallel
+      - name: Validate generated internal I/O without a filesystem
+        run: |
+          cmake -S . -B build/host \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DF2C_BUILD_TESTING=OFF \
+            -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
+          cmake --build build/host --target f2c --parallel
+          build/host/f2c \
+            -o build/wasm/generated-internal-file.c \
+            test/fixtures/internal_file_semantics.f90
+          emcc -std=c17 -O2 -sFILESYSTEM=0 -sEXIT_RUNTIME=1 \
+            build/wasm/generated-internal-file.c \
+            -o build/wasm/generated-internal-file.js
+          node build/wasm/generated-internal-file.js
       - name: Upload WebAssembly validation artifact
         uses: actions/upload-artifact@v7
         with:

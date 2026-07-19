@@ -86,6 +86,7 @@ foreach(
        derived_pointer_component
        structure_constructor
        internal_file_array
+       internal_file_semantics
        module_use
        module_procedure
        module_allocatable
