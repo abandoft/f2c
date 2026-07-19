@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 import hashlib
 import json
 import math
@@ -26,7 +25,8 @@ NATIVE_RECORD = re.compile(
     re.IGNORECASE,
 )
 NATIVE_FAILED_RECORD = re.compile(
-    r"^\s*([A-Z][A-Z0-9]*)\s+drivers:\s*(\d+)\s+out of\s*(\d+)\s+tests failed",
+    r"^\s*([A-Z][A-Z0-9]*)(?:\s+drivers)?\s*:\s*"
+    r"(\d+)\s+out of\s*(\d+)\s+tests failed",
     re.IGNORECASE,
 )
 GENERATED_FAILED_RECORD = re.compile(
@@ -55,6 +55,13 @@ class ResultRecord:
     relative_tolerance: float | None = None
     absolute_limit: float | None = None
     linked_record: str | None = None
+
+
+@dataclass(frozen=True)
+class NativeSummary:
+    name: str
+    tests: int
+    failures: int
 
 
 def parse_number(token: str) -> float:
@@ -129,13 +136,17 @@ def generated_records(text: str, rfp: bool) -> list[tuple[str, int]]:
     return records
 
 
-def native_records(text: str) -> list[tuple[str, int]]:
-    records: list[tuple[str, int]] = []
+def native_records(text: str) -> list[NativeSummary]:
+    records: list[NativeSummary] = []
     for line in text.splitlines():
         failed = NATIVE_FAILED_RECORD.search(line)
         if failed:
             records.append(
-                (canonical_driver_name(failed.group(1)), int(failed.group(3)))
+                NativeSummary(
+                    canonical_driver_name(failed.group(1)),
+                    int(failed.group(3)),
+                    int(failed.group(2)),
+                )
             )
             continue
         match = NATIVE_RECORD.search(line)
@@ -144,7 +155,9 @@ def native_records(text: str) -> list[tuple[str, int]]:
         name = match.group(1).upper()
         if name.startswith("RFP CONVERSION"):
             name = "RFP"
-        records.append((canonical_driver_name(name), int(match.group(2))))
+        records.append(
+            NativeSummary(canonical_driver_name(name), int(match.group(2)), 0)
+        )
     return records
 
 
@@ -206,30 +219,52 @@ def compare_summary(generated: str, native: str, rfp: bool) -> list[ResultRecord
     if not generated_items or not native_items:
         raise Difference("no official computational summary records were found")
     # EIG drivers also print error-exit routine/count pairs.  Native Fortran
-    # describes those with prose and a different aggregate code, so retain
-    # exactly the computational records exposed by the native transcript.
-    remaining = Counter(native_items)
-    computational_items: list[tuple[str, int]] = []
-    for item in generated_items:
-        if remaining[item] > 0:
-            computational_items.append(item)
-            remaining[item] -= 1
-    generated_items = computational_items
-    if generated_items != native_items:
-        limit = min(len(generated_items), len(native_items))
-        index = next(
-            (i for i in range(limit) if generated_items[i] != native_items[i]), limit
-        )
-        generated_item = generated_items[index] if index < len(generated_items) else "<missing>"
-        native_item = native_items[index] if index < len(native_items) else "<missing>"
-        raise Difference(
-            f"computational record {index + 1} differs: "
-            f"generated={generated_item}, native={native_item}"
-        )
-    records = [
-        ResultRecord("test_count", name, count, native_count, "exact")
-        for (name, count), (_, native_count) in zip(generated_items, native_items)
-    ]
+    # describes those with prose and a different aggregate code, so select
+    # the computational records in native order.  A platform's native
+    # baseline may fail a routine that generated C passes.  Its failure-path
+    # total includes or excludes error-exit checks differently from the pass
+    # summary, so the routine name is the stable identity in that case.
+    # Preserve one observable record and encode the improvement as an explicit
+    # failure-count non-regression instead of silently dropping it.
+    records: list[ResultRecord] = []
+    generated_index = 0
+    for native_item in native_items:
+        match_index: int | None = None
+        for index in range(generated_index, len(generated_items)):
+            generated_name, generated_tests = generated_items[index]
+            if generated_name != native_item.name:
+                continue
+            if native_item.failures == 0 and generated_tests != native_item.tests:
+                continue
+            match_index = index
+            break
+        if match_index is None:
+            raise Difference(
+                f"native computational record {native_item.name} has no matching "
+                "generated-C result"
+            )
+        generated_name, generated_tests = generated_items[match_index]
+        generated_index = match_index + 1
+        if native_item.failures > 0:
+            records.append(
+                ResultRecord(
+                    "failure_count",
+                    generated_name,
+                    0,
+                    native_item.failures,
+                    "no_regression",
+                )
+            )
+        else:
+            records.append(
+                ResultRecord(
+                    "test_count",
+                    generated_name,
+                    generated_tests,
+                    native_item.tests,
+                    "exact",
+                )
+            )
     return records + compare_machine(generated, native)
 
 
@@ -464,7 +499,17 @@ def self_test() -> None:
         "CGV drivers: 48 out of 1092 tests failed to pass the threshold\n"
         "CGV drivers: 25 out of 1092 tests failed to pass the threshold\n"
     )
-    assert len(compare_summary(generated_improvement, native_failures, False)) == 2
+    improvement_records = compare_summary(
+        generated_improvement, native_failures, False
+    )
+    assert len(improvement_records) == 2
+    assert all(record.comparison == "no_regression" for record in improvement_records)
+    assert [record.native for record in improvement_records] == [48, 25]
+    native_short_failures = "DES: 2 out of 3810 tests failed to pass the threshold\n"
+    short_improvement = compare_summary(" DES 3822\n", native_short_failures, False)
+    assert short_improvement == [
+        ResultRecord("failure_count", "DES", 0, 2, "no_regression")
+    ]
     generated_balance = "\n 1.96639836\n 0\n 7\n 0\n 7\n\n 0\n"
     native_balance = (
         "value of largest test error = 0.197E+01\n"
