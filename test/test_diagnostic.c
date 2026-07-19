@@ -62,6 +62,16 @@ static F2cResult transpile(const char *source, DiagnosticCapture *capture) {
     return f2c_transpile_project_config(&input, 1U, &config);
 }
 
+static F2cResult transpile_inputs(const F2cInput *inputs, size_t count,
+                                  DiagnosticCapture *capture) {
+    F2cConfig config;
+    memset(&config, 0, sizeof(config));
+    config.structure_size = sizeof(config);
+    config.diagnostic_callback = capture_diagnostic;
+    config.diagnostic_user_data = capture;
+    return f2c_transpile_project_config(inputs, count, &config);
+}
+
 static void test_keyword_association_span(void) {
     static const char source[] = "program exact_keyword\n"
                                  "  implicit none\n"
@@ -287,6 +297,51 @@ static void test_module_cycle_use_span(void) {
     f2c_result_free(&result);
 }
 
+static void test_private_use_remote_span(void) {
+    static const char provider[] = "module exact_access_provider\n"
+                                   "  private\n"
+                                   "  integer :: hidden\n"
+                                   "end module exact_access_provider\n";
+    static const char consumer[] = "subroutine exact_access_consumer(result)\n"
+                                   "  use exact_access_provider, only: alias => hidden\n"
+                                   "  integer, intent(out) :: result\n"
+                                   "  result = alias\n"
+                                   "end subroutine exact_access_consumer\n";
+    F2cInput inputs[] = {
+        {provider, sizeof(provider) - 1U, {"exact_access_provider.f90", F2C_SOURCE_FREE, 0}},
+        {consumer, sizeof(consumer) - 1U, {"exact_access_consumer.f90", F2C_SOURCE_FREE, 0}},
+    };
+    DiagnosticCapture capture = {.needle = "is PRIVATE"};
+    F2cResult result = transpile_inputs(inputs, 2U, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "a private remote USE target suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "private USE association emits one typed semantic diagnostic");
+    expect(capture.begin.line == 2U && capture.begin.column == 45U && capture.end.line == 2U &&
+               capture.end.column == 51U,
+           "private USE diagnostics select the remote designator rather than its local alias");
+    expect(strcmp(capture.source_name, "exact_access_consumer.f90") == 0,
+           "private USE diagnostics retain the consumer source identity");
+    f2c_result_free(&result);
+}
+
+static void test_duplicate_access_span(void) {
+    static const char source[] = "module duplicate_access_span\n"
+                                 "  integer, public :: value\n"
+                                 "  private :: value\n"
+                                 "end module duplicate_access_span\n";
+    DiagnosticCapture capture = {.needle = "accessibility of 'value'"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "duplicate access specifications suppress generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "duplicate access specifications emit one typed semantic diagnostic");
+    expect(capture.begin.line == 3U && capture.begin.column == 14U && capture.end.line == 3U &&
+               capture.end.column == 19U,
+           "duplicate access diagnostics select the resolved access identifier span");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_keyword_association_span();
     test_call_designator_span();
@@ -301,6 +356,8 @@ int main(void) {
     test_internal_procedure_end_scope();
     test_continued_use_duplicate_span();
     test_module_cycle_use_span();
+    test_private_use_remote_span();
+    test_duplicate_access_span();
     if (failures != 0) {
         fprintf(stderr, "%d diagnostic span test(s) failed\n", failures);
         return 1;
