@@ -7,6 +7,18 @@
 typedef struct F2cDerivedType F2cDerivedType;
 typedef struct F2cStatement F2cStatement;
 
+typedef enum F2cAccessibility {
+    F2C_ACCESS_UNSPECIFIED,
+    F2C_ACCESSIBILITY_PUBLIC,
+    F2C_ACCESSIBILITY_PRIVATE
+} F2cAccessibility;
+
+typedef struct F2cModuleAccessEntry {
+    char *key;
+    F2cAccessibility access;
+    F2cSourceSpan span;
+} F2cModuleAccessEntry;
+
 struct Symbol {
     char *name;
     char *c_name;
@@ -51,6 +63,9 @@ struct Symbol {
     int polymorphic;
     int target;
     int module_entity;
+    int use_associated;
+    F2cAccessibility access;
+    F2cSourceSpan access_span;
     int deferred_character;
     int optional;
     int automatic_character;
@@ -145,6 +160,8 @@ struct F2cDerivedType {
     size_t binding_capacity;
     char *defined_io_bindings[F2C_DEFINED_IO_COUNT];
     int abstract_type;
+    F2cAccessibility access;
+    F2cSourceSpan access_span;
     size_t begin;
     size_t end;
 };
@@ -153,6 +170,8 @@ typedef struct F2cImportedDerivedType {
     char *local_name;
     F2cDerivedType *type;
     F2cSourceSpan association_span;
+    F2cAccessibility access;
+    F2cSourceSpan access_span;
 } F2cImportedDerivedType;
 
 struct Unit {
@@ -161,6 +180,14 @@ struct Unit {
     F2cUnitPhase phase;
     F2cSourceSpan header_span;
     F2cSourceSpan name_span;
+    F2cAccessibility access;
+    F2cSourceSpan access_span;
+    F2cAccessibility default_access;
+    F2cSourceSpan default_access_span;
+    int default_access_explicit;
+    F2cModuleAccessEntry *access_entries;
+    size_t access_entry_count;
+    size_t access_entry_capacity;
     char *name;
     char *fortran_name;
     char **arguments;

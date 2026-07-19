@@ -66,6 +66,9 @@ void f2c_free_unit(Unit *unit) {
     free(unit->result_character_length);
     free(unit->result_derived_type_name);
     free(unit->interface_generic_name);
+    for (index = 0U; index < unit->access_entry_count; ++index)
+        free(unit->access_entries[index].key);
+    free(unit->access_entries);
     free((char *)unit->options.source_name);
     for (index = 0U; index < unit->argument_count; ++index)
         free(unit->arguments[index]);
