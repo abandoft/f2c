@@ -1,3 +1,11 @@
+## 1.13.0
+
+- Migrated call, allocation, stop, return, normal assignment, and pointer assignment statements to the canonical token, AST, and typed IR pipeline with exact source spans.
+- Split action-statement parsing and assignment code generation, removing source-text scanning and semantic rediscovery from the core statement path.
+- Added semantic per-edge scope-cleanup plans for labeled transfers, `CYCLE`, `EXIT`, and I/O `ERR`, `END`, and `EOR` branches.
+- Completed CHARACTER stop-code lowering, `NULL(MOLD=...)` handling, and diagnostics for malformed actions, STOP types, PURE restrictions, and alternate returns.
+- Added strict C17, ASan/UBSan, BLOCK finalization, and pointer-semantic regressions, and revalidated the primary pinned Reference BLAS/LAPACK correctness gates.
+
 ## 1.12.0
 
 - Migrated counted, unbounded, `WHILE`, and labeled `DO`, single-line, block, and arithmetic `IF`, `ASSIGN`, and direct, computed, and assigned `GOTO` statements to the canonical token, AST, and typed IR pipeline.
