@@ -24,7 +24,6 @@ char *f2c_buffer_take(Buffer *buffer);
 char *f2c_strdup_n(const char *text, size_t length);
 char *f2c_strdup(const char *text);
 char *f2c_trim(char *text);
-int f2c_starts_word(const char *text, const char *word);
 void f2c_diagnostic(Context *context, size_t line, int error, const char *format, ...);
 void f2c_diagnostic_at(Context *context, size_t line, size_t column, int error, const char *format,
                        ...);

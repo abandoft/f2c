@@ -5,12 +5,6 @@
 
 int f2c_normalize_source(Context *context, const char *source, size_t length, F2cSourceForm form);
 
-char *f2c_identifier(const char *begin, size_t *consumed);
-char **f2c_split_arguments(const char *open, size_t *count);
-char **f2c_split_actual_arguments(const char *open, size_t *count);
-char **f2c_split_comma_list(const char *text, size_t *count);
-int f2c_interface_start_line(const char *line);
-int f2c_interface_end_line(const char *line);
 int f2c_interface_start_tokens(const Line *line);
 int f2c_interface_end_tokens(const Line *line);
 int f2c_abstract_interface_tokens(const Line *line);
@@ -21,7 +15,6 @@ int f2c_contains_tokens(const Line *line);
 int f2c_derived_type_start_tokens(const Line *line);
 int f2c_derived_type_end_tokens(const Line *line);
 int f2c_program_unit_end_tokens(const Line *line, UnitKind kind);
-int f2c_parse_unit_header(const char *line, Unit *unit);
 int f2c_parse_unit_header_tokens(const Line *line, Unit *unit);
 void f2c_parse_explicit_interfaces(Context *context, Unit *host);
 Unit *f2c_find_interface_signature(Context *context, Unit *scope, const char *name,

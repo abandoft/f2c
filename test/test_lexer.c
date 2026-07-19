@@ -157,27 +157,13 @@ static void test_literal_kind_and_boz_validation(void) {
 }
 
 static void test_shared_argument_and_expression_lexing(void) {
-    static const char arguments[] = "(first, call(1, 'x,y'), [2, 3], , last)";
     Unit unit;
-    char **parts;
-    size_t count = 0U;
     F2cExpr *hollerith;
     F2cExpr *boz;
     char *hollerith_c;
     char *boz_c;
     int supported = 0;
     memset(&unit, 0, sizeof(unit));
-    parts = f2c_split_actual_arguments(arguments, &count);
-    expect(count == 5U, "actual-argument splitting shares balanced lexical tokens");
-    expect(parts != NULL && strcmp(parts[1], "call(1, 'x,y')") == 0,
-           "nested commas and string commas never split an argument");
-    expect(parts != NULL && strcmp(parts[2], "[2, 3]") == 0,
-           "array-constructor commas never split an argument");
-    expect(parts != NULL && parts[3][0] == '\0', "omitted actual arguments remain explicit");
-    while (count != 0U)
-        free(parts[--count]);
-    free(parts);
-
     hollerith = f2c_parse_expression_ast(&unit, "5HHELLO", NULL);
     hollerith_c = f2c_emit_expression_ast(&unit, hollerith, &supported);
     expect(supported && hollerith_c != NULL && strcmp(hollerith_c, "\"HELLO\"") == 0,

@@ -133,10 +133,9 @@ static void append_c_character_constant(Buffer *output, unsigned char value, siz
 }
 
 char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, int *supported) {
-    char *copy = NULL;
-    char *constructor = NULL;
-    char **values = NULL;
-    size_t value_count = 0U;
+    const F2cExpr *initializer;
+    const F2cExpr *const *values = NULL;
+    size_t value_count = 1U;
     size_t element_count;
     size_t element_length;
     int64_t evaluated_length;
@@ -146,6 +145,8 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
     if (supported != NULL)
         *supported = 0;
     if (symbol == NULL || symbol->type != TYPE_CHARACTER || symbol->initializer == NULL ||
+        symbol->initializer_expression == NULL ||
+        symbol->initializer_expression->parse_error_offset != SIZE_MAX ||
         !(symbol->character_length_expression != NULL
               ? f2c_evaluate_integer_constant(unit, symbol->character_length_expression,
                                               &evaluated_length)
@@ -157,42 +158,27 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
     if (evaluated_length > 0 && (uint64_t)evaluated_length > SIZE_MAX)
         return NULL;
     element_length = evaluated_length > 0 ? (size_t)evaluated_length : 0U;
-    copy = f2c_strdup(symbol->initializer);
-    if (copy == NULL)
-        return NULL;
-    {
-        char *clean = f2c_trim(copy);
-        const size_t length = strlen(clean);
-        if (symbol->rank != 0U && length >= 2U && clean[0] == '[' && clean[length - 1U] == ']') {
-            constructor = f2c_strdup_n(clean + 1, length - 2U);
-        } else if (symbol->rank != 0U && length >= 4U && clean[0] == '(' && clean[1] == '/' &&
-                   clean[length - 2U] == '/' && clean[length - 1U] == ')') {
-            constructor = f2c_strdup_n(clean + 2, length - 4U);
-        } else {
-            constructor = f2c_strdup(clean);
-        }
+    initializer = symbol->initializer_expression;
+    if (symbol->rank != 0U && initializer->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
+        values = (const F2cExpr *const *)initializer->children;
+        value_count = initializer->child_count;
     }
-    free(copy);
-    if (constructor == NULL)
-        return NULL;
-    if (symbol->rank != 0U && (symbol->initializer[0] == '[' ||
-                               (symbol->initializer[0] == '(' && symbol->initializer[1] == '/'))) {
-        values = f2c_split_arguments(constructor, &value_count);
-    } else {
-        values = (char **)calloc(1U, sizeof(*values));
-        if (values != NULL) {
-            values[0] = f2c_strdup(constructor);
-            value_count = values[0] != NULL ? 1U : 0U;
-        }
+    if (element_count == 0U && value_count == 0U) {
+        f2c_buffer_append(&result, "{0}");
+        if (supported != NULL)
+            *supported = 1;
+        return f2c_buffer_take(&result);
     }
-    free(constructor);
-    if (values == NULL || value_count == 0U || (value_count != 1U && value_count != element_count))
+    if (value_count == 0U || (value_count != 1U && value_count != element_count))
         goto cleanup;
     f2c_buffer_append(&result, symbol->rank == 0U ? "\"" : "{");
     for (element = 0U; element < element_count; ++element) {
         const size_t value_index = value_count == 1U ? 0U : element;
         size_t literal_length = 0U;
-        char *literal = character_literal_bytes(values[value_index], &literal_length);
+        const F2cExpr *value = values != NULL ? values[value_index] : initializer;
+        char *literal = value != NULL && value->kind == F2C_EXPR_STRING_LITERAL
+                            ? character_literal_bytes(value->text, &literal_length)
+                            : NULL;
         size_t offset;
         if (literal == NULL)
             goto cleanup;
@@ -212,9 +198,6 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
         *supported = 1;
 
 cleanup:
-    while (value_count != 0U)
-        free(values[--value_count]);
-    free(values);
     if (supported == NULL || !*supported) {
         free(f2c_buffer_take(&result));
         return NULL;

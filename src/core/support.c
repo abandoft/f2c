@@ -120,27 +120,6 @@ char *f2c_trim(char *text) {
     return text;
 }
 
-int f2c_starts_word(const char *text, const char *word) {
-    F2cTokenStream source;
-    F2cTokenStream expected;
-    f2c_token_stream_init(&source, text, 1U, 1U);
-    f2c_token_stream_init(&expected, word, 1U, 1U);
-    for (;;) {
-        size_t index;
-        f2c_token_stream_next(&expected);
-        if (expected.token.kind == F2C_TOKEN_END)
-            return 1;
-        f2c_token_stream_next(&source);
-        if (source.token.kind != expected.token.kind ||
-            source.token.length != expected.token.length)
-            return 0;
-        for (index = 0U; index < source.token.length; ++index)
-            if (tolower((unsigned char)source.token.begin[index]) !=
-                tolower((unsigned char)expected.token.begin[index]))
-                return 0;
-    }
-}
-
 static const char *diagnostic_source_name(const Context *context) {
     return context->options != NULL && context->options->source_name != NULL
                ? context->options->source_name

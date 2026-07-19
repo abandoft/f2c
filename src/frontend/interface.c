@@ -3,14 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-int f2c_interface_start_line(const char *line) {
-    return f2c_starts_word(line, "interface") || f2c_starts_word(line, "abstract interface");
-}
-
-int f2c_interface_end_line(const char *line) {
-    return f2c_starts_word(line, "end interface") || f2c_starts_word(line, "endinterface");
-}
-
 static int interface_units_push(Unit *host, Unit procedure) {
     Unit *replacement;
     size_t capacity;

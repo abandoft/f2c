@@ -27,6 +27,41 @@ static Symbol *add_symbol(Symbol *symbols, size_t index, const char *name, Type 
     return symbol;
 }
 
+static int parse_unit_header_tokens(const char *source, Unit *unit) {
+    F2cTokenStream stream;
+    F2cToken *tokens = NULL;
+    size_t count = 0U;
+    size_t capacity = 0U;
+    Line line = {0};
+    int parsed = 0;
+    f2c_token_stream_init(&stream, source, 1U, 1U);
+    for (;;) {
+        F2cToken *replacement;
+        f2c_token_stream_next(&stream);
+        if (stream.token.kind == F2C_TOKEN_END)
+            break;
+        if (stream.token.kind == F2C_TOKEN_INVALID)
+            goto cleanup;
+        if (count == capacity) {
+            const size_t next = capacity == 0U ? 16U : capacity * 2U;
+            replacement = (F2cToken *)realloc(tokens, next * sizeof(*replacement));
+            if (replacement == NULL)
+                goto cleanup;
+            tokens = replacement;
+            capacity = next;
+        }
+        tokens[count++] = stream.token;
+    }
+    line.text = (char *)source;
+    line.tokens = tokens;
+    line.token_count = count;
+    parsed = f2c_parse_unit_header_tokens(&line, unit);
+
+cleanup:
+    free(tokens);
+    return parsed;
+}
+
 static void test_kind_shape_and_value_category(void) {
     Symbol symbols[3];
     Unit unit;
@@ -117,14 +152,14 @@ static void test_kind_shape_and_value_category(void) {
     f2c_expr_free(expression);
 
     memset(&function, 0, sizeof(function));
-    expect(f2c_parse_unit_header("integer(kind=8) function wide()", &function) &&
+    expect(parse_unit_header_tokens("integer(kind=8) function wide()", &function) &&
                function.return_kind == 8 &&
                strcmp(f2c_c_type_kind(function.return_type, function.return_kind), "int64_t") == 0,
            "function headers preserve an explicit INTEGER kind in their ABI");
     f2c_free_unit(&function);
 
     memset(&function, 0, sizeof(function));
-    expect(f2c_parse_unit_header(
+    expect(parse_unit_header_tokens(
                "recursive pure real(kind=8) function evaluate(value) result(answer)", &function) &&
                function.kind == UNIT_FUNCTION && function.recursive && function.pure &&
                function.return_type == TYPE_DOUBLE && function.return_kind == 8 &&
@@ -134,20 +169,20 @@ static void test_kind_shape_and_value_category(void) {
     f2c_free_unit(&function);
 
     memset(&function, 0, sizeof(function));
-    expect(f2c_parse_unit_header("real(kind=8) recursive function after_type()", &function) &&
+    expect(parse_unit_header_tokens("real(kind=8) recursive function after_type()", &function) &&
                function.recursive && function.return_type == TYPE_DOUBLE,
            "canonical header tokens accept procedure attributes after a type prefix");
     f2c_free_unit(&function);
 
     memset(&function, 0, sizeof(function));
-    expect(f2c_parse_unit_header("elemental subroutine apply(value)", &function) &&
+    expect(parse_unit_header_tokens("elemental subroutine apply(value)", &function) &&
                function.kind == UNIT_SUBROUTINE && function.elemental &&
                function.argument_count == 1U,
            "canonical header tokens retain ELEMENTAL procedure metadata");
     f2c_free_unit(&function);
 
     memset(&function, 0, sizeof(function));
-    expect(f2c_parse_unit_header("type(cell) function make_cell(value)", &function) &&
+    expect(parse_unit_header_tokens("type(cell) function make_cell(value)", &function) &&
                function.return_type == TYPE_DERIVED && function.result_derived_type_name != NULL &&
                strcmp(function.result_derived_type_name, "cell") == 0,
            "derived function headers retain the concrete result type name");
@@ -390,18 +425,6 @@ static void test_array_constructor_implied_do(void) {
     f2c_expr_free(expression);
 }
 
-static void test_bracket_aware_argument_splitting(void) {
-    size_t count = 0U;
-    char **items = f2c_split_arguments("values(2) = [1, 2], other = 3", &count);
-    expect(items != NULL && count == 2U,
-           "declaration splitting ignores commas inside bracket array constructors");
-    expect(items != NULL && count == 2U && strcmp(items[0], "values(2) = [1, 2]") == 0,
-           "the complete bracket constructor remains attached to its declarator");
-    while (count != 0U)
-        free(items[--count]);
-    free(items);
-}
-
 static void test_malformed_expression_locations(void) {
     static const char *const invalid[] = {
         "1 + )", "1 trailing", "'unterminated", "1e+", "*100",
@@ -515,7 +538,6 @@ int main(void) {
     test_keyword_and_section_emission();
     test_transfer_array_constructor();
     test_array_constructor_implied_do();
-    test_bracket_aware_argument_splitting();
     test_malformed_expression_locations();
     test_nested_expression_source_ranges();
     test_integer_substitution_clone();
