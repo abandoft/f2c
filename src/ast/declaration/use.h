@@ -1,7 +1,7 @@
 #ifndef F2C_AST_DECLARATION_USE_H
 #define F2C_AST_DECLARATION_USE_H
 
-#include "frontend/token.h"
+#include "ast/declaration/designator.h"
 
 typedef enum F2cUseStatementStatus {
     F2C_USE_STATEMENT_NOT_MATCHED,
@@ -16,19 +16,13 @@ typedef enum F2cUseModuleNature {
     F2C_USE_NATURE_NON_INTRINSIC
 } F2cUseModuleNature;
 
-typedef enum F2cUseDesignatorKind {
-    F2C_USE_DESIGNATOR_NAME,
-    F2C_USE_DESIGNATOR_OPERATOR,
-    F2C_USE_DESIGNATOR_ASSIGNMENT,
-    F2C_USE_DESIGNATOR_DEFINED_IO
-} F2cUseDesignatorKind;
+typedef F2cGenericDesignatorKind F2cUseDesignatorKind;
+typedef F2cGenericDesignatorSyntax F2cUseDesignatorSyntax;
 
-typedef struct F2cUseDesignatorSyntax {
-    F2cUseDesignatorKind kind;
-    F2cTokenRange range;
-    F2cSourceSpan span;
-    const F2cToken *name;
-} F2cUseDesignatorSyntax;
+#define F2C_USE_DESIGNATOR_NAME F2C_GENERIC_DESIGNATOR_NAME
+#define F2C_USE_DESIGNATOR_OPERATOR F2C_GENERIC_DESIGNATOR_OPERATOR
+#define F2C_USE_DESIGNATOR_ASSIGNMENT F2C_GENERIC_DESIGNATOR_ASSIGNMENT
+#define F2C_USE_DESIGNATOR_DEFINED_IO F2C_GENERIC_DESIGNATOR_DEFINED_IO
 
 typedef struct F2cUseAssociationSyntax {
     F2cSourceSpan span;
