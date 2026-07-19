@@ -164,6 +164,7 @@ struct Unit {
     int return_type_explicit;
     char *result_name;
     char *result_character_length;
+    F2cTokenRange result_character_length_syntax;
     char *result_derived_type_name;
     Symbol *symbols;
     size_t symbol_count;

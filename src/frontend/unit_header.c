@@ -100,6 +100,7 @@ int f2c_parse_unit_header_tokens(const Line *line, Unit *unit) {
                 unit->return_kind = candidate.kind;
                 if (candidate.character_length != NULL) {
                     unit->result_character_length = candidate.character_length;
+                    unit->result_character_length_syntax = candidate.character_length_syntax;
                     candidate.character_length = NULL;
                 }
                 if (candidate.derived_type_name != NULL) {

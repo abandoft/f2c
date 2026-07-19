@@ -132,8 +132,10 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
         if (function_result != NULL && function_result->first_seen_line == 0U)
             function_result->first_seen_line = context->lines.items[unit->begin].number;
         if (function_result != NULL && unit->return_type == TYPE_CHARACTER &&
-            unit->result_character_length != NULL && function_result->character_length == NULL)
+            unit->result_character_length != NULL && function_result->character_length == NULL) {
             function_result->character_length = f2c_strdup(unit->result_character_length);
+            function_result->character_length_syntax = unit->result_character_length_syntax;
+        }
         if (function_result != NULL && unit->return_type == TYPE_DERIVED &&
             unit->result_derived_type_name != NULL) {
             F2cDerivedType *derived = f2c_find_derived_type(unit, unit->result_derived_type_name);

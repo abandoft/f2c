@@ -92,6 +92,10 @@ static const char *function_character_length(Unit *definition) {
 
 static int copy_function_character_length(Symbol *target, Unit *definition) {
     const char *length = function_character_length(definition);
+    Symbol *result = definition != NULL && definition->kind == UNIT_FUNCTION &&
+                             definition->result_name != NULL
+                         ? f2c_find_symbol(definition, definition->result_name)
+                         : NULL;
     char *copy;
     if (length == NULL)
         return 1;
@@ -100,6 +104,8 @@ static int copy_function_character_length(Symbol *target, Unit *definition) {
         return 0;
     free(target->character_length);
     target->character_length = copy;
+    target->character_length_syntax = result != NULL ? result->character_length_syntax
+                                                      : definition->result_character_length_syntax;
     return 1;
 }
 

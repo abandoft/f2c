@@ -68,6 +68,7 @@ static int copy_signature_to_symbol(Context *context, Unit *host, Unit *procedur
         result_symbol->character_length != NULL) {
         free(external->character_length);
         external->character_length = f2c_strdup(result_symbol->character_length);
+        external->character_length_syntax = result_symbol->character_length_syntax;
         if (external->character_length == NULL)
             return 0;
     }

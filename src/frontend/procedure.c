@@ -151,6 +151,7 @@ int f2c_copy_procedure_signature(Symbol *symbol, Unit *signature) {
     if (symbol->type == TYPE_CHARACTER && result != NULL && result->character_length != NULL) {
         free(symbol->character_length);
         symbol->character_length = f2c_strdup(result->character_length);
+        symbol->character_length_syntax = result->character_length_syntax;
         if (symbol->character_length == NULL)
             return 0;
     }
