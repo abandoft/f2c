@@ -164,6 +164,45 @@ static const F2cModuleConstant *find_la_constant(const char *name) {
     return NULL;
 }
 
+static F2cExpr *parse_compiler_constant(Unit *unit, const char *source) {
+    F2cTokenStream stream;
+    F2cToken *tokens = NULL;
+    size_t count = 0U;
+    size_t capacity = 0U;
+    F2cExpr *expression = NULL;
+    const char *error_at = NULL;
+    f2c_token_stream_init(&stream, source, 1U, 1U);
+    for (;;) {
+        F2cToken *replacement;
+        size_t next;
+        f2c_token_stream_next(&stream);
+        if (stream.token.kind == F2C_TOKEN_END)
+            break;
+        if (stream.token.kind == F2C_TOKEN_INVALID)
+            goto cleanup;
+        if (count == capacity) {
+            next = capacity == 0U ? 8U : capacity * 2U;
+            if (next < capacity || next > SIZE_MAX / sizeof(*tokens))
+                goto cleanup;
+            replacement = (F2cToken *)realloc(tokens, next * sizeof(*tokens));
+            if (replacement == NULL)
+                goto cleanup;
+            tokens = replacement;
+            capacity = next;
+        }
+        tokens[count++] = stream.token;
+    }
+    expression = f2c_parse_expression_tokens(unit, tokens, count, source, &error_at);
+    if (error_at != NULL) {
+        f2c_expr_free(expression);
+        expression = NULL;
+    }
+
+cleanup:
+    free(tokens);
+    return expression;
+}
+
 static void import_la_constant(Context *context, Unit *unit, Line *line, const char *local_name,
                                const char *module_name) {
     const F2cModuleConstant *constant = find_la_constant(module_name);
@@ -187,6 +226,12 @@ static void import_la_constant(Context *context, Unit *unit, Line *line, const c
     symbol->parameter = 1;
     free(symbol->initializer);
     symbol->initializer = f2c_strdup(constant->initializer);
+    f2c_expr_free(symbol->initializer_expression);
+    symbol->initializer_expression = parse_compiler_constant(unit, constant->initializer);
+    if (symbol->initializer == NULL || symbol->initializer_expression == NULL) {
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line->number, 1,
+                            "unable to build typed intrinsic-module constant '%s'", local_name);
+    }
     if (constant->type == TYPE_CHARACTER) {
         free(symbol->character_length);
         symbol->character_length = f2c_strdup("1");
