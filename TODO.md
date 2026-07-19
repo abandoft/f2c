@@ -233,20 +233,26 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 完成 F90 `OPEN`/`CLOSE` 全部控制项，以及 `INQUIRE`、`BACKSPACE` 和 `ENDFILE`。外部文件
   形式现已进入统一 token → AST → typed IR → emitter 流程；生成端用线程局部文件单元状态机实现
   `OLD/NEW/SCRATCH/REPLACE/UNKNOWN`、`KEEP/DELETE`、顺序记录倒退、标准 C17 物理 `ENDFILE`
-  截断，以及按 `UNIT/FILE` 查询连接和文件属性。正负向语义、严格 C17 执行、ASan/UBSan 和
-  gfortran 差分已进入测试与 CI；`INQUIRE(IOLENGTH=)`、更完整错误分类及后续标准控制项仍未完成。
+  截断，以及按 `UNIT/FILE` 查询连接和文件属性。`INQUIRE(IOLENGTH=)` 已使用独立 typed IR 控制项
+  和无文件系统计数流复用真实无格式 wire-size 规则，覆盖所有整数结果 kind、零大小数组、数组段、
+  向量下标、数组构造器、数组表达式、隐式 DO、复数/逻辑/字符和静态组件派生对象；结果可直接作为
+  同类型/参数/shape/order 输出列表的直接无格式 `RECL`。正负向语义、严格 C17 执行、ASan/UBSan 和
+  gfortran 差分已进入测试与 CI；更完整错误分类及后续标准控制项仍未完成。
 - [ ] 完成顺序/直接访问、格式化/非格式化记录、`REC`、`RECL`、`ACCESS`、`ACTION`、`STATUS`、
   `BLANK`、`PAD`、`DELIM`、`POSITION` 和所有对应 `IOSTAT/IOMSG/ERR/END/EOR` 状态。连接状态现保存
   上述属性，记录传输路径已经覆盖直接访问 `READ/WRITE REC=`、定长记录边界、动作/格式/访问
   不匹配的无崩溃错误传播，以及顺序非格式化记录协议。仍需补齐所有控制项和错误状态的标准组合、
-  非连续数组表达式的无格式传输，以及 stream access、异步 I/O 和跨编译器二进制文件互操作策略。
+  非元素化数组函数结果和其他嵌套 transformational 结果的无格式传输，以及 stream access、异步
+  I/O 和跨编译器二进制文件互操作策略。
 - [x] 生成端使用统一 transfer/stream/record 状态机执行顺序与直接、格式化与非格式化记录传输；
   `UNIT` 和 `REC` 表达式只求值一次，`IOSTAT/IOMSG/ERR/END/EOR` 在清理记录和内部文件注册后分支。
   直接文件使用经过溢出检查的 `(REC-1)*RECL` 定位，格式化记录支持空格填充、斜杠编辑和 FORMAT
   回转跨记录，非格式化记录补零；缺失记录、非法记录号和 `NEXTREC` 已有执行回归。顺序非格式化
   文件使用固定 8 字节小端长度首尾标记，读取时验证损坏记录，`BACKSPACE` 按记录边界定位。
-  已实现标量 kind、复数、逻辑、字符、固定数组、隐式 DO、静态组件派生对象和定义 I/O 的二进制
-  传输；严格 C17、ASan/UBSan、损坏文件回归及 gfortran 逐记录差分均已进入数值验证 CI。
+  已实现标量 kind、复数、逻辑、字符、任意 rank 具名数组、仿射数组段、向量下标、数组构造器、
+  可元素化数组表达式、隐式 DO、静态组件派生对象和定义 I/O 的二进制传输；数组 shape、段边界、
+  步长和非平凡标量子表达式会在元素循环外求值一次，复数与默认派生输出表达式也不会因分组件传输
+  重复求值。严格 C17、ASan/UBSan、损坏文件回归及 gfortran 逐记录差分均已进入数值验证 CI。
 - [x] `PRINT`、`READ` 和 `WRITE` 的显式格式共用 canonical token → FORMAT AST → typed IR →
   formatted item emitter；常量字符、标签和 F77 已赋值 FORMAT 均在编译期生成只读 C17 指令表，
   不再扫描源码行或在运行时重新解析常量文本。真正的运行时 CHARACTER 格式使用同一描述符接口的
