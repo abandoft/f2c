@@ -97,6 +97,8 @@ foreach(
        module_access
        module_generic
        module_generic_explicit
+       defined_operator
+       defined_assignment
        module_dependency_order
        module_interface_use
        module_procedure
@@ -178,14 +180,20 @@ foreach(
             message(FATAL_ERROR
                     "assigned FORMAT output differs from Fortran semantics: [${io_run_output}]")
     elseif(io_fixture STREQUAL "module_access" OR io_fixture STREQUAL "module_generic" OR
-           io_fixture STREQUAL "module_generic_explicit")
+           io_fixture STREQUAL "module_generic_explicit" OR
+           io_fixture STREQUAL "defined_operator" OR
+           io_fixture STREQUAL "defined_assignment")
         string(REPLACE "\r\n" "\n" io_run_output "${io_run_output}")
         if(io_fixture STREQUAL "module_access")
             set(module_expected_output "8\n")
         elseif(io_fixture STREQUAL "module_generic")
             set(module_expected_output "4 6.0\n")
-        else()
+        elseif(io_fixture STREQUAL "module_generic_explicit")
             set(module_expected_output "5 7.0\n")
+        elseif(io_fixture STREQUAL "defined_operator")
+            set(module_expected_output "23 12.5 42 4 5\n")
+        else()
+            set(module_expected_output "14 2 4 6\n")
         endif()
         if(NOT io_run_output STREQUAL module_expected_output)
             message(FATAL_ERROR
