@@ -4,6 +4,7 @@ if(CC_ID STREQUAL "MSVC" OR CC_FRONTEND_VARIANT STREQUAL "MSVC")
 endif()
 
 set(CC_COMMAND "${CC}")
+find_program(F2C_GFORTRAN NAMES gfortran)
 if(F2C_MSVC_FRONTEND AND
    ("$ENV{INCLUDE}" STREQUAL "" OR "$ENV{LIB}" STREQUAL ""))
     string(REGEX REPLACE ",.*$" "" visual_studio_root "${VS_INSTALLATION}")
@@ -93,6 +94,7 @@ foreach(
        internal_file_array
        internal_file_semantics
        module_use
+       module_access
        module_dependency_order
        module_interface_use
        module_procedure
@@ -173,7 +175,38 @@ foreach(
         if(NOT io_run_output STREQUAL "ASSIGNED  7\n")
             message(FATAL_ERROR
                     "assigned FORMAT output differs from Fortran semantics: [${io_run_output}]")
+    elseif(io_fixture STREQUAL "module_access")
+        string(REPLACE "\r\n" "\n" io_run_output "${io_run_output}")
+        if(NOT io_run_output STREQUAL "8\n")
+            message(FATAL_ERROR
+                    "module accessibility output differs from Fortran semantics: [${io_run_output}]")
         endif()
+        if(F2C_GFORTRAN)
+            set(module_access_native "${BINARY_DIR}/native_module_access_test")
+            execute_process(
+                COMMAND "${F2C_GFORTRAN}" -std=f2018 -Wall -Wextra -Werror
+                        "${io_source}" -o "${module_access_native}"
+                RESULT_VARIABLE module_access_native_compile_status
+                OUTPUT_VARIABLE module_access_native_compile_output
+                ERROR_VARIABLE module_access_native_compile_error)
+            if(NOT module_access_native_compile_status EQUAL 0)
+                message(FATAL_ERROR
+                        "native module accessibility oracle did not compile: ${module_access_native_compile_error}${module_access_native_compile_output}")
+            endif()
+            execute_process(
+                COMMAND "${module_access_native}"
+                RESULT_VARIABLE module_access_native_run_status
+                OUTPUT_VARIABLE module_access_native_output
+                ERROR_VARIABLE module_access_native_error)
+            string(REPLACE "\r\n" "\n" module_access_native_output
+                   "${module_access_native_output}")
+            if(NOT module_access_native_run_status EQUAL 0 OR
+               NOT io_run_output STREQUAL module_access_native_output)
+                message(FATAL_ERROR
+                        "generated/native module accessibility mismatch: generated='${io_run_output}' native='${module_access_native_output}' error='${module_access_native_error}'")
+            endif()
+        endif()
+    endif()
     endif()
 endforeach()
 
@@ -498,7 +531,6 @@ execute_process(COMMAND "${implicit_executable}"
 if(NOT implicit_run_status EQUAL 0)
     message(FATAL_ERROR "generated IMPLICIT mapping or function-result ABI is incorrect")
 endif()
-find_program(F2C_GFORTRAN NAMES gfortran)
 if(F2C_GFORTRAN)
     foreach(print_oracle IN ITEMS print_formats assigned_format)
         set(print_native_executable "${BINARY_DIR}/native_${print_oracle}_test")
