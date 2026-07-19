@@ -20,6 +20,8 @@ static void free_symbol(Symbol *symbol) {
     free(symbol->character_length);
     f2c_expr_free(symbol->character_length_expression);
     free(symbol->procedure_interface_name);
+    free(symbol->generic_candidates);
+    free(symbol->generic_origin_name);
     free(symbol->alias_to);
     free(symbol->common_block);
     free(symbol->derived_type_name);

@@ -43,6 +43,10 @@ struct Symbol {
     int external_signature_explicit;
     Unit *procedure_interface;
     char *procedure_interface_name;
+    Unit **generic_candidates;
+    size_t generic_candidate_count;
+    Unit *generic_origin_scope;
+    char *generic_origin_name;
     int saved;
     int statement_function;
     int statement_dummy;
