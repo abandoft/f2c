@@ -71,16 +71,3 @@ int f2c_statement_unit_targets_construct(const Unit *unit, const F2cStatement *t
             return 1;
     return 0;
 }
-
-size_t f2c_statement_label_line(const Unit *unit, const char *label) {
-    size_t index;
-    if (label == NULL)
-        return 0U;
-    for (index = 0U; index < unit->statement_count; ++index) {
-        const F2cStatement *statement = &unit->statements[index];
-        if (statement->kind == F2C_STMT_LABEL && statement->name != NULL &&
-            f2c_statement_labels_equal(statement->name, label))
-            return statement->line;
-    }
-    return 0U;
-}

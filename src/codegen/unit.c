@@ -628,18 +628,13 @@ void f2c_emit_block_scope_end(Buffer *output, Unit *unit, size_t line, int depth
     }
 }
 
-void f2c_emit_scope_transfer_cleanup(Buffer *output, Unit *unit, size_t source_line,
-                                     size_t target_line, int depth) {
-    size_t i = unit->symbol_count;
-    while (i != 0U) {
-        Symbol *symbol = &unit->symbols[--i];
-        const int source_inside =
-            source_line > symbol->scope_begin_line && source_line < symbol->scope_end_line;
-        const int target_inside =
-            target_line > symbol->scope_begin_line && target_line < symbol->scope_end_line;
-        if (block_scoped_symbol(unit, symbol) && source_inside && !target_inside)
-            emit_block_symbol_cleanup(output, unit, symbol, depth);
-    }
+void f2c_emit_scope_cleanup_plan(Buffer *output, Unit *unit, const F2cScopeCleanupPlan *plan,
+                                 int depth) {
+    size_t index;
+    if (plan == NULL)
+        return;
+    for (index = 0U; index < plan->symbol_count; ++index)
+        emit_block_symbol_cleanup(output, unit, plan->symbols[index], depth);
 }
 
 static void emit_character_temporary_cleanup(F2cExpr *expression, void *state) {

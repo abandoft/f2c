@@ -38,8 +38,8 @@ void f2c_emit_common_blocks(Context *context);
 void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth);
 void f2c_emit_block_scope_begin(Buffer *output, Unit *unit, size_t line, int depth);
 void f2c_emit_block_scope_end(Buffer *output, Unit *unit, size_t line, int depth);
-void f2c_emit_scope_transfer_cleanup(Buffer *output, Unit *unit, size_t source_line,
-                                     size_t target_line, int depth);
+void f2c_emit_scope_cleanup_plan(Buffer *output, Unit *unit, const F2cScopeCleanupPlan *plan,
+                                 int depth);
 int f2c_unit_has_allocatable_result(Unit *unit);
 void f2c_emit_call(Buffer *output, Unit *unit, const char *name,
                    F2cExpr *const *argument_expressions, size_t count, int depth);

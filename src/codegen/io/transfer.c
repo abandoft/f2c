@@ -99,10 +99,26 @@ static void emit_transfer_completion(Context *context, const F2cStatement *state
                       stream);
 }
 
-static void emit_status_results(Context *context, const char *operation, const char *iostat,
-                                const char *iomsg_pointer, const char *iomsg_length,
-                                const char *end_label, const char *eor_label, const char *err_label,
-                                int depth) {
+static void emit_status_branch(Context *context, Unit *unit, const F2cIoControl *control,
+                               const char *condition, const char *label, int depth) {
+    if (control == NULL || label == NULL)
+        return;
+    f2c_io_indent(&context->output, depth);
+    f2c_buffer_printf(&context->output, "if (%s) {\n", condition);
+    f2c_emit_scope_cleanup_plan(&context->output, unit, &control->cleanup, depth + 1);
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "goto f2c_label_%s;\n",
+                      f2c_statement_label_canonical(label));
+    f2c_io_indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+}
+
+static void emit_status_results(Context *context, Unit *unit, const char *operation,
+                                const char *iostat, const char *iomsg_pointer,
+                                const char *iomsg_length, const F2cIoControl *end_control,
+                                const char *end_label, const F2cIoControl *eor_control,
+                                const char *eor_label, const F2cIoControl *err_control,
+                                const char *err_label, int depth) {
     if (iostat != NULL) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "%s = f2c_io_status_value(f2c_io_status);\n", iostat);
@@ -112,22 +128,10 @@ static void emit_status_results(Context *context, const char *operation, const c
         f2c_buffer_printf(&context->output, "f2c_set_iomsg(%s, (size_t)(%s), f2c_io_status);\n",
                           iomsg_pointer, iomsg_length);
     }
-    if (end_label != NULL) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "if (f2c_io_status == EOF) goto f2c_label_%s;\n",
-                          f2c_statement_label_canonical(end_label));
-    }
-    if (eor_label != NULL) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "if (f2c_io_status == -2) goto f2c_label_%s;\n",
-                          f2c_statement_label_canonical(eor_label));
-    }
-    if (err_label != NULL) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output,
-                          "if (f2c_io_is_error(f2c_io_status)) goto f2c_label_%s;\n",
-                          f2c_statement_label_canonical(err_label));
-    }
+    emit_status_branch(context, unit, end_control, "f2c_io_status == EOF", end_label, depth);
+    emit_status_branch(context, unit, eor_control, "f2c_io_status == -2", eor_label, depth);
+    emit_status_branch(context, unit, err_control, "f2c_io_is_error(f2c_io_status)", err_label,
+                       depth);
     if (iostat == NULL) {
         if (end_label == NULL) {
             f2c_io_indent(&context->output, depth);
@@ -322,8 +326,9 @@ int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStateme
                           "f2c_io_status = f2c_transfer_end(&f2c_io_transfer_state, "
                           "f2c_io_status);\n");
     }
-    emit_status_results(context, input ? "READ" : "WRITE", iostat, iomsg_pointer, iomsg_length,
-                        end_label, eor_label, err_label, depth);
+    emit_status_results(context, unit, input ? "READ" : "WRITE", iostat, iomsg_pointer,
+                        iomsg_length, end_control, end_label, eor_control, eor_label, err_control,
+                        err_label, depth);
     --depth;
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");

@@ -463,6 +463,7 @@ void f2c_validate_unit_expressions(Context *context, Unit *unit) {
     }
     f2c_validation_bind_constructs(context, unit);
     f2c_validation_branches(context, unit);
+    f2c_validation_lifetimes(context, unit);
     for (i = 0U; i < unit->statement_count; ++i)
         validate_statement(context, unit, &unit->statements[i]);
     f2c_validation_select_case_constructs(context, unit);

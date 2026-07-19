@@ -82,7 +82,7 @@ int f2c_emit_open_statement(Context *context, Unit *unit, const F2cStatement *st
                       controls.blank.pointer, controls.blank.length, controls.position.pointer,
                       controls.position.length, controls.delim.pointer, controls.delim.length,
                       controls.pad.pointer, controls.pad.length);
-    f2c_io_emit_control_result(context, &status, "OPEN", depth + 1);
+    f2c_io_emit_control_result(context, unit, statement, &status, "OPEN", depth + 1);
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     emitted = 1;
@@ -119,7 +119,7 @@ int f2c_emit_close_statement(Context *context, Unit *unit, const F2cStatement *s
                       "const bool f2c_io_ok = f2c_close_unit_with_status((int32_t)(%s), %s, "
                       "(size_t)(%s));\n",
                       unit_value, close_status.pointer, close_status.length);
-    f2c_io_emit_control_result(context, &status, "CLOSE", depth + 1);
+    f2c_io_emit_control_result(context, unit, statement, &status, "CLOSE", depth + 1);
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     free(unit_value);

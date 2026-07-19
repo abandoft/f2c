@@ -66,8 +66,10 @@ void f2c_io_free_status_controls(F2cEmittedIoStatus *status) {
     memset(status, 0, sizeof(*status));
 }
 
-void f2c_io_emit_control_result(Context *context, const F2cEmittedIoStatus *status,
-                                const char *operation, int depth) {
+void f2c_io_emit_control_result(Context *context, Unit *unit, const F2cStatement *statement,
+                                const F2cEmittedIoStatus *status, const char *operation,
+                                int depth) {
+    const F2cIoControl *err = f2c_io_control(statement, F2C_IO_CONTROL_ERR, (size_t)-1);
     if (status->iostat != NULL) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "%s = f2c_io_ok ? 0 : 1;\n", status->iostat);
@@ -79,8 +81,14 @@ void f2c_io_emit_control_result(Context *context, const F2cEmittedIoStatus *stat
     }
     if (status->err_label != NULL) {
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "if (!f2c_io_ok) goto f2c_label_%s;\n",
+        f2c_buffer_append(&context->output, "if (!f2c_io_ok) {\n");
+        f2c_emit_scope_cleanup_plan(&context->output, unit, err != NULL ? &err->cleanup : NULL,
+                                    depth + 1);
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output, "goto f2c_label_%s;\n",
                           f2c_statement_label_canonical(status->err_label));
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
     } else if (status->iostat == NULL) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,

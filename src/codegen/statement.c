@@ -155,21 +155,18 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                               f2c_expression_c_type(statement->expression), value);
             indent(&context->output, *depth + 1);
             f2c_buffer_append(&context->output, "if (f2c_arithmetic_if_value < 0) {\n");
-            f2c_emit_scope_transfer_cleanup(&context->output, unit, statement->line,
-                                            f2c_statement_label_line(unit, statement->labels[0]),
-                                            *depth + 2);
+            f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->label_cleanups[0],
+                                        *depth + 2);
             indent(&context->output, *depth + 2);
             f2c_buffer_printf(&context->output, "goto f2c_label_%s; }\n", statement->labels[0]);
             indent(&context->output, *depth + 1);
             f2c_buffer_append(&context->output, "if (f2c_arithmetic_if_value == 0) {\n");
-            f2c_emit_scope_transfer_cleanup(&context->output, unit, statement->line,
-                                            f2c_statement_label_line(unit, statement->labels[1]),
-                                            *depth + 2);
+            f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->label_cleanups[1],
+                                        *depth + 2);
             indent(&context->output, *depth + 2);
             f2c_buffer_printf(&context->output, "goto f2c_label_%s; }\n", statement->labels[1]);
-            f2c_emit_scope_transfer_cleanup(&context->output, unit, statement->line,
-                                            f2c_statement_label_line(unit, statement->labels[2]),
-                                            *depth + 1);
+            f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->label_cleanups[2],
+                                        *depth + 1);
             indent(&context->output, *depth + 1);
             f2c_buffer_printf(&context->output, "goto f2c_label_%s;\n", statement->labels[2]);
             indent(&context->output, *depth);
@@ -358,8 +355,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                            "internal compiler error: CYCLE has no typed DO target");
             return 0;
         }
-        f2c_emit_scope_transfer_cleanup(&context->output, unit, statement->line, target->line,
-                                        *depth);
+        f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->transfer_cleanup, *depth);
         indent(&context->output, *depth);
         if (statement->control_name != NULL)
             f2c_buffer_printf(&context->output, "goto f2c_cycle_%zu;\n",
@@ -373,8 +369,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                            "internal compiler error: EXIT has no typed DO target");
             return 0;
         }
-        f2c_emit_scope_transfer_cleanup(&context->output, unit, statement->line, target->line,
-                                        *depth);
+        f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->transfer_cleanup, *depth);
         indent(&context->output, *depth);
         if (statement->control_name != NULL)
             f2c_buffer_printf(&context->output, "goto f2c_exit_%zu;\n",
@@ -405,9 +400,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             for (i = 0U; i < statement->label_count; ++i) {
                 indent(&context->output, *depth + 1);
                 f2c_buffer_printf(&context->output, "case %zu: {\n", i + 1U);
-                f2c_emit_scope_transfer_cleanup(
-                    &context->output, unit, statement->line,
-                    f2c_statement_label_line(unit, f2c_trim(statement->labels[i])), *depth + 2);
+                f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->label_cleanups[i],
+                                            *depth + 2);
                 indent(&context->output, *depth + 2);
                 f2c_buffer_printf(&context->output, "goto f2c_label_%s; }\n",
                                   f2c_trim(statement->labels[i]));
@@ -416,9 +410,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             f2c_buffer_append(&context->output, "}\n");
             free(selector);
         } else if (statement->name != NULL && statement->name[0] != '\0') {
-            f2c_emit_scope_transfer_cleanup(&context->output, unit, statement->line,
-                                            f2c_statement_label_line(unit, statement->name),
-                                            *depth);
+            f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->transfer_cleanup,
+                                        *depth);
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "goto f2c_label_%s;\n", statement->name);
         } else {
@@ -436,44 +429,22 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                 for (i = 0U; i < statement->label_count; ++i) {
                     indent(&context->output, *depth + 1);
                     f2c_buffer_printf(&context->output, "case %s: {\n", statement->labels[i]);
-                    f2c_emit_scope_transfer_cleanup(
-                        &context->output, unit, statement->line,
-                        f2c_statement_label_line(unit, statement->labels[i]), *depth + 2);
+                    f2c_emit_scope_cleanup_plan(&context->output, unit,
+                                                &statement->label_cleanups[i], *depth + 2);
                     indent(&context->output, *depth + 2);
                     f2c_buffer_printf(&context->output, "goto f2c_label_%s; }\n",
                                       statement->labels[i]);
                 }
                 emitted = statement->label_count;
             } else {
-                for (i = 0U; i < unit->statement_count; ++i) {
-                    const F2cStatement *assignment = &unit->statements[i];
-                    size_t previous;
-                    int duplicate = 0;
-                    if (assignment->kind != F2C_STMT_ASSIGN_LABEL || assignment->name == NULL ||
-                        statement->name == NULL || strcmp(assignment->name, statement->name) != 0 ||
-                        assignment->label_count != 1U)
-                        continue;
-                    for (previous = 0U; previous < i; ++previous) {
-                        const F2cStatement *candidate = &unit->statements[previous];
-                        if (candidate->kind == F2C_STMT_ASSIGN_LABEL && candidate->name != NULL &&
-                            strcmp(candidate->name, statement->name) == 0 &&
-                            candidate->label_count == 1U &&
-                            f2c_statement_labels_equal(candidate->labels[0],
-                                                       assignment->labels[0])) {
-                            duplicate = 1;
-                            break;
-                        }
-                    }
-                    if (duplicate)
-                        continue;
+                for (i = 0U; i < statement->resolved_branch_count; ++i) {
+                    const F2cResolvedBranch *branch = &statement->resolved_branches[i];
                     indent(&context->output, *depth + 1);
-                    f2c_buffer_printf(&context->output, "case %s: {\n", assignment->labels[0]);
-                    f2c_emit_scope_transfer_cleanup(
-                        &context->output, unit, statement->line,
-                        f2c_statement_label_line(unit, assignment->labels[0]), *depth + 2);
+                    f2c_buffer_printf(&context->output, "case %s: {\n", branch->label);
+                    f2c_emit_scope_cleanup_plan(&context->output, unit, &branch->cleanup,
+                                                *depth + 2);
                     indent(&context->output, *depth + 2);
-                    f2c_buffer_printf(&context->output, "goto f2c_label_%s; }\n",
-                                      assignment->labels[0]);
+                    f2c_buffer_printf(&context->output, "goto f2c_label_%s; }\n", branch->label);
                     ++emitted;
                 }
             }

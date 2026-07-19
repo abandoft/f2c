@@ -119,7 +119,7 @@ int f2c_emit_inquire_statement(Context *context, Unit *unit, const F2cStatement 
     f2c_buffer_append(&context->output, "}\n");
     f2c_io_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "f2c_inquiry_dispose(&f2c_inquiry_result);\n");
-    f2c_io_emit_control_result(context, &status, "INQUIRE", depth + 1);
+    f2c_io_emit_control_result(context, unit, statement, &status, "INQUIRE", depth + 1);
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     free(unit_value);

@@ -202,6 +202,7 @@ set(
     src/semantic/validation/data.c
     src/semantic/validation/expression.c
     src/semantic/validation/io.c
+    src/semantic/validation/lifetime.c
     src/semantic/validation/private.h
     src/semantic/validation/procedure.c
     src/semantic/validation/statement.c
