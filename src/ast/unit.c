@@ -286,3 +286,62 @@ void f2c_unit_header_syntax_discard(F2cUnitHeaderSyntax *syntax) {
     free(syntax->arguments);
     memset(syntax, 0, sizeof(*syntax));
 }
+
+static int separated_end_kind(const F2cToken *token, F2cUnitSyntaxKind *kind) {
+    return unit_kind(token, kind) ||
+           (token != NULL && token->kind == F2C_TOKEN_IDENTIFIER &&
+            f2c_token_equals(token, "module") && (*kind = F2C_UNIT_SYNTAX_MODULE, 1));
+}
+
+static int joined_end_kind(const F2cToken *token, F2cUnitSyntaxKind *kind) {
+    if (token == NULL || token->kind != F2C_TOKEN_IDENTIFIER)
+        return 0;
+    if (f2c_token_equals(token, "endprogram"))
+        *kind = F2C_UNIT_SYNTAX_PROGRAM;
+    else if (f2c_token_equals(token, "endsubroutine"))
+        *kind = F2C_UNIT_SYNTAX_SUBROUTINE;
+    else if (f2c_token_equals(token, "endfunction"))
+        *kind = F2C_UNIT_SYNTAX_FUNCTION;
+    else if (f2c_token_equals(token, "endmodule"))
+        *kind = F2C_UNIT_SYNTAX_MODULE;
+    else
+        return 0;
+    return 1;
+}
+
+F2cUnitEndParseStatus f2c_parse_unit_end_syntax(const Line *line, F2cUnitEndSyntax *syntax) {
+    size_t start;
+    size_t index;
+    if (syntax == NULL)
+        return F2C_UNIT_END_INVALID;
+    memset(syntax, 0, sizeof(*syntax));
+    if (line == NULL || line->token_count == 0U)
+        return F2C_UNIT_END_NOT_MATCHED;
+    start = line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U : 0U;
+    if (start == line->token_count)
+        return F2C_UNIT_END_NOT_MATCHED;
+    syntax->span = f2c_source_span_cover(&line->tokens[start].span,
+                                         &line->tokens[line->token_count - 1U].span);
+    index = start;
+    if (f2c_line_token_equals(line, index, "end")) {
+        ++index;
+        if (index == line->token_count)
+            return F2C_UNIT_END_PARSED;
+        if (!separated_end_kind(&line->tokens[index], &syntax->kind))
+            return F2C_UNIT_END_NOT_MATCHED;
+        syntax->has_kind = 1;
+        syntax->kind_token = &line->tokens[index++];
+    } else if (joined_end_kind(&line->tokens[index], &syntax->kind)) {
+        syntax->has_kind = 1;
+        syntax->kind_token = &line->tokens[index++];
+    } else {
+        return F2C_UNIT_END_NOT_MATCHED;
+    }
+    if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_IDENTIFIER)
+        syntax->name = &line->tokens[index++];
+    if (index != line->token_count) {
+        syntax->error_token = &line->tokens[index];
+        return F2C_UNIT_END_INVALID;
+    }
+    return F2C_UNIT_END_PARSED;
+}

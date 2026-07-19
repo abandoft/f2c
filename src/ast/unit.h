@@ -6,7 +6,8 @@
 typedef enum F2cUnitSyntaxKind {
     F2C_UNIT_SYNTAX_PROGRAM,
     F2C_UNIT_SYNTAX_SUBROUTINE,
-    F2C_UNIT_SYNTAX_FUNCTION
+    F2C_UNIT_SYNTAX_FUNCTION,
+    F2C_UNIT_SYNTAX_MODULE
 } F2cUnitSyntaxKind;
 
 typedef enum F2cUnitHeaderParseStatus {
@@ -51,8 +52,24 @@ typedef struct F2cUnitHeaderSyntax {
     const F2cToken *error_token;
 } F2cUnitHeaderSyntax;
 
+typedef enum F2cUnitEndParseStatus {
+    F2C_UNIT_END_NOT_MATCHED,
+    F2C_UNIT_END_PARSED,
+    F2C_UNIT_END_INVALID
+} F2cUnitEndParseStatus;
+
+typedef struct F2cUnitEndSyntax {
+    F2cSourceSpan span;
+    int has_kind;
+    F2cUnitSyntaxKind kind;
+    const F2cToken *kind_token;
+    const F2cToken *name;
+    const F2cToken *error_token;
+} F2cUnitEndSyntax;
+
 F2cUnitHeaderParseStatus f2c_parse_unit_header_syntax(const Line *line,
                                                       F2cUnitHeaderSyntax *syntax);
 void f2c_unit_header_syntax_discard(F2cUnitHeaderSyntax *syntax);
+F2cUnitEndParseStatus f2c_parse_unit_end_syntax(const Line *line, F2cUnitEndSyntax *syntax);
 
 #endif
