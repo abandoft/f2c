@@ -152,9 +152,12 @@ struct Unit {
     Context *context;
     UnitKind kind;
     F2cUnitPhase phase;
+    F2cSourceSpan header_span;
+    F2cSourceSpan name_span;
     char *name;
     char *fortran_name;
     char **arguments;
+    F2cSourceSpan *argument_spans;
     size_t argument_count;
     size_t begin;
     size_t end;
@@ -162,7 +165,9 @@ struct Unit {
     Type return_type;
     int return_kind;
     int return_type_explicit;
+    F2cSourceSpan return_type_span;
     char *result_name;
+    F2cSourceSpan result_name_span;
     char *result_character_length;
     F2cTokenRange result_character_length_syntax;
     char *result_derived_type_name;
@@ -190,10 +195,15 @@ struct Unit {
     int implicit_none_external;
     int save_all;
     int recursive;
+    F2cSourceSpan recursive_span;
     int pure;
+    F2cSourceSpan pure_span;
     int elemental;
+    F2cSourceSpan elemental_span;
     int impure;
+    F2cSourceSpan impure_span;
     int module_procedure;
+    F2cSourceSpan module_procedure_span;
     int internal;
     int interface_body;
     int interface_abstract;

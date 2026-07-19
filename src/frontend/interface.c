@@ -198,6 +198,7 @@ void f2c_parse_explicit_interfaces(Context *context, Unit *host) {
         generic_name = parse_generic_name(context, start);
         for (j = i + 1U; j < block_end;) {
             Unit procedure;
+            F2cUnitHeaderParseStatus header_status;
             Unit *previous_specific;
             size_t procedure_end;
             int first_generic_specific;
@@ -206,7 +207,8 @@ void f2c_parse_explicit_interfaces(Context *context, Unit *host) {
                 ++j;
                 continue;
             }
-            if (!f2c_parse_unit_header_tokens(&context->lines.items[j], &procedure)) {
+            header_status = f2c_parse_unit_header(context, &context->lines.items[j], &procedure);
+            if (header_status != F2C_UNIT_HEADER_PARSED) {
                 ++j;
                 continue;
             }

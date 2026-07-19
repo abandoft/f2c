@@ -5,6 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void header_diagnostic(Context *context, const F2cSourceSpan *span, size_t fallback_line,
+                              const char *message) {
+    if (span != NULL && span->begin.line != 0U)
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, span, 1, "%s", message);
+    else
+        f2c_diagnostic(context, fallback_line, 1, "%s", message);
+}
+
 void f2c_analyze_module(Context *context, Unit *unit) {
     size_t i;
     f2c_prepare_implicit_map(context, unit);
@@ -53,13 +61,28 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
     Symbol *function_result = NULL;
     const size_t header_line = context->lines.items[unit->begin].number;
     if (unit->pure && unit->impure)
-        f2c_diagnostic(context, header_line, 1,
-                       "a procedure cannot have both PURE and IMPURE prefixes");
-    if ((unit->pure || unit->elemental || unit->impure || unit->recursive) &&
-        unit->kind == UNIT_PROGRAM)
-        f2c_diagnostic(context, header_line, 1, "PROGRAM cannot have procedure prefix attributes");
+        header_diagnostic(context, &unit->impure_span, header_line,
+                          "a procedure cannot have both PURE and IMPURE prefixes");
+    if (unit->kind == UNIT_PROGRAM) {
+        if (unit->pure)
+            header_diagnostic(context, &unit->pure_span, header_line,
+                              "PURE is not valid on a PROGRAM");
+        if (unit->elemental)
+            header_diagnostic(context, &unit->elemental_span, header_line,
+                              "ELEMENTAL is not valid on a PROGRAM");
+        if (unit->impure)
+            header_diagnostic(context, &unit->impure_span, header_line,
+                              "IMPURE is not valid on a PROGRAM");
+        if (unit->recursive)
+            header_diagnostic(context, &unit->recursive_span, header_line,
+                              "RECURSIVE is not valid on a PROGRAM");
+        if (unit->module_procedure)
+            header_diagnostic(context, &unit->module_procedure_span, header_line,
+                              "MODULE is not valid on a PROGRAM");
+    }
     if (unit->elemental && unit->recursive)
-        f2c_diagnostic(context, header_line, 1, "an ELEMENTAL procedure cannot also be RECURSIVE");
+        header_diagnostic(context, &unit->recursive_span, header_line,
+                          "an ELEMENTAL procedure cannot also be RECURSIVE");
     if (unit->elemental && !unit->impure)
         unit->pure = 1;
     if (!unit->interface_body)
@@ -250,11 +273,11 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
             !symbol->parameter && !symbol->allocatable && !is_function_result && !symbol->pointer &&
             symbol->character_length != NULL && strcmp(symbol->character_length, "*") != 0) {
             int64_t constant_length;
-            symbol->automatic_character = symbol->character_length_syntax.count != 0U
-                                              ? !f2c_evaluate_integer_syntax(
-                                                    unit, symbol->character_length_syntax,
-                                                    &constant_length)
-                                              : strcmp(symbol->character_length, "1") != 0;
+            symbol->automatic_character =
+                symbol->character_length_syntax.count != 0U
+                    ? !f2c_evaluate_integer_syntax(unit, symbol->character_length_syntax,
+                                                   &constant_length)
+                    : strcmp(symbol->character_length, "1") != 0;
         }
         if (unit->symbols[i].type == TYPE_UNKNOWN) {
             Type implicit_type;

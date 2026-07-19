@@ -1,6 +1,7 @@
 #ifndef F2C_FRONTEND_FRONTEND_H
 #define F2C_FRONTEND_FRONTEND_H
 
+#include "ast/unit.h"
 #include "internal/context.h"
 
 int f2c_normalize_source(Context *context, const char *source, size_t length, F2cSourceForm form);
@@ -15,7 +16,7 @@ int f2c_contains_tokens(const Line *line);
 int f2c_derived_type_start_tokens(const Line *line);
 int f2c_derived_type_end_tokens(const Line *line);
 int f2c_program_unit_end_tokens(const Line *line, UnitKind kind);
-int f2c_parse_unit_header_tokens(const Line *line, Unit *unit);
+F2cUnitHeaderParseStatus f2c_parse_unit_header(Context *context, const Line *line, Unit *unit);
 void f2c_parse_explicit_interfaces(Context *context, Unit *host);
 Unit *f2c_find_interface_signature(Context *context, Unit *scope, const char *name,
                                    int include_abstract);

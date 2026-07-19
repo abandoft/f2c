@@ -55,7 +55,7 @@ static int parse_unit_header_tokens(const char *source, Unit *unit) {
     line.text = (char *)source;
     line.tokens = tokens;
     line.token_count = count;
-    parsed = f2c_parse_unit_header_tokens(&line, unit);
+    parsed = f2c_parse_unit_header(NULL, &line, unit) == F2C_UNIT_HEADER_PARSED;
 
 cleanup:
     free(tokens);

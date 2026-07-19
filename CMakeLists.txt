@@ -61,6 +61,8 @@ set(
     src/ast/statement/parenthesis.c
     src/ast/statement/private.h
     src/ast/token_stream.c
+    src/ast/unit.c
+    src/ast/unit.h
     src/ast/visit.c
     src/codegen/allocation.c
     src/codegen/array.c
