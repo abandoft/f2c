@@ -16,8 +16,7 @@ static char *identifier_text(const F2cToken *token) {
 
 static const F2cToken *derived_type_name_token(const Line *line) {
     const size_t start = statement_start(line);
-    const size_t double_colon =
-        f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
+    const size_t double_colon = f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
     const size_t index = double_colon != SIZE_MAX ? double_colon + 1U : start + 1U;
     return line != NULL && index < line->token_count &&
                    line->tokens[index].kind == F2C_TOKEN_IDENTIFIER
@@ -92,8 +91,7 @@ static int apply_binding_attributes(Context *context, const Line *line, size_t b
             if (index < end && line->tokens[index].kind == F2C_TOKEN_LEFT_PAREN) {
                 size_t close;
                 if (!f2c_token_matching_delimiter(line->tokens, end, index, &close) ||
-                    close != index + 2U ||
-                    line->tokens[index + 1U].kind != F2C_TOKEN_IDENTIFIER) {
+                    close != index + 2U || line->tokens[index + 1U].kind != F2C_TOKEN_IDENTIFIER) {
                     diagnose_attribute(context, line, attribute, "malformed PASS attribute '%s'");
                     valid = 0;
                     while (index < end && line->tokens[index].kind != F2C_TOKEN_COMMA)
@@ -160,8 +158,7 @@ static void initialize_binding(Context *context, F2cDerivedType *derived, const 
 static void parse_type_bound_procedure(Context *context, F2cDerivedType *derived,
                                        const Line *line) {
     const size_t start = statement_start(line);
-    const size_t double_colon =
-        f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
+    const size_t double_colon = f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
     const F2cToken *interface_token = NULL;
     size_t attributes_begin = start + 1U;
     size_t index;
@@ -194,8 +191,7 @@ static void parse_type_bound_procedure(Context *context, F2cDerivedType *derived
         const F2cToken *target_token = NULL;
         F2cTypeBinding *binding;
         if (line->tokens[index].kind != F2C_TOKEN_IDENTIFIER) {
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line,
-                                      &line->tokens[index], 1,
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, &line->tokens[index], 1,
                                       "malformed type-bound PROCEDURE binding");
             while (index < line->token_count && line->tokens[index].kind != F2C_TOKEN_COMMA)
                 ++index;
@@ -207,8 +203,7 @@ static void parse_type_bound_procedure(Context *context, F2cDerivedType *derived
         if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_OPERATOR &&
             f2c_token_equals(&line->tokens[index], "=>")) {
             ++index;
-            if (index >= line->token_count ||
-                line->tokens[index].kind != F2C_TOKEN_IDENTIFIER) {
+            if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_IDENTIFIER) {
                 f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, name_token, 1,
                                           "binding implementation is missing after '=>'");
                 while (index < line->token_count && line->tokens[index].kind != F2C_TOKEN_COMMA)
@@ -218,8 +213,7 @@ static void parse_type_bound_procedure(Context *context, F2cDerivedType *derived
             }
         }
         if (index < line->token_count && line->tokens[index].kind != F2C_TOKEN_COMMA) {
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line,
-                                      &line->tokens[index], 1,
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, &line->tokens[index], 1,
                                       "malformed type-bound PROCEDURE binding");
             while (index < line->token_count && line->tokens[index].kind != F2C_TOKEN_COMMA)
                 ++index;
@@ -254,8 +248,7 @@ static int defined_io_kind(const F2cToken *operation, const F2cToken *form,
 
 static void parse_defined_io_generic(Context *context, F2cDerivedType *derived, const Line *line) {
     const size_t start = statement_start(line);
-    const size_t double_colon =
-        f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
+    const size_t double_colon = f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
     const size_t generic = double_colon != SIZE_MAX ? double_colon + 1U : SIZE_MAX;
     size_t arrow;
     F2cDefinedIoKind kind;
@@ -272,15 +265,13 @@ static void parse_defined_io_generic(Context *context, F2cDerivedType *derived, 
         line->tokens[generic + 3U].kind != F2C_TOKEN_RIGHT_PAREN ||
         !defined_io_kind(&line->tokens[generic], &line->tokens[generic + 2U], &kind))
         return;
-    if (arrow + 2U != line->token_count ||
-        line->tokens[arrow + 1U].kind != F2C_TOKEN_IDENTIFIER) {
+    if (arrow + 2U != line->token_count || line->tokens[arrow + 1U].kind != F2C_TOKEN_IDENTIFIER) {
         f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, &line->tokens[arrow], 1,
                                   "defined I/O generic must resolve to one specific binding");
         return;
     }
     if (derived->defined_io_bindings[kind] != NULL) {
-        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line,
-                                  &line->tokens[generic], 1,
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, &line->tokens[generic], 1,
                                   "duplicate defined I/O generic");
         return;
     }
@@ -295,8 +286,7 @@ static void parse_defined_io_generic(Context *context, F2cDerivedType *derived, 
 
 static int header_has_attribute(const Line *line, const char *attribute) {
     const size_t start = statement_start(line);
-    const size_t double_colon =
-        f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
+    const size_t double_colon = f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
     const size_t end = double_colon != SIZE_MAX ? double_colon : line->token_count;
     size_t index;
     for (index = start + 1U; index < end; ++index) {
@@ -310,8 +300,7 @@ static int header_has_attribute(const Line *line, const char *attribute) {
 static void parse_parent_type(Context *context, Unit *unit, F2cDerivedType *derived) {
     const Line *line = &context->lines.items[derived->begin];
     const size_t start = statement_start(line);
-    const size_t double_colon =
-        f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
+    const size_t double_colon = f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
     const size_t end = double_colon != SIZE_MAX ? double_colon : line->token_count;
     size_t index;
     for (index = start + 1U; index < end; ++index) {
@@ -321,8 +310,8 @@ static void parse_parent_type(Context *context, Unit *unit, F2cDerivedType *deri
         if (index + 1U >= end || line->tokens[index + 1U].kind != F2C_TOKEN_LEFT_PAREN ||
             !f2c_token_matching_delimiter(line->tokens, end, index + 1U, &close) ||
             close != index + 3U || line->tokens[index + 2U].kind != F2C_TOKEN_IDENTIFIER) {
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line,
-                                      &line->tokens[index], 1, "malformed EXTENDS attribute");
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, &line->tokens[index], 1,
+                                      "malformed EXTENDS attribute");
             return;
         }
         derived->parent_name = identifier_text(&line->tokens[index + 2U]);
@@ -378,8 +367,7 @@ static void parse_finalizers(Context *context, F2cDerivedType *derived, const Li
         } else if (!expect_name && line->tokens[index].kind == F2C_TOKEN_COMMA) {
             expect_name = 1;
         } else {
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line,
-                                      &line->tokens[index], 1,
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, &line->tokens[index], 1,
                                       "malformed FINAL procedure list");
             return;
         }
@@ -432,6 +420,8 @@ void f2c_parse_derived_type_definitions(Context *context, Unit *unit) {
         const F2cToken *name_token;
         char *name;
         size_t end;
+        if (!f2c_unit_line_is_active(unit, line))
+            continue;
         if (!f2c_derived_type_start_tokens(line))
             continue;
         name_token = derived_type_name_token(line);

@@ -1,5 +1,7 @@
 #include "frontend/private.h"
 
+#include "ast/declaration/use.h"
+
 #include <ctype.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -16,8 +18,16 @@ static void header_diagnostic(Context *context, const F2cSourceSpan *span, size_
 void f2c_analyze_module(Context *context, Unit *unit) {
     size_t i;
     f2c_prepare_implicit_map(context, unit);
-    for (i = unit->begin + 1U; i < unit->end; ++i)
+    for (i = unit->begin + 1U; i < unit->end; ++i) {
+        if (f2c_interface_start_tokens(&context->lines.items[i])) {
+            while (i + 1U < unit->end && !f2c_interface_end_tokens(&context->lines.items[i + 1U]))
+                ++i;
+            if (i + 1U < unit->end)
+                ++i;
+            continue;
+        }
         f2c_import_module(context, unit, &context->lines.items[i]);
+    }
     f2c_parse_derived_type_definitions(context, unit);
     f2c_parse_explicit_interfaces(context, unit);
     for (i = unit->begin + 1U; i < unit->end; ++i) {
@@ -40,6 +50,8 @@ void f2c_analyze_module(Context *context, Unit *unit) {
     for (i = 0U; i < unit->symbol_count; ++i) {
         Symbol *symbol = &unit->symbols[i];
         Buffer c_name = {0};
+        if (symbol->external)
+            continue;
         symbol->module_entity = 1;
         symbol->saved = 1;
         f2c_buffer_printf(&c_name, "f2c_module_%s_%s", unit->name, symbol->name);
@@ -124,7 +136,7 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
                 continue;
             if (in_specification_part && f2c_mark_statement_function_symbols(unit, line))
                 continue;
-            if (!f2c_declaration_tokens(line) && !f2c_line_token_equals(line, 0U, "use"))
+            if (!f2c_declaration_tokens(line) && !f2c_use_statement_candidate(line))
                 in_specification_part = 0;
         }
     }
