@@ -353,8 +353,10 @@ int main(void) {
     expect(f2c_parse_statement(&unit, "call consume(x, n + 1)", 18U, &statement), "CALL parses");
     expect(statement.kind == F2C_STMT_CALL && statement.name != NULL &&
                strcmp(statement.name, "consume") == 0 && statement.item_count == 2U &&
-               statement.arguments != NULL && statement.arguments[0] != NULL &&
-               statement.arguments[1] != NULL && statement.arguments[0]->span.begin.line == 18U &&
+               statement.name_span.begin.line == 18U && statement.name_span.begin.column == 6U &&
+               statement.name_span.end.column == 13U && statement.arguments != NULL &&
+               statement.arguments[0] != NULL && statement.arguments[1] != NULL &&
+               statement.arguments[0]->span.begin.line == 18U &&
                statement.arguments[0]->span.begin.column == 14U &&
                statement.arguments[1]->span.begin.column == 17U,
            "CALL owns its procedure name, actual texts, and argument ASTs");
@@ -364,7 +366,9 @@ int main(void) {
            "MOVE_ALLOC parses");
     expect(statement.kind == F2C_STMT_MOVE_ALLOC && statement.name != NULL &&
                strcmp(statement.name, "move_alloc") == 0 && statement.item_count == 2U &&
-               statement.arguments != NULL && statement.arguments[0] != NULL &&
+               statement.name_span.begin.line == 18U && statement.name_span.begin.column == 6U &&
+               statement.name_span.end.column == 16U && statement.arguments != NULL &&
+               statement.arguments[0] != NULL &&
                statement.arguments[0]->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
                statement.arguments[0]->span.begin.column == 17U &&
                statement.arguments[0]->children[0]->span.begin.column == 22U &&
