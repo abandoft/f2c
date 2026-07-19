@@ -96,9 +96,36 @@ static int copy_lower(char *destination, size_t *offset, const F2cToken *token) 
     size_t index;
     if (destination == NULL || offset == NULL || token == NULL)
         return 0;
-    for (index = 0U; index < token->length; ++index)
-        destination[(*offset)++] = (char)ascii_lower((unsigned char)token->begin[index]);
+    for (index = 0U; index < token->length; ++index) {
+        const unsigned char value = (unsigned char)token->begin[index];
+        if (value != (unsigned char)' ' && value != (unsigned char)'\t' &&
+            value != (unsigned char)'\r' && value != (unsigned char)'\n')
+            destination[(*offset)++] = (char)ascii_lower(value);
+    }
     return 1;
+}
+
+char *f2c_generic_operator_key(const char *operator_text) {
+    const size_t source_length = operator_text != NULL ? strlen(operator_text) : 0U;
+    const char prefix[] = "operator(";
+    size_t offset = sizeof(prefix) - 1U;
+    size_t index;
+    char *key;
+    if (source_length > SIZE_MAX - sizeof(prefix) - 1U)
+        return NULL;
+    key = (char *)malloc(sizeof(prefix) + source_length + 1U);
+    if (key == NULL)
+        return NULL;
+    memcpy(key, prefix, sizeof(prefix) - 1U);
+    for (index = 0U; index < source_length; ++index) {
+        const unsigned char value = (unsigned char)operator_text[index];
+        if (value != (unsigned char)' ' && value != (unsigned char)'\t' &&
+            value != (unsigned char)'\r' && value != (unsigned char)'\n')
+            key[offset++] = (char)ascii_lower(value);
+    }
+    key[offset++] = ')';
+    key[offset] = '\0';
+    return key;
 }
 
 char *f2c_generic_designator_key(const F2cGenericDesignatorSyntax *designator) {

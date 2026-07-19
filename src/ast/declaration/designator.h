@@ -29,5 +29,6 @@ f2c_parse_generic_designator_syntax(const Line *line, size_t begin, size_t *end,
 int f2c_generic_designators_equal(const F2cGenericDesignatorSyntax *left,
                                   const F2cGenericDesignatorSyntax *right);
 char *f2c_generic_designator_key(const F2cGenericDesignatorSyntax *designator);
+char *f2c_generic_operator_key(const char *operator_text);
 
 #endif
