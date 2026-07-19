@@ -9,7 +9,6 @@ int f2c_normalize_source(Context *context, const char *source, size_t length, F2
 int f2c_interface_start_tokens(const Line *line);
 int f2c_interface_end_tokens(const Line *line);
 int f2c_abstract_interface_tokens(const Line *line);
-int f2c_module_procedure_tokens(const Line *line);
 int f2c_contains_tokens(const Line *line);
 int f2c_derived_type_start_tokens(const Line *line);
 int f2c_derived_type_end_tokens(const Line *line);

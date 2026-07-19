@@ -34,11 +34,6 @@ int f2c_abstract_interface_tokens(const Line *line) {
            word(line, 1U, "interface");
 }
 
-int f2c_module_procedure_tokens(const Line *line) {
-    return statement_token_count(line) >= 2U && word(line, 0U, "module") &&
-           word(line, 1U, "procedure");
-}
-
 int f2c_contains_tokens(const Line *line) {
     return statement_token_count(line) == 1U && word(line, 0U, "contains");
 }
