@@ -56,6 +56,8 @@ jobs:
         run: sh test/transform_differential.sh build/numerical/f2c
       - name: Differential-test file control I/O
         run: sh test/file_control_differential.sh build/numerical/f2c
+      - name: Differential-test record I/O
+        run: sh test/record_io_differential.sh build/numerical/f2c
       - name: Differential-test FORMAT descriptors
         run: sh test/format_differential.sh build/numerical/f2c
       - name: Run Reference BLAS/LAPACK smoke test
