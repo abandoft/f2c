@@ -841,7 +841,17 @@ static void test_lapack_f90_semantics(void) {
                                  "  real :: b(ldb, *)\n"
                                  "  real :: h(2, 3)\n"
                                  "  h = b(k+1:k+2, k:k+2)\n"
-                                 "end subroutine copy_section\n";
+                                 "end subroutine copy_section\n"
+                                 "subroutine import_all_constants(value)\n"
+                                 "  use la_constants\n"
+                                 "  real :: value\n"
+                                 "  value = sone\n"
+                                 "end subroutine import_all_constants\n"
+                                 "subroutine rename_constant(value)\n"
+                                 "  use la_constants, one => sone\n"
+                                 "  real :: value\n"
+                                 "  value = one\n"
+                                 "end subroutine rename_constant\n";
     F2cOptions options = {"lapack_semantics.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "LAPACK F90 module and section semantics translate");
@@ -857,6 +867,10 @@ static void test_lapack_f90_semantics(void) {
                     "character substring assignment uses checked typed-AST bounds");
     expect_contains(result.code, "int32_t f2c_row, f2c_column",
                     "rank-two array section assignment lowers to column-major loops");
+    expect_contains(result.code, "void import_all_constants",
+                    "USE LA_CONSTANTS without ONLY imports the complete compiler module");
+    expect_contains(result.code, "void rename_constant",
+                    "LA_CONSTANTS rename lists import aliases while hiding remote names");
     f2c_result_free(&result);
 }
 
@@ -3242,6 +3256,140 @@ static void test_tokenized_use_association(void) {
     expect_contains(result.code, "f2c_module_use_provider_remote_value",
                     "USE renaming retains the provider's collision-free storage identity");
     f2c_result_free(&result);
+
+    {
+        static const char use_named_variable[] = "subroutine use_named_entity(result)\n"
+                                                 "  integer, intent(out) :: result\n"
+                                                 "  integer :: use\n"
+                                                 "  use = 4\n"
+                                                 "  result = use\n"
+                                                 "end subroutine use_named_entity\n";
+        F2cOptions options = {"use_named_entity.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(use_named_variable, sizeof(use_named_variable) - 1U, &options);
+        expect(result.error_count == 0U,
+               "the non-reserved USE keyword remains available as an entity name");
+        expect_contains(result.code, "use = 4",
+                        "a USE-named assignment is not consumed as a module statement");
+        f2c_result_free(&result);
+    }
+}
+
+static void test_derived_type_use_association(void) {
+    static const char dependent[] = "module type_consumer\n"
+                                    "  use type_provider, only: alias => original\n"
+                                    "  type(alias) :: stored\n"
+                                    "end module type_consumer\n";
+    static const char consumer[] = "subroutine read_imported_type(result)\n"
+                                   "  use type_consumer, only: stored\n"
+                                   "  integer, intent(out) :: result\n"
+                                   "  stored%value = 9\n"
+                                   "  result = stored%value\n"
+                                   "end subroutine read_imported_type\n";
+    static const char provider[] = "module type_provider\n"
+                                   "  type :: original\n"
+                                   "    integer :: value\n"
+                                   "  end type original\n"
+                                   "end module type_provider\n";
+    static const char empty_only[] = "subroutine empty_type_import()\n"
+                                     "  use type_provider, only:\n"
+                                     "  type(original) :: hidden\n"
+                                     "end subroutine empty_type_import\n";
+    static const char rename_hides_remote[] = "subroutine renamed_type_import()\n"
+                                              "  use type_provider, alias => original\n"
+                                              "  type(alias) :: visible\n"
+                                              "  type(original) :: hidden\n"
+                                              "end subroutine renamed_type_import\n";
+    static const char local_conflict[] = "subroutine conflicting_type_import()\n"
+                                         "  use type_provider, only: alias => original\n"
+                                         "  type :: alias\n"
+                                         "    integer :: local_value\n"
+                                         "  end type alias\n"
+                                         "end subroutine conflicting_type_import\n";
+    static const char interface_scope[] = "module interface_scope\n"
+                                          "  interface\n"
+                                          "    subroutine accepts(value)\n"
+                                          "      use type_provider, only: alias => original\n"
+                                          "      type(alias), intent(in) :: value\n"
+                                          "    end subroutine accepts\n"
+                                          "  end interface\n"
+                                          "  type(alias) :: leaked\n"
+                                          "end module interface_scope\n";
+    static const char cycle_a[] = "module cycle_a\n"
+                                  "  use cycle_b\n"
+                                  "end module cycle_a\n";
+    static const char cycle_b[] = "module cycle_b\n"
+                                  "  use cycle_a\n"
+                                  "end module cycle_b\n";
+    F2cInput ordered_inputs[] = {
+        {dependent, sizeof(dependent) - 1U, {"dependent.f90", F2C_SOURCE_FREE, 0}},
+        {consumer, sizeof(consumer) - 1U, {"consumer.f90", F2C_SOURCE_FREE, 0}},
+        {provider, sizeof(provider) - 1U, {"provider.f90", F2C_SOURCE_FREE, 0}},
+    };
+    F2cInput empty_inputs[] = {
+        {provider, sizeof(provider) - 1U, {"provider.f90", F2C_SOURCE_FREE, 0}},
+        {empty_only, sizeof(empty_only) - 1U, {"empty_only.f90", F2C_SOURCE_FREE, 0}},
+    };
+    F2cInput rename_inputs[] = {
+        {provider, sizeof(provider) - 1U, {"provider.f90", F2C_SOURCE_FREE, 0}},
+        {rename_hides_remote, sizeof(rename_hides_remote) - 1U, {"rename.f90", F2C_SOURCE_FREE, 0}},
+    };
+    F2cInput cycle_inputs[] = {
+        {cycle_a, sizeof(cycle_a) - 1U, {"cycle_a.f90", F2C_SOURCE_FREE, 0}},
+        {cycle_b, sizeof(cycle_b) - 1U, {"cycle_b.f90", F2C_SOURCE_FREE, 0}},
+    };
+    F2cInput conflict_inputs[] = {
+        {provider, sizeof(provider) - 1U, {"provider.f90", F2C_SOURCE_FREE, 0}},
+        {local_conflict, sizeof(local_conflict) - 1U, {"conflict.f90", F2C_SOURCE_FREE, 0}},
+    };
+    F2cInput interface_inputs[] = {
+        {provider, sizeof(provider) - 1U, {"provider.f90", F2C_SOURCE_FREE, 0}},
+        {interface_scope,
+         sizeof(interface_scope) - 1U,
+         {"interface_scope.f90", F2C_SOURCE_FREE, 0}},
+    };
+    F2cResult result = f2c_transpile_project(ordered_inputs, 3U);
+    expect(result.error_count == 0U,
+           "project modules are analyzed by dependency order rather than input order");
+    expect_contains(result.code, "f2c_type_type_provider_original",
+                    "renamed derived types retain their provider C17 type identity");
+    expect_contains(result.code, "f2c_module_type_consumer_stored",
+                    "a module may publish an entity declared with an imported type alias");
+    f2c_result_free(&result);
+
+    result = f2c_transpile_project(empty_inputs, 2U);
+    expect(result.code == NULL && result.error_count != 0U,
+           "an empty ONLY list imports no derived types");
+    expect_contains(result.diagnostics, "derived type 'original' is not declared in this scope",
+                    "empty ONLY semantics fail at a hidden type use");
+    f2c_result_free(&result);
+
+    result = f2c_transpile_project(rename_inputs, 2U);
+    expect(result.code == NULL && result.error_count != 0U,
+           "a rename list hides the remote derived type name");
+    expect_contains(result.diagnostics, "derived type 'original' is not declared in this scope",
+                    "the renamed remote type cannot remain visible accidentally");
+    f2c_result_free(&result);
+
+    result = f2c_transpile_project(conflict_inputs, 2U);
+    expect(result.code == NULL && result.error_count != 0U,
+           "a USE alias cannot collide with a local derived-type definition");
+    expect_contains(result.diagnostics, "denotes conflicting derived types",
+                    "local and imported derived-type conflicts are diagnosed before emission");
+    f2c_result_free(&result);
+
+    result = f2c_transpile_project(interface_inputs, 2U);
+    expect(result.code == NULL && result.error_count != 0U,
+           "USE association inside an interface body cannot leak into its host module");
+    expect_contains(result.diagnostics, "derived type 'alias' is not declared in this scope",
+                    "interface-body module associations retain their own scope");
+    f2c_result_free(&result);
+
+    result = f2c_transpile_project(cycle_inputs, 2U);
+    expect(result.code == NULL && result.error_count != 0U,
+           "cyclic project module dependencies suppress generated C17");
+    expect_contains(result.diagnostics, "cyclic project module dependency",
+                    "module dependency cycles produce an actionable semantic diagnostic");
+    f2c_result_free(&result);
 }
 
 static void test_malformed_character_prefix_cleanup(void) {
@@ -3308,6 +3456,7 @@ int main(void) {
     test_token_driven_scope_and_reference_boundaries();
     test_statement_function_typed_lowering();
     test_tokenized_use_association();
+    test_derived_type_use_association();
     test_malformed_character_prefix_cleanup();
     test_implicit_mapping_semantics();
     test_control_flow_semantics();
