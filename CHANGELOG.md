@@ -1,3 +1,13 @@
+## 1.10.0
+
+- Added a record-based transfer layer for sequential and direct formatted and unformatted files, including checked `REC`/`RECL` addressing and fixed record boundaries.
+- Added portable little-endian sequential-unformatted framing, corrupt-record detection, partial-record cleanup, and record-aware `BACKSPACE`.
+- Added binary transfers for supported scalar kinds, complex and character values, fixed arrays, implied DO loops, and default or defined I/O for derived values.
+- Unified `IOSTAT`, `IOMSG`, `ERR`, `END`, and `EOR` handling while enforcing connected-unit action, form, access, and record constraints without generated abort placeholders.
+- Corrected direct formatted padding, slash editing, format reversion, missing-record handling, and `NEXTREC` advancement across fixed-length records.
+- Added pre-emission validation for invalid record controls and derived values whose dynamic components require defined I/O.
+- Added strict C17 execution, corrupt-file regression, sanitizer coverage, and generated-C/native-Fortran record-I/O differentials to CI.
+
 ## 1.9.0
 
 - Added a unified, seekable generated-code I/O stream abstraction that retains libc for external files and uses memory records for internal files.
