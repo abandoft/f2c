@@ -206,8 +206,39 @@ static void validate_pointer_statement(Context *context, const F2cStatement *sta
     }
 }
 
+static int validate_defined_assignment(Context *context, Unit *unit, F2cStatement *statement) {
+    static const char generic_name[] = "assignment(=)";
+    F2cExpr *operands[2];
+    F2cExpr **bound_operands = operands;
+    size_t operand_count = 2U;
+    Unit *definition;
+    int handled = 0;
+    if (statement == NULL || statement->kind != F2C_STMT_ASSIGNMENT || statement->left == NULL ||
+        statement->right == NULL)
+        return 0;
+    operands[0] = statement->left;
+    operands[1] = statement->right;
+    definition = f2c_validation_generic_specific(context, unit, statement->line, generic_name,
+                                                 &statement->operator_span, operands, operand_count,
+                                                 1, 0, &handled);
+    if (definition == NULL)
+        return handled;
+    definition = f2c_validation_procedure_call(context, unit, statement->line, statement->text,
+                                               generic_name, &statement->operator_span,
+                                               &bound_operands, NULL, &operand_count, 1);
+    if (bound_operands != operands || operand_count != 2U) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_INTERNAL, &statement->operator_span, 1,
+                                 "defined assignment changed its fixed operand contract");
+        free(bound_operands != operands ? bound_operands : NULL);
+        return 1;
+    }
+    statement->resolved_procedure = definition;
+    return 1;
+}
+
 static void validate_statement(Context *context, Unit *unit, F2cStatement *statement) {
     size_t i;
+    int defined_assignment;
     if (statement->kind == F2C_STMT_INVALID) {
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &statement->span, 1,
                                  "unsupported Fortran statement: %s", statement->text);
@@ -267,8 +298,11 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
     f2c_validation_data_statement(context, unit, statement);
     f2c_validation_where_statement(context, statement);
     validate_pointer_statement(context, statement);
-    f2c_validation_intrinsic_assignment(context, statement);
-    f2c_validation_constructor_assignment(context, unit, statement);
+    defined_assignment = validate_defined_assignment(context, unit, statement);
+    if (!defined_assignment) {
+        f2c_validation_intrinsic_assignment(context, statement);
+        f2c_validation_constructor_assignment(context, unit, statement);
+    }
     if (statement->kind == F2C_STMT_ALLOCATE || statement->kind == F2C_STMT_DEALLOCATE)
         f2c_validation_allocation(context, unit, statement);
     if (statement->kind != F2C_STMT_READ && statement->kind != F2C_STMT_WRITE &&
