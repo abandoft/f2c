@@ -11,11 +11,18 @@ int f2c_interface_end_tokens(const Line *line);
 int f2c_abstract_interface_tokens(const Line *line);
 int f2c_module_procedure_tokens(const Line *line);
 int f2c_module_header_tokens(const Line *line, const F2cToken **name);
-int f2c_module_end_tokens(const Line *line);
 int f2c_contains_tokens(const Line *line);
 int f2c_derived_type_start_tokens(const Line *line);
 int f2c_derived_type_end_tokens(const Line *line);
-int f2c_program_unit_end_tokens(const Line *line, UnitKind kind);
+
+typedef enum F2cUnitEndMatchStatus {
+    F2C_UNIT_END_NO_MATCH,
+    F2C_UNIT_END_MATCHED,
+    F2C_UNIT_END_MISMATCHED
+} F2cUnitEndMatchStatus;
+
+F2cUnitEndMatchStatus f2c_match_program_unit_end(Context *context, const Line *line,
+                                                 const Unit *unit);
 F2cUnitHeaderParseStatus f2c_parse_unit_header(Context *context, const Line *line, Unit *unit);
 void f2c_parse_explicit_interfaces(Context *context, Unit *host);
 Unit *f2c_find_interface_signature(Context *context, Unit *scope, const char *name,

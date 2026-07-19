@@ -47,6 +47,7 @@ int f2c_discover_units(Context *context) {
         }
         if (active_index != (size_t)-1) {
             Unit *active = &context->units.items[active_index];
+            F2cUnitEndMatchStatus end_status;
             if (f2c_interface_start_tokens(line)) {
                 ++interface_depth;
                 context->lines.items[i].interface_depth = interface_depth;
@@ -72,7 +73,8 @@ int f2c_discover_units(Context *context) {
                 active->end = i;
                 host_index = active_index;
                 active_index = (size_t)-1;
-            } else if (f2c_program_unit_end_tokens(line, active->kind)) {
+            } else if ((end_status = f2c_match_program_unit_end(context, line, active)) !=
+                       F2C_UNIT_END_NO_MATCH) {
                 active->end = i;
                 active_index = (size_t)-1;
             }
@@ -107,8 +109,11 @@ int f2c_discover_units(Context *context) {
                 active_index = context->units.count - 1U;
                 interface_depth = 0U;
                 derived_type_depth = 0U;
-            } else if (f2c_program_unit_end_tokens(line, context->units.items[host_index].kind)) {
-                host_index = (size_t)-1;
+            } else {
+                const F2cUnitEndMatchStatus end_status =
+                    f2c_match_program_unit_end(context, line, &context->units.items[host_index]);
+                if (end_status != F2C_UNIT_END_NO_MATCH)
+                    host_index = (size_t)-1;
             }
             continue;
         }

@@ -150,11 +150,12 @@ Unit *f2c_find_interface_signature(Context *context, Unit *scope, const char *na
     return NULL;
 }
 
-static size_t find_procedure_end(const Context *context, size_t begin, size_t block_end,
-                                 UnitKind kind) {
+static size_t find_procedure_end(Context *context, size_t begin, size_t block_end,
+                                 const Unit *procedure) {
     size_t i;
     for (i = begin + 1U; i < block_end; ++i) {
-        if (f2c_program_unit_end_tokens(&context->lines.items[i], kind))
+        if (f2c_match_program_unit_end(context, &context->lines.items[i], procedure) !=
+            F2C_UNIT_END_NO_MATCH)
             return i;
     }
     return block_end;
@@ -219,7 +220,7 @@ void f2c_parse_explicit_interfaces(Context *context, Unit *host) {
                 ++j;
                 continue;
             }
-            procedure_end = find_procedure_end(context, j, block_end, procedure.kind);
+            procedure_end = find_procedure_end(context, j, block_end, &procedure);
             if (procedure_end == block_end) {
                 f2c_diagnostic(context, context->lines.items[j].number, 1,
                                "unterminated procedure interface '%s'", procedure.name);

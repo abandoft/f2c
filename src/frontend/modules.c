@@ -575,6 +575,7 @@ int f2c_discover_modules(Context *context) {
         size_t contains;
         Unit *replacement;
         Unit module;
+        Unit opening;
         if (!f2c_module_header_tokens(&context->lines.items[line_index], &name_token))
             continue;
         name = f2c_token_text(name_token);
@@ -584,6 +585,9 @@ int f2c_discover_modules(Context *context) {
             free(name);
             continue;
         }
+        memset(&opening, 0, sizeof(opening));
+        opening.kind = UNIT_MODULE;
+        opening.name = name;
         contains = context->lines.count;
         {
             size_t derived_type_depth = 0U;
@@ -601,7 +605,8 @@ int f2c_discover_modules(Context *context) {
                     continue;
                 if (contains == context->lines.count && f2c_contains_tokens(candidate))
                     contains = end;
-                if (f2c_module_end_tokens(candidate))
+                if (f2c_match_program_unit_end(context, candidate, &opening) !=
+                    F2C_UNIT_END_NO_MATCH)
                     break;
             }
         }
@@ -625,6 +630,12 @@ int f2c_discover_modules(Context *context) {
         memset(&module, 0, sizeof(module));
         module.context = context;
         module.kind = UNIT_MODULE;
+        module.header_span =
+            f2c_source_span_cover(&context->lines.items[line_index].tokens[0].span,
+                                  &context->lines.items[line_index]
+                                       .tokens[context->lines.items[line_index].token_count - 1U]
+                                       .span);
+        module.name_span = name_token->span;
         module.name = name;
         module.fortran_name = f2c_strdup(name);
         module.begin = line_index;

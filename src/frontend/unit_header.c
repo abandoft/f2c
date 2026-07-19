@@ -248,3 +248,50 @@ F2cUnitHeaderParseStatus f2c_parse_unit_header(Context *context, const Line *lin
     f2c_unit_header_syntax_discard(&syntax);
     return status;
 }
+
+static F2cUnitSyntaxKind syntax_kind(UnitKind kind) {
+    switch (kind) {
+    case UNIT_PROGRAM:
+        return F2C_UNIT_SYNTAX_PROGRAM;
+    case UNIT_SUBROUTINE:
+        return F2C_UNIT_SYNTAX_SUBROUTINE;
+    case UNIT_FUNCTION:
+        return F2C_UNIT_SYNTAX_FUNCTION;
+    case UNIT_MODULE:
+        return F2C_UNIT_SYNTAX_MODULE;
+    }
+    return F2C_UNIT_SYNTAX_PROGRAM;
+}
+
+F2cUnitEndMatchStatus f2c_match_program_unit_end(Context *context, const Line *line,
+                                                 const Unit *unit) {
+    F2cUnitEndSyntax syntax;
+    const F2cUnitEndParseStatus status = f2c_parse_unit_end_syntax(line, &syntax);
+    const char *expected_name;
+    if (status == F2C_UNIT_END_NOT_MATCHED)
+        return F2C_UNIT_END_NO_MATCH;
+    if (status == F2C_UNIT_END_INVALID) {
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, syntax.error_token, 1,
+                                  "unexpected tokens after program-unit END statement");
+        return F2C_UNIT_END_MISMATCHED;
+    }
+    if (unit == NULL)
+        return F2C_UNIT_END_MATCHED;
+    if (syntax.has_kind && syntax.kind != syntax_kind(unit->kind)) {
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, syntax.kind_token, 1,
+                                  "program-unit END kind does not match its opening statement");
+        return F2C_UNIT_END_MISMATCHED;
+    }
+    expected_name = unit->fortran_name != NULL ? unit->fortran_name : unit->name;
+    if (syntax.name != NULL &&
+        (expected_name == NULL || !f2c_token_equals(syntax.name, expected_name))) {
+        char *actual_name = f2c_token_text(syntax.name);
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, syntax.name, 1,
+                                  "program-unit END name '%s' does not match '%s'",
+                                  actual_name != NULL ? actual_name : "<invalid>",
+                                  expected_name != NULL ? expected_name : "<unnamed>");
+        free(actual_name);
+        return F2C_UNIT_END_MISMATCHED;
+    }
+    return F2C_UNIT_END_MATCHED;
+}

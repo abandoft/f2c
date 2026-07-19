@@ -284,8 +284,7 @@ static void test_top_level_token_ranges(void) {
     size_t count = 0U;
     size_t comma;
     char *middle;
-    F2cTokenRange range =
-        {source, sizeof(source) - 1U, line.tokens, line.token_count};
+    F2cTokenRange range = {source, sizeof(source) - 1U, line.tokens, line.token_count};
     expect(f2c_token_range_split_top_level(range, F2C_TOKEN_COMMA, NULL, &items, &count) &&
                count == 3U,
            "top-level token splitting ignores nested and quoted commas");
@@ -311,6 +310,7 @@ static void test_statement_syntax_predicates(void) {
     Line contains_name = tokenized_line("contains_value = 'contains'");
     Line abstract_interface = tokenized_line("abstract interface");
     const F2cToken *module_name = NULL;
+    F2cUnitEndSyntax end_syntax;
 
     expect(f2c_module_header_tokens(&module, &module_name) && module_name != NULL &&
                f2c_token_equals(module_name, "numerics"),
@@ -318,11 +318,13 @@ static void test_statement_syntax_predicates(void) {
     expect(!f2c_module_header_tokens(&module_procedure, NULL) &&
                f2c_module_procedure_tokens(&module_procedure),
            "MODULE PROCEDURE cannot be mistaken for a module definition");
-    expect(!f2c_module_end_tokens(&quoted_end),
+    expect(f2c_parse_unit_end_syntax(&quoted_end, &end_syntax) == F2C_UNIT_END_NOT_MATCHED,
            "keywords inside a character literal cannot terminate a module");
-    expect(!f2c_program_unit_end_tokens(&end_if, UNIT_SUBROUTINE),
+    expect(f2c_parse_unit_end_syntax(&end_if, &end_syntax) == F2C_UNIT_END_NOT_MATCHED,
            "END IF cannot terminate an enclosing procedure");
-    expect(f2c_program_unit_end_tokens(&labeled_end, UNIT_SUBROUTINE),
+    expect(f2c_parse_unit_end_syntax(&labeled_end, &end_syntax) == F2C_UNIT_END_PARSED &&
+               end_syntax.has_kind && end_syntax.kind == F2C_UNIT_SYNTAX_SUBROUTINE &&
+               end_syntax.name != NULL && f2c_token_equals(end_syntax.name, "solve"),
            "labeled procedure terminators retain their unit kind");
     expect(f2c_derived_type_start_tokens(&derived),
            "attributed derived-type definitions are recognized structurally");
