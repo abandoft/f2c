@@ -144,6 +144,25 @@ static size_t select_scope_interface(Unit *scope, const char *name, const char *
     return candidate_count;
 }
 
+static size_t select_generic_symbol(Symbol *generic, F2cExpr *const *arguments,
+                                    size_t argument_count, int subroutine_call, Unit **selection,
+                                    size_t *matching_count) {
+    size_t index;
+    *selection = NULL;
+    *matching_count = 0U;
+    for (index = 0U; index < generic->generic_candidate_count; ++index) {
+        Unit *candidate = generic->generic_candidates[index];
+        if (candidate != NULL &&
+            interface_candidate_matches(candidate, arguments, argument_count, subroutine_call)) {
+            *selection = candidate;
+            ++*matching_count;
+        }
+    }
+    if (generic->generic_candidate_count == 1U && *matching_count == 0U)
+        *selection = generic->generic_candidates[0];
+    return generic->generic_candidate_count;
+}
+
 static size_t select_explicit_interface(Context *context, Unit *caller, const char *name,
                                         F2cExpr *const *arguments, size_t argument_count,
                                         int subroutine_call, Unit **selection,
@@ -160,6 +179,9 @@ static size_t select_explicit_interface(Context *context, Unit *caller, const ch
                 : 0U;
         return 1U;
     }
+    if (symbol != NULL && symbol->generic_candidate_count != 0U)
+        return select_generic_symbol(symbol, arguments, argument_count, subroutine_call, selection,
+                                     matching_count);
     count = select_scope_interface(caller, name, resolved_name, arguments, argument_count,
                                    subroutine_call, selection, matching_count);
     if (count == 0U && caller->internal && caller->host_index < context->units.count) {
