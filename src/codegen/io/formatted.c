@@ -82,22 +82,122 @@ static void emit_formatted_scalar(Context *context, Unit *unit, const F2cExpr *e
     }
 }
 
-static void emit_formatted_derived(Context *context, const char *value, F2cDerivedType *derived,
-                                   int input, const char *unit_number, int depth) {
+static int default_formatted_derived_supported(const F2cDerivedType *derived) {
+    size_t index;
+    if (derived == NULL)
+        return 0;
+    if (derived->parent != NULL && !default_formatted_derived_supported(derived->parent))
+        return 0;
+    for (index = 0U; index < derived->component_count; ++index) {
+        const Symbol *component = &derived->components[index];
+        if (component->allocatable || component->pointer || component->procedure_pointer)
+            return 0;
+        if (component->type == TYPE_DERIVED && component->derived_type != NULL &&
+            !default_formatted_derived_supported(component->derived_type))
+            return 0;
+    }
+    return 1;
+}
+
+static void emit_formatted_derived(Context *context, Unit *unit, const char *value,
+                                   F2cDerivedType *derived, int input, const char *unit_number,
+                                   int depth);
+
+static void emit_formatted_component(Context *context, Unit *unit, const Symbol *component,
+                                     const char *owner, int input, const char *unit_number,
+                                     int depth) {
+    Buffer value = {0};
+    Buffer index_name = {0};
+    char *count =
+        component->rank != 0U ? f2c_symbol_element_count(unit, (Symbol *)component) : NULL;
+    char *character_length =
+        component->type == TYPE_CHARACTER ? f2c_symbol_character_length(unit, component) : NULL;
+    f2c_buffer_printf(&value, "(%s).%s", owner, f2c_symbol_c_name(unit, component));
+    if (component->rank == 0U) {
+        if (component->type == TYPE_DERIVED && component->derived_type != NULL)
+            emit_formatted_derived(context, unit, value.data, component->derived_type, input,
+                                   unit_number, depth);
+        else
+            emit_formatted_scalar(context, unit, NULL, component, value.data, input, depth);
+    } else {
+        f2c_buffer_printf(&index_name, "f2c_format_component_%d", depth);
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output, "for (size_t %s = 0U; %s < %s; ++%s) {\n",
+                          index_name.data, index_name.data, count != NULL ? count : "0U",
+                          index_name.data);
+        {
+            Buffer element = {0};
+            if (component->type == TYPE_CHARACTER)
+                f2c_buffer_printf(&element, "%s + %s * (size_t)(%s)", value.data, index_name.data,
+                                  character_length != NULL ? character_length : "1U");
+            else
+                f2c_buffer_printf(&element, "%s[%s]", value.data, index_name.data);
+            if (component->type == TYPE_DERIVED && component->derived_type != NULL)
+                emit_formatted_derived(context, unit, element.data, component->derived_type, input,
+                                       unit_number, depth + 1);
+            else
+                emit_formatted_scalar(context, unit, NULL, component, element.data, input,
+                                      depth + 1);
+            free(element.data);
+        }
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
+    }
+    free(value.data);
+    free(index_name.data);
+    free(count);
+    free(character_length);
+}
+
+static void emit_default_formatted_derived(Context *context, Unit *unit, const char *value,
+                                           F2cDerivedType *derived, int input,
+                                           const char *unit_number, int depth) {
+    size_t index;
+    if (derived->parent != NULL) {
+        Buffer parent = {0};
+        f2c_buffer_printf(&parent, "(%s).parent", value);
+        emit_default_formatted_derived(context, unit, parent.data, derived->parent, input,
+                                       unit_number, depth);
+        free(parent.data);
+    }
+    for (index = 0U; index < derived->component_count; ++index)
+        emit_formatted_component(context, unit, &derived->components[index], value, input,
+                                 unit_number, depth);
+}
+
+static void emit_formatted_derived(Context *context, Unit *unit, const char *value,
+                                   F2cDerivedType *derived, int input, const char *unit_number,
+                                   int depth) {
     const F2cDefinedIoKind kind =
         input ? F2C_DEFINED_IO_READ_FORMATTED : F2C_DEFINED_IO_WRITE_FORMATTED;
+    if (f2c_io_defined_binding(derived, kind) == NULL) {
+        if (default_formatted_derived_supported(derived))
+            emit_default_formatted_derived(context, unit, value, derived, input, unit_number,
+                                           depth);
+        else {
+            f2c_io_indent(&context->output, depth);
+            f2c_buffer_append(&context->output, "f2c_io_format.status = 0;\n");
+        }
+        return;
+    }
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{ f2c_format_descriptor f2c_dtio_descriptor;\n");
     f2c_io_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output,
-                      "if (!f2c_format_next(&f2c_io_format, &f2c_dtio_descriptor) || "
-                      "f2c_dtio_descriptor.code[0] != 'D' || "
-                      "f2c_dtio_descriptor.code[1] != 'T') { "
-                      "f2c_io_format.status = 0; } else {\n");
+                      "if (f2c_format_take_dt(&f2c_io_format, &f2c_dtio_descriptor)) {\n");
     if (!f2c_io_emit_defined_io_call(context, value, derived, kind, unit_number,
                                      "f2c_dtio_descriptor.iotype", "f2c_dtio_descriptor.v_list",
                                      "f2c_dtio_descriptor.v_list_count", "f2c_io_format.status",
                                      depth + 2)) {
+        f2c_io_indent(&context->output, depth + 2);
+        f2c_buffer_append(&context->output, "f2c_io_format.status = 0;\n");
+    }
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output, "} else {\n");
+    if (default_formatted_derived_supported(derived))
+        emit_default_formatted_derived(context, unit, value, derived, input, unit_number,
+                                       depth + 2);
+    else {
         f2c_io_indent(&context->output, depth + 2);
         f2c_buffer_append(&context->output, "f2c_io_format.status = 0;\n");
     }
@@ -160,9 +260,10 @@ void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *i
             else
                 f2c_buffer_printf(&value, "%s[f2c_format_index]", f2c_symbol_c_name(unit, symbol));
             if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL)
-                emit_formatted_derived(
-                    context, value.data != NULL ? value.data : f2c_symbol_c_name(unit, symbol),
-                    symbol->derived_type, input, unit_number, depth + 1);
+                emit_formatted_derived(context, unit,
+                                       value.data != NULL ? value.data
+                                                          : f2c_symbol_c_name(unit, symbol),
+                                       symbol->derived_type, input, unit_number, depth + 1);
             else
                 emit_formatted_scalar(context, unit, NULL, symbol,
                                       value.data != NULL ? value.data
@@ -178,8 +279,8 @@ void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *i
         char *value = f2c_io_emit_item_expression(unit, item);
         if (value != NULL) {
             if (expression->type == TYPE_DERIVED && expression->derived_type != NULL)
-                emit_formatted_derived(context, value, expression->derived_type, input, unit_number,
-                                       depth);
+                emit_formatted_derived(context, unit, value, expression->derived_type, input,
+                                       unit_number, depth);
             else
                 emit_formatted_scalar(context, unit, expression, symbol, value, input, depth);
         }
