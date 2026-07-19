@@ -295,9 +295,16 @@ static int clone_module_symbol(Unit *unit, const Symbol *source, const char *loc
     size_t dimension;
     size_t parameter;
     if (target != NULL) {
-        const int same_entity = target->use_associated && target->c_name != NULL &&
-                                source->c_name != NULL &&
-                                strcmp(target->c_name, source->c_name) == 0;
+        const int generic_source = source->generic_candidate_count != 0U;
+        const int same_generic =
+            generic_source && target->generic_candidate_count != 0U &&
+            target->generic_origin_scope == source->generic_origin_scope &&
+            target->generic_origin_name != NULL && source->generic_origin_name != NULL &&
+            strcmp(target->generic_origin_name, source->generic_origin_name) == 0;
+        const int same_entity =
+            target->use_associated &&
+            (same_generic || (!generic_source && target->c_name != NULL && source->c_name != NULL &&
+                              strcmp(target->c_name, source->c_name) == 0));
         free(procedure_interface_name);
         return same_entity ? 1 : -1;
     }
@@ -407,6 +414,19 @@ static int clone_module_symbol(Unit *unit, const Symbol *source, const char *loc
         target->external_parameter_procedures[parameter] =
             source->external_parameter_procedures[parameter];
         target->external_parameter_const[parameter] = source->external_parameter_const[parameter];
+    }
+    if (source->generic_candidate_count != 0U) {
+        if (source->generic_candidate_count > SIZE_MAX / sizeof(*target->generic_candidates))
+            return 0;
+        target->generic_candidates =
+            (Unit **)malloc(source->generic_candidate_count * sizeof(*target->generic_candidates));
+        target->generic_origin_name = f2c_strdup(source->generic_origin_name);
+        if (target->generic_candidates == NULL || target->generic_origin_name == NULL)
+            return 0;
+        memcpy(target->generic_candidates, source->generic_candidates,
+               source->generic_candidate_count * sizeof(*target->generic_candidates));
+        target->generic_candidate_count = source->generic_candidate_count;
+        target->generic_origin_scope = source->generic_origin_scope;
     }
     return 1;
 }
@@ -606,6 +626,9 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
     for (i = 0U; i < module->symbol_count; ++i) {
         int imported;
         if (use_name_is_renamed(syntax, module->symbols[i].name))
+            continue;
+        if (syntax == NULL && unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
+            strcmp(unit->result_name, module->symbols[i].name) == 0)
             continue;
         if (syntax != NULL && !f2c_module_symbol_is_public(module, &module->symbols[i]))
             continue;
