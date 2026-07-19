@@ -1,6 +1,7 @@
 #include "frontend/private.h"
 
 #include "ast/declaration/use.h"
+#include "frontend/module/access.h"
 
 #include <ctype.h>
 #include <limits.h>
@@ -43,14 +44,19 @@ void f2c_analyze_module(Context *context, Unit *unit) {
         if (f2c_line_in_derived_type(unit, i))
             continue;
         f2c_parse_declaration(context, unit, &context->lines.items[i]);
+        f2c_parse_procedure_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_dimension_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_parameter_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_save_declaration(context, unit, &context->lines.items[i]);
     }
+    f2c_parse_access_statements(context, unit);
+    f2c_finalize_module_accessibility(context, unit);
     for (i = 0U; i < unit->symbol_count; ++i) {
         Symbol *symbol = &unit->symbols[i];
         Buffer c_name = {0};
         if (symbol->external)
+            continue;
+        if (symbol->use_associated)
             continue;
         symbol->module_entity = 1;
         symbol->saved = 1;
@@ -127,6 +133,7 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
         f2c_parse_namelist_declaration(context, unit, &context->lines.items[i]);
         f2c_mark_call_targets(unit, &context->lines.items[i]);
     }
+    f2c_parse_access_statements(context, unit);
     f2c_discover_implicit_symbols(context, unit);
     {
         int in_specification_part = 1;
