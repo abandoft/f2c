@@ -107,6 +107,7 @@ set(
     src/codegen/module.c
     src/codegen/ownership.c
     src/codegen/statement.c
+    src/codegen/statement/loop.c
     src/codegen/statement/select.c
     src/codegen/statement/private.h
     src/codegen/statement/target.c

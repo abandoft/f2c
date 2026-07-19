@@ -1,4 +1,4 @@
-#include "internal/f2c.h"
+#include "codegen/statement/private.h"
 
 #include "codegen/array/private.h"
 
@@ -10,7 +10,7 @@ static void indent(Buffer *output, int depth) {
 }
 
 static size_t statement_id(const Unit *unit, const F2cStatement *statement) {
-    return (size_t)(statement - unit->statements);
+    return f2c_statement_unit_index(unit, statement);
 }
 
 static int numeric_type(Type type) {

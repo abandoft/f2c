@@ -15,70 +15,6 @@ static int is_numeric_type(Type type) {
            type == TYPE_COMPLEX || type == TYPE_DOUBLE_COMPLEX;
 }
 
-static int integer_literal_value(const F2cExpr *expression, long long *value) {
-    char *end = NULL;
-    if (expression == NULL || expression->kind != F2C_EXPR_INTEGER_LITERAL ||
-        expression->text == NULL)
-        return 0;
-    *value = strtoll(expression->text, &end, 10);
-    return end != expression->text && *end == '\0';
-}
-
-static int same_scalar_designator(const F2cExpr *left, const F2cExpr *right) {
-    if (left == NULL || right == NULL || left->rank != 0U || right->rank != 0U ||
-        left->kind != F2C_EXPR_NAME || right->kind != F2C_EXPR_NAME)
-        return 0;
-    if (left->symbol != NULL || right->symbol != NULL)
-        return left->symbol != NULL && left->symbol == right->symbol;
-    return left->text != NULL && right->text != NULL && strcmp(left->text, right->text) == 0;
-}
-
-static int relative_do_count_fits_default_integer(const F2cExpr *start, const F2cExpr *finish,
-                                                  long long step) {
-    const F2cExpr *offset = NULL;
-    long long distance;
-    if (finish == NULL || finish->kind != F2C_EXPR_BINARY || finish->text == NULL ||
-        finish->child_count != 2U)
-        return 0;
-    if (step == 1 && strcmp(finish->text, "+") == 0) {
-        if (same_scalar_designator(start, finish->children[0]))
-            offset = finish->children[1];
-        else if (same_scalar_designator(start, finish->children[1]))
-            offset = finish->children[0];
-    } else if (step == -1 && strcmp(finish->text, "-") == 0 &&
-               same_scalar_designator(start, finish->children[0])) {
-        offset = finish->children[1];
-    }
-    return integer_literal_value(offset, &distance) && distance >= 0 && distance < INT32_MAX;
-}
-
-static int do_count_fits_default_integer(const F2cStatement *statement) {
-    long long start;
-    long long step;
-    if (statement == NULL || statement->right == NULL || statement->step == NULL ||
-        statement->left == NULL || statement->left->type_kind != f2c_default_kind(TYPE_INTEGER) ||
-        !integer_literal_value(statement->step, &step))
-        return 0;
-    if (step == 1 && statement->right->kind == F2C_EXPR_INTEGER_LITERAL &&
-        integer_literal_value(statement->right, &start)) {
-        if (start >= 1 && start <= INT32_MAX)
-            return 1;
-    }
-    if (relative_do_count_fits_default_integer(statement->right, statement->limit, step))
-        return 1;
-    return step <= -3 || step >= 3;
-}
-
-static int is_canonical_positive_unit_do(const F2cStatement *statement) {
-    long long start;
-    long long step;
-    return statement != NULL && statement->left != NULL && statement->right != NULL &&
-           statement->step != NULL && statement->left->type == TYPE_INTEGER &&
-           statement->left->type_kind == f2c_default_kind(TYPE_INTEGER) &&
-           integer_literal_value(statement->right, &start) && start >= 1 && start <= INT32_MAX &&
-           integer_literal_value(statement->step, &step) && step == 1;
-}
-
 static void emit_condition(Buffer *output, const char *condition) {
     const size_t length = strlen(condition);
     if (length >= 2U && condition[0] == '(' && condition[length - 1U] == ')') {
@@ -91,8 +27,8 @@ static void emit_condition(Buffer *output, const char *condition) {
 static int emit_inline_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                  Line *source_line, int depth);
 
-static char *emit_statement_expression(Context *context, Unit *unit, const F2cExpr *expression,
-                                       size_t line) {
+char *f2c_emit_statement_expression(Context *context, Unit *unit, const F2cExpr *expression,
+                                    size_t line) {
     int supported = 0;
     char *result = f2c_emit_expression_ast(unit, expression, &supported);
     if (!supported || result == NULL) {
@@ -179,47 +115,21 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             f2c_diagnostic(context, source_line->number, 1, "malformed SELECT CASE statement");
             return 0;
         }
-    } else if (statement->kind == F2C_STMT_END_IF || statement->kind == F2C_STMT_END_DO) {
-        if (statement->name != NULL && f2c_statement_unit_has_label_target(unit, statement->name)) {
-            indent(&context->output, *depth);
-            f2c_buffer_printf(&context->output, "f2c_label_%s: ;\n", statement->name);
-        }
-        if (statement->kind == F2C_STMT_END_DO && statement->construct_owner != NULL &&
-            f2c_statement_unit_targets_construct(unit, statement->construct_owner,
-                                                 F2C_STMT_CYCLE)) {
-            const size_t loop_id = (size_t)(statement->construct_owner - unit->statements);
-            indent(&context->output, *depth);
-            f2c_buffer_printf(&context->output, "f2c_cycle_%zu: ;\n", loop_id);
-        }
+    } else if (statement->kind == F2C_STMT_END_IF) {
         if (*depth > 1)
             --*depth;
         indent(&context->output, *depth);
         f2c_buffer_append(&context->output, "}\n");
-        if (statement->kind == F2C_STMT_END_DO && statement->construct_owner != NULL &&
-            is_canonical_positive_unit_do(statement->construct_owner)) {
-            const size_t loop_id = (size_t)(statement->construct_owner - unit->statements);
-            char *variable = emit_statement_expression(
-                context, unit, statement->construct_owner->left, source_line->number);
-            indent(&context->output, *depth);
-            f2c_buffer_printf(&context->output,
-                              "%s = f2c_do_index_%zu <= (int64_t)INT32_MAX "
-                              "? (int32_t)f2c_do_index_%zu : INT32_MIN;\n",
-                              variable, loop_id, loop_id);
-            free(variable);
-        }
-        if (statement->kind == F2C_STMT_END_DO && statement->construct_owner != NULL &&
-            f2c_statement_unit_targets_construct(unit, statement->construct_owner, F2C_STMT_EXIT)) {
-            const size_t loop_id = (size_t)(statement->construct_owner - unit->statements);
-            indent(&context->output, *depth);
-            f2c_buffer_printf(&context->output, "f2c_exit_%zu: ;\n", loop_id);
-        }
+    } else if (statement->kind == F2C_STMT_END_DO) {
+        if (!f2c_emit_do_end(context, unit, statement->construct_owner, source_line->number, depth))
+            return 0;
     } else if (statement->kind == F2C_STMT_ELSE_IF) {
         char *condition;
         if (statement->expression == NULL) {
             f2c_diagnostic(context, source_line->number, 1, "malformed ELSE IF statement");
         } else {
-            condition = emit_statement_expression(context, unit, statement->expression,
-                                                  source_line->number);
+            condition = f2c_emit_statement_expression(context, unit, statement->expression,
+                                                      source_line->number);
             if (*depth > 1)
                 --*depth;
             indent(&context->output, *depth);
@@ -242,8 +152,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
              statement->expression->type != TYPE_DOUBLE)) {
             f2c_diagnostic(context, source_line->number, 1, "malformed arithmetic IF statement");
         } else {
-            char *value = emit_statement_expression(context, unit, statement->expression,
-                                                    source_line->number);
+            char *value = f2c_emit_statement_expression(context, unit, statement->expression,
+                                                        source_line->number);
             indent(&context->output, *depth);
             f2c_buffer_append(&context->output, "{\n");
             indent(&context->output, *depth + 1);
@@ -276,8 +186,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
         if (statement->expression == NULL) {
             f2c_diagnostic(context, source_line->number, 1, "malformed IF statement");
         } else {
-            char *condition = emit_statement_expression(context, unit, statement->expression,
-                                                        source_line->number);
+            char *condition = f2c_emit_statement_expression(context, unit, statement->expression,
+                                                            source_line->number);
             indent(&context->output, *depth);
             if (statement->block) {
                 f2c_buffer_append(&context->output, "if ");
@@ -296,112 +206,9 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             }
             free(condition);
         }
-    } else if (statement->kind == F2C_STMT_DO_WHILE) {
-        if (statement->expression != NULL) {
-            char *condition = emit_statement_expression(context, unit, statement->expression,
-                                                        source_line->number);
-            indent(&context->output, *depth);
-            f2c_buffer_append(&context->output, "while ");
-            emit_condition(&context->output, condition);
-            f2c_buffer_append(&context->output, " {\n");
-            ++*depth;
-            free(condition);
-        }
-    } else if (statement->kind == F2C_STMT_DO) {
-        if (statement->left != NULL && statement->right != NULL && statement->limit != NULL &&
-            statement->step != NULL) {
-            char *variable =
-                emit_statement_expression(context, unit, statement->left, source_line->number);
-            char *start =
-                emit_statement_expression(context, unit, statement->right, source_line->number);
-            char *finish =
-                emit_statement_expression(context, unit, statement->limit, source_line->number);
-            char *step =
-                emit_statement_expression(context, unit, statement->step, source_line->number);
-            const size_t loop_id = (size_t)(statement - unit->statements);
-            const int canonical_positive_unit = is_canonical_positive_unit_do(statement);
-            if (statement->left->type == TYPE_INTEGER) {
-                const int narrow_count = do_count_fits_default_integer(statement);
-                indent(&context->output, *depth);
-                f2c_buffer_printf(&context->output,
-                                  "const int32_t f2c_do_start_%zu = (int32_t)(%s);\n", loop_id,
-                                  start);
-                indent(&context->output, *depth);
-                f2c_buffer_printf(&context->output,
-                                  "const int32_t f2c_do_limit_%zu = (int32_t)(%s);\n", loop_id,
-                                  finish);
-                if (!canonical_positive_unit) {
-                    indent(&context->output, *depth);
-                    f2c_buffer_printf(&context->output,
-                                      "const int32_t f2c_do_step_%zu = (int32_t)(%s);\n", loop_id,
-                                      step);
-                }
-                indent(&context->output, *depth);
-                f2c_buffer_printf(&context->output, "%s = f2c_do_start_%zu;\n", variable, loop_id);
-                if (canonical_positive_unit) {
-                    indent(&context->output, *depth);
-                    f2c_buffer_printf(&context->output,
-                                      "int64_t f2c_do_index_%zu = (int64_t)f2c_do_start_%zu;\n",
-                                      loop_id, loop_id);
-                } else {
-                    indent(&context->output, *depth);
-                    f2c_buffer_printf(&context->output, "%s f2c_do_count_%zu = 0;\n",
-                                      narrow_count ? "int32_t" : "int64_t", loop_id);
-                    indent(&context->output, *depth);
-                    f2c_buffer_printf(
-                        &context->output,
-                        "if (f2c_do_step_%zu > 0 && %s <= f2c_do_limit_%zu) "
-                        "f2c_do_count_%zu = %s((int64_t)f2c_do_limit_%zu - (int64_t)%s) / "
-                        "(int64_t)f2c_do_step_%zu + 1%s;\n",
-                        loop_id, variable, loop_id, loop_id, narrow_count ? "(int32_t)(" : "",
-                        loop_id, variable, loop_id, narrow_count ? ")" : "");
-                    indent(&context->output, *depth);
-                    f2c_buffer_printf(
-                        &context->output,
-                        "else if (f2c_do_step_%zu < 0 && %s >= f2c_do_limit_%zu) "
-                        "f2c_do_count_%zu = %s((int64_t)%s - (int64_t)f2c_do_limit_%zu) / "
-                        "-(int64_t)f2c_do_step_%zu + 1%s;\n",
-                        loop_id, variable, loop_id, loop_id, narrow_count ? "(int32_t)(" : "",
-                        variable, loop_id, loop_id, narrow_count ? ")" : "");
-                }
-            }
-            if (statement->unroll_hint) {
-                indent(&context->output, *depth);
-                f2c_buffer_append(&context->output, "F2C_LOOP_UNROLL\n");
-            }
-            indent(&context->output, *depth);
-            if (statement->left->type == TYPE_INTEGER) {
-                if (canonical_positive_unit) {
-                    f2c_buffer_printf(&context->output,
-                                      "for (; f2c_do_index_%zu <= (int64_t)f2c_do_limit_%zu; "
-                                      "++f2c_do_index_%zu) {\n",
-                                      loop_id, loop_id, loop_id);
-                } else {
-                    f2c_buffer_printf(&context->output,
-                                      "for (; f2c_do_count_%zu > 0; --f2c_do_count_%zu, %s += "
-                                      "f2c_do_step_%zu) {\n",
-                                      loop_id, loop_id, variable, loop_id);
-                }
-            } else {
-                f2c_buffer_printf(&context->output,
-                                  "for (%s = %s; ((%s) >= 0 ? %s <= %s : %s >= %s); %s += "
-                                  "%s) {\n",
-                                  variable, start, step, variable, finish, variable, finish,
-                                  variable, step);
-            }
-            ++*depth;
-            if (canonical_positive_unit) {
-                indent(&context->output, *depth);
-                f2c_buffer_printf(&context->output, "%s = (int32_t)f2c_do_index_%zu;\n", variable,
-                                  loop_id);
-            }
-            free(variable);
-            free(start);
-            free(finish);
-            free(step);
-        } else {
-            f2c_diagnostic(context, source_line->number, 1, "malformed DO statement");
-        }
+    } else if (statement->kind == F2C_STMT_DO_WHILE || statement->kind == F2C_STMT_DO) {
+        if (!f2c_emit_do_begin(context, unit, statement, source_line->number, depth))
+            return 0;
     } else if (statement->kind == F2C_STMT_WRITE) {
         if (!f2c_emit_read_write_statement(context, unit, statement, 0, *depth))
             f2c_diagnostic(context, source_line->number, 1, "malformed WRITE statement");
@@ -439,8 +246,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
         if (statement->expression != NULL && statement->expression->symbol != NULL &&
             statement->expression->symbol->procedure_pointer) {
             const Symbol *procedure = statement->expression->symbol;
-            char *callee = emit_statement_expression(context, unit, statement->expression,
-                                                     source_line->number);
+            char *callee = f2c_emit_statement_expression(context, unit, statement->expression,
+                                                         source_line->number);
             if (procedure->type_bound && !procedure->type_bound_nopass &&
                 statement->expression->kind == F2C_EXPR_COMPONENT &&
                 statement->expression->child_count != 0U &&
@@ -524,7 +331,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
         indent(&context->output, *depth);
         if (statement->control_name != NULL)
             f2c_buffer_printf(&context->output, "goto f2c_cycle_%zu;\n",
-                              (size_t)(target - unit->statements));
+                              f2c_statement_unit_index(unit, target));
         else
             f2c_buffer_append(&context->output, "continue;\n");
     } else if (statement->kind == F2C_STMT_EXIT) {
@@ -539,7 +346,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
         indent(&context->output, *depth);
         if (statement->control_name != NULL)
             f2c_buffer_printf(&context->output, "goto f2c_exit_%zu;\n",
-                              (size_t)(target - unit->statements));
+                              f2c_statement_unit_index(unit, target));
         else
             f2c_buffer_append(&context->output, "break;\n");
     } else if (statement->kind == F2C_STMT_CONTINUE) {
@@ -548,8 +355,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
     } else if (statement->kind == F2C_STMT_ASSIGN_LABEL) {
         if (statement->expression != NULL && statement->expression->definable &&
             statement->expression->type == TYPE_INTEGER && statement->label_count == 1U) {
-            char *target = emit_statement_expression(context, unit, statement->expression,
-                                                     source_line->number);
+            char *target = f2c_emit_statement_expression(context, unit, statement->expression,
+                                                         source_line->number);
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "%s = %s;\n", target, statement->labels[0]);
             free(target);
@@ -559,8 +366,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
     } else if (statement->kind == F2C_STMT_GOTO) {
         if (statement->label_count != 0U && statement->expression != NULL) {
             size_t i;
-            char *selector = emit_statement_expression(context, unit, statement->expression,
-                                                       source_line->number);
+            char *selector = f2c_emit_statement_expression(context, unit, statement->expression,
+                                                           source_line->number);
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "switch ((int32_t)(%s)) {\n", selector);
             for (i = 0U; i < statement->label_count; ++i) {
@@ -587,8 +394,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
         }
     } else if (statement->kind == F2C_STMT_ASSIGNED_GOTO) {
         if (statement->expression != NULL && statement->expression->type == TYPE_INTEGER) {
-            char *selector = emit_statement_expression(context, unit, statement->expression,
-                                                       source_line->number);
+            char *selector = f2c_emit_statement_expression(context, unit, statement->expression,
+                                                           source_line->number);
             size_t i;
             size_t emitted = 0U;
             indent(&context->output, *depth);
@@ -619,7 +426,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                         if (candidate->kind == F2C_STMT_ASSIGN_LABEL && candidate->name != NULL &&
                             strcmp(candidate->name, statement->name) == 0 &&
                             candidate->label_count == 1U &&
-                            strcmp(candidate->labels[0], assignment->labels[0]) == 0) {
+                            f2c_statement_labels_equal(candidate->labels[0],
+                                                       assignment->labels[0])) {
                             duplicate = 1;
                             break;
                         }
@@ -653,8 +461,12 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                 indent(&context->output, *depth);
                 f2c_buffer_printf(&context->output, "f2c_label_%s: ;\n", statement->name);
             }
-            if (statement->nested != NULL)
+            if (statement->nested != NULL && statement->nested->kind != F2C_STMT_END_DO)
                 (void)f2c_emit_statement(context, unit, statement->nested, source_line, depth);
+            for (size_t loop = 0U; loop < statement->terminal_loop_count; ++loop)
+                if (!f2c_emit_do_end(context, unit, statement->terminal_loops[loop],
+                                     source_line->number, depth))
+                    return 0;
         }
     } else if (statement->kind == F2C_STMT_NULLIFY) {
         size_t item;
@@ -668,7 +480,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                 continue;
             pointer_name =
                 symbol->procedure_pointer
-                    ? emit_statement_expression(context, unit, expression, source_line->number)
+                    ? f2c_emit_statement_expression(context, unit, expression, source_line->number)
                     : f2c_emit_pointer_designator(unit, expression, &supported);
             if (symbol->procedure_pointer)
                 supported = pointer_name != NULL;
@@ -694,7 +506,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             statement->items != NULL && f2c_starts_word(statement->items[1], "null");
         if (pointer != NULL && pointer->procedure_pointer) {
             char *pointer_name =
-                emit_statement_expression(context, unit, statement->left, source_line->number);
+                f2c_emit_statement_expression(context, unit, statement->left, source_line->number);
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "%s = %s;\n", pointer_name,
                               null_target || target == NULL ? "NULL"

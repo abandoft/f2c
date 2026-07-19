@@ -1,15 +1,31 @@
 #include "codegen/statement/private.h"
 
+#include <stdint.h>
 #include <string.h>
+
+static int contains_statement(const F2cStatement *root, const F2cStatement *statement) {
+    return root == statement ||
+           (root != NULL && root->nested != NULL && contains_statement(root->nested, statement));
+}
+
+size_t f2c_statement_unit_index(const Unit *unit, const F2cStatement *statement) {
+    size_t index;
+    if (unit == NULL || statement == NULL)
+        return SIZE_MAX;
+    for (index = 0U; index < unit->statement_count; ++index)
+        if (contains_statement(&unit->statements[index], statement))
+            return index;
+    return SIZE_MAX;
+}
 
 static int statement_targets_label(const F2cStatement *statement, const char *label) {
     size_t index;
     if (statement->kind == F2C_STMT_GOTO || statement->kind == F2C_STMT_ASSIGNED_GOTO ||
         statement->kind == F2C_STMT_ASSIGN_LABEL || statement->kind == F2C_STMT_ARITHMETIC_IF) {
-        if (statement->name != NULL && strcmp(statement->name, label) == 0)
+        if (statement->name != NULL && f2c_statement_labels_equal(statement->name, label))
             return 1;
         for (index = 0U; index < statement->label_count; ++index)
-            if (strcmp(statement->labels[index], label) == 0)
+            if (f2c_statement_labels_equal(statement->labels[index], label))
                 return 1;
     }
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
@@ -23,7 +39,7 @@ static int statement_targets_label(const F2cStatement *statement, const char *la
                  control->kind != F2C_IO_CONTROL_ERR) ||
                 value == NULL)
                 continue;
-            if (value->text != NULL && strcmp(value->text, label) == 0)
+            if (value->text != NULL && f2c_statement_labels_equal(value->text, label))
                 return 1;
         }
     }
@@ -63,7 +79,7 @@ size_t f2c_statement_label_line(const Unit *unit, const char *label) {
     for (index = 0U; index < unit->statement_count; ++index) {
         const F2cStatement *statement = &unit->statements[index];
         if (statement->kind == F2C_STMT_LABEL && statement->name != NULL &&
-            strcmp(statement->name, label) == 0)
+            f2c_statement_labels_equal(statement->name, label))
             return statement->line;
     }
     return 0U;
