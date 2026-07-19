@@ -1,3 +1,12 @@
+## 1.17.0
+
+- Added structured syntax ASTs for `INTERFACE`, `END INTERFACE`, and `[MODULE] PROCEDURE` specific-procedure lists with exact source ranges.
+- Completed named-generic candidate sets for ordinary and module procedures, including exact overload selection, complete signatures, and diagnostics for no match, ambiguity, and invalid interfaces.
+- Added defined unary and binary operators and intrinsic-operator extensions with Fortran precedence, typed-IR binding, and concrete-function C17 emission.
+- Added scalar and `ELEMENTAL` array defined assignment, emitting calls from the concrete subroutine signature through the existing descriptor ABI.
+- Completed `PUBLIC`/`PRIVATE`, `USE ONLY`, module import, and re-export semantics for special generic designators.
+- Added strict C17, native Fortran differential, sanitizer, and architecture regressions, then revalidated the complete pinned Reference BLAS/LAPACK correctness audit and 71-case performance matrix.
+
 ## 1.16.0
 
 - Added a structured syntax AST for `USE` statements with nature, empty `ONLY`, entity renames, generic designators, and exact source ranges.
