@@ -149,6 +149,12 @@ struct F2cDerivedType {
     size_t end;
 };
 
+typedef struct F2cImportedDerivedType {
+    char *local_name;
+    F2cDerivedType *type;
+    F2cSourceSpan association_span;
+} F2cImportedDerivedType;
+
 struct Unit {
     Context *context;
     UnitKind kind;
@@ -183,7 +189,7 @@ struct Unit {
     F2cDerivedType *derived_types;
     size_t derived_type_count;
     size_t derived_type_capacity;
-    F2cDerivedType **imported_derived_types;
+    F2cImportedDerivedType *imported_derived_types;
     size_t imported_derived_type_count;
     size_t imported_derived_type_capacity;
     Type implicit_types[26];
