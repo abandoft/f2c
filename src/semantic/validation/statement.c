@@ -238,7 +238,7 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
     if (statement->kind == F2C_STMT_ALLOCATE || statement->kind == F2C_STMT_DEALLOCATE)
         f2c_validation_allocation(context, unit, statement);
     if (statement->kind != F2C_STMT_READ && statement->kind != F2C_STMT_WRITE &&
-        statement->kind != F2C_STMT_PRINT) {
+        statement->kind != F2C_STMT_PRINT && statement->io_item_count == 0U) {
         for (i = 0U; i < statement->item_count; ++i)
             f2c_validation_report_parse_error(
                 context, statement->line, statement->text,
