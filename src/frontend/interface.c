@@ -1,6 +1,7 @@
 #include "internal/f2c.h"
 
-#include "ast/declaration/module_procedure.h"
+#include "ast/interface/header.h"
+#include "ast/interface/specific.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -197,21 +198,6 @@ static int rebuild_generic_candidates(Context *context, Unit *host) {
     return 1;
 }
 
-static char *parse_generic_name(Context *context, const Line *line) {
-    const size_t start =
-        line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U : 0U;
-    if (f2c_abstract_interface_tokens(line))
-        return f2c_strdup("");
-    if (start + 1U == line->token_count)
-        return f2c_strdup("");
-    if (start + 2U != line->token_count || line->tokens[start + 1U].kind != F2C_TOKEN_IDENTIFIER) {
-        f2c_diagnostic(context, line->number, 1,
-                       "only a plain name is supported on a generic INTERFACE statement");
-        return NULL;
-    }
-    return f2c_token_text(&line->tokens[start + 1U]);
-}
-
 static Unit *find_signature_in_scope(Unit *scope, const char *name, int include_abstract) {
     size_t i;
     if (scope == NULL || name == NULL)
@@ -268,14 +254,17 @@ static void rebind_procedure_interfaces(Context *context, Unit *host) {
     }
 }
 
-static Unit *find_contained_module_procedure(Context *context, const Unit *module,
-                                             const F2cToken *name_token) {
+static Unit *find_specific_procedure(Context *context, const Unit *host, const F2cToken *name_token,
+                                     int require_module_procedure) {
     size_t index;
     for (index = 0U; index < context->units.count; ++index) {
         Unit *candidate = &context->units.items[index];
         const char *visible = interface_specific_name(candidate);
-        if (!candidate->internal && candidate->begin > module->end &&
-            candidate->begin < module->container_end && f2c_token_equals(name_token, visible))
+        const int contained = host->kind == UNIT_MODULE && !candidate->internal &&
+                              candidate->begin > host->end &&
+                              candidate->begin < host->container_end;
+        if (candidate->kind != UNIT_PROGRAM && f2c_token_equals(name_token, visible) &&
+            (contained || (!require_module_procedure && !candidate->internal)))
             return candidate;
     }
     return NULL;
@@ -331,9 +320,9 @@ static int store_interface_signature(Context *context, Unit *host, Unit *procedu
     return 1;
 }
 
-static int build_module_procedure_signature(Context *context, Unit *host, Unit *actual,
-                                            const char *generic_name, const F2cToken *binding_name,
-                                            Unit *procedure) {
+static int build_procedure_signature(Context *context, Unit *host, Unit *actual,
+                                     const char *generic_name, const F2cToken *binding_name,
+                                     Unit *procedure) {
     const F2cOptions *previous_options = context->options;
     char *specific_name;
     if (f2c_parse_unit_header(context, &context->lines.items[actual->begin], procedure) !=
@@ -365,28 +354,30 @@ static int build_module_procedure_signature(Context *context, Unit *host, Unit *
     return 1;
 }
 
-static void report_module_procedure_syntax_error(Context *context, const Line *line,
-                                                 const F2cModuleProcedureStatementSyntax *syntax) {
+static void report_specific_syntax_error(Context *context, const Line *line,
+                                         const F2cInterfaceSpecificSyntax *syntax) {
     const F2cToken *token =
         syntax->error_token != NULL ? syntax->error_token : syntax->procedure_keyword;
-    const char *message = "malformed MODULE PROCEDURE statement";
+    const char *prefix = syntax->module_keyword != NULL ? "MODULE PROCEDURE" : "PROCEDURE";
+    const char *message = "malformed PROCEDURE specific list";
     switch (syntax->error) {
-    case F2C_MODULE_PROCEDURE_ERROR_EMPTY_LIST:
-        message = "MODULE PROCEDURE requires at least one specific procedure name";
+    case F2C_INTERFACE_SPECIFIC_ERROR_EMPTY_LIST:
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1,
+                                  "%s requires at least one specific procedure name", prefix);
+        return;
+    case F2C_INTERFACE_SPECIFIC_ERROR_NAME:
+        message = "PROCEDURE specific list requires a procedure name";
         break;
-    case F2C_MODULE_PROCEDURE_ERROR_NAME:
-        message = "MODULE PROCEDURE list requires a procedure name";
+    case F2C_INTERFACE_SPECIFIC_ERROR_SEPARATOR:
+        message = "PROCEDURE specific names must be separated by commas";
         break;
-    case F2C_MODULE_PROCEDURE_ERROR_SEPARATOR:
-        message = "MODULE PROCEDURE names must be separated by commas";
+    case F2C_INTERFACE_SPECIFIC_ERROR_DUPLICATE_NAME:
+        message = "duplicate name in PROCEDURE specific list";
         break;
-    case F2C_MODULE_PROCEDURE_ERROR_DUPLICATE_NAME:
-        message = "duplicate name in MODULE PROCEDURE statement";
+    case F2C_INTERFACE_SPECIFIC_ERROR_TRAILING_COMMA:
+        message = "PROCEDURE specific list cannot end with a comma";
         break;
-    case F2C_MODULE_PROCEDURE_ERROR_TRAILING_COMMA:
-        message = "MODULE PROCEDURE list cannot end with a comma";
-        break;
-    case F2C_MODULE_PROCEDURE_ERROR_NONE:
+    case F2C_INTERFACE_SPECIFIC_ERROR_NONE:
         break;
     }
     f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1, "%s", message);
@@ -399,10 +390,31 @@ void f2c_parse_explicit_interfaces(Context *context, Unit *host) {
         size_t block_end;
         size_t j;
         size_t procedure_count = 0U;
-        const int abstract_block = f2c_abstract_interface_tokens(start);
-        char *generic_name;
+        F2cInterfaceHeaderSyntax header_syntax;
+        F2cEndInterfaceSyntax end_syntax;
+        F2cInterfaceHeaderStatus interface_status;
+        int abstract_block;
+        char *generic_name = NULL;
         if (!f2c_interface_start_tokens(start))
             continue;
+        interface_status = f2c_parse_interface_header_syntax(start, &header_syntax);
+        if (interface_status != F2C_INTERFACE_HEADER_PARSED) {
+            const F2cToken *token = header_syntax.error_token != NULL
+                                        ? header_syntax.error_token
+                                        : header_syntax.interface_keyword;
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, start, token, 1,
+                                      "malformed INTERFACE statement");
+            continue;
+        }
+        abstract_block = header_syntax.abstract_keyword != NULL;
+        generic_name = header_syntax.has_generic
+                           ? f2c_generic_designator_key(&header_syntax.generic)
+                           : f2c_strdup("");
+        if (generic_name == NULL) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &header_syntax.span, 1,
+                                     "out of memory parsing INTERFACE generic spec");
+            return;
+        }
         block_end = i + 1U;
         while (block_end < host->end &&
                !(f2c_interface_end_tokens(&context->lines.items[block_end]) &&
@@ -410,75 +422,97 @@ void f2c_parse_explicit_interfaces(Context *context, Unit *host) {
             ++block_end;
         if (block_end == host->end) {
             f2c_diagnostic(context, start->number, 1, "unterminated INTERFACE block");
+            free(generic_name);
             return;
         }
-        generic_name = parse_generic_name(context, start);
+        interface_status =
+            f2c_parse_end_interface_syntax(&context->lines.items[block_end], &end_syntax);
+        if (interface_status != F2C_INTERFACE_HEADER_PARSED) {
+            const F2cToken *token = end_syntax.error_token != NULL ? end_syntax.error_token
+                                                                   : end_syntax.interface_keyword;
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX,
+                                      &context->lines.items[block_end], token, 1,
+                                      "malformed END INTERFACE statement");
+        } else if (end_syntax.has_generic &&
+                   (!header_syntax.has_generic ||
+                    !f2c_generic_designators_equal(&header_syntax.generic, &end_syntax.generic))) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &end_syntax.generic.span, 1,
+                                     "END INTERFACE generic spec does not match its INTERFACE");
+        }
         for (j = i + 1U; j < block_end;) {
             Unit procedure;
             F2cUnitHeaderParseStatus header_status;
             size_t procedure_end;
-            F2cModuleProcedureStatementSyntax module_syntax;
-            const F2cModuleProcedureStatementStatus module_status =
-                f2c_parse_module_procedure_statement_syntax(&context->lines.items[j],
-                                                            &module_syntax);
-            if (module_status != F2C_MODULE_PROCEDURE_NOT_MATCHED) {
+            F2cInterfaceSpecificSyntax specific_syntax;
+            const F2cInterfaceSpecificStatus specific_status =
+                f2c_parse_interface_specific_syntax(&context->lines.items[j], &specific_syntax);
+            if (specific_status != F2C_INTERFACE_SPECIFIC_NOT_MATCHED) {
                 size_t specific_index;
-                if (module_status == F2C_MODULE_PROCEDURE_NO_MEMORY) {
+                const F2cToken *keyword = specific_syntax.module_keyword != NULL
+                                              ? specific_syntax.module_keyword
+                                              : specific_syntax.procedure_keyword;
+                if (specific_status == F2C_INTERFACE_SPECIFIC_NO_MEMORY) {
                     f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
-                                             &module_syntax.span, 1,
-                                             "out of memory parsing MODULE PROCEDURE statement");
-                } else if (module_status == F2C_MODULE_PROCEDURE_INVALID) {
-                    report_module_procedure_syntax_error(context, &context->lines.items[j],
-                                                         &module_syntax);
+                                             &specific_syntax.span, 1,
+                                             "out of memory parsing PROCEDURE specific list");
+                } else if (specific_status == F2C_INTERFACE_SPECIFIC_INVALID) {
+                    report_specific_syntax_error(context, &context->lines.items[j],
+                                                 &specific_syntax);
                 } else if (abstract_block) {
                     f2c_diagnostic_token_code(
-                        context, F2C_DIAGNOSTIC_SEMANTIC, &context->lines.items[j],
-                        module_syntax.module_keyword, 1,
-                        "MODULE PROCEDURE is not valid in an ABSTRACT INTERFACE");
-                } else if (host->kind != UNIT_MODULE) {
+                        context, F2C_DIAGNOSTIC_SEMANTIC, &context->lines.items[j], keyword, 1,
+                        "PROCEDURE specific lists are not valid in an ABSTRACT INTERFACE");
+                } else if (specific_syntax.module_keyword != NULL && host->kind != UNIT_MODULE) {
                     f2c_diagnostic_token_code(
                         context, F2C_DIAGNOSTIC_SEMANTIC, &context->lines.items[j],
-                        module_syntax.module_keyword, 1,
+                        specific_syntax.module_keyword, 1,
                         "MODULE PROCEDURE generic bindings require a module scope");
-                } else if (generic_name == NULL || generic_name[0] == '\0') {
+                } else if (generic_name[0] == '\0') {
                     f2c_diagnostic_token_code(
-                        context, F2C_DIAGNOSTIC_SEMANTIC, &context->lines.items[j],
-                        module_syntax.module_keyword, 1,
-                        "MODULE PROCEDURE requires a named generic INTERFACE");
+                        context, F2C_DIAGNOSTIC_SEMANTIC, &context->lines.items[j], keyword, 1,
+                        "PROCEDURE specific list requires a generic INTERFACE");
                 } else {
-                    for (specific_index = 0U; specific_index < module_syntax.name_count;
+                    for (specific_index = 0U; specific_index < specific_syntax.name_count;
                          ++specific_index) {
-                        const F2cToken *specific_token = module_syntax.names[specific_index];
-                        Unit *actual =
-                            find_contained_module_procedure(context, host, specific_token);
+                        const F2cToken *specific_token = specific_syntax.names[specific_index];
+                        Unit *actual = find_specific_procedure(
+                            context, host, specific_token, specific_syntax.module_keyword != NULL);
                         memset(&procedure, 0, sizeof(procedure));
                         if (actual == NULL) {
-                            f2c_diagnostic_token_code(
-                                context, F2C_DIAGNOSTIC_SEMANTIC, &context->lines.items[j],
-                                specific_token, 1,
-                                "MODULE PROCEDURE specific '%.*s' is not defined in module '%s'",
-                                (int)specific_token->length, specific_token->begin, host->name);
+                            if (specific_syntax.module_keyword != NULL)
+                                f2c_diagnostic_token_code(
+                                    context, F2C_DIAGNOSTIC_SEMANTIC, &context->lines.items[j],
+                                    specific_token, 1,
+                                    "MODULE PROCEDURE specific '%.*s' is not defined in module "
+                                    "'%s'",
+                                    (int)specific_token->length, specific_token->begin, host->name);
+                            else
+                                f2c_diagnostic_token_code(
+                                    context, F2C_DIAGNOSTIC_SEMANTIC, &context->lines.items[j],
+                                    specific_token, 1,
+                                    "PROCEDURE specific '%.*s' is not a visible procedure",
+                                    (int)specific_token->length, specific_token->begin);
                             continue;
                         }
-                        if (!build_module_procedure_signature(context, host, actual, generic_name,
-                                                              specific_token, &procedure)) {
+                        if (!build_procedure_signature(context, host, actual, generic_name,
+                                                       specific_token, &procedure)) {
                             f2c_diagnostic_token_code(
                                 context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &context->lines.items[j],
                                 specific_token, 1,
-                                "out of memory binding MODULE PROCEDURE specific '%.*s'",
+                                "out of memory binding PROCEDURE specific '%.*s'",
                                 (int)specific_token->length, specific_token->begin);
                             continue;
                         }
                         if (!store_interface_signature(context, host, &procedure,
                                                        context->lines.items[j].number)) {
-                            f2c_module_procedure_statement_syntax_discard(&module_syntax);
+                            f2c_interface_specific_syntax_discard(&specific_syntax);
                             free(generic_name);
                             return;
                         }
                         ++procedure_count;
                     }
                 }
-                f2c_module_procedure_statement_syntax_discard(&module_syntax);
+                f2c_interface_specific_syntax_discard(&specific_syntax);
                 ++j;
                 continue;
             }
