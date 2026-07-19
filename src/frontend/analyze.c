@@ -30,7 +30,6 @@ void f2c_analyze_module(Context *context, Unit *unit) {
         f2c_import_module(context, unit, &context->lines.items[i]);
     }
     f2c_parse_derived_type_definitions(context, unit);
-    f2c_parse_explicit_interfaces(context, unit);
     for (i = unit->begin + 1U; i < unit->end; ++i) {
         if (f2c_interface_start_tokens(&context->lines.items[i])) {
             while (i + 1U < unit->end && !f2c_interface_end_tokens(&context->lines.items[i + 1U]))
@@ -44,10 +43,14 @@ void f2c_analyze_module(Context *context, Unit *unit) {
         if (f2c_line_in_derived_type(unit, i))
             continue;
         f2c_parse_declaration(context, unit, &context->lines.items[i]);
-        f2c_parse_procedure_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_dimension_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_parameter_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_save_declaration(context, unit, &context->lines.items[i]);
+    }
+    f2c_parse_explicit_interfaces(context, unit);
+    for (i = unit->begin + 1U; i < unit->end; ++i) {
+        if (context->lines.items[i].interface_depth == 0U && !f2c_line_in_derived_type(unit, i))
+            f2c_parse_procedure_declaration(context, unit, &context->lines.items[i]);
     }
     f2c_parse_access_statements(context, unit);
     f2c_finalize_module_accessibility(context, unit);
