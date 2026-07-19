@@ -3511,6 +3511,85 @@ static void test_module_generic_semantics(void) {
     }
 }
 
+static void test_defined_operation_semantics(void) {
+    F2cResult result;
+    {
+        static const char source[] = "program missing_defined_operator\n"
+                                     "  implicit none\n"
+                                     "  integer :: value\n"
+                                     "  value = .missing. 1\n"
+                                     "end program missing_defined_operator\n";
+        F2cOptions options = {"missing_defined_operator.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(source, sizeof(source) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "a defined operator requires a visible generic binding");
+        expect_contains(result.diagnostics,
+                        "generic interface 'operator(.missing.)' is not visible",
+                        "missing defined-operator diagnostics retain the canonical generic spec");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char source[] = "module invalid_special_generics\n"
+                                     "  interface operator(.bad.)\n"
+                                     "    module procedure bad_operator\n"
+                                     "  end interface operator(.bad.)\n"
+                                     "  interface assignment(=)\n"
+                                     "    module procedure bad_assignment\n"
+                                     "  end interface assignment(=)\n"
+                                     "contains\n"
+                                     "  subroutine bad_operator(value)\n"
+                                     "    integer, intent(in) :: value\n"
+                                     "  end subroutine bad_operator\n"
+                                     "  integer function bad_assignment(target, source)\n"
+                                     "    integer, intent(out) :: target\n"
+                                     "    integer, intent(in) :: source\n"
+                                     "    bad_assignment = source\n"
+                                     "  end function bad_assignment\n"
+                                     "end module invalid_special_generics\n";
+        F2cOptions options = {"invalid_special_generics.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(source, sizeof(source) - 1U, &options);
+        expect(result.code == NULL && result.error_count >= 2U,
+               "invalid operator and assignment specifics are rejected at their declarations");
+        expect_contains(result.diagnostics, "must be a function with one or two dummy arguments",
+                        "operator generics require a function specific");
+        expect_contains(result.diagnostics,
+                        "for defined assignment must be a subroutine with two dummy arguments",
+                        "defined assignment generics require a two-argument subroutine");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char source[] = "module ambiguous_defined_operator\n"
+                                     "  interface operator(.choose.)\n"
+                                     "    module procedure choose_first, choose_second\n"
+                                     "  end interface operator(.choose.)\n"
+                                     "contains\n"
+                                     "  integer function choose_first(value)\n"
+                                     "    integer, intent(in) :: value\n"
+                                     "    choose_first = value\n"
+                                     "  end function choose_first\n"
+                                     "  integer function choose_second(value)\n"
+                                     "    integer, intent(in) :: value\n"
+                                     "    choose_second = value + 1\n"
+                                     "  end function choose_second\n"
+                                     "end module ambiguous_defined_operator\n"
+                                     "program ambiguous_defined_operator_use\n"
+                                     "  use ambiguous_defined_operator, only: operator(.choose.)\n"
+                                     "  implicit none\n"
+                                     "  print *, .choose. 1\n"
+                                     "end program ambiguous_defined_operator_use\n";
+        F2cOptions options = {"ambiguous_defined_operator.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(source, sizeof(source) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "indistinguishable defined-operator specifics are never declaration-ordered");
+        expect_contains(result.diagnostics,
+                        "generic interface 'operator(.choose.)' is ambiguous for this operand list",
+                        "defined-operator ambiguity identifies the operator generic");
+        f2c_result_free(&result);
+    }
+}
+
 static void test_module_accessibility_semantics(void) {
     static const char provider[] = "module access_provider\n"
                                    "  implicit none\n"
@@ -4110,6 +4189,7 @@ int main(void) {
     test_statement_function_typed_lowering();
     test_tokenized_use_association();
     test_module_generic_semantics();
+    test_defined_operation_semantics();
     test_module_accessibility_semantics();
     test_derived_type_use_association();
     test_malformed_character_prefix_cleanup();
