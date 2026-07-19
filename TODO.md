@@ -28,7 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建基线已经建立；本轮普通与 ASan/UBSan 严格 CTest 均为 32/32，架构边界检查作为独立测试运行。
+  构建基线已经建立；本轮普通与 ASan/UBSan 严格 CTest 均为 33/33，架构边界检查作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -49,7 +49,9 @@
   嵌套动作均直接从 canonical token 构建 AST，并保留标签和表达式的精确物理 span。预处理对象宏
   已经保留 expansion/spelling 双范围和重映射源码名，文本与结构化诊断均可同时呈现；仍需让其余
   parser/semantic 诊断全部直接消费 token/AST span，并增加完整宏/include 栈 related location，才能
-  满足“任意诊断均有精确范围”的验收标准。
+  满足“任意诊断均有精确范围”的验收标准。过程设计符、关键字实参、`MOVE_ALLOC` 和规格表达式
+  诊断现已直接使用 AST 的起止范围；同名过程/关键字回归会验证诊断不会退回到源码字符串中的首个
+  文本匹配。
 - [ ] 让声明、程序单元头、`USE`、`NAMELIST`、旧式语句和 I/O 全部消费统一 token 流，删除
   `f2c_identifier`、`f2c_split_*`、`f2c_starts_word`、括号/引号手工扫描等生产解析路径。表达式和
   语句入口现已接受预先生成的 canonical token 流；程序单元、模块/接口/派生类型边界、过程引用、
@@ -63,8 +65,10 @@
   计数/无控制/`WHILE`/标号 `DO`、单行/块/算术 `IF`、直接/计算/赋值 `GOTO`、`ASSIGN` 和带标签
   嵌套动作也已迁移。`CALL/MOVE_ALLOC`、`ALLOCATE/DEALLOCATE/NULLIFY`、`STOP/ERROR STOP`、
   `RETURN`、普通赋值和指针赋值现同样直接从 canonical token range 构建 AST；关键字实参、分配
-  类型说明、停止码及赋值两端均保留精确物理 span。该任务仍因程序单元、部分声明/属性和其他旧式
-  规格语句中的文本解析路径未全部删除而保持未关闭。
+  类型说明、停止码及赋值两端均保留精确物理 span。`f2c_identifier`、全部 `f2c_split_*`、
+  `f2c_starts_word`、整数文本求值器和表达式文本查询包装器已经从生产代码删除；架构测试禁止在
+  parser 之外重新调用原始文本表达式入口，也禁止恢复这些旧解析器。该任务仍因程序单元、部分
+  声明/属性和其他旧式规格语句中的手写文本扫描尚未全部迁移而保持未关闭。
   源码归一化层的注释识别、分号拆句和代码大小写处理已经
   改为消费 canonical token，不会在 token 化之前破坏字符或 Hollerith 载荷。
 - [x] 只保留 `frontend/token.h` 定义的 `F2cToken/F2cTokenStream`。表达式 AST 已删除独立的
@@ -112,8 +116,9 @@
   rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级，仍需补齐其余规格
   intrinsic 和所有允许出现位置。
 - [x] 移除 `f2c_emit_cached_expression` 和 `f2c_translate_expression` 原始文本降级路径；模块实体、
-  派生类型组件、声明初始化、字符长度和数组边界均在语义阶段建立表达式 AST。`codegen/` 不得
-  调用表达式解析器，该边界由 `architecture_boundaries` 测试强制检查。
+  派生类型组件、声明初始化、字符长度、数组边界、语句函数结果和模块常量均在语义阶段建立表达式
+  AST。除表达式 parser 自身及其测试入口声明外，全部生产代码均不得调用原始文本表达式解析器；
+  `architecture_boundaries` 同时禁止恢复已经删除的文本拆分、标识符和整数求值包装器。
 - [ ] 保证 Fortran 未指定求值顺序不会被错误固化，具有副作用的实参和下标只求值一次；数组
   重叠、函数结果和临时对象具有可证明的生命周期。
 - [x] 语句函数已建立真实的类型化定义 AST；直接和嵌套调用使用每次调用独立的 C17 实参临时值，
