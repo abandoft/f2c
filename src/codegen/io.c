@@ -171,9 +171,112 @@ int f2c_io_emit_defined_io_call(Context *context, const char *value, F2cDerivedT
     return 1;
 }
 
-void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
-                                const Symbol *symbol, const char *value,
-                                const char *character_length_override, int input, int depth);
+static void emit_list_derived(Context *context, Unit *unit, const char *file, const char *value,
+                              F2cDerivedType *derived, int input, const char *status,
+                              F2cDefinedIoKind defined_kind, const char *unit_number,
+                              const char *iotype, int depth);
+
+static void emit_list_component(Context *context, Unit *unit, const char *file, Symbol *component,
+                                const char *owner, int input, const char *status,
+                                F2cDefinedIoKind defined_kind, const char *unit_number,
+                                const char *iotype, int depth) {
+    Buffer base = {0};
+    Buffer index_name = {0};
+    char *count = component->rank != 0U ? f2c_symbol_element_count(unit, component) : NULL;
+    char *character_length =
+        component->type == TYPE_CHARACTER ? f2c_symbol_character_length(unit, component) : NULL;
+    F2cExpr expression = {0};
+    F2cIoItem item = {0};
+    f2c_buffer_printf(&base, "(%s).%s", owner, f2c_symbol_c_name(unit, component));
+    expression.kind = F2C_EXPR_COMPONENT;
+    expression.type = component->type;
+    expression.type_kind = component->kind;
+    expression.symbol = component;
+    expression.derived_type = component->derived_type;
+    expression.value_category = F2C_VALUE_VARIABLE;
+    expression.definable = 1;
+    expression.shape.kind = F2C_SHAPE_SCALAR;
+    expression.lowered_character_length_c = character_length;
+    item.expression = &expression;
+    if (component->rank == 0U) {
+        expression.lowered_c = base.data;
+        if (component->type == TYPE_DERIVED && component->derived_type != NULL)
+            emit_list_derived(context, unit, file, base.data, component->derived_type, input,
+                              status, defined_kind, unit_number, iotype, depth);
+        else
+            f2c_io_emit_item(context, unit, file, &item, input, status, 0, defined_kind,
+                             unit_number, iotype, depth);
+    } else {
+        f2c_buffer_printf(&index_name, "f2c_list_component_%d", depth);
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output, "for (size_t %s = 0U; %s < %s; ++%s) {\n",
+                          index_name.data, index_name.data, count != NULL ? count : "0U",
+                          index_name.data);
+        {
+            Buffer element = {0};
+            if (component->type == TYPE_CHARACTER)
+                f2c_buffer_printf(&element, "%s + %s * (size_t)(%s)", base.data, index_name.data,
+                                  character_length != NULL ? character_length : "1U");
+            else
+                f2c_buffer_printf(&element, "%s[%s]", base.data, index_name.data);
+            expression.lowered_c = element.data;
+            if (component->type == TYPE_DERIVED && component->derived_type != NULL)
+                emit_list_derived(context, unit, file, element.data, component->derived_type, input,
+                                  status, defined_kind, unit_number, iotype, depth + 1);
+            else
+                f2c_io_emit_item(context, unit, file, &item, input, status, 0, defined_kind,
+                                 unit_number, iotype, depth + 1);
+            free(element.data);
+        }
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
+    }
+    free(base.data);
+    free(index_name.data);
+    free(count);
+    free(character_length);
+}
+
+static void emit_default_list_derived(Context *context, Unit *unit, const char *file,
+                                      const char *value, F2cDerivedType *derived, int input,
+                                      const char *status, F2cDefinedIoKind defined_kind,
+                                      const char *unit_number, const char *iotype, int depth) {
+    size_t index;
+    if (derived->parent != NULL) {
+        Buffer parent = {0};
+        f2c_buffer_printf(&parent, "(%s).parent", value);
+        emit_default_list_derived(context, unit, file, parent.data, derived->parent, input, status,
+                                  defined_kind, unit_number, iotype, depth);
+        free(parent.data);
+    }
+    for (index = 0U; index < derived->component_count; ++index)
+        emit_list_component(context, unit, file, &derived->components[index], value, input, status,
+                            defined_kind, unit_number, iotype, depth);
+}
+
+static void emit_list_derived(Context *context, Unit *unit, const char *file, const char *value,
+                              F2cDerivedType *derived, int input, const char *status,
+                              F2cDefinedIoKind defined_kind, const char *unit_number,
+                              const char *iotype, int depth) {
+    if (f2c_io_defined_binding(derived, defined_kind) == NULL) {
+        emit_default_list_derived(context, unit, file, value, derived, input, status, defined_kind,
+                                  unit_number, iotype, depth);
+        return;
+    }
+    if (!input && iotype != NULL && strcmp(iotype, "\"LISTDIRECTED\"") == 0) {
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output, "(void)f2c_stream_putc(' ', %s);\n", file);
+    }
+    if (!f2c_io_emit_defined_io_call(context, value, derived, defined_kind, unit_number, iotype,
+                                     NULL, "0U", status, depth)) {
+        f2c_io_indent(&context->output, depth);
+        if (status != NULL)
+            f2c_buffer_printf(&context->output, "%s = F2C_IO_STATUS_RECORD;\n", status);
+        else
+            f2c_buffer_append(&context->output, "f2c_io_abort_unhandled("
+                                                "F2C_IO_STATUS_RECORD, \"defined I/O\");\n");
+    }
+}
 
 void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cIoItem *item,
                       int input, const char *status, int record_input,
@@ -212,21 +315,11 @@ void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cI
     expression = item->expression;
     symbol = expression != NULL ? expression->symbol : NULL;
     simple_name = expression != NULL && expression->kind == F2C_EXPR_NAME;
-    if (simple_name && symbol != NULL && symbol->type == TYPE_DERIVED &&
-        symbol->derived_type != NULL) {
-        const char *name = f2c_symbol_c_name(unit, symbol);
-        if (symbol->rank == 0U) {
-            if (!input && iotype != NULL && strcmp(iotype, "\"LISTDIRECTED\"") == 0) {
-                f2c_io_indent(&context->output, depth);
-                f2c_buffer_printf(&context->output, "(void)f2c_stream_putc(' ', %s);\n", file);
-            }
-            if (!f2c_io_emit_defined_io_call(context, name, symbol->derived_type, defined_kind,
-                                             unit_number, iotype, NULL, "0U", status, depth)) {
-                f2c_io_indent(&context->output, depth);
-                f2c_buffer_append(&context->output, "abort(); /* missing defined I/O */\n");
-            }
-        } else {
+    if (expression != NULL && expression->type == TYPE_DERIVED &&
+        expression->derived_type != NULL) {
+        if (simple_name && symbol != NULL && symbol->rank != 0U) {
             char *count = f2c_symbol_element_count(unit, symbol);
+            const char *name = f2c_symbol_c_name(unit, symbol);
             f2c_io_indent(&context->output, depth);
             f2c_buffer_printf(&context->output,
                               "for (size_t f2c_dtio_index = 0U; f2c_dtio_index < %s; "
@@ -235,21 +328,19 @@ void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cI
             {
                 Buffer value = {0};
                 f2c_buffer_printf(&value, "%s[f2c_dtio_index]", name);
-                if (!input && iotype != NULL && strcmp(iotype, "\"LISTDIRECTED\"") == 0) {
-                    f2c_io_indent(&context->output, depth + 1);
-                    f2c_buffer_printf(&context->output, "(void)f2c_stream_putc(' ', %s);\n", file);
-                }
-                if (!f2c_io_emit_defined_io_call(context, value.data, symbol->derived_type,
-                                                 defined_kind, unit_number, iotype, NULL, "0U",
-                                                 status, depth + 1)) {
-                    f2c_io_indent(&context->output, depth + 1);
-                    f2c_buffer_append(&context->output, "abort(); /* missing defined I/O */\n");
-                }
+                emit_list_derived(context, unit, file, value.data, symbol->derived_type, input,
+                                  status, defined_kind, unit_number, iotype, depth + 1);
                 free(value.data);
             }
             f2c_io_indent(&context->output, depth);
             f2c_buffer_append(&context->output, "}\n");
             free(count);
+        } else {
+            char *value = f2c_io_emit_item_expression(unit, item);
+            if (value != NULL)
+                emit_list_derived(context, unit, file, value, expression->derived_type, input,
+                                  status, defined_kind, unit_number, iotype, depth);
+            free(value);
         }
         return;
     }
@@ -298,31 +389,36 @@ void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cI
                                   "f2c_io_logical ? 1 : 0; }\n",
                                   file, value);
             free(value);
-        } else if (simple_name && symbol != NULL && symbol->type == TYPE_CHARACTER &&
-                   (symbol->argument || symbol->character_length != NULL || symbol->rank != 0U)) {
-            f2c_io_indent(&context->output, depth);
-            if (record_input && !symbol->argument) {
-                if (status != NULL)
-                    f2c_buffer_printf(
-                        &context->output, "%s = f2c_read_record(%s, %s, sizeof(%s));\n", status,
-                        file, f2c_symbol_c_name(unit, symbol), f2c_symbol_c_name(unit, symbol));
-                else
-                    f2c_buffer_printf(
-                        &context->output, "(void)f2c_read_record(%s, %s, sizeof(%s));\n", file,
-                        f2c_symbol_c_name(unit, symbol), f2c_symbol_c_name(unit, symbol));
-            } else {
-                char *length = f2c_symbol_character_length(unit, symbol);
-                if (status != NULL)
+        } else if (expression != NULL && expression->type == TYPE_CHARACTER &&
+                   expression->rank == 0U) {
+            char *value = f2c_io_emit_item_expression(unit, item);
+            char *length = f2c_character_length_expression(unit, expression);
+            char *pointer =
+                value != NULL ? f2c_character_source_pointer(unit, expression, value) : NULL;
+            if (value != NULL && length != NULL && pointer != NULL) {
+                f2c_io_indent(&context->output, depth);
+                if (record_input && simple_name && symbol != NULL && !symbol->argument) {
+                    if (status != NULL)
+                        f2c_buffer_printf(&context->output,
+                                          "%s = f2c_read_record(%s, %s, (size_t)(%s));\n", status,
+                                          file, pointer, length);
+                    else
+                        f2c_buffer_printf(&context->output,
+                                          "(void)f2c_read_record(%s, %s, (size_t)(%s));\n", file,
+                                          pointer, length);
+                } else if (status != NULL) {
                     f2c_buffer_printf(&context->output,
                                       "%s = f2c_read_character(%s, %s, (size_t)(%s));\n", status,
-                                      file, f2c_symbol_c_name(unit, symbol),
-                                      length != NULL ? length : "1U");
-                else
-                    f2c_buffer_printf(
-                        &context->output, "(void)f2c_read_character(%s, %s, (size_t)(%s));\n", file,
-                        f2c_symbol_c_name(unit, symbol), length != NULL ? length : "1U");
-                free(length);
+                                      file, pointer, length);
+                } else {
+                    f2c_buffer_printf(&context->output,
+                                      "(void)f2c_read_character(%s, %s, (size_t)(%s));\n", file,
+                                      pointer, length);
+                }
             }
+            free(value);
+            free(length);
+            free(pointer);
         } else {
             char *value = f2c_io_emit_item_expression(unit, item);
             if (value == NULL)
@@ -406,319 +502,4 @@ const F2cIoControl *f2c_io_control(const F2cStatement *statement, F2cIoControlKi
             return control;
     }
     return NULL;
-}
-
-static int io_character_record_format(const F2cIoControl *format) {
-    const char *cursor;
-    const char *text = format != NULL && format->value != NULL ? format->value->text : NULL;
-    if (text == NULL || format->value->kind != F2C_EXPR_STRING_LITERAL ||
-        (*text != '\'' && *text != '"'))
-        return 0;
-    for (cursor = text + 1; *cursor != '\0' && *cursor != *text; ++cursor) {
-        if ((*cursor == 'a' || *cursor == 'A') &&
-            (cursor == text + 1 || !isalpha((unsigned char)cursor[-1])))
-            return 1;
-    }
-    return 0;
-}
-
-static char *io_file_expression(Unit *unit, const F2cStatement *statement, int input) {
-    const F2cIoControl *control = f2c_io_control(statement, F2C_IO_CONTROL_UNIT, 0U);
-    char *unit_value;
-    Buffer result = {0};
-    if (control == NULL)
-        return f2c_strdup(input ? "f2c_unit_stream(5, true)" : "f2c_unit_stream(6, false)");
-    if (control->asterisk) {
-        unit_value = f2c_strdup(input ? "f2c_unit_stream(5, true)" : "f2c_unit_stream(6, false)");
-    } else if (control->value != NULL && control->value->type == TYPE_CHARACTER) {
-        unit_value = f2c_strdup("&f2c_internal_stream");
-    } else {
-        char *translated = f2c_io_emit_required_expression(unit, control->value);
-        if (translated == NULL)
-            return NULL;
-        f2c_buffer_printf(&result, "f2c_unit_stream((int32_t)(%s), %s)", translated,
-                          input ? "true" : "false");
-        free(translated);
-        unit_value = f2c_buffer_take(&result);
-    }
-    return unit_value;
-}
-
-static char *io_unit_number_expression(Unit *unit, const F2cStatement *statement, int input,
-                                       int internal_file) {
-    const F2cIoControl *control = f2c_io_control(statement, F2C_IO_CONTROL_UNIT, 0U);
-    if (internal_file)
-        return f2c_strdup("f2c_internal_unit");
-    if (control == NULL || control->asterisk)
-        return f2c_strdup(input ? "5" : "6");
-    return control->value != NULL ? f2c_io_emit_required_expression(unit, control->value) : NULL;
-}
-
-int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStatement *statement,
-                                  int input, int depth) {
-    char *file;
-    char *unit_number;
-    const F2cIoControl *end_control = NULL;
-    const F2cIoControl *err_control = NULL;
-    const F2cIoControl *iostat_control = NULL;
-    const F2cIoControl *eor_control = NULL;
-    const F2cIoControl *iomsg_control = NULL;
-    const F2cIoControl *size_control = NULL;
-    const F2cIoControl *advance_control = NULL;
-    const F2cIoControl *format_control = NULL;
-    const F2cIoControl *namelist_control = NULL;
-    F2cNamelistGroup *namelist_group = NULL;
-    char *end_label = NULL;
-    char *err_label = NULL;
-    char *iostat = NULL;
-    char *eor_label = NULL;
-    char *iomsg_value = NULL;
-    char *iomsg_pointer = NULL;
-    char *iomsg_length = NULL;
-    char *size_value = NULL;
-    char *advance_value = NULL;
-    char *advance_pointer = NULL;
-    char *advance_length = NULL;
-    char *advance_expression = NULL;
-    const F2cIoControl *unit_control;
-    const int internal_file =
-        (unit_control = f2c_io_control(statement, F2C_IO_CONTROL_UNIT, 0U)) != NULL &&
-        !unit_control->asterisk && unit_control->value != NULL &&
-        unit_control->value->type == TYPE_CHARACTER;
-    char *internal_value = NULL;
-    char *internal_pointer = NULL;
-    char *internal_length = NULL;
-    char *internal_record_count = NULL;
-    int formatted = 0;
-    int list_directed = 0;
-    int needs_status = 0;
-    size_t i;
-    if (statement->io_controls == NULL || statement->control_count == 0U ||
-        statement->io_item_count != statement->item_count)
-        return 0;
-    file = io_file_expression(unit, statement, input);
-    if (file == NULL)
-        return 0;
-    unit_number = io_unit_number_expression(unit, statement, input, internal_file);
-    if (unit_number == NULL) {
-        free(file);
-        return 0;
-    }
-    if (internal_file) {
-        int supported = 0;
-        internal_value = f2c_emit_expression_ast(unit, unit_control->value, &supported);
-        internal_pointer =
-            supported && internal_value != NULL
-                ? f2c_character_source_pointer(unit, unit_control->value, internal_value)
-                : NULL;
-        internal_length = f2c_character_length_expression(unit, unit_control->value);
-        internal_record_count =
-            unit_control->value->rank == 1U && unit_control->value->symbol != NULL
-                ? f2c_symbol_element_count(unit, unit_control->value->symbol)
-                : f2c_strdup("1U");
-        if (internal_value == NULL || internal_pointer == NULL || internal_length == NULL ||
-            internal_record_count == NULL) {
-            free(file);
-            free(internal_value);
-            free(internal_pointer);
-            free(internal_length);
-            free(internal_record_count);
-            return 0;
-        }
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "{\n");
-        ++depth;
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "f2c_io_stream f2c_internal_stream;\n");
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output,
-                          "if (!f2c_stream_initialize_internal(&f2c_internal_stream, %s, "
-                          "(size_t)(%s), (size_t)(%s), %s)) abort();\n",
-                          internal_pointer, internal_length, internal_record_count,
-                          input ? "true" : "false");
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "const int32_t f2c_internal_unit = "
-                                            "f2c_register_internal_unit(&f2c_internal_stream);\n");
-    }
-    end_control = input ? f2c_io_control(statement, F2C_IO_CONTROL_END, (size_t)-1) : NULL;
-    eor_control = input ? f2c_io_control(statement, F2C_IO_CONTROL_EOR, (size_t)-1) : NULL;
-    err_control = f2c_io_control(statement, F2C_IO_CONTROL_ERR, (size_t)-1);
-    iostat_control = f2c_io_control(statement, F2C_IO_CONTROL_IOSTAT, (size_t)-1);
-    iomsg_control = f2c_io_control(statement, F2C_IO_CONTROL_IOMSG, (size_t)-1);
-    size_control = input ? f2c_io_control(statement, F2C_IO_CONTROL_SIZE, (size_t)-1) : NULL;
-    advance_control = f2c_io_control(statement, F2C_IO_CONTROL_ADVANCE, (size_t)-1);
-    if (input)
-        end_label =
-            end_control != NULL ? f2c_io_emit_required_expression(unit, end_control->value) : NULL;
-    if (input)
-        eor_label =
-            eor_control != NULL ? f2c_io_emit_required_expression(unit, eor_control->value) : NULL;
-    err_label =
-        err_control != NULL ? f2c_io_emit_required_expression(unit, err_control->value) : NULL;
-    iostat = iostat_control != NULL ? f2c_io_emit_required_expression(unit, iostat_control->value)
-                                    : NULL;
-    if (iomsg_control != NULL && iomsg_control->value != NULL) {
-        iomsg_value = f2c_io_emit_required_expression(unit, iomsg_control->value);
-        iomsg_pointer = iomsg_value != NULL
-                            ? f2c_character_source_pointer(unit, iomsg_control->value, iomsg_value)
-                            : NULL;
-        iomsg_length = f2c_character_length_expression(unit, iomsg_control->value);
-    }
-    if (size_control != NULL)
-        size_value = f2c_io_emit_required_expression(unit, size_control->value);
-    if (advance_control != NULL && advance_control->value != NULL) {
-        Buffer advance = {0};
-        advance_value = f2c_io_emit_required_expression(unit, advance_control->value);
-        advance_pointer =
-            advance_value != NULL
-                ? f2c_character_source_pointer(unit, advance_control->value, advance_value)
-                : NULL;
-        advance_length = f2c_character_length_expression(unit, advance_control->value);
-        if (advance_pointer != NULL && advance_length != NULL)
-            f2c_buffer_printf(&advance, "f2c_advance_enabled(%s, (size_t)(%s))", advance_pointer,
-                              advance_length);
-        advance_expression = f2c_buffer_take(&advance);
-    } else {
-        advance_expression = f2c_strdup("true");
-    }
-    if (advance_expression == NULL || (eor_control != NULL && eor_label == NULL) ||
-        (iomsg_control != NULL &&
-         (iomsg_value == NULL || iomsg_pointer == NULL || iomsg_length == NULL)) ||
-        (size_control != NULL && size_value == NULL)) {
-        free(file);
-        free(eor_label);
-        free(iomsg_value);
-        free(iomsg_pointer);
-        free(iomsg_length);
-        free(size_value);
-        free(advance_value);
-        free(advance_pointer);
-        free(advance_length);
-        free(advance_expression);
-        return 0;
-    }
-    needs_status = end_label != NULL || eor_label != NULL || err_label != NULL || iostat != NULL ||
-                   iomsg_pointer != NULL;
-    format_control = f2c_io_control(statement, F2C_IO_CONTROL_FMT, 1U);
-    formatted = format_control != NULL && !format_control->asterisk;
-    list_directed = format_control != NULL && format_control->asterisk;
-    namelist_control = f2c_io_control(statement, F2C_IO_CONTROL_NML, (size_t)-1);
-    if (namelist_control != NULL && namelist_control->value != NULL)
-        namelist_group = f2c_find_namelist(unit, namelist_control->value->text);
-    if (needs_status) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "{\n");
-        ++depth;
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "int f2c_io_status = 1;\n");
-    }
-    if (namelist_group != NULL) {
-        if (!f2c_io_emit_namelist(context, unit, file, namelist_group, input, unit_number, depth)) {
-            free(file);
-            return 0;
-        }
-    } else if (formatted) {
-        if (!f2c_io_emit_formatted_transfer(context, unit, statement, format_control, file,
-                                            unit_number, input, advance_expression, size_value,
-                                            needs_status ? "f2c_io_status" : NULL, depth)) {
-            free(file);
-            free(unit_number);
-            return 0;
-        }
-    } else if (statement->io_item_count == 1U && statement->io_items[0].implied_do) {
-        f2c_io_emit_item(context, unit, file, &statement->io_items[0], input,
-                         input && needs_status ? "f2c_io_status" : NULL, 0,
-                         input ? (list_directed ? F2C_DEFINED_IO_READ_FORMATTED
-                                                : F2C_DEFINED_IO_READ_UNFORMATTED)
-                               : (list_directed ? F2C_DEFINED_IO_WRITE_FORMATTED
-                                                : F2C_DEFINED_IO_WRITE_UNFORMATTED),
-                         unit_number, list_directed ? "\"LISTDIRECTED\"" : NULL, depth);
-    } else {
-        for (i = 0U; i < statement->io_item_count; ++i)
-            f2c_io_emit_item(context, unit, file, &statement->io_items[i], input,
-                             input && needs_status ? "f2c_io_status" : NULL,
-                             input && statement->io_item_count == 1U &&
-                                 io_character_record_format(format_control),
-                             input ? (list_directed ? F2C_DEFINED_IO_READ_FORMATTED
-                                                    : F2C_DEFINED_IO_READ_UNFORMATTED)
-                                   : (list_directed ? F2C_DEFINED_IO_WRITE_FORMATTED
-                                                    : F2C_DEFINED_IO_WRITE_UNFORMATTED),
-                             unit_number, list_directed ? "\"LISTDIRECTED\"" : NULL, depth);
-    }
-    if (input) {
-        if (namelist_group == NULL && !formatted && !io_character_record_format(format_control)) {
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_printf(&context->output,
-                              "if ((%s) && f2c_child_io_depth == 0U) f2c_finish_read(%s);\n",
-                              advance_expression, file);
-        }
-    } else if (namelist_group == NULL && !formatted) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output,
-                          "if ((%s) && f2c_child_io_depth == 0U) "
-                          "(void)f2c_stream_putc('\\n', %s);\n",
-                          advance_expression, file);
-    }
-    if (!input && needs_status) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "if (f2c_stream_error(%s)) f2c_io_status = 0;\n", file);
-    }
-    if (iostat != NULL) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output,
-                          "%s = f2c_io_status == EOF ? -1 : (f2c_io_status == -2 ? -2 : "
-                          "(f2c_io_status <= 0 ? 1 : 0));\n",
-                          iostat);
-    }
-    if (iomsg_pointer != NULL) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "f2c_set_iomsg(%s, (size_t)(%s), f2c_io_status);\n",
-                          iomsg_pointer, iomsg_length);
-    }
-    if (end_label != NULL) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "if (f2c_io_status == EOF) goto f2c_label_%s;\n",
-                          end_label);
-    }
-    if (eor_label != NULL) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "if (f2c_io_status == -2) goto f2c_label_%s;\n",
-                          eor_label);
-    }
-    if (err_label != NULL) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "if (f2c_io_status == 0) goto f2c_label_%s;\n",
-                          err_label);
-    }
-    if (needs_status) {
-        --depth;
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "}\n");
-    }
-    if (internal_file) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "f2c_unregister_internal_unit(f2c_internal_unit);\n");
-        --depth;
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "}\n");
-    }
-    free(file);
-    free(unit_number);
-    free(end_label);
-    free(err_label);
-    free(iostat);
-    free(eor_label);
-    free(iomsg_value);
-    free(iomsg_pointer);
-    free(iomsg_length);
-    free(size_value);
-    free(advance_value);
-    free(advance_pointer);
-    free(advance_length);
-    free(advance_expression);
-    free(internal_value);
-    free(internal_pointer);
-    free(internal_length);
-    free(internal_record_count);
-    return 1;
 }

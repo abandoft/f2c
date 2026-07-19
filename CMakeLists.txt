@@ -97,6 +97,8 @@ set(
     src/codegen/io/private.h
     src/codegen/io/program.c
     src/codegen/io/support.c
+    src/codegen/io/transfer.c
+    src/codegen/io/unformatted.c
     src/codegen/lowering.c
     src/codegen/module.c
     src/codegen/ownership.c
