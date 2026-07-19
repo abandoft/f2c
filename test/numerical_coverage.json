@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "observable": {
     "suite_count": 104,
     "numerical_records": 900,
@@ -8,20 +8,39 @@
   },
   "internal": {
     "blas": {
-      "suites": 12,
-      "records": 303096,
-      "generated_records": 303096,
-      "native_records": 303096,
-      "generated_only_records": 0,
-      "native_only_records": 0
+      "profiles": [
+        {
+          "name": "reference",
+          "suites": 12,
+          "records": 303096,
+          "generated_records": 303096,
+          "native_records": 303096,
+          "generated_only_records": 0,
+          "native_only_records": 0
+        }
+      ]
     },
     "lapack": {
-      "suites": 88,
-      "records": 5504702,
-      "generated_records": 5504162,
-      "native_records": 5504162,
-      "generated_only_records": 540,
-      "native_only_records": 540
+      "profiles": [
+        {
+          "name": "gnu-linux",
+          "suites": 88,
+          "records": 5504702,
+          "generated_records": 5504162,
+          "native_records": 5504162,
+          "generated_only_records": 540,
+          "native_only_records": 540
+        },
+        {
+          "name": "gnu-darwin",
+          "suites": 88,
+          "records": 5504845,
+          "generated_records": 5504162,
+          "native_records": 5504279,
+          "generated_only_records": 566,
+          "native_only_records": 683
+        }
+      ]
     }
   }
 }

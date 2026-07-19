@@ -44,8 +44,8 @@ def load_baseline(path: Path = BASELINE_PATH) -> dict[str, object]:
         baseline = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise CoverageError(f"cannot load coverage baseline {path}: {error}") from error
-    if not isinstance(baseline, dict) or baseline.get("schema_version") != 1:
-        raise CoverageError("coverage baseline must use schema version 1")
+    if not isinstance(baseline, dict) or baseline.get("schema_version") != 2:
+        raise CoverageError("coverage baseline must use schema version 2")
 
     observable = baseline.get("observable")
     observable_values = {
@@ -61,28 +61,79 @@ def load_baseline(path: Path = BASELINE_PATH) -> dict[str, object]:
     if not isinstance(internal, dict):
         raise CoverageError("internal must be an object")
     for label in ("blas", "lapack"):
-        expected = internal.get(label)
-        values = {
-            field: _nonnegative_integer(expected, field, f"internal.{label}")
-            for field in INTERNAL_FIELDS
-        }
-        if values["records"] != (
-            values["generated_records"] + values["native_only_records"]
-        ) or values["records"] != (
-            values["native_records"] + values["generated_only_records"]
-        ):
-            raise CoverageError(f"internal.{label} union totals are inconsistent")
+        entry = internal.get(label)
+        if not isinstance(entry, dict):
+            raise CoverageError(f"internal.{label} must be an object")
+        profiles = entry.get("profiles")
+        if not isinstance(profiles, list) or not profiles:
+            raise CoverageError(f"internal.{label}.profiles must be a non-empty array")
+        names: set[str] = set()
+        invariant_values: tuple[int, int] | None = None
+        for index, profile in enumerate(profiles):
+            profile_label = f"internal.{label}.profiles[{index}]"
+            if not isinstance(profile, dict):
+                raise CoverageError(f"{profile_label} must be an object")
+            name = profile.get("name")
+            if not isinstance(name, str) or not name or name in names:
+                raise CoverageError(f"{profile_label}.name must be a unique non-empty string")
+            names.add(name)
+            values = {
+                field: _nonnegative_integer(profile, field, profile_label)
+                for field in INTERNAL_FIELDS
+            }
+            if values["records"] != (
+                values["generated_records"] + values["native_only_records"]
+            ) or values["records"] != (
+                values["native_records"] + values["generated_only_records"]
+            ):
+                raise CoverageError(f"{profile_label} union totals are inconsistent")
+            invariants = (values["suites"], values["generated_records"])
+            if invariant_values is None:
+                invariant_values = invariants
+            elif invariants != invariant_values:
+                raise CoverageError(
+                    f"internal.{label} profiles must preserve suite and generated coverage"
+                )
     return baseline
+
+
+def internal_profiles(baseline: dict[str, object], label: str) -> list[dict[str, object]]:
+    internal = baseline["internal"]
+    assert isinstance(internal, dict)
+    entry = internal[label]
+    assert isinstance(entry, dict)
+    profiles = entry["profiles"]
+    assert isinstance(profiles, list)
+    return profiles
+
+
+def match_internal_profile(
+    label: str,
+    values: object,
+    baseline: dict[str, object] | None = None,
+) -> dict[str, object]:
+    if baseline is None:
+        baseline = load_baseline()
+    actual = {
+        field: _nonnegative_integer(values, field, f"actual.{label}")
+        for field in INTERNAL_FIELDS
+    }
+    profiles = internal_profiles(baseline, label)
+    for profile in profiles:
+        if all(actual[field] == profile[field] for field in INTERNAL_FIELDS):
+            return profile
+    names = ", ".join(str(profile["name"]) for profile in profiles)
+    details = ", ".join(f"{field}={actual[field]}" for field in INTERNAL_FIELDS)
+    raise CoverageError(
+        f"{label} coverage does not match a supported native profile "
+        f"({names}): {details}"
+    )
 
 
 def verify_internal_manifest(
     label: str, manifest_path: Path, baseline_path: Path = BASELINE_PATH
-) -> None:
+) -> dict[str, object]:
     baseline = load_baseline(baseline_path)
-    internal = baseline["internal"]
-    assert isinstance(internal, dict)
-    expected = internal[label]
-    assert isinstance(expected, dict)
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -91,12 +142,7 @@ def verify_internal_manifest(
         ) from error
     if not isinstance(manifest, dict):
         raise CoverageError(f"numerical manifest {manifest_path} must be an object")
-    for field in INTERNAL_FIELDS:
-        actual = manifest.get(field)
-        if actual != expected[field]:
-            raise CoverageError(
-                f"{label} {field} differs: actual={actual!r}, expected={expected[field]}"
-            )
+    return match_internal_profile(label, manifest, baseline)
 
 
 def main() -> int:
@@ -109,21 +155,31 @@ def main() -> int:
     try:
         baseline = load_baseline(args.baseline)
         if args.self_test:
+            for label in ("blas", "lapack"):
+                for profile in internal_profiles(baseline, label):
+                    matched = match_internal_profile(label, profile, baseline)
+                    assert matched["name"] == profile["name"]
+            lapack_profiles = internal_profiles(baseline, "lapack")
+            if len(lapack_profiles) > 1:
+                hybrid = dict(lapack_profiles[0])
+                hybrid["native_records"] = lapack_profiles[1]["native_records"]
+                try:
+                    match_internal_profile("lapack", hybrid, baseline)
+                except CoverageError:
+                    pass
+                else:
+                    raise CoverageError("a mixed native coverage profile was accepted")
             print("numerical coverage baseline self-test passed")
             return 0
         if args.label is None or args.manifest is None:
             parser.error("label and manifest are required")
-        verify_internal_manifest(args.label, args.manifest, args.baseline)
+        matched = verify_internal_manifest(args.label, args.manifest, args.baseline)
     except CoverageError as error:
         print(f"numerical coverage validation failed: {error}", file=sys.stderr)
         return 1
-    internal = baseline["internal"]
-    assert isinstance(internal, dict)
-    expected = internal[args.label]
-    assert isinstance(expected, dict)
     print(
-        f"validated {args.label.upper()} coverage: {expected['suites']} suites, "
-        f"{expected['records']} union records"
+        f"validated {args.label.upper()} coverage profile {matched['name']}: "
+        f"{matched['suites']} suites, {matched['records']} union records"
     )
     return 0
 

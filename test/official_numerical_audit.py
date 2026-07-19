@@ -36,12 +36,16 @@ from exhaustive_result_diff import (
     passes_threshold,
     printed_rounding_tolerance,
 )
-from numerical_coverage import load_baseline
+from numerical_coverage import (
+    CoverageError,
+    internal_profiles,
+    load_baseline,
+    match_internal_profile,
+)
 
 
 COVERAGE_BASELINE = load_baseline()
 EXPECTED_OBSERVABLE = COVERAGE_BASELINE["observable"]
-EXPECTED_INTERNAL = COVERAGE_BASELINE["internal"]
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -403,14 +407,15 @@ def validate_report(report_path: Path, report_root: Path) -> dict[str, object]:
 def validate_internal_root(
     label: str, report_root: Path
 ) -> tuple[dict[str, object], list[dict[str, object]]]:
-    expected = EXPECTED_INTERNAL[label]
+    profiles = internal_profiles(COVERAGE_BASELINE, label)
+    expected_suites = profiles[0]["suites"]
     paths = sorted(
         path for path in report_root.glob("*.json") if path.name != "manifest.json"
     )
-    if len(paths) != expected["suites"]:
+    if len(paths) != expected_suites:
         raise AuditError(
             f"{label} suite coverage differs: actual={len(paths)}, "
-            f"expected={expected['suites']}"
+            f"expected={expected_suites}"
         )
     entries = [validate_report(path, report_root) for path in paths]
     totals = {
@@ -438,12 +443,11 @@ def validate_internal_root(
             int(entry["correctness_status"] == "regressed") for entry in entries
         ),
     }
-    for field, expected_value in expected.items():
-        if totals[field] != expected_value:
-            raise AuditError(
-                f"{label} {field} differs: actual={totals[field]}, "
-                f"expected={expected_value}"
-            )
+    try:
+        matched_profile = match_internal_profile(label, totals, COVERAGE_BASELINE)
+    except CoverageError as error:
+        raise AuditError(str(error)) from error
+    totals["coverage_profile"] = matched_profile["name"]
 
     stored_path = report_root / "manifest.json"
     if not stored_path.is_file():
