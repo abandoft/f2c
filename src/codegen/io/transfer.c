@@ -300,8 +300,9 @@ int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStateme
             goto cleanup;
     } else if (!formatted) {
         for (index = 0U; index < statement->io_item_count; ++index)
-            f2c_io_emit_unformatted_item(context, unit, &statement->io_items[index], input,
-                                         "f2c_io_file", "f2c_io_unit", "f2c_io_status", depth);
+            if (!f2c_io_emit_unformatted_item(context, unit, &statement->io_items[index], input,
+                                              "f2c_io_file", "f2c_io_unit", "f2c_io_status", depth))
+                goto cleanup;
     } else if (list_directed) {
         emit_list_transfer(context, unit, statement, "f2c_io_file", "f2c_io_unit", input,
                            "f2c_io_status", depth);

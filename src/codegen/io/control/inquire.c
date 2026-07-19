@@ -78,6 +78,8 @@ static int emit_inquiry_results(Context *context, Unit *unit, const F2cStatement
 
 int f2c_emit_inquire_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                int depth) {
+    if (f2c_io_control(statement, F2C_IO_CONTROL_IOLENGTH, (size_t)-1) != NULL)
+        return f2c_emit_iolength_statement(context, unit, statement, depth);
     const F2cIoControl *unit_control = f2c_io_control(statement, F2C_IO_CONTROL_UNIT, (size_t)-1);
     const F2cIoControl *file_control = f2c_io_control(statement, F2C_IO_CONTROL_FILE, (size_t)-1);
     F2cEmittedCharacterControl file = {0};

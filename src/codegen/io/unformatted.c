@@ -1,4 +1,4 @@
-#include "codegen/io/private.h"
+#include "codegen/io/unformatted/private.h"
 
 #include <stdlib.h>
 
@@ -55,12 +55,18 @@ static void emit_binary_complex(Context *context, const F2cExpr *expression, con
     const char *imaginary_part = kind == 4 ? "cimagf" : "cimag";
     const char *constructor = kind == 4 ? "f2c_make_c" : "f2c_make_z";
     f2c_io_indent(&context->output, depth);
-    f2c_buffer_printf(&context->output, "{ %s f2c_unformatted_real", real_type);
+    f2c_buffer_append(&context->output, "{ ");
     if (!input)
-        f2c_buffer_printf(&context->output, " = (%s)%s(%s)", real_type, real_part, value);
+        f2c_buffer_printf(&context->output, "%s f2c_unformatted_value = (%s); ",
+                          f2c_expression_c_type(expression), value);
+    f2c_buffer_printf(&context->output, "%s f2c_unformatted_real", real_type);
+    if (!input)
+        f2c_buffer_printf(&context->output, " = (%s)%s(f2c_unformatted_value)", real_type,
+                          real_part);
     f2c_buffer_append(&context->output, ", f2c_unformatted_imaginary");
     if (!input)
-        f2c_buffer_printf(&context->output, " = (%s)%s(%s)", real_type, imaginary_part, value);
+        f2c_buffer_printf(&context->output, " = (%s)%s(f2c_unformatted_value)", real_type,
+                          imaginary_part);
     f2c_buffer_append(&context->output, ";\n");
     emit_binary_operation(context, status, input ? "read" : "write", stream,
                           "&f2c_unformatted_real", "sizeof(f2c_unformatted_real)", depth + 1);
@@ -100,9 +106,9 @@ static void emit_binary_numeric(Context *context, const F2cExpr *expression, con
     f2c_buffer_append(&context->output, "}\n");
 }
 
-static void emit_binary_scalar(Context *context, Unit *unit, const F2cExpr *expression,
-                               const char *value, int input, const char *stream, const char *status,
-                               int depth) {
+void f2c_io_emit_unformatted_scalar(Context *context, Unit *unit, const F2cExpr *expression,
+                                    const char *value, int input, const char *stream,
+                                    const char *status, int depth) {
     if (expression->type == TYPE_CHARACTER) {
         emit_binary_character(context, unit, expression, value, input, stream, status, depth);
     } else if (expression->type == TYPE_LOGICAL) {
@@ -114,44 +120,9 @@ static void emit_binary_scalar(Context *context, Unit *unit, const F2cExpr *expr
     }
 }
 
-static void emit_binary_array(Context *context, Unit *unit, const F2cIoItem *item, Symbol *symbol,
-                              int input, const char *stream, const char *status, int depth) {
-    char *count = f2c_symbol_element_count(unit, symbol);
-    char *character_length =
-        symbol->type == TYPE_CHARACTER ? f2c_symbol_character_length(unit, symbol) : NULL;
-    const char *name = f2c_symbol_c_name(unit, symbol);
-    f2c_io_indent(&context->output, depth);
-    f2c_buffer_printf(&context->output,
-                      "for (size_t f2c_unformatted_index = 0U; f2c_unformatted_index < %s; "
-                      "++f2c_unformatted_index) {\n",
-                      count != NULL ? count : "0U");
-    {
-        Buffer value = {0};
-        F2cExpr element = *item->expression;
-        element.rank = 0U;
-        element.shape.kind = F2C_SHAPE_SCALAR;
-        element.shape.rank = 0U;
-        if (symbol->type == TYPE_CHARACTER) {
-            f2c_buffer_printf(&value, "%s + f2c_unformatted_index * (size_t)(%s)", name,
-                              character_length != NULL ? character_length : "1U");
-            element.lowered_c = value.data;
-            element.lowered_character_length_c = character_length;
-        } else {
-            f2c_buffer_printf(&value, "%s[f2c_unformatted_index]", name);
-        }
-        emit_binary_scalar(context, unit, &element, value.data != NULL ? value.data : name, input,
-                           stream, status, depth + 1);
-        free(value.data);
-    }
-    f2c_io_indent(&context->output, depth);
-    f2c_buffer_append(&context->output, "}\n");
-    free(count);
-    free(character_length);
-}
-
-static void emit_derived_scalar(Context *context, Unit *unit, F2cDerivedType *derived,
-                                const char *value, int input, const char *stream,
-                                const char *unit_number, const char *status, int depth);
+void f2c_io_emit_unformatted_derived_scalar(Context *context, Unit *unit, F2cDerivedType *derived,
+                                            const char *value, int input, const char *stream,
+                                            const char *unit_number, const char *status, int depth);
 
 static void emit_default_component(Context *context, Unit *unit, Symbol *component,
                                    const char *owner, int input, const char *stream,
@@ -175,10 +146,12 @@ static void emit_default_component(Context *context, Unit *unit, Symbol *compone
     expression.lowered_character_length_c = character_length;
     if (component->rank == 0U) {
         if (component->type == TYPE_DERIVED && component->derived_type != NULL)
-            emit_derived_scalar(context, unit, component->derived_type, base.data, input, stream,
-                                unit_number, status, depth);
+            f2c_io_emit_unformatted_derived_scalar(context, unit, component->derived_type,
+                                                   base.data, input, stream, unit_number, status,
+                                                   depth);
         else
-            emit_binary_scalar(context, unit, &expression, base.data, input, stream, status, depth);
+            f2c_io_emit_unformatted_scalar(context, unit, &expression, base.data, input, stream,
+                                           status, depth);
     } else {
         f2c_buffer_printf(&index_name, "f2c_component_index_%d", depth);
         f2c_io_indent(&context->output, depth);
@@ -193,11 +166,12 @@ static void emit_default_component(Context *context, Unit *unit, Symbol *compone
             else
                 f2c_buffer_printf(&element, "%s[%s]", base.data, index_name.data);
             if (component->type == TYPE_DERIVED && component->derived_type != NULL)
-                emit_derived_scalar(context, unit, component->derived_type, element.data, input,
-                                    stream, unit_number, status, depth + 1);
+                f2c_io_emit_unformatted_derived_scalar(context, unit, component->derived_type,
+                                                       element.data, input, stream, unit_number,
+                                                       status, depth + 1);
             else
-                emit_binary_scalar(context, unit, &expression, element.data, input, stream, status,
-                                   depth + 1);
+                f2c_io_emit_unformatted_scalar(context, unit, &expression, element.data, input,
+                                               stream, status, depth + 1);
             free(element.data);
         }
         f2c_io_indent(&context->output, depth);
@@ -209,9 +183,10 @@ static void emit_default_component(Context *context, Unit *unit, Symbol *compone
     free(character_length);
 }
 
-static void emit_derived_scalar(Context *context, Unit *unit, F2cDerivedType *derived,
-                                const char *value, int input, const char *stream,
-                                const char *unit_number, const char *status, int depth) {
+void f2c_io_emit_unformatted_derived_scalar(Context *context, Unit *unit, F2cDerivedType *derived,
+                                            const char *value, int input, const char *stream,
+                                            const char *unit_number, const char *status,
+                                            int depth) {
     const F2cDefinedIoKind kind =
         input ? F2C_DEFINED_IO_READ_UNFORMATTED : F2C_DEFINED_IO_WRITE_UNFORMATTED;
     size_t index;
@@ -226,8 +201,8 @@ static void emit_derived_scalar(Context *context, Unit *unit, F2cDerivedType *de
     if (derived->parent != NULL) {
         Buffer parent = {0};
         f2c_buffer_printf(&parent, "(%s).parent", value);
-        emit_derived_scalar(context, unit, derived->parent, parent.data, input, stream, unit_number,
-                            status, depth);
+        f2c_io_emit_unformatted_derived_scalar(context, unit, derived->parent, parent.data, input,
+                                               stream, unit_number, status, depth);
         free(parent.data);
     }
     for (index = 0U; index < derived->component_count; ++index)
@@ -235,86 +210,115 @@ static void emit_derived_scalar(Context *context, Unit *unit, F2cDerivedType *de
                                unit_number, status, depth);
 }
 
-static void emit_derived_item(Context *context, Unit *unit, const F2cIoItem *item,
-                              F2cDerivedType *derived, int input, const char *stream,
-                              const char *unit_number, const char *status, int depth) {
-    const F2cExpr *expression = item->expression;
-    Symbol *symbol = expression->symbol;
-    if (expression->kind == F2C_EXPR_NAME && symbol != NULL && symbol->rank != 0U) {
-        char *count = f2c_symbol_element_count(unit, symbol);
-        const char *name = f2c_symbol_c_name(unit, symbol);
+static int emit_derived_item(Context *context, Unit *unit, const F2cIoItem *item,
+                             F2cDerivedType *derived, int input, const char *stream,
+                             const char *unit_number, const char *status, int depth) {
+    char *value = f2c_io_emit_item_expression(unit, item);
+    if (value == NULL)
+        return 0;
+    if (!input && f2c_io_defined_binding(derived, F2C_DEFINED_IO_WRITE_UNFORMATTED) == NULL) {
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output,
-                          "for (size_t f2c_derived_io_index = 0U; f2c_derived_io_index < %s; "
-                          "++f2c_derived_io_index) {\n",
-                          count != NULL ? count : "0U");
-        {
-            Buffer value = {0};
-            f2c_buffer_printf(&value, "%s[f2c_derived_io_index]", name);
-            emit_derived_scalar(context, unit, derived, value.data, input, stream, unit_number,
-                                status, depth + 1);
-            free(value.data);
-        }
+        f2c_buffer_printf(&context->output, "{ %s f2c_unformatted_derived_value = (%s);\n",
+                          derived->c_name, value);
+        f2c_io_emit_unformatted_derived_scalar(context, unit, derived,
+                                               "f2c_unformatted_derived_value", input, stream,
+                                               unit_number, status, depth + 1);
         f2c_io_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
-        free(count);
     } else {
-        char *value = f2c_io_emit_item_expression(unit, item);
-        if (value != NULL)
-            emit_derived_scalar(context, unit, derived, value, input, stream, unit_number, status,
-                                depth);
-        free(value);
+        f2c_io_emit_unformatted_derived_scalar(context, unit, derived, value, input, stream,
+                                               unit_number, status, depth);
     }
+    free(value);
+    return 1;
 }
 
-void f2c_io_emit_unformatted_item(Context *context, Unit *unit, const F2cIoItem *item, int input,
-                                  const char *stream, const char *unit_number, const char *status,
-                                  int depth) {
-    const F2cExpr *expression;
-    Symbol *symbol;
-    char *value;
+static int emit_implied_do(Context *context, Unit *unit, const F2cIoItem *item, int input,
+                           const char *stream, const char *unit_number, const char *status,
+                           int depth) {
+    const char *iterator_type = f2c_expression_c_type(item->iterator);
+    char *iterator = f2c_io_emit_required_expression(unit, item->iterator);
+    char *initial = f2c_io_emit_required_expression(unit, item->initial);
+    char *limit = f2c_io_emit_required_expression(unit, item->limit);
+    char *step = f2c_io_emit_required_expression(unit, item->step);
     size_t index;
+    int result = 0;
+    if (iterator == NULL || initial == NULL || limit == NULL || step == NULL)
+        goto cleanup;
+    f2c_io_indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "{\n");
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "int64_t f2c_io_do_value = (int64_t)(%s)(%s);\n",
+                      iterator_type, initial);
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "const int64_t f2c_io_do_limit = (int64_t)(%s)(%s);\n",
+                      iterator_type, limit);
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "const int64_t f2c_io_do_step = (int64_t)(%s)(%s);\n",
+                      iterator_type, step);
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "if (f2c_io_do_step == 0) %s = F2C_IO_STATUS_OVERFLOW;\n",
+                      status);
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output,
+                      "while (%s == F2C_IO_STATUS_OK && "
+                      "(f2c_io_do_step > 0 ? f2c_io_do_value <= f2c_io_do_limit : "
+                      "f2c_io_do_step < 0 && f2c_io_do_value >= f2c_io_do_limit)) {\n",
+                      status);
+    f2c_io_indent(&context->output, depth + 2);
+    f2c_buffer_printf(&context->output, "%s = (%s)f2c_io_do_value;\n", iterator, iterator_type);
+    for (index = 0U; index < item->child_count; ++index)
+        if (!f2c_io_emit_unformatted_item(context, unit, &item->children[index], input, stream,
+                                          unit_number, status, depth + 2))
+            goto cleanup;
+    f2c_io_indent(&context->output, depth + 2);
+    f2c_buffer_append(
+        &context->output,
+        "if (f2c_io_do_step > 0) { const uint64_t f2c_io_do_distance = "
+        "(uint64_t)f2c_io_do_limit - (uint64_t)f2c_io_do_value; if "
+        "((uint64_t)f2c_io_do_step > f2c_io_do_distance) break; } else { const uint64_t "
+        "f2c_io_do_magnitude = UINT64_C(0) - (uint64_t)f2c_io_do_step; const uint64_t "
+        "f2c_io_do_distance = (uint64_t)f2c_io_do_value - (uint64_t)f2c_io_do_limit; if "
+        "(f2c_io_do_magnitude > f2c_io_do_distance) break; }\n");
+    f2c_io_indent(&context->output, depth + 2);
+    f2c_buffer_append(&context->output, "f2c_io_do_value += f2c_io_do_step;\n");
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output, "}\n");
+    f2c_io_indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+    result = 1;
+
+cleanup:
+    free(iterator);
+    free(initial);
+    free(limit);
+    free(step);
+    return result;
+}
+
+int f2c_io_emit_unformatted_item(Context *context, Unit *unit, const F2cIoItem *item, int input,
+                                 const char *stream, const char *unit_number, const char *status,
+                                 int depth) {
+    const F2cExpr *expression;
+    char *value;
     if (item == NULL)
-        return;
-    if (item->implied_do) {
-        char *iterator = f2c_io_emit_required_expression(unit, item->iterator);
-        char *initial = f2c_io_emit_required_expression(unit, item->initial);
-        char *limit = f2c_io_emit_required_expression(unit, item->limit);
-        char *step = f2c_io_emit_required_expression(unit, item->step);
-        if (iterator != NULL && initial != NULL && limit != NULL && step != NULL) {
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_printf(&context->output,
-                              "for (%s = %s; ((%s) >= 0 ? %s <= %s : %s >= %s); %s += %s) "
-                              "{\n",
-                              iterator, initial, step, iterator, limit, iterator, limit, iterator,
-                              step);
-            for (index = 0U; index < item->child_count; ++index)
-                f2c_io_emit_unformatted_item(context, unit, &item->children[index], input, stream,
-                                             unit_number, status, depth + 1);
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_append(&context->output, "}\n");
-        }
-        free(iterator);
-        free(initial);
-        free(limit);
-        free(step);
-        return;
-    }
+        return 0;
+    if (item->implied_do)
+        return emit_implied_do(context, unit, item, input, stream, unit_number, status, depth);
     expression = item->expression;
     if (expression == NULL)
-        return;
-    symbol = expression->symbol;
+        return 0;
+    if (expression->rank != 0U)
+        return f2c_io_emit_unformatted_array(context, unit, item, input, stream, unit_number,
+                                             status, depth);
     if (expression->type == TYPE_DERIVED && expression->derived_type != NULL) {
-        emit_derived_item(context, unit, item, expression->derived_type, input, stream, unit_number,
-                          status, depth);
-        return;
-    }
-    if (expression->kind == F2C_EXPR_NAME && symbol != NULL && symbol->rank != 0U) {
-        emit_binary_array(context, unit, item, symbol, input, stream, status, depth);
-        return;
+        return emit_derived_item(context, unit, item, expression->derived_type, input, stream,
+                                 unit_number, status, depth);
     }
     value = f2c_io_emit_item_expression(unit, item);
-    if (value != NULL)
-        emit_binary_scalar(context, unit, expression, value, input, stream, status, depth);
+    if (value == NULL)
+        return 0;
+    f2c_io_emit_unformatted_scalar(context, unit, expression, value, input, stream, status, depth);
     free(value);
+    return 1;
 }

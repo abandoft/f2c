@@ -82,6 +82,7 @@ set(
     src/codegen/io.c
     src/codegen/io/control/common.c
     src/codegen/io/control/inquire.c
+    src/codegen/io/control/iolength.c
     src/codegen/io/control/open.c
     src/codegen/io/control/position.c
     src/codegen/io/control/print.c
@@ -99,6 +100,8 @@ set(
     src/codegen/io/support.c
     src/codegen/io/transfer.c
     src/codegen/io/unformatted.c
+    src/codegen/io/unformatted/array.c
+    src/codegen/io/unformatted/private.h
     src/codegen/lowering.c
     src/codegen/module.c
     src/codegen/ownership.c

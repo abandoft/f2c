@@ -24,5 +24,7 @@ int f2c_io_emit_status_controls(Unit *unit, const F2cStatement *statement,
 void f2c_io_free_status_controls(F2cEmittedIoStatus *status);
 void f2c_io_emit_control_result(Context *context, const F2cEmittedIoStatus *status,
                                 const char *operation, int depth);
+int f2c_emit_iolength_statement(Context *context, Unit *unit, const F2cStatement *statement,
+                                int depth);
 
 #endif
