@@ -22,6 +22,7 @@ static void expect_diagnostic(const char *body, const char *message, const char 
                                 "  implicit none\n"
                                 "  integer :: value\n"
                                 "  integer(8) :: wide\n"
+                                "  integer :: short(2), long(3)\n"
                                 "  logical :: flag\n"
                                 "%s\n"
                                 "end subroutine bit_negative\n",
@@ -42,11 +43,13 @@ static void test_valid_contracts(void) {
                                  "  integer(8), intent(inout) :: i64\n"
                                  "  integer, intent(in) :: positions(4)\n"
                                  "  logical, intent(out) :: flags(4)\n"
+                                 "  integer :: targets(4)\n"
                                  "  i8 = not(i8)\n"
                                  "  i16 = ibset(i16, 3)\n"
                                  "  i32 = ieor(i32, int(7, 4))\n"
                                  "  i64 = ishftc(i64, -3, bit_size(i64))\n"
                                  "  flags = btest(i32, positions)\n"
+                                 "  call mvbits(i32, positions, 1, targets, positions)\n"
                                  "end subroutine bit_contracts\n";
     F2cOptions options = {"bit_contracts.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
@@ -92,10 +95,37 @@ static void test_keyword_diagnostics(void) {
                       "missing required bit intrinsic keywords suppress generated code");
 }
 
+static void test_mvbits_diagnostics(void) {
+    expect_diagnostic("  call mvbits(1.0, 0, 1, value, 0)", "MVBITS argument from must be INTEGER",
+                      "noninteger MVBITS sources suppress generated code");
+    expect_diagnostic("  call mvbits(wide, 0, 1, value, 0)",
+                      "MVBITS arguments FROM and TO must have the same INTEGER kind",
+                      "mixed MVBITS integer kinds suppress generated code");
+    expect_diagnostic("  call mvbits(value, 0, 1, value + 1, 0)",
+                      "MVBITS argument TO must be definable",
+                      "nondefinable MVBITS targets suppress generated code");
+    expect_diagnostic("  call mvbits(value, 31, 2, value, 0)",
+                      "MVBITS requires FROMPOS + LEN to be at most BIT_SIZE(FROM) (32)",
+                      "invalid MVBITS source ranges suppress generated code");
+    expect_diagnostic("  call mvbits(value, 0, 2, value, 31)",
+                      "MVBITS requires TOPOS + LEN to be at most BIT_SIZE(TO) (32)",
+                      "invalid MVBITS target ranges suppress generated code");
+    expect_diagnostic("  call mvbits(short, 0, 1, long, 0)",
+                      "MVBITS has nonconformable extent in dimension 1",
+                      "nonconformable MVBITS arrays suppress generated code");
+    expect_diagnostic("  call mvbits(short, 0, 1, value, 0)",
+                      "MVBITS argument TO must be an array conformable with every array input",
+                      "scalar MVBITS targets are rejected for array invocations");
+    expect_diagnostic("  call mvbits(from=value, frompos=0, len=1, to=value, where=0)",
+                      "MVBITS has no argument named 'where'",
+                      "unknown MVBITS keywords suppress generated code");
+}
+
 int main(void) {
     test_valid_contracts();
     test_type_and_kind_diagnostics();
     test_constant_range_diagnostics();
     test_keyword_diagnostics();
+    test_mvbits_diagnostics();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

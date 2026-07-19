@@ -31,8 +31,9 @@ static const char *intrinsic_display_name(F2cIntrinsicId intrinsic) {
         return "ISHFTC";
     case F2C_INTRINSIC_NOT:
         return "NOT";
-    case F2C_INTRINSIC_NONE:
     case F2C_INTRINSIC_MVBITS:
+        return "MVBITS";
+    case F2C_INTRINSIC_NONE:
     default:
         return "intrinsic";
     }
@@ -263,4 +264,99 @@ void f2c_validation_bit_intrinsic(Context *context, Unit *unit, size_t line,
             validate_shift(context, unit, line, statement_text, "ISHFTC", bound.values[1], width);
         }
     }
+}
+
+void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement) {
+    static const char *const names[] = {"from", "frompos", "len", "to", "topos"};
+    F2cBoundIntrinsicArguments bound;
+    const F2cExpr *shape = NULL;
+    const F2cExpr *from;
+    const F2cExpr *to;
+    size_t rank = 0U;
+    size_t argument;
+    int width;
+    int64_t from_position;
+    int64_t length;
+    int64_t to_position;
+    int from_position_known;
+    int length_known;
+    int to_position_known;
+    if (statement == NULL || statement->kind != F2C_STMT_CALL || statement->name == NULL ||
+        !f2c_is_intrinsic_subroutine(statement->name))
+        return;
+    statement->intrinsic = F2C_INTRINSIC_MVBITS;
+    if (statement->item_count != 5U)
+        f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
+                          "MVBITS requires exactly 5 arguments");
+    bound = bind_arguments(context, statement->line, statement->text, "MVBITS",
+                           statement->arguments, statement->item_count, names, 5U, 5U);
+    for (argument = 0U; argument < 5U; ++argument)
+        require_integer(context, statement->line, statement->text, "MVBITS", names[argument],
+                        bound.values[argument]);
+    from = bound.values[0];
+    to = bound.values[3];
+    if (from != NULL && to != NULL && from->type == TYPE_INTEGER && to->type == TYPE_INTEGER &&
+        integer_kind(from) != integer_kind(to))
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, to), 1,
+                          "MVBITS arguments FROM and TO must have the same INTEGER kind");
+    if (to != NULL && !to->definable)
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, to), 1,
+                          "MVBITS argument TO must be definable");
+    for (argument = 0U; argument < 5U; ++argument) {
+        const F2cExpr *value = bound.values[argument];
+        size_t dimension;
+        if (value == NULL || value->rank == 0U)
+            continue;
+        if (shape == NULL) {
+            shape = value;
+            rank = value->rank;
+            continue;
+        }
+        if (value->rank != rank) {
+            f2c_diagnostic_at(context, statement->line,
+                              f2c_validation_expression_start_column(statement->text, value), 1,
+                              "MVBITS has nonconformable argument ranks %zu and %zu", rank,
+                              value->rank);
+        } else if (f2c_validation_shapes_mismatch(shape, value, &dimension)) {
+            f2c_diagnostic_at(context, statement->line,
+                              f2c_validation_expression_start_column(statement->text, value), 1,
+                              "MVBITS has nonconformable extent in dimension %zu", dimension + 1U);
+        }
+    }
+    if (rank != 0U && (to == NULL || to->rank != rank))
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, to), 1,
+                          "MVBITS argument TO must be an array conformable with every array "
+                          "input");
+    width = integer_bit_size(from);
+    from_position_known = constant_integer(unit, bound.values[1], &from_position);
+    length_known = constant_integer(unit, bound.values[2], &length);
+    to_position_known = constant_integer(unit, bound.values[4], &to_position);
+    if (from_position_known && from_position < 0)
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, bound.values[1]),
+                          1, "MVBITS argument FROMPOS must be nonnegative");
+    if (length_known && length < 0)
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, bound.values[2]),
+                          1, "MVBITS argument LEN must be nonnegative");
+    if (to_position_known && to_position < 0)
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, bound.values[4]),
+                          1, "MVBITS argument TOPOS must be nonnegative");
+    if (width != 0 && from_position_known && length_known && from_position >= 0 && length >= 0 &&
+        ((uint64_t)from_position > (uint64_t)width ||
+         (uint64_t)length > (uint64_t)width - (uint64_t)from_position))
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, bound.values[0]),
+                          1, "MVBITS requires FROMPOS + LEN to be at most BIT_SIZE(FROM) (%d)",
+                          width);
+    if (width != 0 && to_position_known && length_known && to_position >= 0 && length >= 0 &&
+        ((uint64_t)to_position > (uint64_t)width ||
+         (uint64_t)length > (uint64_t)width - (uint64_t)to_position))
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, to), 1,
+                          "MVBITS requires TOPOS + LEN to be at most BIT_SIZE(TO) (%d)", width);
 }

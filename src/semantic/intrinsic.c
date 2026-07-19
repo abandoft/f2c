@@ -175,6 +175,10 @@ const F2cIntrinsicSignature *f2c_find_intrinsic(const char *name) {
 
 int f2c_is_intrinsic_name(const char *name) { return f2c_find_intrinsic(name) != NULL; }
 
+int f2c_is_intrinsic_subroutine(const char *name) {
+    return name != NULL && strcmp(name, "mvbits") == 0;
+}
+
 static Type absolute_result(Type type) {
     if (type == TYPE_DOUBLE_COMPLEX)
         return TYPE_DOUBLE;

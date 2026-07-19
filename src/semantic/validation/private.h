@@ -39,6 +39,7 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                                      const char *statement_text, F2cExpr *expression);
 void f2c_validation_bit_intrinsic(Context *context, Unit *unit, size_t line,
                                   const char *statement_text, F2cExpr *expression);
+void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement);
 void f2c_validation_io_item_calls(Context *context, Unit *unit, size_t line,
                                   const char *statement_text, F2cIoItem *item);
 void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *statement);

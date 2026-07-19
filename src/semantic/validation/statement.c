@@ -323,9 +323,15 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
     if (statement->kind == F2C_STMT_MOVE_ALLOC) {
         f2c_validation_move_alloc(context, unit, statement);
     } else if (statement->kind == F2C_STMT_CALL && statement->expression == NULL) {
-        Unit *definition = f2c_validation_procedure_call(
-            context, unit, statement->line, statement->text, statement->name, &statement->name_span,
-            &statement->arguments, &statement->items, &statement->item_count, 1);
+        Unit *definition = NULL;
+        if (f2c_is_intrinsic_subroutine(statement->name)) {
+            f2c_validation_mvbits(context, unit, statement);
+        } else {
+            definition = f2c_validation_procedure_call(
+                context, unit, statement->line, statement->text, statement->name,
+                &statement->name_span, &statement->arguments, &statement->items,
+                &statement->item_count, 1);
+        }
         statement->resolved_procedure = definition;
         if (definition != NULL && definition->name != NULL && !definition->interface_abstract &&
             strcmp(statement->name, definition->name) != 0) {
