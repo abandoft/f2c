@@ -1,5 +1,7 @@
 #include "ast/statement/private.h"
 
+#include "ast/declaration/use.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -49,7 +51,7 @@ static F2cStatementKind classify_tokens(const Line *line, size_t begin) {
         token_words(line, begin, "class", "default"))
         return F2C_STMT_TYPE_GUARD;
     if (begin == 0U && (f2c_declaration_tokens(line) || token_word(line, 0U, "contains") ||
-                        token_word(line, 0U, "use")))
+                        f2c_use_statement_candidate(line)))
         return F2C_STMT_DECLARATION;
     if (token_words(line, begin, "end", "select") || token_word(line, begin, "endselect"))
         return F2C_STMT_END_SELECT;
