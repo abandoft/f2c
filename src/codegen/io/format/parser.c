@@ -143,10 +143,16 @@ static void emit_text_parser_descriptor(Buffer *output) {
         "state->repeat_remaining = repeats > 1U ? repeats - 1U : 0U; return 1; } }\n"
         "static inline F2C_UNUSED int f2c_format_next(f2c_format_state *state, "
         "f2c_format_descriptor *descriptor) { if (state == NULL || descriptor == NULL || "
-        "state->status == 0 || state->status == EOF) return 0; if (state->repeat_remaining != "
-        "0U) { *descriptor = state->repeated; --state->repeat_remaining; return 1; } return "
+        "state->status == 0 || state->status == EOF) return 0; if (state->have_pending) { "
+        "*descriptor = state->pending; state->have_pending = false; return 1; } if "
+        "(state->repeat_remaining != 0U) { *descriptor = state->repeated; "
+        "--state->repeat_remaining; return 1; } return "
         "state->program != NULL ? f2c_format_next_program(state, descriptor) : "
-        "f2c_format_next_text(state, descriptor); }\n");
+        "f2c_format_next_text(state, descriptor); }\n"
+        "static inline F2C_UNUSED bool f2c_format_take_dt(f2c_format_state *state, "
+        "f2c_format_descriptor *descriptor) { if (!f2c_format_next(state, descriptor)) "
+        "return false; if (descriptor->code[0] == 'D' && descriptor->code[1] == 'T') return "
+        "true; state->pending = *descriptor; state->have_pending = true; return false; }\n");
 }
 
 void f2c_io_emit_format_text_parser_support(Context *context) {

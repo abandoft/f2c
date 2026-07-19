@@ -191,7 +191,8 @@ void f2c_emit_format_support(Context *context) {
         "static inline F2C_UNUSED void f2c_format_finish(f2c_format_state *state, bool advance) { "
         "f2c_format_descriptor descriptor; if (advance) { state->finishing = 1; "
         "(void)f2c_format_next(state, &descriptor); if (state->record_ended) "
-        "state->record_ended = 0; else if (state->column != 1U && f2c_child_io_depth == 0U) "
+        "state->record_ended = 0; else if (state->column != 1U && f2c_child_io_depth == 0U && "
+        "!(state->file != NULL && state->file->bounded && state->file->formatted_record)) "
         "f2c_format_record(state); if (state->status == -2) state->status = 1; } "
         "f2c_format_dispose(state); }\n");
 }
