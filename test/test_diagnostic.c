@@ -232,6 +232,23 @@ static void test_module_header_span(void) {
     f2c_result_free(&result);
 }
 
+static void test_internal_procedure_end_scope(void) {
+    static const char source[] = "module procedures\n"
+                                 "contains\n"
+                                 "  subroutine first()\n"
+                                 "  end subroutine first\n"
+                                 "  subroutine second()\n"
+                                 "  end subroutine second\n"
+                                 "end module procedures\n";
+    DiagnosticCapture capture = {.needle = "program-unit END kind does not match"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code != NULL && result.error_count == 0U,
+           "internal procedure terminators remain inside the enclosing module");
+    expect(capture.count == 0U,
+           "internal procedure END statements never trigger a module-kind diagnostic");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_keyword_association_span();
     test_call_designator_span();
@@ -243,6 +260,7 @@ int main(void) {
     test_unit_end_kind_span();
     test_module_end_name_span();
     test_module_header_span();
+    test_internal_procedure_end_scope();
     if (failures != 0) {
         fprintf(stderr, "%d diagnostic span test(s) failed\n", failures);
         return 1;

@@ -615,9 +615,16 @@ int f2c_discover_modules(Context *context) {
                     continue;
                 if (contains == context->lines.count && f2c_contains_tokens(candidate))
                     contains = end;
-                if (f2c_match_program_unit_end(context, candidate, &opening) !=
-                    F2C_UNIT_END_NO_MATCH)
-                    break;
+                {
+                    F2cUnitEndSyntax end_syntax;
+                    const F2cUnitEndParseStatus end_status =
+                        f2c_parse_unit_end_syntax(candidate, &end_syntax);
+                    if (end_status != F2C_UNIT_END_NOT_MATCHED && end_syntax.has_kind &&
+                        end_syntax.kind == F2C_UNIT_SYNTAX_MODULE) {
+                        (void)f2c_match_program_unit_end(context, candidate, &opening);
+                        break;
+                    }
+                }
             }
         }
         if (end == context->lines.count) {
