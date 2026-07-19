@@ -284,7 +284,7 @@ static void parse_defined_io_generic(Context *context, F2cDerivedType *derived, 
     derived->defined_io_bindings[kind] = binding;
 }
 
-static int header_has_attribute(const Line *line, const char *attribute) {
+static const F2cToken *header_attribute_token(const Line *line, const char *attribute) {
     const size_t start = statement_start(line);
     const size_t double_colon = f2c_line_find_token(line, start + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
     const size_t end = double_colon != SIZE_MAX ? double_colon : line->token_count;
@@ -292,9 +292,13 @@ static int header_has_attribute(const Line *line, const char *attribute) {
     for (index = start + 1U; index < end; ++index) {
         if (line->tokens[index].kind == F2C_TOKEN_IDENTIFIER &&
             f2c_token_equals(&line->tokens[index], attribute))
-            return 1;
+            return &line->tokens[index];
     }
-    return 0;
+    return NULL;
+}
+
+static int header_has_attribute(const Line *line, const char *attribute) {
+    return header_attribute_token(line, attribute) != NULL;
 }
 
 static void parse_parent_type(Context *context, Unit *unit, F2cDerivedType *derived) {
@@ -409,6 +413,24 @@ static F2cDerivedType *append_derived_type(Context *context, Unit *unit, const L
     derived->begin = begin;
     derived->end = end;
     derived->abstract_type = header_has_attribute(line, "abstract");
+    {
+        const F2cToken *public_token = header_attribute_token(line, "public");
+        const F2cToken *private_token = header_attribute_token(line, "private");
+        const F2cToken *access_token = public_token != NULL ? public_token : private_token;
+        if (public_token != NULL && private_token != NULL) {
+            f2c_diagnostic_token_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, line, private_token, 1,
+                "derived type cannot have both PUBLIC and PRIVATE attributes");
+        } else if (access_token != NULL && unit->kind != UNIT_MODULE) {
+            f2c_diagnostic_token_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, line, access_token, 1,
+                "PUBLIC and PRIVATE derived-type attributes are valid only in a module");
+        } else if (access_token != NULL) {
+            derived->access =
+                public_token != NULL ? F2C_ACCESSIBILITY_PUBLIC : F2C_ACCESSIBILITY_PRIVATE;
+            derived->access_span = access_token->span;
+        }
+    }
     return derived;
 }
 
