@@ -1,4 +1,4 @@
-#include "ast/declaration/module_procedure.h"
+#include "ast/interface/specific.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -8,8 +8,8 @@ static size_t statement_start(const Line *line) {
     return line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U : 0U;
 }
 
-static int set_error(F2cModuleProcedureStatementSyntax *syntax,
-                     F2cModuleProcedureStatementError error, const F2cToken *token) {
+static int set_error(F2cInterfaceSpecificSyntax *syntax, F2cInterfaceSpecificError error,
+                     const F2cToken *token) {
     syntax->error = error;
     syntax->error_token = token;
     return 0;
@@ -33,13 +33,13 @@ static int names_equal(const F2cToken *left, const F2cToken *right) {
     return 1;
 }
 
-static int append_name(F2cModuleProcedureStatementSyntax *syntax, const F2cToken *name) {
+static int append_name(F2cInterfaceSpecificSyntax *syntax, const F2cToken *name) {
     const F2cToken **replacement;
     size_t capacity;
     size_t index;
     for (index = 0U; index < syntax->name_count; ++index) {
         if (names_equal(syntax->names[index], name))
-            return set_error(syntax, F2C_MODULE_PROCEDURE_ERROR_DUPLICATE_NAME, name);
+            return set_error(syntax, F2C_INTERFACE_SPECIFIC_ERROR_DUPLICATE_NAME, name);
     }
     if (syntax->name_count == syntax->name_capacity) {
         capacity = syntax->name_capacity == 0U ? 8U : syntax->name_capacity * 2U;
@@ -55,60 +55,63 @@ static int append_name(F2cModuleProcedureStatementSyntax *syntax, const F2cToken
     return 1;
 }
 
-F2cModuleProcedureStatementStatus
-f2c_parse_module_procedure_statement_syntax(const Line *line,
-                                            F2cModuleProcedureStatementSyntax *syntax) {
+F2cInterfaceSpecificStatus f2c_parse_interface_specific_syntax(const Line *line,
+                                                               F2cInterfaceSpecificSyntax *syntax) {
     size_t index;
     size_t start;
     if (syntax == NULL)
-        return F2C_MODULE_PROCEDURE_INVALID;
+        return F2C_INTERFACE_SPECIFIC_INVALID;
     memset(syntax, 0, sizeof(*syntax));
     if (line == NULL || line->token_count == 0U)
-        return F2C_MODULE_PROCEDURE_NOT_MATCHED;
+        return F2C_INTERFACE_SPECIFIC_NOT_MATCHED;
     start = statement_start(line);
-    if (!f2c_line_token_equals(line, start, "module") ||
-        !f2c_line_token_equals(line, start + 1U, "procedure"))
-        return F2C_MODULE_PROCEDURE_NOT_MATCHED;
-    syntax->module_keyword = &line->tokens[start];
-    syntax->procedure_keyword = &line->tokens[start + 1U];
+    index = start;
+    if (f2c_line_token_equals(line, index, "module"))
+        syntax->module_keyword = &line->tokens[index++];
+    if (!f2c_line_token_equals(line, index, "procedure"))
+        return F2C_INTERFACE_SPECIFIC_NOT_MATCHED;
+    syntax->procedure_keyword = &line->tokens[index++];
+    if (syntax->module_keyword == NULL && index < line->token_count &&
+        line->tokens[index].kind == F2C_TOKEN_LEFT_PAREN)
+        return F2C_INTERFACE_SPECIFIC_NOT_MATCHED;
     syntax->span = f2c_source_span_cover(&line->tokens[start].span,
                                          &line->tokens[line->token_count - 1U].span);
-    index = start + 2U;
     if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_DOUBLE_COLON)
         syntax->double_colon = &line->tokens[index++];
     if (index == line->token_count) {
-        set_error(syntax, F2C_MODULE_PROCEDURE_ERROR_EMPTY_LIST,
+        set_error(syntax, F2C_INTERFACE_SPECIFIC_ERROR_EMPTY_LIST,
                   syntax->double_colon != NULL ? syntax->double_colon : syntax->procedure_keyword);
-        return F2C_MODULE_PROCEDURE_INVALID;
+        return F2C_INTERFACE_SPECIFIC_INVALID;
     }
     while (index < line->token_count) {
         int appended;
         if (line->tokens[index].kind != F2C_TOKEN_IDENTIFIER) {
-            set_error(syntax, F2C_MODULE_PROCEDURE_ERROR_NAME, &line->tokens[index]);
-            return F2C_MODULE_PROCEDURE_INVALID;
+            set_error(syntax, F2C_INTERFACE_SPECIFIC_ERROR_NAME, &line->tokens[index]);
+            return F2C_INTERFACE_SPECIFIC_INVALID;
         }
         appended = append_name(syntax, &line->tokens[index]);
         if (appended < 0)
-            return F2C_MODULE_PROCEDURE_NO_MEMORY;
+            return F2C_INTERFACE_SPECIFIC_NO_MEMORY;
         if (!appended)
-            return F2C_MODULE_PROCEDURE_INVALID;
+            return F2C_INTERFACE_SPECIFIC_INVALID;
         ++index;
         if (index == line->token_count)
-            return F2C_MODULE_PROCEDURE_PARSED;
+            return F2C_INTERFACE_SPECIFIC_PARSED;
         if (line->tokens[index].kind != F2C_TOKEN_COMMA) {
-            set_error(syntax, F2C_MODULE_PROCEDURE_ERROR_SEPARATOR, &line->tokens[index]);
-            return F2C_MODULE_PROCEDURE_INVALID;
+            set_error(syntax, F2C_INTERFACE_SPECIFIC_ERROR_SEPARATOR, &line->tokens[index]);
+            return F2C_INTERFACE_SPECIFIC_INVALID;
         }
         ++index;
         if (index == line->token_count) {
-            set_error(syntax, F2C_MODULE_PROCEDURE_ERROR_TRAILING_COMMA, &line->tokens[index - 1U]);
-            return F2C_MODULE_PROCEDURE_INVALID;
+            set_error(syntax, F2C_INTERFACE_SPECIFIC_ERROR_TRAILING_COMMA,
+                      &line->tokens[index - 1U]);
+            return F2C_INTERFACE_SPECIFIC_INVALID;
         }
     }
-    return F2C_MODULE_PROCEDURE_PARSED;
+    return F2C_INTERFACE_SPECIFIC_PARSED;
 }
 
-void f2c_module_procedure_statement_syntax_discard(F2cModuleProcedureStatementSyntax *syntax) {
+void f2c_interface_specific_syntax_discard(F2cInterfaceSpecificSyntax *syntax) {
     if (syntax == NULL)
         return;
     free(syntax->names);

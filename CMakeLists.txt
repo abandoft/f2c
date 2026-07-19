@@ -46,8 +46,6 @@ set(
     src/ast/declaration/access.h
     src/ast/declaration/designator.c
     src/ast/declaration/designator.h
-    src/ast/declaration/module_procedure.c
-    src/ast/declaration/module_procedure.h
     src/ast/declaration/procedure.c
     src/ast/declaration/procedure.h
     src/ast/declaration/use.c
@@ -55,6 +53,10 @@ set(
     src/ast/expression.c
     src/ast/format.c
     src/ast/format.h
+    src/ast/interface/header.c
+    src/ast/interface/header.h
+    src/ast/interface/specific.c
+    src/ast/interface/specific.h
     src/ast/internal.h
     src/ast/parser.c
     src/ast/shape.c
@@ -419,12 +421,12 @@ if(F2C_BUILD_TESTING)
     f2c_configure_internal_test_target(f2c_access_ast_tests)
     add_test(NAME access_statement_ast COMMAND f2c_access_ast_tests)
 
-    add_executable(f2c_module_procedure_ast_tests test/test_module_procedure_ast.c)
+    add_executable(f2c_interface_ast_tests test/test_interface_ast.c)
     target_include_directories(
-        f2c_module_procedure_ast_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+        f2c_interface_ast_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    f2c_configure_internal_test_target(f2c_module_procedure_ast_tests)
-    add_test(NAME module_procedure_statement_ast COMMAND f2c_module_procedure_ast_tests)
+    f2c_configure_internal_test_target(f2c_interface_ast_tests)
+    add_test(NAME interface_ast COMMAND f2c_interface_ast_tests)
 
     add_executable(f2c_format_tests test/test_format.c)
     target_include_directories(f2c_format_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
