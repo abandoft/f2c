@@ -1,3 +1,10 @@
+## 1.15.0
+
+- Added structured syntax ASTs for `PROGRAM`, `SUBROUTINE`, `FUNCTION`, and `MODULE` headers, preserving procedure prefixes, dummy arguments, function results, and exact source ranges.
+- Migrated `PROCEDURE(interface)` declarations to dedicated syntax-AST and semantic-lowering stages with precise diagnostics for interfaces, attributes, entity lists, and continued source lines.
+- Unified structured parsing and kind/name validation for program-unit terminators, and fixed module discovery so internal procedure endings cannot close their containing module.
+- Added architecture boundaries, malformed-syntax tests, and exact diagnostic regressions, then revalidated 35 strict C17 and sanitizer tests together with the pinned Reference BLAS/LAPACK correctness gates.
+
 ## 1.14.0
 
 - Migrated character lengths, array bounds, declaration initializers, statement-function results, and intrinsic-module constants to canonical token ranges and typed expression IR.
