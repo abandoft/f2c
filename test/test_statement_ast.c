@@ -359,6 +359,22 @@ int main(void) {
            "INQUIRE owns typed query-result designators");
     f2c_statement_free(&statement);
 
+    expect(
+        f2c_parse_statement(&unit, "inquire(iolength=n) x, (work(n, 1), n=1, 2)", 20U, &statement),
+        "INQUIRE(IOLENGTH=) parses");
+    expect(statement.kind == F2C_STMT_INQUIRE && statement.io_syntax_valid &&
+               statement.control_count == 1U &&
+               statement.io_controls[0].kind == F2C_IO_CONTROL_IOLENGTH &&
+               statement.io_controls[0].value != NULL &&
+               statement.io_controls[0].value->symbol == &symbols[1] &&
+               statement.io_item_count == 2U && statement.io_items[0].expression != NULL &&
+               statement.io_items[0].expression->type == TYPE_REAL &&
+               statement.io_items[1].implied_do && statement.io_items[1].child_count == 1U &&
+               statement.io_items[1].iterator != NULL &&
+               statement.io_items[1].iterator->symbol == &symbols[1],
+           "INQUIRE(IOLENGTH=) owns a typed result and structured output-item list");
+    f2c_statement_free(&statement);
+
     expect(f2c_parse_statement(&unit, "allocate(work(n, 2), stat=n)", 21U, &statement),
            "ALLOCATE parses");
     expect(statement.kind == F2C_STMT_ALLOCATE && statement.item_count == 2U &&
@@ -431,8 +447,7 @@ int main(void) {
            "labeled FORMAT owns a canonical-token-derived descriptor AST");
     f2c_statement_free(&statement);
 
-    expect(f2c_parse_statement(&unit,
-                               "99999 format(/' Test of subprogram number',I3,12X,A6)", 23U,
+    expect(f2c_parse_statement(&unit, "99999 format(/' Test of subprogram number',I3,12X,A6)", 23U,
                                &statement),
            "labeled FORMAT beginning with a record descriptor parses");
     expect(statement.kind == F2C_STMT_FORMAT && statement.format_syntax_valid &&
