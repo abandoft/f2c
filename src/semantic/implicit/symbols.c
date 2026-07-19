@@ -1,21 +1,23 @@
 #include "internal/f2c.h"
 #include "semantic/implicit/private.h"
 
+#include "ast/declaration/use.h"
+
 #include <stdlib.h>
 #include <string.h>
 
 static int is_fortran_keyword(const char *name) {
     static const char *const keywords[] = {
-        "allocate",   "assign",    "backspace", "block",     "call",      "case",   "character",
-        "class",      "close",     "complex",   "contains",  "continue",  "cycle",  "data",
-        "deallocate", "default",   "do",        "double",    "else",      "elseif", "end",
-        "enddo",      "endfile",   "endif",     "endselect", "endwhere",  "error",  "exit",
-        "external",   "forall",    "format",    "function",  "go",        "goto",   "if",
-        "implicit",   "import",    "inquire",   "integer",   "interface", "is",     "logical",
-        "namelist",   "none",      "open",      "nullify",   "precision", "print",  "program",
-        "read",       "real",      "result",    "return",    "rewind",    "select", "stop",
-        "subroutine", "then",      "to",        "type",      "use",       "where",  "while",
-        "write",      "elsewhere",
+        "allocate",   "assign",  "backspace", "block",     "call",      "case",   "character",
+        "class",      "close",   "complex",   "contains",  "continue",  "cycle",  "data",
+        "deallocate", "default", "do",        "double",    "else",      "elseif", "end",
+        "enddo",      "endfile", "endif",     "endselect", "endwhere",  "error",  "exit",
+        "external",   "forall",  "format",    "function",  "go",        "goto",   "if",
+        "implicit",   "import",  "inquire",   "integer",   "interface", "is",     "logical",
+        "namelist",   "none",    "open",      "nullify",   "precision", "print",  "program",
+        "read",       "real",    "result",    "return",    "rewind",    "select", "stop",
+        "subroutine", "then",    "to",        "type",      "where",     "while",  "write",
+        "elsewhere",
     };
     size_t index;
     for (index = 0U; index < sizeof(keywords) / sizeof(keywords[0]); ++index) {
@@ -151,7 +153,7 @@ void f2c_discover_implicit_line_symbols(Context *context, Unit *unit, const Line
     size_t index;
     size_t start = statement_body_start(line);
     size_t parenthesis_depth = 0U;
-    if (line == NULL || f2c_declaration_tokens(line) || f2c_line_token_equals(line, start, "use") ||
+    if (line == NULL || f2c_declaration_tokens(line) || f2c_use_statement_candidate(line) ||
         f2c_line_token_equals(line, start, "contains") ||
         f2c_line_token_equals(line, start, "format"))
         return;

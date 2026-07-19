@@ -1,5 +1,7 @@
 #include "frontend/private.h"
 
+#include "ast/declaration/use.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -84,7 +86,7 @@ void f2c_mark_function_references(Unit *unit, const Line *line) {
     const size_t start = statement_start(line);
     size_t index;
     if (unit == NULL || line == NULL || f2c_declaration_tokens(line) ||
-        f2c_line_token_equals(line, start, "use"))
+        f2c_use_statement_candidate(line))
         return;
     for (index = start; index + 1U < line->token_count; ++index) {
         Symbol *symbol;
@@ -97,8 +99,7 @@ void f2c_mark_function_references(Unit *unit, const Line *line) {
         symbol = symbol_for_token(unit, &line->tokens[index]);
         if (symbol == NULL || symbol->argument || symbol->parameter || symbol->rank != 0U ||
             symbol->type == TYPE_CHARACTER || symbol->statement_function ||
-            f2c_token_equals(&line->tokens[index], "if") ||
-            f2c_is_intrinsic_name(symbol->name))
+            f2c_token_equals(&line->tokens[index], "if") || f2c_is_intrinsic_name(symbol->name))
             continue;
         symbol->external = 1;
         symbol->external_subroutine = 0;
@@ -130,8 +131,7 @@ int f2c_mark_statement_function_symbols(Unit *unit, const Line *line) {
         line->tokens[name_index].kind != F2C_TOKEN_IDENTIFIER ||
         line->tokens[open_index].kind != F2C_TOKEN_LEFT_PAREN ||
         !f2c_token_matching_delimiter(line->tokens, line->token_count, open_index, &close) ||
-        close + 1U >= line->token_count ||
-        line->tokens[close + 1U].kind != F2C_TOKEN_OPERATOR ||
+        close + 1U >= line->token_count || line->tokens[close + 1U].kind != F2C_TOKEN_OPERATOR ||
         !f2c_token_equals(&line->tokens[close + 1U], "="))
         return 0;
     function = symbol_for_token(unit, &line->tokens[name_index]);
@@ -150,10 +150,9 @@ int f2c_mark_statement_function_symbols(Unit *unit, const Line *line) {
     }
     if (function->statement_function) {
         if (unit->context != NULL)
-            f2c_diagnostic_token_code(unit->context, F2C_DIAGNOSTIC_SEMANTIC, line,
-                                      &line->tokens[name_index], 1,
-                                   "duplicate statement-function definition '%s'",
-                                   function->name);
+            f2c_diagnostic_token_code(
+                unit->context, F2C_DIAGNOSTIC_SEMANTIC, line, &line->tokens[name_index], 1,
+                "duplicate statement-function definition '%s'", function->name);
         return 1;
     }
     clear_statement_function(function);
@@ -173,7 +172,7 @@ int f2c_mark_statement_function_symbols(Unit *unit, const Line *line) {
             if (unit->context != NULL)
                 f2c_diagnostic_token_code(unit->context, F2C_DIAGNOSTIC_SYNTAX, line,
                                           &line->tokens[index], 1,
-                                       "malformed statement-function dummy argument list");
+                                          "malformed statement-function dummy argument list");
             clear_statement_function(function);
             function->statement_function = 0;
             return 1;
@@ -196,12 +195,11 @@ int f2c_mark_statement_function_symbols(Unit *unit, const Line *line) {
                 }
             }
         }
-        replacement =
-            function->statement_function_argument_count < SIZE_MAX / sizeof(*replacement)
-                ? (char **)realloc(function->statement_function_arguments,
-                                   (function->statement_function_argument_count + 1U) *
-                                       sizeof(*replacement))
-                : NULL;
+        replacement = function->statement_function_argument_count < SIZE_MAX / sizeof(*replacement)
+                          ? (char **)realloc(function->statement_function_arguments,
+                                             (function->statement_function_argument_count + 1U) *
+                                                 sizeof(*replacement))
+                          : NULL;
         if (name == NULL || replacement == NULL) {
             free(name);
             if (unit->context != NULL)
@@ -221,18 +219,15 @@ int f2c_mark_statement_function_symbols(Unit *unit, const Line *line) {
     }
     if (close + 2U >= line->token_count) {
         if (unit->context != NULL)
-            f2c_diagnostic_token_code(unit->context, F2C_DIAGNOSTIC_SYNTAX, line,
-                                      &line->tokens[close + 1U], 1,
-                                   "statement function '%s' requires a result expression",
-                                   function->name);
+            f2c_diagnostic_token_code(
+                unit->context, F2C_DIAGNOSTIC_SYNTAX, line, &line->tokens[close + 1U], 1,
+                "statement function '%s' requires a result expression", function->name);
         clear_statement_function(function);
         function->statement_function = 0;
         return 1;
     }
-    function->statement_function_syntax =
-        f2c_line_token_range(line, close + 2U, line->token_count);
-    function->statement_function_text =
-        f2c_token_range_text(function->statement_function_syntax);
+    function->statement_function_syntax = f2c_line_token_range(line, close + 2U, line->token_count);
+    function->statement_function_text = f2c_token_range_text(function->statement_function_syntax);
     if (function->statement_function_text == NULL && unit->context != NULL) {
         f2c_diagnostic_code(unit->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line->number, 1,
                             "out of memory recording statement function '%s'", function->name);
@@ -265,8 +260,7 @@ static const F2cExpr *actual_value(const F2cExpr *expression) {
                : expression;
 }
 
-static void record_actual_parameter(Symbol *external, size_t parameter,
-                                    const F2cExpr *expression) {
+static void record_actual_parameter(Symbol *external, size_t parameter, const F2cExpr *expression) {
     const F2cExpr *value = actual_value(expression);
     Symbol *actual = value != NULL ? value->symbol : NULL;
     Type type = value != NULL ? value->type : TYPE_UNKNOWN;
@@ -283,8 +277,8 @@ static void record_actual_parameter(Symbol *external, size_t parameter,
         external->external_parameter_procedures[parameter] = actual;
 }
 
-static int record_external_signature(Unit *unit, Symbol *external, const Line *line,
-                                     size_t open, size_t close) {
+static int record_external_signature(Unit *unit, Symbol *external, const Line *line, size_t open,
+                                     size_t close) {
     const size_t count = actual_argument_count(line, open + 1U, close);
     size_t parameter = 0U;
     size_t begin = open + 1U;
