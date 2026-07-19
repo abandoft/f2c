@@ -100,10 +100,10 @@ static void emit_complex_list_io(Buffer *output) {
         "*i = strtod(b, NULL); return 2; }\n"
         "static inline F2C_UNUSED int f2c_read_c(f2c_io_stream *f, f2c_complex_float *v) { "
         "double r, i; int n = f2c_read_complex_parts(f, &r, &i); if (n == 2) *v = "
-        "f2c_make_c((float)r, (float)i); return n; }\n"
+        "f2c_make_c((float)r, (float)i); return n == 2 ? 1 : n; }\n"
         "static inline F2C_UNUSED int f2c_read_z(f2c_io_stream *f, f2c_complex_double *v) { "
         "double r, i; int n = f2c_read_complex_parts(f, &r, &i); if (n == 2) *v = "
-        "f2c_make_z(r, i); return n; }\n");
+        "f2c_make_z(r, i); return n == 2 ? 1 : n; }\n");
 }
 
 void f2c_emit_list_io_support(Buffer *output, int needs_complex) {
