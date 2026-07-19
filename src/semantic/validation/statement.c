@@ -204,6 +204,10 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &statement->span, 1,
                                  "malformed construct name or control target syntax");
     }
+    if (!statement->control_syntax_valid) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &statement->span, 1,
+                                 "malformed control-flow statement syntax");
+    }
     f2c_validation_report_parse_error(context, statement->line, statement->text,
                                       statement->expression, "statement");
     f2c_validation_constructor(context, unit, statement->line, statement->text,
@@ -428,6 +432,7 @@ void f2c_validate_unit_expressions(Context *context, Unit *unit) {
             validate_symbol_expressions(context, unit, &derived->components[i]);
     }
     f2c_validation_bind_constructs(context, unit);
+    f2c_validation_branches(context, unit);
     for (i = 0U; i < unit->statement_count; ++i)
         validate_statement(context, unit, &unit->statements[i]);
     f2c_validation_select_case_constructs(context, unit);

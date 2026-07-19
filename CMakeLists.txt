@@ -192,6 +192,7 @@ set(
     src/semantic/type.c
     src/semantic/validation.c
     src/semantic/validation/allocation.c
+    src/semantic/validation/branch.c
     src/semantic/validation/case.c
     src/semantic/validation/construct.c
     src/semantic/validation/data.c

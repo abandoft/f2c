@@ -43,6 +43,7 @@ void f2c_validation_case_statement(Context *context, Unit *unit, F2cStatement *s
 void f2c_validation_data_statement(Context *context, Unit *unit, F2cStatement *statement);
 void f2c_validation_select_case_constructs(Context *context, Unit *unit);
 void f2c_validation_bind_constructs(Context *context, Unit *unit);
+void f2c_validation_branches(Context *context, Unit *unit);
 void f2c_validation_where_statement(Context *context, const F2cStatement *statement);
 
 #endif
