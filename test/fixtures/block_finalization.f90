@@ -74,6 +74,18 @@ contains
 100 continue
   end subroutine goto_from_block
 
+  subroutine io_error_from_block()
+    character(1) :: record
+    integer :: value
+    record = 'x'
+    block
+      type(tracked) :: object
+      object%value = 1
+      read(record, '(I1)', err=100) value
+    end block
+100 continue
+  end subroutine io_error_from_block
+
 end module block_finalization_state
 
 program block_finalization
@@ -90,4 +102,6 @@ program block_finalization
   if (scalar_finalized /= 6) stop 4
   call goto_from_block()
   if (scalar_finalized /= 7) stop 5
+  call io_error_from_block()
+  if (scalar_finalized /= 8) stop 6
 end program block_finalization

@@ -354,7 +354,9 @@ int main(void) {
     expect(statement.kind == F2C_STMT_CALL && statement.name != NULL &&
                strcmp(statement.name, "consume") == 0 && statement.item_count == 2U &&
                statement.arguments != NULL && statement.arguments[0] != NULL &&
-               statement.arguments[1] != NULL,
+               statement.arguments[1] != NULL && statement.arguments[0]->span.begin.line == 18U &&
+               statement.arguments[0]->span.begin.column == 14U &&
+               statement.arguments[1]->span.begin.column == 17U,
            "CALL owns its procedure name, actual texts, and argument ASTs");
     f2c_statement_free(&statement);
 
@@ -363,8 +365,44 @@ int main(void) {
     expect(statement.kind == F2C_STMT_MOVE_ALLOC && statement.name != NULL &&
                strcmp(statement.name, "move_alloc") == 0 && statement.item_count == 2U &&
                statement.arguments != NULL && statement.arguments[0] != NULL &&
-               statement.arguments[0]->kind == F2C_EXPR_KEYWORD_ARGUMENT,
+               statement.arguments[0]->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
+               statement.arguments[0]->span.begin.column == 17U &&
+               statement.arguments[0]->children[0]->span.begin.column == 22U &&
+               statement.arguments[1]->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
+               statement.arguments[1]->span.begin.column == 25U,
            "MOVE_ALLOC owns a dedicated typed statement node and argument ASTs");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "call", 18U, &statement),
+           "malformed CALL remains representable");
+    expect(statement.kind == F2C_STMT_CALL && !statement.action_syntax_valid,
+           "CALL without a procedure designator retains an explicit action-syntax failure");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "stop 'complete'", 18U, &statement), "character STOP parses");
+    expect(statement.kind == F2C_STMT_STOP && statement.action_syntax_valid &&
+               statement.expression != NULL &&
+               statement.expression->kind == F2C_EXPR_STRING_LITERAL &&
+               statement.expression->span.begin.line == 18U &&
+               statement.expression->span.begin.column == 6U,
+           "STOP owns its token-derived CHARACTER code and exact source span");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "error stop n", 18U, &statement),
+           "integer ERROR STOP parses");
+    expect(statement.kind == F2C_STMT_STOP && statement.error_stop &&
+               statement.expression != NULL && statement.expression->symbol == &symbols[1] &&
+               statement.expression->span.begin.column == 12U,
+           "ERROR STOP owns its typed code expression");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "return 1", 18U, &statement),
+           "alternate RETURN syntax parses into the action AST");
+    expect(statement.kind == F2C_STMT_RETURN && statement.action_syntax_valid &&
+               statement.expression != NULL &&
+               statement.expression->kind == F2C_EXPR_INTEGER_LITERAL &&
+               statement.expression->span.begin.column == 8U,
+           "RETURN retains its alternate-return expression for semantic validation");
     f2c_statement_free(&statement);
 
     expect(f2c_parse_statement(&unit, "00020 continue", 19U, &statement),
@@ -458,6 +496,9 @@ int main(void) {
            "typed deferred CHARACTER ALLOCATE parses");
     expect(statement.kind == F2C_STMT_ALLOCATE && statement.tail != NULL &&
                strcmp(statement.tail, "character(len=n + 1)") == 0 &&
+               statement.allocation_has_type_spec && statement.allocation_type == TYPE_CHARACTER &&
+               statement.allocation_type_span.begin.line == 21U &&
+               statement.allocation_type_span.begin.column == 10U &&
                statement.allocation_character_length != NULL &&
                statement.allocation_character_length->kind == F2C_EXPR_BINARY &&
                statement.allocation_character_length->type == TYPE_INTEGER &&
@@ -465,6 +506,12 @@ int main(void) {
                statement.arguments[0]->kind == F2C_EXPR_ARRAY_REFERENCE &&
                statement.arguments[0]->children[0]->kind == F2C_EXPR_ARRAY_SECTION,
            "typed ALLOCATE owns its CHARACTER length and explicit bounds as AST nodes");
+    f2c_statement_free(&statement);
+
+    expect(f2c_parse_statement(&unit, "allocate()", 21U, &statement),
+           "empty ALLOCATE remains representable");
+    expect(statement.kind == F2C_STMT_ALLOCATE && !statement.action_syntax_valid,
+           "empty ALLOCATE retains an explicit action-syntax failure");
     f2c_statement_free(&statement);
 
     expect(f2c_parse_statement(&unit, "read(5, fmt='(A8)', end=90, iostat=n) x", 22U, &statement),

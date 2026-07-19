@@ -1987,8 +1987,9 @@ static void test_internal_procedure_and_file_units(void) {
     expect_contains(result.code, "f2c_close_unit", "CLOSE releases the opened Fortran unit");
     expect_contains(result.code, "status = f2c_io_ok ? 0 : 1",
                     "OPEN/REWIND/CLOSE define IOSTAT without an auxiliary runtime");
-    expect_contains(result.code, "if (!f2c_io_ok) goto f2c_label_90",
-                    "OPEN/REWIND/CLOSE preserve ERR= control flow");
+    expect_contains(result.code, "if (!f2c_io_ok) {",
+                    "OPEN/REWIND/CLOSE use structured ERR= branches");
+    expect_contains(result.code, "goto f2c_label_90", "OPEN/REWIND/CLOSE preserve ERR= targets");
     expect_contains(result.code, "F2C_RANDOM_NUMBER",
                     "RANDOM_NUMBER uses the self-contained generated PRNG");
     expect_contains(result.code, "(float)(f2c_random_bits() >> 40) * 0x1p-24f",
@@ -2116,10 +2117,12 @@ static void test_formatted_record_end_branch(void) {
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "formatted record READ control branches translate");
     expect_contains(result.code, "f2c_read_record", "A edit descriptor reads a complete record");
-    expect_contains(result.code, "f2c_io_status == EOF) goto f2c_label_90",
-                    "READ END target is preserved");
-    expect_contains(result.code, "f2c_io_is_error(f2c_io_status)) goto f2c_label_80",
-                    "READ ERR target is preserved");
+    expect_contains(result.code, "if (f2c_io_status == EOF) {",
+                    "READ END uses a structured cleanup branch");
+    expect_contains(result.code, "goto f2c_label_90", "READ END target is preserved");
+    expect_contains(result.code, "if (f2c_io_is_error(f2c_io_status)) {",
+                    "READ ERR uses a structured cleanup branch");
+    expect_contains(result.code, "goto f2c_label_80", "READ ERR target is preserved");
     expect_contains(result.code, "status = f2c_io_status_value(f2c_io_status)",
                     "READ IOSTAT receives a Fortran-compatible status class");
     expect_contains(result.code, "f2c_label_90", "READ-only target label is emitted");
@@ -2304,6 +2307,53 @@ static void test_control_flow_semantics(void) {
     expect_contains(result.diagnostics, "ASSIGN target must be a definable scalar INTEGER",
                     "legacy assigned-label storage validates its target");
     f2c_result_free(&result);
+}
+
+static void test_action_statement_semantics(void) {
+    static const char invalid_source[] = "subroutine invalid_actions(real_code)\n"
+                                         "  implicit none\n"
+                                         "  real :: real_code\n"
+                                         "  call\n"
+                                         "  allocate()\n"
+                                         "  stop real_code\n"
+                                         "  return 1\n"
+                                         "end subroutine invalid_actions\n"
+                                         "pure subroutine invalid_pure_stop()\n"
+                                         "  stop\n"
+                                         "end subroutine invalid_pure_stop\n";
+    F2cOptions invalid_options = {"invalid_actions.f90", F2C_SOURCE_FREE, 0};
+    F2cResult invalid =
+        f2c_transpile(invalid_source, sizeof(invalid_source) - 1U, &invalid_options);
+    expect(invalid.error_count >= 5U,
+           "malformed and semantically invalid action statements are rejected independently");
+    expect(invalid.code == NULL, "invalid action statements suppress generated C17");
+    expect_contains(invalid.diagnostics, "malformed executable statement syntax",
+                    "malformed CALL and ALLOCATE syntax produces a hard diagnostic");
+    expect_contains(invalid.diagnostics,
+                    "STOP code must be a scalar INTEGER or CHARACTER expression",
+                    "STOP validates the typed code expression");
+    expect_contains(invalid.diagnostics, "alternate RETURN requires an alternate-return",
+                    "alternate RETURN remains explicit until its unsupported ABI is diagnosed");
+    expect_contains(invalid.diagnostics,
+                    "STOP and ERROR STOP are not permitted in a PURE procedure",
+                    "PURE procedures reject image termination statements");
+    f2c_result_free(&invalid);
+
+    {
+        static const char valid_source[] = "program character_stop_codegen\n"
+                                           "  implicit none\n"
+                                           "  if (.false.) stop 'complete'\n"
+                                           "end program character_stop_codegen\n";
+        F2cOptions valid_options = {"character_stop_codegen.f90", F2C_SOURCE_FREE, 0};
+        F2cResult valid = f2c_transpile(valid_source, sizeof(valid_source) - 1U, &valid_options);
+        expect(valid.error_count == 0U,
+               "a standard CHARACTER stop code lowers without diagnostics");
+        expect_contains(valid.code, "fwrite(",
+                        "CHARACTER stop codes write their bounded payload without a runtime");
+        expect_contains(valid.code, "return EXIT_SUCCESS",
+                        "plain CHARACTER STOP preserves successful termination status");
+        f2c_result_free(&valid);
+    }
 }
 
 static void test_labeled_do_semantics(void) {
@@ -2824,11 +2874,11 @@ static void test_malformed_expression_diagnostics(void) {
     expect(result.error_count == 2U,
            "each malformed or partially consumed expression is a hard error");
     expect(result.code == NULL, "expression parse errors prevent C17 emission");
-    expect_contains(result.diagnostics, "malformed_expression.f90:4:12:",
+    expect_contains(result.diagnostics, "malformed_expression.f90:4:14:",
                     "expression diagnostic retains source file, physical line, and logical column");
     expect_contains(result.diagnostics, "unexpected token near ')'",
                     "expression diagnostic identifies the first unexpected token");
-    expect_contains(result.diagnostics, "malformed_expression.f90:5:9:",
+    expect_contains(result.diagnostics, "malformed_expression.f90:5:11:",
                     "unconsumed expression suffix is diagnosed on its own line");
     expect_contains(result.diagnostics, "unexpected token near 'trailing'",
                     "unconsumed expression suffix is shown to the user");
@@ -3261,6 +3311,7 @@ int main(void) {
     test_malformed_character_prefix_cleanup();
     test_implicit_mapping_semantics();
     test_control_flow_semantics();
+    test_action_statement_semantics();
     test_labeled_do_semantics();
     test_statement_label_control_flow();
     test_select_case_semantics();

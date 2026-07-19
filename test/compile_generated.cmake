@@ -56,6 +56,7 @@ foreach(
     io_fixture
     IN ITEMS
        assigned_format
+       action_statements
        legacy_control
        print_formats
        formatted_internal

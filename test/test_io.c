@@ -105,8 +105,10 @@ static void test_file_control_codegen(void) {
                     "CLOSE forwards KEEP or DELETE disposition");
     expect_contains(result.code, "f2c_set_iomsg",
                     "file control statements define IOMSG together with IOSTAT");
-    expect_contains(result.code, "if (!f2c_io_ok) goto f2c_label_90",
-                    "file control failures retain ERR label control flow");
+    expect_contains(result.code, "if (!f2c_io_ok) {",
+                    "file control failures use structured ERR branches");
+    expect_contains(result.code, "goto f2c_label_90",
+                    "file control failures retain ERR label targets");
     f2c_result_free(&result);
 }
 

@@ -11,6 +11,10 @@ program pointer_semantics
   if (associated(scalar) .or. associated(vector)) stop 1
 
   scalar => value
+  scalar => null(mold=scalar)
+  if (associated(scalar)) stop 7
+
+  scalar => value
   if (.not. associated(scalar, value)) stop 2
   scalar = 9
   if (value /= 9) stop 3
