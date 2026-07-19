@@ -77,6 +77,7 @@ static const char *io_control_name(F2cIoControlKind kind) {
         [F2C_IO_CONTROL_ASYNCHRONOUS] = "ASYNCHRONOUS",
         [F2C_IO_CONTROL_ID] = "ID",
         [F2C_IO_CONTROL_NEWUNIT] = "NEWUNIT",
+        [F2C_IO_CONTROL_IOLENGTH] = "IOLENGTH",
         [F2C_IO_CONTROL_EXIST] = "EXIST",
         [F2C_IO_CONTROL_OPENED] = "OPENED",
         [F2C_IO_CONTROL_NUMBER] = "NUMBER",
@@ -128,14 +129,14 @@ static int io_control_supported(F2cStatementKind statement_kind, F2cIoControlKin
         return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_ERR ||
                control_kind == F2C_IO_CONTROL_IOSTAT || control_kind == F2C_IO_CONTROL_IOMSG;
     if (statement_kind == F2C_STMT_INQUIRE)
-        return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_FILE ||
-               control_kind == F2C_IO_CONTROL_ERR || control_kind == F2C_IO_CONTROL_IOSTAT ||
-               control_kind == F2C_IO_CONTROL_IOMSG || control_kind == F2C_IO_CONTROL_EXIST ||
-               control_kind == F2C_IO_CONTROL_OPENED || control_kind == F2C_IO_CONTROL_NUMBER ||
-               control_kind == F2C_IO_CONTROL_NAMED || control_kind == F2C_IO_CONTROL_NAME ||
-               control_kind == F2C_IO_CONTROL_ACCESS || control_kind == F2C_IO_CONTROL_SEQUENTIAL ||
-               control_kind == F2C_IO_CONTROL_DIRECT || control_kind == F2C_IO_CONTROL_FORM ||
-               control_kind == F2C_IO_CONTROL_FORMATTED ||
+        return control_kind == F2C_IO_CONTROL_IOLENGTH || control_kind == F2C_IO_CONTROL_UNIT ||
+               control_kind == F2C_IO_CONTROL_FILE || control_kind == F2C_IO_CONTROL_ERR ||
+               control_kind == F2C_IO_CONTROL_IOSTAT || control_kind == F2C_IO_CONTROL_IOMSG ||
+               control_kind == F2C_IO_CONTROL_EXIST || control_kind == F2C_IO_CONTROL_OPENED ||
+               control_kind == F2C_IO_CONTROL_NUMBER || control_kind == F2C_IO_CONTROL_NAMED ||
+               control_kind == F2C_IO_CONTROL_NAME || control_kind == F2C_IO_CONTROL_ACCESS ||
+               control_kind == F2C_IO_CONTROL_SEQUENTIAL || control_kind == F2C_IO_CONTROL_DIRECT ||
+               control_kind == F2C_IO_CONTROL_FORM || control_kind == F2C_IO_CONTROL_FORMATTED ||
                control_kind == F2C_IO_CONTROL_UNFORMATTED || control_kind == F2C_IO_CONTROL_RECL ||
                control_kind == F2C_IO_CONTROL_NEXTREC || control_kind == F2C_IO_CONTROL_BLANK ||
                control_kind == F2C_IO_CONTROL_POSITION || control_kind == F2C_IO_CONTROL_ACTION ||
@@ -263,8 +264,8 @@ static int inquiry_logical_result(F2cIoControlKind kind) {
 }
 
 static int inquiry_integer_result(F2cIoControlKind kind) {
-    return kind == F2C_IO_CONTROL_NUMBER || kind == F2C_IO_CONTROL_RECL ||
-           kind == F2C_IO_CONTROL_NEXTREC;
+    return kind == F2C_IO_CONTROL_IOLENGTH || kind == F2C_IO_CONTROL_NUMBER ||
+           kind == F2C_IO_CONTROL_RECL || kind == F2C_IO_CONTROL_NEXTREC;
 }
 
 static int inquiry_character_result(F2cIoControlKind kind) {
@@ -673,6 +674,16 @@ static int derived_requires_defined_io(const F2cDerivedType *derived) {
     return 0;
 }
 
+static int iolength_inquiry(const F2cStatement *statement) {
+    size_t index;
+    if (statement == NULL || statement->kind != F2C_STMT_INQUIRE)
+        return 0;
+    for (index = 0U; index < statement->control_count; ++index)
+        if (statement->io_controls[index].kind == F2C_IO_CONTROL_IOLENGTH)
+            return 1;
+    return 0;
+}
+
 static void validate_io_item_semantics(Context *context, Unit *unit, const F2cStatement *statement,
                                        const F2cIoItem *item, int input, int unformatted,
                                        int namelist) {
@@ -709,10 +720,25 @@ static void validate_io_item_semantics(Context *context, Unit *unit, const F2cSt
                           f2c_validation_expression_start_column(statement->text, item->expression),
                           1, "READ item must be definable");
     }
-    if (!namelist && item->expression != NULL && item->expression->type == TYPE_DERIVED &&
-        item->expression->derived_type != NULL &&
-        !derived_has_io_binding(item->expression->derived_type, input, unformatted) &&
-        derived_requires_defined_io(item->expression->derived_type)) {
+    if (iolength_inquiry(statement) && item->expression != NULL &&
+        item->expression->type == TYPE_DERIVED && item->expression->derived_type != NULL) {
+        if (derived_has_io_binding(item->expression->derived_type, 0, 1)) {
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &item->expression->span, 1,
+                "INQUIRE(IOLENGTH=) output item of derived type '%s' requires defined "
+                "unformatted I/O",
+                item->expression->derived_type->name);
+        } else if (derived_requires_defined_io(item->expression->derived_type)) {
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &item->expression->span, 1,
+                "INQUIRE(IOLENGTH=) output item of derived type '%s' has pointer, "
+                "allocatable, or procedure-pointer subcomponents",
+                item->expression->derived_type->name);
+        }
+    } else if (!namelist && item->expression != NULL && item->expression->type == TYPE_DERIVED &&
+               item->expression->derived_type != NULL &&
+               !derived_has_io_binding(item->expression->derived_type, input, unformatted) &&
+               derived_requires_defined_io(item->expression->derived_type)) {
         f2c_diagnostic_span_code(
             context, F2C_DIAGNOSTIC_SEMANTIC, &item->expression->span, 1,
             "%s %s of derived type '%s' with dynamic components requires defined I/O",
@@ -782,8 +808,17 @@ void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *sta
         }
         validate_io_control_type(context, unit, statement, control, semantic_kind);
     }
-    if (statement->kind == F2C_STMT_INQUIRE &&
-        seen[F2C_IO_CONTROL_UNIT] == seen[F2C_IO_CONTROL_FILE]) {
+    if (statement->kind == F2C_STMT_INQUIRE && seen[F2C_IO_CONTROL_IOLENGTH]) {
+        if (seen[F2C_IO_CONTROL_UNIT] || seen[F2C_IO_CONTROL_FILE] ||
+            statement->control_count != 1U) {
+            f2c_diagnostic_at(context, statement->line, 1U, 1,
+                              "INQUIRE(IOLENGTH=) cannot contain other inquiry specifiers");
+        }
+        if (statement->io_item_count == 0U)
+            f2c_diagnostic_at(context, statement->line, 1U, 1,
+                              "INQUIRE(IOLENGTH=) requires a nonempty output list");
+    } else if (statement->kind == F2C_STMT_INQUIRE &&
+               seen[F2C_IO_CONTROL_UNIT] == seen[F2C_IO_CONTROL_FILE]) {
         f2c_diagnostic_at(context, statement->line, 1U, 1,
                           "INQUIRE requires exactly one of UNIT= or FILE=");
     } else if (statement->kind != F2C_STMT_INQUIRE && statement->kind != F2C_STMT_PRINT &&
