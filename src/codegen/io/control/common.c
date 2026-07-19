@@ -80,7 +80,7 @@ void f2c_io_emit_control_result(Context *context, const F2cEmittedIoStatus *stat
     if (status->err_label != NULL) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "if (!f2c_io_ok) goto f2c_label_%s;\n",
-                          status->err_label);
+                          f2c_statement_label_canonical(status->err_label));
     } else if (status->iostat == NULL) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,

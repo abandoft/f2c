@@ -10,7 +10,7 @@ static const F2cStatement *find_format_statement(const Unit *unit, const char *l
     for (index = 0U; index < unit->statement_count; ++index) {
         const F2cStatement *statement = &unit->statements[index];
         if (statement->kind == F2C_STMT_FORMAT && statement->name != NULL &&
-            strcmp(statement->name, label) == 0)
+            f2c_statement_labels_equal(statement->name, label))
             return statement;
     }
     return NULL;
@@ -54,7 +54,7 @@ static int append_assigned_format(Unit *unit, AssignedFormats *formats, const ch
     AssignedFormatCase *resized;
     size_t capacity;
     for (index = 0U; index < formats->count; ++index)
-        if (strcmp(formats->items[index].label, label) == 0)
+        if (f2c_statement_labels_equal(formats->items[index].label, label))
             return 1;
     definition = find_format_statement(unit, label);
     if (definition == NULL || definition->format == NULL || !definition->format->validated)

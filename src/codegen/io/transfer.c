@@ -115,17 +115,18 @@ static void emit_status_results(Context *context, const char *operation, const c
     if (end_label != NULL) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "if (f2c_io_status == EOF) goto f2c_label_%s;\n",
-                          end_label);
+                          f2c_statement_label_canonical(end_label));
     }
     if (eor_label != NULL) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "if (f2c_io_status == -2) goto f2c_label_%s;\n",
-                          eor_label);
+                          f2c_statement_label_canonical(eor_label));
     }
     if (err_label != NULL) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
-                          "if (f2c_io_is_error(f2c_io_status)) goto f2c_label_%s;\n", err_label);
+                          "if (f2c_io_is_error(f2c_io_status)) goto f2c_label_%s;\n",
+                          f2c_statement_label_canonical(err_label));
     }
     if (iostat == NULL) {
         if (end_label == NULL) {

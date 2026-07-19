@@ -174,7 +174,7 @@ static const F2cStatement *find_format_statement(const Unit *unit, const char *l
     for (index = 0U; index < unit->statement_count; ++index) {
         const F2cStatement *statement = &unit->statements[index];
         if (statement->kind == F2C_STMT_FORMAT && statement->name != NULL &&
-            strcmp(statement->name, label) == 0)
+            f2c_statement_labels_equal(statement->name, label))
             return statement;
     }
     return NULL;
