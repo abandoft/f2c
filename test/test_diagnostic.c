@@ -172,6 +172,51 @@ static void test_continued_procedure_attribute_span(void) {
     f2c_result_free(&result);
 }
 
+static void test_unit_end_name_span(void) {
+    static const char source[] = "subroutine alpha()\n"
+                                 "end subroutine beta\n";
+    DiagnosticCapture capture = {.needle = "END name 'beta'"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "mismatched unit END name suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "mismatched unit END name emits one typed semantic diagnostic");
+    expect(capture.begin.line == 2U && capture.begin.column == 16U && capture.end.line == 2U &&
+               capture.end.column == 20U,
+           "unit END name diagnostic uses the closing designator span");
+    f2c_result_free(&result);
+}
+
+static void test_unit_end_kind_span(void) {
+    static const char source[] = "subroutine alpha()\n"
+                                 "end function alpha\n";
+    DiagnosticCapture capture = {.needle = "END kind does not match"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "mismatched unit END kind suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "mismatched unit END kind emits one typed semantic diagnostic");
+    expect(capture.begin.line == 2U && capture.begin.column == 5U && capture.end.line == 2U &&
+               capture.end.column == 13U,
+           "unit END kind diagnostic uses the explicit closing-kind span");
+    f2c_result_free(&result);
+}
+
+static void test_module_end_name_span(void) {
+    static const char source[] = "module alpha\n"
+                                 "end module beta\n";
+    DiagnosticCapture capture = {.needle = "END name 'beta'"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "mismatched module END name suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "mismatched module END name emits one typed semantic diagnostic");
+    expect(capture.begin.line == 2U && capture.begin.column == 12U && capture.end.line == 2U &&
+               capture.end.column == 16U,
+           "module END name diagnostic uses the closing module designator span");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_keyword_association_span();
     test_call_designator_span();
@@ -179,6 +224,9 @@ int main(void) {
     test_result_name_span();
     test_trailing_header_token_span();
     test_continued_procedure_attribute_span();
+    test_unit_end_name_span();
+    test_unit_end_kind_span();
+    test_module_end_name_span();
     if (failures != 0) {
         fprintf(stderr, "%d diagnostic span test(s) failed\n", failures);
         return 1;

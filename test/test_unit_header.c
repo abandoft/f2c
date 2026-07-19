@@ -126,8 +126,7 @@ static void test_invalid_headers(void) {
 
     expect(parsed_line_init(&parsed, "procedure(iface) :: function"),
            "procedure entity named FUNCTION tokenizes");
-    expect(f2c_parse_unit_header_syntax(&parsed.line, &syntax) ==
-               F2C_UNIT_HEADER_NOT_MATCHED,
+    expect(f2c_parse_unit_header_syntax(&parsed.line, &syntax) == F2C_UNIT_HEADER_NOT_MATCHED,
            "a PROCEDURE entity named FUNCTION is not mistaken for a unit header");
     f2c_unit_header_syntax_discard(&syntax);
     parsed_line_discard(&parsed);
@@ -160,11 +159,41 @@ static void test_invalid_headers(void) {
     parsed_line_discard(&parsed);
 }
 
+static void test_unit_end_ast(void) {
+    ParsedLine parsed;
+    F2cUnitEndSyntax syntax;
+    expect(parsed_line_init(&parsed, "120 end subroutine worker"), "labeled unit END tokenizes");
+    expect(f2c_parse_unit_end_syntax(&parsed.line, &syntax) == F2C_UNIT_END_PARSED &&
+               syntax.has_kind && syntax.kind == F2C_UNIT_SYNTAX_SUBROUTINE &&
+               syntax.kind_token != NULL && syntax.name != NULL &&
+               f2c_token_equals(syntax.name, "worker"),
+           "unit END AST retains its kind, optional label, and closing name");
+    parsed_line_discard(&parsed);
+
+    expect(parsed_line_init(&parsed, "endfunction evaluate"), "joined unit END tokenizes");
+    expect(f2c_parse_unit_end_syntax(&parsed.line, &syntax) == F2C_UNIT_END_PARSED &&
+               syntax.kind == F2C_UNIT_SYNTAX_FUNCTION && f2c_token_equals(syntax.name, "evaluate"),
+           "joined legacy unit END spelling uses the same syntax AST");
+    parsed_line_discard(&parsed);
+
+    expect(parsed_line_init(&parsed, "end if"), "construct END tokenizes");
+    expect(f2c_parse_unit_end_syntax(&parsed.line, &syntax) == F2C_UNIT_END_NOT_MATCHED,
+           "construct terminators are not mistaken for program-unit END statements");
+    parsed_line_discard(&parsed);
+
+    expect(parsed_line_init(&parsed, "end subroutine worker junk"), "invalid unit END tokenizes");
+    expect(f2c_parse_unit_end_syntax(&parsed.line, &syntax) == F2C_UNIT_END_INVALID &&
+               syntax.error_token != NULL && f2c_token_equals(syntax.error_token, "junk"),
+           "unit END rejects trailing syntax at the first unconsumed token");
+    parsed_line_discard(&parsed);
+}
+
 int main(void) {
     test_function_header_ast();
     test_header_lowering();
     test_legacy_alternate_return_ast();
     test_invalid_headers();
+    test_unit_end_ast();
     if (failures != 0) {
         fprintf(stderr, "%d unit-header test(s) failed\n", failures);
         return 1;
