@@ -149,7 +149,8 @@ static int emit_derived_assignment(Context *context, const F2cStatement *stateme
                           statement->right->derived_type->c_name);
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
-    } else if (statement->right->kind == F2C_EXPR_CALL) {
+    } else if (statement->right->kind == F2C_EXPR_CALL ||
+               statement->right->resolved_procedure != NULL) {
         f2c_buffer_printf(&context->output, "{ %s f2c_assignment_result = %s;\n",
                           statement->right->derived_type->c_name, right);
         indent(&context->output, depth + 1);
@@ -176,6 +177,23 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
     char *right;
     int left_supported = 0;
     int right_supported = 0;
+    if (statement->resolved_procedure != NULL) {
+        F2cExpr *operands[2] = {statement->left, statement->right};
+        if (statement->resolved_procedure->elemental &&
+            ((statement->left != NULL && statement->left->rank != 0U) ||
+             (statement->right != NULL && statement->right->rank != 0U))) {
+            F2cStatement call = *statement;
+            call.kind = F2C_STMT_CALL;
+            call.name = statement->resolved_procedure->name;
+            call.arguments = operands;
+            call.item_count = 2U;
+            if (f2c_array_emit_elemental_call(context, unit, &call, depth))
+                return 1;
+        }
+        f2c_emit_call_with_procedure(&context->output, unit, statement->resolved_procedure,
+                                     operands, 2U, depth);
+        return 1;
+    }
     if (f2c_emit_array_section_assignment(context, unit, statement->left, statement->right,
                                           depth) ||
         f2c_emit_rank2_section_assignment(context, unit, statement->left, statement->right,

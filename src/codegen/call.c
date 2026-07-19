@@ -523,3 +523,25 @@ void f2c_emit_call(Buffer *output, Unit *unit, const char *name,
                    F2cExpr *const *argument_expressions, size_t count, int depth) {
     f2c_emit_call_with_signature(output, unit, name, NULL, argument_expressions, count, depth);
 }
+
+void f2c_emit_call_with_procedure(Buffer *output, Unit *unit, const Unit *procedure,
+                                  F2cExpr *const *argument_expressions, size_t count, int depth) {
+    Symbol signature = {0};
+    if (procedure == NULL || procedure->name == NULL)
+        return;
+    if (!f2c_copy_procedure_signature(&signature, (Unit *)procedure)) {
+        (void)f2c_symbol_resize_external_parameters(&signature, 0U);
+        free(signature.procedure_interface_name);
+        free(signature.character_length);
+        free(signature.derived_type_name);
+        free(signature.c_type);
+        return;
+    }
+    f2c_emit_call_with_signature(output, unit, procedure->name, &signature, argument_expressions,
+                                 count, depth);
+    (void)f2c_symbol_resize_external_parameters(&signature, 0U);
+    free(signature.procedure_interface_name);
+    free(signature.character_length);
+    free(signature.derived_type_name);
+    free(signature.c_type);
+}
