@@ -1319,7 +1319,7 @@ static void test_project_interface_semantics(void) {
         F2cResult result = f2c_transpile_project(inputs, 2U);
         expect(result.error_count != 0U,
                "project interface validation rejects a scalar actual for an array dummy");
-        expect_contains(result.diagnostics, "rank_mismatch.f90:3:14:",
+        expect_contains(result.diagnostics, "rank_mismatch.f90:3:16:",
                         "rank mismatch diagnostic identifies the exact actual argument");
         expect_contains(result.diagnostics, "has rank 0 but dummy 'values' has rank 1",
                         "rank mismatch diagnostic reports both ranks and the dummy name");
