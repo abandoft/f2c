@@ -90,6 +90,8 @@ void f2c_free_unit(Unit *unit) {
     for (index = 0U; index < unit->derived_type_count; ++index)
         free_derived_type(&unit->derived_types[index]);
     free(unit->derived_types);
+    for (index = 0U; index < unit->imported_derived_type_count; ++index)
+        free(unit->imported_derived_types[index].local_name);
     free(unit->imported_derived_types);
     for (index = 0U; index < unit->interface_count; ++index)
         f2c_free_unit(&unit->interfaces[index]);
