@@ -37,5 +37,8 @@ int f2c_io_emit_formatted_transfer(Context *context, Unit *unit, const F2cStatem
                                    const char *unit_number, int input,
                                    const char *advance_expression, const char *size_target,
                                    const char *status_target, int depth);
+void f2c_io_emit_unformatted_item(Context *context, Unit *unit, const F2cIoItem *item, int input,
+                                  const char *stream, const char *unit_number, const char *status,
+                                  int depth);
 
 #endif
