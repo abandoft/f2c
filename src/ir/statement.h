@@ -163,6 +163,7 @@ struct F2cStatement {
     char *text;
     char *tail;
     char *name;
+    char *terminal_label;
     char *construct_name;
     char *control_name;
     char **items;
@@ -188,7 +189,10 @@ struct F2cStatement {
     Unit *resolved_procedure;
     struct F2cStatement *construct_owner;
     struct F2cStatement *control_target;
+    struct F2cStatement **terminal_loops;
+    size_t terminal_loop_count;
     char **labels;
+    F2cSourceSpan *label_spans;
     size_t label_count;
     F2cStatement *nested;
     int block;
@@ -201,11 +205,16 @@ struct F2cStatement {
     int format_syntax_valid;
     F2cFormatError format_error;
     int construct_syntax_valid;
+    int control_syntax_valid;
+    F2cSourceSpan label_span;
+    F2cSourceSpan terminal_label_span;
 };
 
 char *f2c_find_assignment(char *line);
 int f2c_parse_statement(Unit *unit, const char *text, size_t line, F2cStatement *statement);
 int f2c_parse_statement_tokens(Unit *unit, const Line *line, F2cStatement *statement);
+const char *f2c_statement_label_canonical(const char *label);
+int f2c_statement_labels_equal(const char *left, const char *right);
 void f2c_statement_free(F2cStatement *statement);
 void f2c_visit_statement_expressions(F2cStatement *statement, F2cExpressionVisitor visitor,
                                      void *state);
