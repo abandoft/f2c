@@ -340,6 +340,114 @@ static void test_record_transfer_codegen(void) {
     f2c_result_free(&result);
 }
 
+static void test_iolength_semantics(void) {
+    static const char source[] = "program invalid_iolength\n"
+                                 "  implicit none\n"
+                                 "  type :: dynamic_payload\n"
+                                 "    integer, allocatable :: values(:)\n"
+                                 "  end type dynamic_payload\n"
+                                 "  integer :: length, value\n"
+                                 "  real :: wrong_type\n"
+                                 "  type(dynamic_payload) :: dynamic\n"
+                                 "  inquire(iolength=wrong_type) value\n"
+                                 "  inquire(iolength=1) value\n"
+                                 "  inquire(iolength=length, unit=10) value\n"
+                                 "  inquire(iolength=length)\n"
+                                 "  inquire(iolength=length) (value, value=1, 3, 0)\n"
+                                 "  inquire(iolength=length) dynamic\n"
+                                 "end program invalid_iolength\n";
+    static const char defined_source[] = "module defined_iolength_type\n"
+                                         "  implicit none\n"
+                                         "  type :: payload\n"
+                                         "    integer :: value\n"
+                                         "  contains\n"
+                                         "    procedure :: write_unformatted => write_payload\n"
+                                         "    generic :: write(unformatted) => write_unformatted\n"
+                                         "  end type payload\n"
+                                         "contains\n"
+                                         "  subroutine write_payload(dtv, unit, iostat, iomsg)\n"
+                                         "    class(payload), intent(in) :: dtv\n"
+                                         "    integer, intent(in) :: unit\n"
+                                         "    integer, intent(out) :: iostat\n"
+                                         "    character(*), intent(inout) :: iomsg\n"
+                                         "    iostat = 0\n"
+                                         "  end subroutine write_payload\n"
+                                         "end module defined_iolength_type\n"
+                                         "program invalid_defined_iolength\n"
+                                         "  use defined_iolength_type\n"
+                                         "  implicit none\n"
+                                         "  integer :: length\n"
+                                         "  type(payload) :: value\n"
+                                         "  inquire(iolength=length) value\n"
+                                         "end program invalid_defined_iolength\n";
+    F2cOptions options = {"invalid_iolength.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count >= 5U, "invalid IOLENGTH forms produce independent hard errors");
+    expect(result.code == NULL, "invalid IOLENGTH forms suppress generated C");
+    expect_contains(result.diagnostics,
+                    "INQUIRE IOLENGTH= must be a definable scalar INTEGER variable",
+                    "IOLENGTH validates its result variable type and definability");
+    expect_contains(result.diagnostics,
+                    "INQUIRE(IOLENGTH=) cannot contain other inquiry specifiers",
+                    "IOLENGTH is kept distinct from file and unit inquiries");
+    expect_contains(result.diagnostics, "INQUIRE(IOLENGTH=) requires a nonempty output list",
+                    "IOLENGTH requires an output-item list");
+    expect_contains(result.diagnostics, "I/O implied-DO step cannot be zero",
+                    "IOLENGTH rejects a constant zero implied-DO step before code generation");
+    expect_contains(result.diagnostics,
+                    "INQUIRE(IOLENGTH=) output item of derived type 'dynamic_payload' has "
+                    "pointer, allocatable, or procedure-pointer subcomponents",
+                    "IOLENGTH rejects processor representations with dynamic components");
+    f2c_result_free(&result);
+
+    options.source_name = "invalid_defined_iolength.f90";
+    result = f2c_transpile(defined_source, sizeof(defined_source) - 1U, &options);
+    expect(result.error_count != 0U,
+           "IOLENGTH rejects derived output items that require defined unformatted I/O");
+    expect_contains(result.diagnostics, "requires defined unformatted I/O",
+                    "IOLENGTH reports the defined-I/O restriction explicitly");
+    f2c_result_free(&result);
+}
+
+static void test_iolength_codegen(void) {
+    static const char source[] =
+        "program iolength_codegen\n"
+        "  implicit none\n"
+        "  type :: payload\n"
+        "    integer :: identifier\n"
+        "    character(3) :: name\n"
+        "  end type payload\n"
+        "  integer :: length, iterator, values(3)\n"
+        "  integer(kind=8) :: length8\n"
+        "  complex :: value\n"
+        "  type(payload) :: object\n"
+        "  inquire(iolength=length) values(3:1:-1), (iterator * 2, iterator=1, 3), &\n"
+        "       value, object, side_effect()\n"
+        "  inquire(iolength=length8) values\n"
+        "contains\n"
+        "  integer function side_effect()\n"
+        "    side_effect = 42\n"
+        "  end function side_effect\n"
+        "end program iolength_codegen\n";
+    F2cOptions options = {"iolength_codegen.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count == 0U,
+           "IOLENGTH lowers arrays, implied-DO items, complex values, and derived values");
+    expect_contains(result.code, "f2c_stream_initialize_counter(&f2c_iolength_stream)",
+                    "IOLENGTH uses the same unformatted transfer representation in count mode");
+    expect_contains(result.code, "f2c_unformatted_extent_1",
+                    "IOLENGTH expands array sections in scalar element order");
+    expect_contains(result.code, "while (f2c_iolength_status == F2C_IO_STATUS_OK",
+                    "IOLENGTH implied-DO bounds are captured once in a checked loop");
+    expect_contains(result.code, "f2c_complex_float f2c_unformatted_value = (",
+                    "complex output expressions are captured before extracting both parts");
+    expect_contains(result.code, "f2c_inquiry_size_integer(f2c_iolength_stream.position, 4)",
+                    "IOLENGTH checks the result against the target INTEGER kind");
+    expect_contains(result.code, "f2c_inquiry_size_integer(f2c_iolength_stream.position, 8)",
+                    "IOLENGTH preserves a nondefault result INTEGER kind");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_file_control_semantics();
     test_file_control_codegen();
@@ -349,6 +457,8 @@ int main(void) {
     test_internal_file_codegen();
     test_record_transfer_constraints();
     test_record_transfer_codegen();
+    test_iolength_semantics();
+    test_iolength_codegen();
     if (failures != 0) {
         fprintf(stderr, "%d I/O semantic test(s) failed\n", failures);
         return 1;
