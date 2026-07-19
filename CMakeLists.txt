@@ -42,6 +42,8 @@ option(F2C_BUILD_LIBFUZZER "Build the coverage-guided libFuzzer target" OFF)
 set(
     F2C_CORE_SOURCES
     src/ast/budget.c
+    src/ast/declaration/procedure.c
+    src/ast/declaration/procedure.h
     src/ast/expression.c
     src/ast/format.c
     src/ast/format.h

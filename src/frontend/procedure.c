@@ -1,98 +1,9 @@
 #include "internal/f2c.h"
 
+#include "ast/declaration/procedure.h"
+
 #include <stdlib.h>
 #include <string.h>
-
-static int parse_attributes(Context *context, const Line *source_line, size_t begin, size_t end,
-                            int *optional, int *pointer, F2cIntent *intent) {
-    size_t index = begin;
-    int valid = 1;
-    while (index < end) {
-        const F2cToken *attribute;
-        if (source_line->tokens[index].kind == F2C_TOKEN_COMMA) {
-            ++index;
-            continue;
-        }
-        attribute = &source_line->tokens[index];
-        if (attribute->kind != F2C_TOKEN_IDENTIFIER) {
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, source_line, attribute, 1,
-                                      "malformed PROCEDURE attribute");
-            valid = 0;
-            ++index;
-            continue;
-        }
-        if (f2c_token_equals(attribute, "optional")) {
-            if (*optional) {
-                f2c_diagnostic(context, source_line->number, 1,
-                               "duplicate OPTIONAL attribute in PROCEDURE declaration");
-                valid = 0;
-            }
-            *optional = 1;
-            ++index;
-        } else if (f2c_token_equals(attribute, "intent")) {
-            size_t close;
-            F2cIntent parsed_intent = F2C_INTENT_UNSPECIFIED;
-            if (index + 1U >= end || source_line->tokens[index + 1U].kind != F2C_TOKEN_LEFT_PAREN ||
-                !f2c_token_matching_delimiter(source_line->tokens, end, index + 1U, &close) ||
-                close != index + 3U ||
-                source_line->tokens[index + 2U].kind != F2C_TOKEN_IDENTIFIER) {
-                f2c_diagnostic(context, source_line->number, 1,
-                               "malformed PROCEDURE INTENT attribute");
-                valid = 0;
-                ++index;
-                continue;
-            }
-            if (f2c_token_equals(&source_line->tokens[index + 2U], "in"))
-                parsed_intent = F2C_INTENT_IN;
-            else if (f2c_token_equals(&source_line->tokens[index + 2U], "out"))
-                parsed_intent = F2C_INTENT_OUT;
-            else if (f2c_token_equals(&source_line->tokens[index + 2U], "inout"))
-                parsed_intent = F2C_INTENT_INOUT;
-            else
-                valid = 0;
-            if (*intent != F2C_INTENT_UNSPECIFIED) {
-                f2c_diagnostic(context, source_line->number, 1,
-                               "duplicate INTENT attribute in PROCEDURE declaration");
-                valid = 0;
-            }
-            *intent = parsed_intent;
-            index = close + 1U;
-        } else if (f2c_token_equals(attribute, "pointer")) {
-            if (*pointer) {
-                f2c_diagnostic(context, source_line->number, 1,
-                               "duplicate POINTER attribute in PROCEDURE declaration");
-                valid = 0;
-            }
-            *pointer = 1;
-            ++index;
-        } else if (f2c_token_equals(attribute, "nopass")) {
-            /* NOPASS changes no C ABI state for an explicit procedure-pointer interface. */
-            ++index;
-        } else if (f2c_token_equals(attribute, "pass")) {
-            f2c_diagnostic(context, source_line->number, 1,
-                           "PASS requires a type-bound procedure binding");
-            valid = 0;
-            ++index;
-        } else {
-            char *text = f2c_token_text(attribute);
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, source_line, attribute, 1,
-                                      "unsupported or malformed PROCEDURE attribute '%s'",
-                                      text != NULL ? text : "<invalid>");
-            free(text);
-            valid = 0;
-            ++index;
-        }
-        if (index < end && source_line->tokens[index].kind != F2C_TOKEN_COMMA) {
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, source_line,
-                                      &source_line->tokens[index], 1,
-                                      "malformed PROCEDURE attribute list");
-            valid = 0;
-            while (index < end && source_line->tokens[index].kind != F2C_TOKEN_COMMA)
-                ++index;
-        }
-    }
-    return valid;
-}
 
 int f2c_copy_function_result_metadata(Symbol *symbol, Unit *signature) {
     Symbol *result = signature->kind == UNIT_FUNCTION && signature->result_name != NULL
@@ -175,100 +86,142 @@ int f2c_copy_procedure_signature(Symbol *symbol, Unit *signature) {
     return 1;
 }
 
-void f2c_parse_procedure_declaration(Context *context, Unit *unit, Line *source_line) {
-    size_t start = source_line != NULL && source_line->token_count > 1U &&
-                           source_line->tokens[0].kind == F2C_TOKEN_NUMBER
-                       ? 1U
-                       : 0U;
-    size_t open;
-    size_t close;
-    size_t double_colon;
-    size_t entities_begin;
-    char *interface_name;
-    Unit *signature;
-    size_t index;
-    int optional = 0;
-    int pointer = 0;
-    F2cIntent intent = F2C_INTENT_UNSPECIFIED;
-    if (!f2c_line_token_equals(source_line, start, "procedure"))
-        return;
-    open = start + 1U;
-    if (open >= source_line->token_count ||
-        source_line->tokens[open].kind != F2C_TOKEN_LEFT_PAREN ||
-        !f2c_token_matching_delimiter(source_line->tokens, source_line->token_count, open,
-                                      &close) ||
-        close != open + 2U || source_line->tokens[open + 1U].kind != F2C_TOKEN_IDENTIFIER) {
-        f2c_diagnostic(context, source_line->number, 1,
-                       "PROCEDURE declaration requires a named interface in parentheses");
-        return;
+static void report_declaration_error(Context *context, const Line *line,
+                                     const F2cProcedureDeclarationSyntax *syntax) {
+    const F2cToken *token = syntax->error_token;
+    switch (syntax->error) {
+    case F2C_PROCEDURE_DECLARATION_ERROR_INTERFACE:
+        f2c_diagnostic_token_code(
+            context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1,
+            "PROCEDURE declaration requires a named interface in parentheses");
+        break;
+    case F2C_PROCEDURE_DECLARATION_ERROR_ATTRIBUTE_SEPARATOR:
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1,
+                                  "PROCEDURE attributes require comma separators and '::'");
+        break;
+    case F2C_PROCEDURE_DECLARATION_ERROR_ATTRIBUTE:
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1,
+                                  "malformed PROCEDURE attribute list");
+        break;
+    case F2C_PROCEDURE_DECLARATION_ERROR_UNKNOWN_ATTRIBUTE: {
+        char *name = f2c_token_text(token);
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1,
+                                  "unsupported or malformed PROCEDURE attribute '%s'",
+                                  name != NULL ? name : "<invalid>");
+        free(name);
+        break;
     }
-    interface_name = f2c_token_text(&source_line->tokens[open + 1U]);
+    case F2C_PROCEDURE_DECLARATION_ERROR_DUPLICATE_ATTRIBUTE: {
+        char *name = f2c_token_text(token);
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, token, 1,
+                                  "duplicate %s attribute in PROCEDURE declaration",
+                                  name != NULL ? name : "<invalid>");
+        free(name);
+        break;
+    }
+    case F2C_PROCEDURE_DECLARATION_ERROR_INTENT:
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1,
+                                  "malformed PROCEDURE INTENT attribute");
+        break;
+    case F2C_PROCEDURE_DECLARATION_ERROR_ENTITY_LIST:
+        if (syntax->entity_count == 0U)
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1,
+                                      "PROCEDURE declaration has no entities");
+        else
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1,
+                                      "malformed PROCEDURE declaration entity list");
+        break;
+    case F2C_PROCEDURE_DECLARATION_ERROR_ENTITY:
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1,
+                                  "malformed PROCEDURE declaration entity");
+        break;
+    case F2C_PROCEDURE_DECLARATION_ERROR_DUPLICATE_ENTITY: {
+        char *name = f2c_token_text(token);
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, token, 1,
+                                  "duplicate PROCEDURE entity '%s'",
+                                  name != NULL ? name : "<invalid>");
+        free(name);
+        break;
+    }
+    case F2C_PROCEDURE_DECLARATION_ERROR_NONE:
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &syntax->span, 1,
+                                 "malformed PROCEDURE declaration");
+        break;
+    }
+}
+
+static F2cIntent lower_intent(F2cProcedureIntentSyntax intent) {
+    switch (intent) {
+    case F2C_PROCEDURE_INTENT_IN:
+        return F2C_INTENT_IN;
+    case F2C_PROCEDURE_INTENT_OUT:
+        return F2C_INTENT_OUT;
+    case F2C_PROCEDURE_INTENT_INOUT:
+        return F2C_INTENT_INOUT;
+    case F2C_PROCEDURE_INTENT_NONE:
+        break;
+    }
+    return F2C_INTENT_UNSPECIFIED;
+}
+
+static void lower_declaration(Context *context, Unit *unit, const Line *line,
+                              const F2cProcedureDeclarationSyntax *syntax) {
+    char *interface_name = f2c_token_text(syntax->interface_name);
+    Unit *signature;
+    F2cIntent intent = lower_intent(syntax->intent);
+    size_t index;
     if (interface_name == NULL) {
-        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
-                            "out of memory parsing PROCEDURE declaration");
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &syntax->span, 1,
+                                 "out of memory parsing PROCEDURE declaration");
         return;
     }
     signature = f2c_find_interface_signature(context, unit, interface_name, 1);
     if (signature == NULL || strcmp(signature->name, interface_name) != 0) {
-        f2c_diagnostic(context, source_line->number, 1,
-                       "PROCEDURE interface '%s' is not a visible specific or abstract interface",
-                       interface_name);
+        f2c_diagnostic_token_code(
+            context, F2C_DIAGNOSTIC_SEMANTIC, line, syntax->interface_name, 1,
+            "PROCEDURE interface '%s' is not a visible specific or abstract interface",
+            interface_name);
         free(interface_name);
         return;
     }
-    double_colon = f2c_line_find_token(source_line, close + 1U, F2C_TOKEN_DOUBLE_COLON, NULL);
-    if (double_colon != SIZE_MAX) {
-        (void)parse_attributes(context, source_line, close + 1U, double_colon, &optional, &pointer,
-                               &intent);
-        entities_begin = double_colon + 1U;
-    } else {
-        entities_begin = close + 1U;
-        if (entities_begin < source_line->token_count &&
-            source_line->tokens[entities_begin].kind == F2C_TOKEN_COMMA) {
-            f2c_diagnostic(context, source_line->number, 1,
-                           "PROCEDURE attributes require '::' before the entity list");
-            free(interface_name);
-            return;
-        }
-    }
-    if (intent != F2C_INTENT_UNSPECIFIED && !pointer)
-        f2c_diagnostic(context, source_line->number, 1,
-                       "INTENT on a PROCEDURE entity requires the POINTER attribute");
-    if (entities_begin == source_line->token_count)
-        f2c_diagnostic(context, source_line->number, 1, "PROCEDURE declaration has no entities");
-    index = entities_begin;
-    while (index < source_line->token_count) {
-        char *name;
-        Symbol *symbol;
-        if (source_line->tokens[index].kind != F2C_TOKEN_IDENTIFIER) {
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, source_line,
-                                      &source_line->tokens[index], 1,
-                                      "malformed PROCEDURE declaration entity");
-            break;
-        }
-        name = f2c_token_text(&source_line->tokens[index++]);
-        symbol = name != NULL ? f2c_ensure_symbol(unit, name) : NULL;
+    if (syntax->pass_attribute != NULL)
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, syntax->pass_attribute, 1,
+                                  "PASS requires a type-bound procedure binding");
+    if (intent != F2C_INTENT_UNSPECIFIED && syntax->pointer_attribute == NULL)
+        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, syntax->intent_attribute,
+                                  1, "INTENT on a PROCEDURE entity requires the POINTER attribute");
+    for (index = 0U; index < syntax->entity_count; ++index) {
+        const F2cToken *entity = syntax->entities[index];
+        char *name = f2c_token_text(entity);
+        Symbol *symbol = name != NULL ? f2c_ensure_symbol(unit, name) : NULL;
         if (symbol == NULL) {
-            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
-                                "out of memory binding PROCEDURE entity");
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, entity, 1,
+                                      "out of memory binding PROCEDURE entity");
         } else if (!f2c_copy_procedure_signature(symbol, signature)) {
-            f2c_diagnostic(context, source_line->number, 1,
-                           "out of memory binding PROCEDURE entity '%s'", name);
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, entity, 1,
+                                      "out of memory binding PROCEDURE entity '%s'", name);
         } else {
-            symbol->optional |= optional;
-            symbol->procedure_pointer |= pointer;
+            symbol->optional |= syntax->optional_attribute != NULL;
+            symbol->procedure_pointer |= syntax->pointer_attribute != NULL;
             symbol->intent = intent;
-            symbol->declaration_line = source_line->number;
+            symbol->declaration_line = entity->span.begin.line;
+            symbol->declaration_span = entity->span;
         }
         free(name);
-        if (index == source_line->token_count)
-            break;
-        if (source_line->tokens[index].kind != F2C_TOKEN_COMMA ||
-            ++index == source_line->token_count) {
-            f2c_diagnostic(context, source_line->number, 1,
-                           "malformed PROCEDURE declaration entity list");
-            break;
-        }
     }
     free(interface_name);
+}
+
+void f2c_parse_procedure_declaration(Context *context, Unit *unit, Line *source_line) {
+    F2cProcedureDeclarationSyntax syntax;
+    F2cProcedureDeclarationStatus status =
+        f2c_parse_procedure_declaration_syntax(source_line, &syntax);
+    if (status == F2C_PROCEDURE_DECLARATION_INVALID)
+        report_declaration_error(context, source_line, &syntax);
+    else if (status == F2C_PROCEDURE_DECLARATION_NO_MEMORY)
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &syntax.span, 1,
+                                 "out of memory parsing PROCEDURE declaration");
+    else if (status == F2C_PROCEDURE_DECLARATION_PARSED)
+        lower_declaration(context, unit, source_line, &syntax);
+    f2c_procedure_declaration_syntax_discard(&syntax);
 }

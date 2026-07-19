@@ -82,6 +82,7 @@ struct Symbol {
     char *common_block;
     size_t common_index;
     size_t declaration_line;
+    F2cSourceSpan declaration_span;
     size_t first_seen_line;
     size_t scope_begin_line;
     size_t scope_end_line;
