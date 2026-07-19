@@ -1,5 +1,7 @@
 #include "frontend/declaration/private.h"
 
+#include "ast/declaration/access.h"
+
 #include <stdlib.h>
 
 static int declaration_token_word(const Line *line, size_t index, const char *word) {
@@ -32,6 +34,8 @@ int f2c_declaration_tokens(const Line *line) {
     if (declaration_token_word(line, start, "class"))
         return start + 1U < line->token_count &&
                line->tokens[start + 1U].kind == F2C_TOKEN_LEFT_PAREN;
+    if (f2c_access_statement_candidate(line))
+        return 1;
     for (index = 0U; index < sizeof(starters) / sizeof(starters[0]); ++index) {
         if (declaration_token_word(line, start, starters[index]))
             return 1;

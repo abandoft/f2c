@@ -32,6 +32,7 @@ Symbol *f2c_find_symbol(Unit *unit, const char *name);
 Symbol *f2c_ensure_symbol(Unit *unit, const char *name);
 F2cNamelistGroup *f2c_find_namelist(Unit *unit, const char *name);
 F2cDerivedType *f2c_find_derived_type(Unit *unit, const char *name);
+int f2c_line_in_derived_type(const Unit *unit, size_t line_index);
 const char *f2c_symbol_c_name(Unit *unit, const Symbol *symbol);
 int f2c_declaration_line(const char *line);
 int f2c_declaration_tokens(const Line *line);
