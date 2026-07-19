@@ -335,17 +335,15 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
     statement->state = F2C_IR_TYPED;
 }
 
-static F2cExpr *parse_specification_expression(Context *context, Unit *unit, size_t line,
-                                               const char *text, F2cTokenRange syntax,
-                                               const char *role) {
+static F2cExpr *parse_specification_syntax(Context *context, Unit *unit, size_t line,
+                                           F2cTokenRange syntax, const char *role) {
     const char *error_at = NULL;
     const char *source_line;
     F2cExpr *expression;
-    if (text == NULL || strcmp(text, "*") == 0 || strcmp(text, ":") == 0)
+    if (syntax.count == 0U || syntax.tokens == NULL)
         return NULL;
-    expression = syntax.count != 0U ? f2c_parse_expression_tokens(unit, syntax.tokens, syntax.count,
-                                                                  syntax.source, &error_at)
-                                    : f2c_parse_expression_ast(unit, text, &error_at);
+    expression = f2c_parse_expression_tokens(unit, syntax.tokens, syntax.count, syntax.source,
+                                             &error_at);
     source_line = f2c_validation_unit_line(context, unit, line);
     if (expression == NULL) {
         f2c_diagnostic_at(context, line, 1U, 1, "out of memory while validating %s expression",
@@ -354,6 +352,13 @@ static F2cExpr *parse_specification_expression(Context *context, Unit *unit, siz
         f2c_validation_report_parse_error(context, line, source_line, expression, role);
     }
     return expression;
+}
+
+static int specification_sentinel(F2cTokenRange syntax) {
+    return syntax.count == 1U &&
+           ((syntax.tokens[0].kind == F2C_TOKEN_OPERATOR &&
+             f2c_token_equals(&syntax.tokens[0], "*")) ||
+            syntax.tokens[0].kind == F2C_TOKEN_COLON);
 }
 
 static void validate_integer_specification(Context *context, size_t line, const char *source_line,
@@ -389,21 +394,44 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
     const size_t line = symbol->declaration_line != 0U ? symbol->declaration_line
                                                        : context->lines.items[unit->begin].number;
     const char *source_line = f2c_validation_unit_line(context, unit, line);
-    f2c_expr_free(symbol->initializer_expression);
+    if (symbol->initializer_syntax.count != 0U) {
+        f2c_expr_free(symbol->initializer_expression);
+        symbol->initializer_expression = parse_specification_syntax(
+            context, unit, line, symbol->initializer_syntax, "declaration initializer");
+    } else if (symbol->initializer == NULL) {
+        f2c_expr_free(symbol->initializer_expression);
+        symbol->initializer_expression = NULL;
+    } else if (symbol->initializer_expression == NULL) {
+        f2c_diagnostic_at_code(context, F2C_DIAGNOSTIC_INTERNAL, line, 1U, 1,
+                               "compiler-synthesized initializer for '%s' has no typed AST",
+                               symbol->name);
+    }
     f2c_expr_free(symbol->character_length_expression);
-    symbol->initializer_expression =
-        parse_specification_expression(context, unit, line, symbol->initializer,
-                                       symbol->initializer_syntax, "declaration initializer");
-    symbol->character_length_expression =
-        parse_specification_expression(context, unit, line, symbol->character_length,
-                                       symbol->character_length_syntax, "character length");
+    symbol->character_length_expression = NULL;
+    if (symbol->type == TYPE_CHARACTER && symbol->character_length_syntax.count != 0U &&
+        !specification_sentinel(symbol->character_length_syntax)) {
+        symbol->character_length_expression =
+            parse_specification_syntax(context, unit, line, symbol->character_length_syntax,
+                                       "character length");
+    } else if (symbol->type == TYPE_CHARACTER &&
+               (symbol->character_length == NULL || strcmp(symbol->character_length, "1") == 0)) {
+        symbol->character_length_expression = f2c_expr_new_integer_constant(1);
+        if (symbol->character_length_expression == NULL)
+            f2c_diagnostic_at_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, 1U, 1,
+                                   "out of memory creating default CHARACTER length");
+    } else if (symbol->type == TYPE_CHARACTER && symbol->character_length != NULL &&
+               strcmp(symbol->character_length, "*") != 0 &&
+               strcmp(symbol->character_length, ":") != 0) {
+        f2c_diagnostic_at_code(context, F2C_DIAGNOSTIC_INTERNAL, line, 1U, 1,
+                               "CHARACTER length for '%s' has no canonical token range",
+                               symbol->name);
+    }
     f2c_expr_free(symbol->statement_function_expression);
     symbol->statement_function_expression =
         symbol->statement_function
-            ? parse_specification_expression(context, unit, symbol->statement_function_line,
-                                             symbol->statement_function_text,
-                                             symbol->statement_function_syntax,
-                                             "statement-function result")
+            ? parse_specification_syntax(context, unit, symbol->statement_function_line,
+                                         symbol->statement_function_syntax,
+                                         "statement-function result")
             : NULL;
     f2c_validation_expression_calls(context, unit, line, source_line,
                                     symbol->initializer_expression);
@@ -433,21 +461,34 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
         Dimension *shape = &symbol->dimensions[dimension];
         f2c_expr_free(shape->lower_expression);
         f2c_expr_free(shape->upper_expression);
-        shape->lower_expression = parse_specification_expression(
-            context, unit, line, shape->lower, symbol->dimension_lower_syntax[dimension],
-            "array lower bound");
+        shape->lower_expression = symbol->dimension_lower_syntax[dimension].count != 0U
+                                      ? parse_specification_syntax(
+                                            context, unit, line,
+                                            symbol->dimension_lower_syntax[dimension],
+                                            "array lower bound")
+                                      : f2c_expr_new_integer_constant(1);
         shape->upper_expression =
             shape->kind == F2C_DIMENSION_EXPLICIT
-                ? parse_specification_expression(context, unit, line, shape->upper,
-                                                 symbol->dimension_upper_syntax[dimension],
-                                                 "array upper bound")
+                ? parse_specification_syntax(context, unit, line,
+                                             symbol->dimension_upper_syntax[dimension],
+                                             "array upper bound")
                 : NULL;
+        if (shape->lower_expression == NULL)
+            f2c_diagnostic_at_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, 1U, 1,
+                                   "out of memory creating default array lower bound");
         f2c_validation_expression_calls(context, unit, line, source_line, shape->lower_expression);
         f2c_validation_expression_calls(context, unit, line, source_line, shape->upper_expression);
         validate_integer_specification(context, line, source_line, shape->lower_expression,
                                        "array lower bound");
         validate_integer_specification(context, line, source_line, shape->upper_expression,
                                        "array upper bound");
+    }
+    if (symbol->type == TYPE_CHARACTER && !symbol->argument && !symbol->external &&
+        !symbol->parameter && !symbol->allocatable && !symbol->pointer &&
+        symbol->character_length_expression != NULL) {
+        int64_t constant_length;
+        symbol->automatic_character = !f2c_evaluate_integer_constant(
+            unit, symbol->character_length_expression, &constant_length);
     }
     f2c_shape_from_symbol(unit, &symbol->shape, symbol);
 }
