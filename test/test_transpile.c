@@ -3287,6 +3287,230 @@ static void test_tokenized_use_association(void) {
     }
 }
 
+static void test_module_generic_semantics(void) {
+    static const char provider[] = "module generic_provider\n"
+                                   "  implicit none\n"
+                                   "  private\n"
+                                   "  public :: apply\n"
+                                   "  interface apply\n"
+                                   "    module procedure apply_integer, apply_real\n"
+                                   "  end interface apply\n"
+                                   "  interface hidden_apply\n"
+                                   "    module procedure apply_integer\n"
+                                   "  end interface hidden_apply\n"
+                                   "contains\n"
+                                   "  integer function apply_integer(value) result(answer)\n"
+                                   "    integer, intent(in) :: value\n"
+                                   "    answer = value + 1\n"
+                                   "  end function apply_integer\n"
+                                   "  real function apply_real(value) result(answer)\n"
+                                   "    real, intent(in) :: value\n"
+                                   "    answer = value + 2.0\n"
+                                   "  end function apply_real\n"
+                                   "end module generic_provider\n";
+    static const char wrapper[] = "module generic_wrapper\n"
+                                  "  use generic_provider, only: apply\n"
+                                  "  implicit none\n"
+                                  "  private\n"
+                                  "  public :: apply\n"
+                                  "end module generic_wrapper\n";
+    static const char consumer[] = "subroutine generic_consumer(integer_result, real_result)\n"
+                                   "  use generic_provider, only: apply\n"
+                                   "  use generic_wrapper, only: apply\n"
+                                   "  implicit none\n"
+                                   "  integer, intent(out) :: integer_result\n"
+                                   "  real, intent(out) :: real_result\n"
+                                   "  integer_result = apply(3)\n"
+                                   "  real_result = apply(4.0)\n"
+                                   "end subroutine generic_consumer\n";
+    F2cInput inputs[] = {
+        {consumer, sizeof(consumer) - 1U, {"generic_consumer.f90", F2C_SOURCE_FREE, 0}},
+        {wrapper, sizeof(wrapper) - 1U, {"generic_wrapper.f90", F2C_SOURCE_FREE, 0}},
+        {provider, sizeof(provider) - 1U, {"generic_provider.f90", F2C_SOURCE_FREE, 0}},
+    };
+    F2cResult result = f2c_transpile_project(inputs, 3U);
+    expect(result.error_count == 0U,
+           "a public MODULE PROCEDURE generic survives topological USE association and re-export");
+    expect_contains(result.code, "f2c_module_generic_provider_apply_integer(&(int32_t){3})",
+                    "the imported generic selects its INTEGER specific procedure");
+    expect_contains(result.code, "f2c_module_generic_provider_apply_real(&(float){4.0f})",
+                    "the imported generic selects its REAL specific with a distinct result type");
+    expect(count_occurrences(result.code, "f2c_module_generic_provider_apply_integer(") >= 3U,
+           "the generic specific keeps one provider-owned C17 implementation and typed calls");
+    expect_not_contains(
+        result.code, "f2c_module_generic_wrapper_apply",
+        "a wrapper module never synthesizes storage or code for an imported generic");
+    f2c_result_free(&result);
+
+    {
+        static const char explicit_provider[] = "module explicit_generic_provider\n"
+                                                "  interface offset\n"
+                                                "    integer function offset_integer(value)\n"
+                                                "      integer, intent(in) :: value\n"
+                                                "    end function offset_integer\n"
+                                                "    real function offset_real(value)\n"
+                                                "      real, intent(in) :: value\n"
+                                                "    end function offset_real\n"
+                                                "  end interface offset\n"
+                                                "end module explicit_generic_provider\n";
+        static const char explicit_consumer[] =
+            "subroutine explicit_generic_consumer(integer_result, real_result)\n"
+            "  use explicit_generic_provider, only: offset\n"
+            "  integer, intent(out) :: integer_result\n"
+            "  real, intent(out) :: real_result\n"
+            "  integer_result = offset(3)\n"
+            "  real_result = offset(4.0)\n"
+            "end subroutine explicit_generic_consumer\n";
+        F2cInput explicit_inputs[] = {
+            {explicit_provider,
+             sizeof(explicit_provider) - 1U,
+             {"explicit_generic_provider.f90", F2C_SOURCE_FREE, 0}},
+            {explicit_consumer,
+             sizeof(explicit_consumer) - 1U,
+             {"explicit_generic_consumer.f90", F2C_SOURCE_FREE, 0}},
+        };
+        result = f2c_transpile_project(explicit_inputs, 2U);
+        expect(result.error_count == 0U,
+               "USE association imports every candidate from a named explicit generic");
+        expect_contains(result.code, "offset_integer(&(int32_t){3})",
+                        "an imported explicit generic selects its INTEGER candidate");
+        expect_contains(result.code, "offset_real(&(float){4.0f})",
+                        "an imported explicit generic selects its REAL candidate");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char renamed_consumer[] = "subroutine renamed_generic_consumer(result)\n"
+                                               "  use generic_provider, only: renamed => apply\n"
+                                               "  integer, intent(out) :: result\n"
+                                               "  result = renamed(5)\n"
+                                               "end subroutine renamed_generic_consumer\n";
+        F2cInput renamed_inputs[] = {
+            {provider, sizeof(provider) - 1U, {"generic_provider.f90", F2C_SOURCE_FREE, 0}},
+            {renamed_consumer,
+             sizeof(renamed_consumer) - 1U,
+             {"renamed_generic_consumer.f90", F2C_SOURCE_FREE, 0}},
+        };
+        result = f2c_transpile_project(renamed_inputs, 2U);
+        expect(result.error_count == 0U, "a named generic candidate set survives USE renaming");
+        expect_contains(result.code, "f2c_module_generic_provider_apply_integer(&(int32_t){5})",
+                        "renamed generic calls still select the provider specific");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char private_consumer[] = "subroutine private_generic_consumer(result)\n"
+                                               "  use generic_provider, only: hidden_apply\n"
+                                               "  integer, intent(out) :: result\n"
+                                               "  result = hidden_apply(1)\n"
+                                               "end subroutine private_generic_consumer\n";
+        F2cInput private_inputs[] = {
+            {provider, sizeof(provider) - 1U, {"generic_provider.f90", F2C_SOURCE_FREE, 0}},
+            {private_consumer,
+             sizeof(private_consumer) - 1U,
+             {"private_generic_consumer.f90", F2C_SOURCE_FREE, 0}},
+        };
+        result = f2c_transpile_project(private_inputs, 2U);
+        expect(result.code == NULL && result.error_count != 0U,
+               "an ONLY clause cannot import a private named generic");
+        expect_contains(result.diagnostics, "module entity 'hidden_apply' is PRIVATE",
+                        "private generic imports identify the inaccessible remote binding");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char missing_provider[] = "module missing_specific_provider\n"
+                                               "  interface apply\n"
+                                               "    module procedure absent\n"
+                                               "  end interface apply\n"
+                                               "end module missing_specific_provider\n";
+        F2cOptions options = {"missing_specific_provider.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(missing_provider, sizeof(missing_provider) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "MODULE PROCEDURE rejects a specific not defined by its module");
+        expect_contains(result.diagnostics,
+                        "MODULE PROCEDURE specific 'absent' is not defined in module",
+                        "missing-specific diagnostics identify the exact unresolved name");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char nested_only_provider[] =
+            "module nested_only_specific_provider\n"
+            "  interface apply\n"
+            "    module procedure nested_implementation\n"
+            "  end interface apply\n"
+            "contains\n"
+            "  subroutine outer()\n"
+            "  contains\n"
+            "    integer function nested_implementation(value)\n"
+            "      integer, intent(in) :: value\n"
+            "      nested_implementation = value\n"
+            "    end function nested_implementation\n"
+            "  end subroutine outer\n"
+            "end module nested_only_specific_provider\n";
+        F2cOptions options = {"nested_only_specific_provider.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(nested_only_provider, sizeof(nested_only_provider) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "MODULE PROCEDURE never binds a nested internal procedure as a module specific");
+        expect_contains(result.diagnostics,
+                        "MODULE PROCEDURE specific 'nested_implementation' is not defined in "
+                        "module",
+                        "nested internal procedures remain outside the module generic namespace");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char duplicate_provider[] = "module duplicate_specific_provider\n"
+                                                 "  interface apply\n"
+                                                 "    module procedure implementation\n"
+                                                 "    module procedure implementation\n"
+                                                 "  end interface apply\n"
+                                                 "contains\n"
+                                                 "  integer function implementation(value)\n"
+                                                 "    integer :: value\n"
+                                                 "    implementation = value\n"
+                                                 "  end function implementation\n"
+                                                 "end module duplicate_specific_provider\n";
+        F2cOptions options = {"duplicate_specific_provider.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(duplicate_provider, sizeof(duplicate_provider) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "a generic rejects the same MODULE PROCEDURE specific on multiple statements");
+        expect_contains(result.diagnostics, "appears more than once in generic interface 'apply'",
+                        "duplicate-specific diagnostics name the generic binding");
+        f2c_result_free(&result);
+    }
+
+    {
+        static const char ambiguous_provider[] =
+            "module ambiguous_module_generic\n"
+            "  interface choose\n"
+            "    module procedure choose_first, choose_second\n"
+            "  end interface choose\n"
+            "contains\n"
+            "  integer function choose_first(value)\n"
+            "    integer :: value\n"
+            "    choose_first = value\n"
+            "  end function choose_first\n"
+            "  integer function choose_second(value)\n"
+            "    integer :: value\n"
+            "    choose_second = value + 1\n"
+            "  end function choose_second\n"
+            "end module ambiguous_module_generic\n"
+            "program ambiguous_module_consumer\n"
+            "  use ambiguous_module_generic, only: choose\n"
+            "  print *, choose(1)\n"
+            "end program ambiguous_module_consumer\n";
+        F2cOptions options = {"ambiguous_module_generic.f90", F2C_SOURCE_FREE, 0};
+        result = f2c_transpile(ambiguous_provider, sizeof(ambiguous_provider) - 1U, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "indistinguishable MODULE PROCEDURE specifics never select by declaration order");
+        expect_contains(result.diagnostics, "generic interface 'choose' is ambiguous",
+                        "ambiguous module-generic diagnostics identify the call binding");
+        f2c_result_free(&result);
+    }
+}
+
 static void test_module_accessibility_semantics(void) {
     static const char provider[] = "module access_provider\n"
                                    "  implicit none\n"
@@ -3885,6 +4109,7 @@ int main(void) {
     test_token_driven_scope_and_reference_boundaries();
     test_statement_function_typed_lowering();
     test_tokenized_use_association();
+    test_module_generic_semantics();
     test_module_accessibility_semantics();
     test_derived_type_use_association();
     test_malformed_character_prefix_cleanup();
