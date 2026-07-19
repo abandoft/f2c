@@ -237,6 +237,109 @@ static void test_internal_file_codegen(void) {
     f2c_result_free(&result);
 }
 
+static void test_record_transfer_constraints(void) {
+    static const char source[] = "program invalid_record_transfer\n"
+                                 "  implicit none\n"
+                                 "  integer :: value, status\n"
+                                 "  character(8) :: record\n"
+                                 "  namelist /values/ value\n"
+                                 "  read(10, rec=0, iostat=status) value\n"
+                                 "  read(record, '(I2)', rec=1, iostat=status) value\n"
+                                 "  read(10, *, rec=1, iostat=status) value\n"
+                                 "  write(10, nml=values, rec=1, iostat=status)\n"
+                                 "  read(10, rec=1, end=90, iostat=status) value\n"
+                                 "  read(10, advance='no', iostat=status) value\n"
+                                 "90 continue\n"
+                                 "end program invalid_record_transfer\n";
+    F2cOptions options = {"invalid_record_transfer.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count >= 6U,
+           "invalid direct and unformatted transfer combinations produce hard errors");
+    expect(result.code == NULL, "invalid record transfers suppress generated C");
+    expect_contains(result.diagnostics, "READ REC= must be positive",
+                    "constant direct record numbers must be positive");
+    expect_contains(result.diagnostics, "internal-file READ cannot specify REC=",
+                    "internal files reject direct record selectors");
+    expect_contains(result.diagnostics, "direct-access READ cannot use list-directed formatting",
+                    "direct access rejects list-directed formatting");
+    expect_contains(result.diagnostics, "direct-access WRITE cannot use NAMELIST",
+                    "direct access rejects NAMELIST transfers");
+    expect_contains(result.diagnostics,
+                    "direct-access READ cannot use END=, ADVANCE=, EOR=, or SIZE=",
+                    "direct access rejects sequential record conditions");
+    expect_contains(result.diagnostics, "unformatted READ cannot use ADVANCE=, EOR=, or SIZE=",
+                    "unformatted transfers reject formatted nonadvancing controls");
+    f2c_result_free(&result);
+    {
+        static const char dynamic_source[] = "program invalid_dynamic_unformatted\n"
+                                             "  implicit none\n"
+                                             "  type :: payload\n"
+                                             "    integer, allocatable :: values(:)\n"
+                                             "  end type payload\n"
+                                             "  type(payload) :: object\n"
+                                             "  write(10) object\n"
+                                             "end program invalid_dynamic_unformatted\n";
+        F2cResult dynamic = f2c_transpile(dynamic_source, sizeof(dynamic_source) - 1U, &options);
+        expect(dynamic.error_count != 0U,
+               "default unformatted I/O rejects derived objects with dynamic components");
+        expect_contains(dynamic.diagnostics, "with dynamic components requires defined I/O",
+                        "dynamic derived storage never falls through to an aborting emitter");
+        f2c_result_free(&dynamic);
+    }
+    {
+        static const char dynamic_source[] = "program invalid_dynamic_formatted\n"
+                                             "  implicit none\n"
+                                             "  type :: payload\n"
+                                             "    integer, pointer :: values(:)\n"
+                                             "  end type payload\n"
+                                             "  type(payload) :: object\n"
+                                             "  write(*, *) object\n"
+                                             "end program invalid_dynamic_formatted\n";
+        F2cResult dynamic = f2c_transpile(dynamic_source, sizeof(dynamic_source) - 1U, &options);
+        expect(dynamic.error_count != 0U,
+               "default formatted I/O rejects derived objects with dynamic components");
+        expect_contains(dynamic.diagnostics,
+                        "formatted WRITE of derived type 'payload' with dynamic components "
+                        "requires defined I/O",
+                        "dynamic formatted derived I/O never reaches a runtime placeholder");
+        f2c_result_free(&dynamic);
+    }
+}
+
+static void test_record_transfer_codegen(void) {
+    static const char source[] =
+        "program record_transfer_codegen\n"
+        "  implicit none\n"
+        "  integer :: status, value, values(3)\n"
+        "  character(32) :: message\n"
+        "  open(31, file='records.tmp', status='replace', access='direct', recl=32, &\n"
+        "       form='unformatted', iostat=status, iomsg=message)\n"
+        "  write(31, rec=2, iostat=status, iomsg=message) values\n"
+        "  read(31, rec=2, iostat=status, iomsg=message) values\n"
+        "  close(31, status='delete')\n"
+        "  open(32, status='scratch', form='unformatted', iostat=status)\n"
+        "  write(32, iostat=status) value\n"
+        "  rewind(32)\n"
+        "  read(32, iostat=status) value\n"
+        "  close(32)\n"
+        "end program record_transfer_codegen\n";
+    F2cOptions options = {"record_transfer_codegen.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count == 0U,
+           "direct and sequential unformatted transfers lower without diagnostics");
+    expect_contains(result.code, "f2c_transfer_begin(&f2c_io_transfer_state",
+                    "record transfers validate the live unit before touching data");
+    expect_contains(result.code, "f2c_stream_initialize_external_record",
+                    "direct records use a bounded stream view");
+    expect_contains(result.code, "f2c_record_write_u64",
+                    "sequential unformatted transfers emit explicit record framing");
+    expect_contains(result.code, "f2c_binary_write(f2c_io_file",
+                    "unformatted output uses binary rather than list-directed serialization");
+    expect_contains(result.code, "f2c_transfer_end(&f2c_io_transfer_state",
+                    "every external transfer closes its record before status branching");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_file_control_semantics();
     test_file_control_codegen();
@@ -244,6 +347,8 @@ int main(void) {
     test_print_codegen();
     test_internal_file_constraints();
     test_internal_file_codegen();
+    test_record_transfer_constraints();
+    test_record_transfer_codegen();
     if (failures != 0) {
         fprintf(stderr, "%d I/O semantic test(s) failed\n", failures);
         return 1;
