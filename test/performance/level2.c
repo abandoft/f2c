@@ -94,15 +94,15 @@ static int run_case(const DgerCase *test, double *x, double *y, double *generate
             initialize(native, matrix_count, 19);
             fortran_second = measure(dger_, test, x, y, native);
         }
-        samples[round] = f2c_benchmark_paired_sample(
-            round, generated_first, fortran_first, fortran_second, generated_second);
+        samples[round] = f2c_benchmark_paired_sample(round, generated_first, fortran_first,
+                                                     fortran_second, generated_second);
     }
     return f2c_benchmark_report("DGER", description, samples, sizeof(samples) / sizeof(samples[0]));
 }
 
 int f2c_benchmark_level2(void) {
-    static const DgerCase cases[] = {{64, 1, 8192},  {64, 2, 8192},  {64, -1, 8192},
-                                     {192, 1, 1024}, {192, 2, 1024}, {192, -1, 1024}};
+    static const DgerCase cases[] = {{64, 1, 65536}, {64, 2, 65536}, {64, -1, 65536},
+                                     {192, 1, 8192}, {192, 2, 8192}, {192, -1, 8192}};
     const size_t vector_maximum = 1U + 191U * 2U;
     const size_t matrix_maximum = 192U * 192U;
     double *x = (double *)malloc(vector_maximum * sizeof(*x));
