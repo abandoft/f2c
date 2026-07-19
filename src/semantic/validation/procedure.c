@@ -202,6 +202,44 @@ static F2cSourceSpan diagnostic_span(const F2cSourceSpan *span, size_t line) {
     return result;
 }
 
+Unit *f2c_validation_generic_specific(Context *context, Unit *caller, size_t line,
+                                      const char *generic_name, const F2cSourceSpan *span,
+                                      F2cExpr *const *arguments, size_t argument_count,
+                                      int subroutine_call, int required, int *handled) {
+    Unit *definition = NULL;
+    size_t matching_interfaces = 0U;
+    const size_t interface_count =
+        select_explicit_interface(context, caller, generic_name, arguments, argument_count,
+                                  subroutine_call, &definition, &matching_interfaces);
+    const F2cSourceSpan operation_span = diagnostic_span(span, line);
+    if (handled != NULL)
+        *handled = 0;
+    if (matching_interfaces == 1U) {
+        if (handled != NULL)
+            *handled = 1;
+        return definition;
+    }
+    if (matching_interfaces > 1U) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &operation_span, 1,
+                                 "generic interface '%s' is ambiguous for this operand list",
+                                 generic_name);
+        if (handled != NULL)
+            *handled = 1;
+        return NULL;
+    }
+    if (required) {
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_SEMANTIC, &operation_span, 1,
+            interface_count == 0U
+                ? "generic interface '%s' is not visible for this operation"
+                : "generic interface '%s' has no specific procedure matching this operand list",
+            generic_name);
+        if (handled != NULL)
+            *handled = 1;
+    }
+    return NULL;
+}
+
 static int has_explicit_argument_association(F2cExpr *const *arguments, size_t argument_count) {
     size_t i;
     for (i = 0U; i < argument_count; ++i) {

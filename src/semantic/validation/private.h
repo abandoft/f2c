@@ -31,6 +31,10 @@ Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
                                     const char *statement_text, const char *name,
                                     const F2cSourceSpan *call_span, F2cExpr ***arguments,
                                     char ***argument_texts, size_t *argument_count, int subroutine);
+Unit *f2c_validation_generic_specific(Context *context, Unit *caller, size_t line,
+                                      const char *generic_name, const F2cSourceSpan *span,
+                                      F2cExpr *const *arguments, size_t argument_count,
+                                      int subroutine, int required, int *handled);
 void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                                      const char *statement_text, F2cExpr *expression);
 void f2c_validation_io_item_calls(Context *context, Unit *unit, size_t line,
