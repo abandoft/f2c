@@ -155,12 +155,30 @@ static void test_trailing_header_token_span(void) {
     f2c_result_free(&result);
 }
 
+static void test_continued_procedure_attribute_span(void) {
+    static const char source[] = "subroutine duplicate_attribute()\n"
+                                 "  procedure(operation), pointer, &\n"
+                                 "   & pointer :: callback\n"
+                                 "end subroutine duplicate_attribute\n";
+    DiagnosticCapture capture = {.needle = "duplicate pointer attribute"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "duplicate continued PROCEDURE attribute suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "duplicate PROCEDURE attribute emits one typed semantic diagnostic");
+    expect(capture.begin.line == 3U && capture.begin.column == 6U && capture.end.line == 3U &&
+               capture.end.column == 13U,
+           "continued PROCEDURE diagnostics retain the repeated attribute's physical span");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_keyword_association_span();
     test_call_designator_span();
     test_continued_dummy_span();
     test_result_name_span();
     test_trailing_header_token_span();
+    test_continued_procedure_attribute_span();
     if (failures != 0) {
         fprintf(stderr, "%d diagnostic span test(s) failed\n", failures);
         return 1;

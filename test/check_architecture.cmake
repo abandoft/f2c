@@ -62,8 +62,15 @@ if(ROOT_CMAKE MATCHES "modern_f2c" OR ROOT_CMAKE MATCHES "src/cli/main\\.c[ \t\r
 endif()
 
 file(READ "${SOURCE_DIR}/src/semantic/model.h" SEMANTIC_MODEL)
+file(READ "${SOURCE_DIR}/src/frontend/procedure.c" PROCEDURE_LOWERING)
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
+endif()
+if(
+    NOT PROCEDURE_LOWERING MATCHES "f2c_parse_procedure_declaration_syntax[ \t\r\n]*\\("
+    OR PROCEDURE_LOWERING MATCHES "f2c_(line_find_token|token_matching_delimiter)[ \t\r\n]*\\("
+)
+    message(FATAL_ERROR "PROCEDURE declarations must lower from their canonical syntax AST")
 endif()
 
 file(READ "${SOURCE_DIR}/include/f2c/f2c.h" PUBLIC_API)
