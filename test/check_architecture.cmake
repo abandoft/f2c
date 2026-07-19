@@ -79,6 +79,7 @@ file(READ "${SOURCE_DIR}/src/frontend/modules.c" USE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/module/dependency.c" MODULE_DEPENDENCIES)
 file(READ "${SOURCE_DIR}/src/frontend/pipeline.c" FRONTEND_PIPELINE)
 file(READ "${SOURCE_DIR}/src/frontend/module/access.c" ACCESS_LOWERING)
+file(READ "${SOURCE_DIR}/src/frontend/interface.c" INTERFACE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/declaration/syntax.c" DECLARATION_CLASSIFICATION)
 file(READ "${SOURCE_DIR}/src/codegen/module.c" MODULE_CODEGEN)
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
@@ -96,6 +97,22 @@ if(
 )
     message(FATAL_ERROR
             "PUBLIC/PRIVATE statements must classify and lower through their canonical syntax AST")
+endif()
+if(
+    NOT INTERFACE_LOWERING MATCHES
+        "f2c_parse_module_procedure_statement_syntax[ \t\r\n]*\\("
+    OR INTERFACE_LOWERING MATCHES "f2c_module_procedure_tokens[ \t\r\n]*\\("
+)
+    message(FATAL_ERROR
+            "MODULE PROCEDURE bindings must lower exclusively from their canonical syntax AST")
+endif()
+if(
+    NOT SEMANTIC_MODEL MATCHES "Unit[ \t]*\\*\\*[ \t]*generic_candidates"
+    OR NOT INTERFACE_LOWERING MATCHES "rebuild_generic_candidates[ \t\r\n]*\\("
+    OR NOT USE_LOWERING MATCHES "generic_candidates"
+)
+    message(FATAL_ERROR
+            "named generic interfaces must retain and import their complete candidate sets")
 endif()
 if(
     NOT SEMANTIC_MODEL MATCHES "int[ \t]+use_associated"
