@@ -56,6 +56,7 @@ foreach(
     io_fixture
     IN ITEMS
        assigned_format
+       legacy_control
        print_formats
        formatted_internal
        formatted_record_input
@@ -113,7 +114,7 @@ foreach(
     set(io_generated "${BINARY_DIR}/generated_${io_fixture}.c")
     set(io_executable "${BINARY_DIR}/generated_${io_fixture}_test")
     set(io_source "${SOURCE_DIR}/test/fixtures/${io_fixture}.f90")
-    if(io_fixture STREQUAL "assigned_format")
+    if(io_fixture STREQUAL "assigned_format" OR io_fixture STREQUAL "legacy_control")
         set(io_source "${SOURCE_DIR}/test/fixtures/${io_fixture}.f")
     endif()
     execute_process(

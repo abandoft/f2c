@@ -1,0 +1,24 @@
+      PROGRAM LEGACY_CONTROL
+      INTEGER I,J,TOTAL,COUNT
+      TOTAL=0
+      DO 100 I=1,2
+      DO 100 J=1,3
+      TOTAL=TOTAL+I*10+J
+  100 CONTINUE
+      DO 200 I=1,3
+      TOTAL=TOTAL+I
+  200 TOTAL=TOTAL+10
+      COUNT=0
+      DO
+      COUNT=COUNT+1
+      IF (COUNT.EQ.3) EXIT
+      END DO
+      I=0
+      DO 300 WHILE (I.LT.3)
+      I=I+1
+  300 CONTINUE
+  400 DO 500 I=1,2
+      TOTAL=TOTAL+I
+  500 CONTINUE
+      WRITE(*,'(4(I0,1X))') TOTAL,COUNT,I,J
+      END
