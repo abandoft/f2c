@@ -1,3 +1,11 @@
+## 1.18.0
+
+- Added complete typed-IR, argument-association, and result-typing paths for `BIT_SIZE`, `BTEST`, `IAND`, `IBCLR`, `IBITS`, `IBSET`, `IEOR`, `IOR`, `ISHFT`, `ISHFTC`, `NOT`, and `MVBITS`.
+- Completed `INTEGER(KIND=1/2/4/8)`, keyword-argument, elemental-array, static-shape, and position, length, and shift-range validation so invalid calls are rejected before C generation.
+- Added finite-width bit-operation constant folding across sign-bit, full-width, zero-length, circular-shift, and boundary-shift cases while preserving the target integer kind.
+- Emitted portable C17 through fixed-width unsigned operations and `memcpy` bit copies, avoiding signed shifts, width-sized shifts, and strict-aliasing undefined behavior while generating support code only when used.
+- Implemented write-before-snapshot semantics for scalar aliases, scalar broadcasting, and overlapping array sections in `MVBITS`, with strict C17, UBSan, native-Fortran differential, and CI regressions.
+
 ## 1.17.0
 
 - Added structured syntax ASTs for `INTERFACE`, `END INTERFACE`, and `[MODULE] PROCEDURE` specific-procedure lists with exact source ranges.

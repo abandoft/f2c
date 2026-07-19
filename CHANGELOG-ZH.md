@@ -1,3 +1,11 @@
+## 1.18.0
+
+- 为 `BIT_SIZE`、`BTEST`、`IAND`、`IBCLR`、`IBITS`、`IBSET`、`IEOR`、`IOR`、`ISHFT`、`ISHFTC`、`NOT` 和 `MVBITS` 建立完整的 typed IR、参数关联和结果类型流程。
+- 完善 `INTEGER(KIND=1/2/4/8)`、关键字参数、elemental 数组、静态 shape 及位置、长度和移位范围诊断，并在生成 C 前拒绝无效调用。
+- 增加位操作常量折叠，覆盖符号位、完整位宽、零长度、循环移位和边界移位，同时保持目标整数 kind 的有限位宽语义。
+- 使用无符号固定位宽运算与 `memcpy` 位复制生成可移植 C17，避免有符号移位、移位量等于位宽和严格别名未定义行为，且只在实际使用时生成对应支持代码。
+- 为 `MVBITS` 实现标量别名、标量广播和重叠数组段的写入前快照语义，并增加严格 C17、UBSan、原生 Fortran 逐项差分及 CI 回归。
+
 ## 1.17.0
 
 - 为 `INTERFACE`、`END INTERFACE` 和 `[MODULE] PROCEDURE` 具体过程列表建立结构化语法 AST，并保留精确源码范围。
