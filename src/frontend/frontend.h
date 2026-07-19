@@ -4,7 +4,6 @@
 #include "internal/context.h"
 
 int f2c_normalize_source(Context *context, const char *source, size_t length, F2cSourceForm form);
-int f2c_rewrite_labeled_do(Context *context);
 
 char *f2c_identifier(const char *begin, size_t *consumed);
 char **f2c_split_arguments(const char *open, size_t *count);

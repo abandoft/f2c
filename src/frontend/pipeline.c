@@ -6,8 +6,8 @@
 int f2c_build_syntax_program(Context *context) {
     if (context == NULL || context->phase != F2C_COMPILATION_SOURCE)
         return 0;
-    if (!f2c_rewrite_labeled_do(context) || !f2c_tokenize_lines(context) ||
-        !f2c_discover_modules(context) || !f2c_discover_units(context)) {
+    if (!f2c_tokenize_lines(context) || !f2c_discover_modules(context) ||
+        !f2c_discover_units(context)) {
         if (context->result.error_count == 0U)
             f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
                                 "out of memory while building syntax program");
