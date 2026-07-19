@@ -1,3 +1,12 @@
+## 1.9.0
+
+- Added a unified, seekable generated-code I/O stream abstraction that retains libc for external files and uses memory records for internal files.
+- Removed internal-file `tmpfile()` simulation and copy-back, with character scalar and array records, multiple records, PAD, positioning, and overflow status handling.
+- Migrated explicit formatting, list-directed I/O, NAMELIST, and defined I/O to the same stream interface while retaining bulk external-file transfers.
+- Added internal-file format constraints that reject standard-prohibited nonadvancing controls and unformatted transfers.
+- Split list-directed and memory-stream generation support out of the core transpiler into dedicated modules.
+- Added native Fortran semantic differentials, strict C17, sanitizer, and filesystem-free WebAssembly execution coverage.
+
 ## 1.8.0
 
 - Migrated constant, labeled, and assigned FORMATs to the unified token, AST, typed IR, and static C17 instruction pipeline.

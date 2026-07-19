@@ -253,8 +253,11 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   标记、极大/极小双精度和 `G` 有效数字/尾随空白已经匹配 gfortran。仍需完成所有 `EN/ES`、显式
   指数位、六种 ROUND 模式、舍入进位边界、特殊值、超宽输入字段及全部描述符交叉组合。
   标准规定的最右嵌套组 FORMAT 回转点及其与非前进 I/O、冒号和无限组的全部组合也尚需逐项差分。
-- [ ] 用内存记录引擎实现内部文件，不再通过 `tmpfile()` 模拟；覆盖字符标量/数组、多记录、
-  非前进状态、PAD 和文件位置，确保 Web/mobile 无文件系统环境可运行。
+- [x] 用统一、可定位的内存记录引擎实现内部文件，不再通过 `tmpfile()` 模拟或结束时回读复制。
+  字符标量和一维记录数组直接绑定原存储，覆盖多记录、默认 PAD、`T/TL/TR/X` 定位、已写记录
+  空格填充、未触及记录保持和记录溢出 `IOSTAT`；显式格式、列表导向、NAMELIST 与定义 I/O 共用
+  同一流及内部负单元游标。标准禁止的内部文件 `ADVANCE/EOR/SIZE` 和无格式传输会在生成前拒绝。
+  严格 C17、ASan/UBSan、gfortran 差分以及 Emscripten `-sFILESYSTEM=0` Node 执行均已进入回归。
 - [ ] 完成 F90 NAMELIST 的大小写、重复值、子串/数组段、派生对象扩展和错误恢复；动态分配必须
   先验证完整输入再原子提交，失败不得破坏原对象。
 - [ ] 统一文件单元生命周期、预连接单元、并发访问和错误映射，明确线程安全策略。文件单元表及
@@ -379,8 +382,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 
 ### P1-PORT-01 跨平台实际运行
 
-- [ ] WebAssembly 不只编译，还要在 Node/browser runner 中执行公共 API、转译、编译后生成代码
-  和无需文件系统的 I/O 测试。
+- [ ] WebAssembly 不只编译，还要在 Node/browser runner 中执行公共 API、转译和编译后生成代码。
+  无需文件系统的内部 I/O 已由 Emscripten `-sFILESYSTEM=0` 在 Node 中实际执行；公共 API、浏览器
+  runner 及 WebAssembly 版 CLI 的端到端转译仍未完成。
 - [ ] 增加 Android NDK 与 iOS/tvOS 模拟器或交叉编译门禁，验证静态库、CLI 可裁剪性和生成代码。
 - [ ] 增加 Linux AArch64、musl、32 位目标和至少一种不同字节序的交叉编译/执行验证；审计
   `long`、`size_t`、对齐、字符符号性和二进制 I/O 假设。
@@ -404,7 +408,7 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 完成可分配哑实参/函数结果、可分配派生组件、动态多态分配、`SOURCE/MOLD`、`MOVE_ALLOC`
   和深复制/移动的异常安全语义。
 - [ ] 完成定义 I/O、完整派生类型 NAMELIST、`FLUSH`、异步 I/O、`WAIT`、stream access、
-  `NEWUNIT` 和非前进内部文件语义。
+  `NEWUNIT` 和外部文件非前进 I/O 的全部边界语义。
 - [ ] 完成 `ASSOCIATE`、`BLOCK`、`DO CONCURRENT`、`FORALL`、子模块、C interoperability、IEEE
   模块和后续 transformational/inquiry intrinsic。
 - [ ] 在确定产品标准范围后再规划 coarray、team、event、lock、atomic 等并行语言特性；不能将
