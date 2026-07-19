@@ -249,6 +249,44 @@ static void test_internal_procedure_end_scope(void) {
     f2c_result_free(&result);
 }
 
+static void test_continued_use_duplicate_span(void) {
+    static const char source[] = "subroutine duplicate_use()\n"
+                                 "  use provider, only: first, &\n"
+                                 "   & second, second\n"
+                                 "end subroutine duplicate_use\n";
+    DiagnosticCapture capture = {.needle = "duplicate local name in USE association list"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "duplicate continued USE association suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SYNTAX,
+           "duplicate USE local name emits one typed syntax diagnostic");
+    expect(capture.begin.line == 3U && capture.begin.column == 14U && capture.end.line == 3U &&
+               capture.end.column == 20U,
+           "continued USE diagnostics retain the duplicate designator's physical span");
+    expect(strcmp(capture.source_name, "diagnostic.f90") == 0,
+           "continued USE diagnostics retain the canonical source name");
+    f2c_result_free(&result);
+}
+
+static void test_module_cycle_use_span(void) {
+    static const char source[] = "module cycle_a\n"
+                                 "  use cycle_b\n"
+                                 "end module cycle_a\n"
+                                 "module cycle_b\n"
+                                 "  use cycle_a\n"
+                                 "end module cycle_b\n";
+    DiagnosticCapture capture = {.needle = "cyclic project module dependency"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "cyclic module dependency suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "module cycle emits one typed semantic diagnostic");
+    expect(capture.begin.line == 2U && capture.begin.column == 7U && capture.end.line == 2U &&
+               capture.end.column == 14U,
+           "module cycle diagnostic uses the exact USE module-name span");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_keyword_association_span();
     test_call_designator_span();
@@ -261,6 +299,8 @@ int main(void) {
     test_module_end_name_span();
     test_module_header_span();
     test_internal_procedure_end_scope();
+    test_continued_use_duplicate_span();
+    test_module_cycle_use_span();
     if (failures != 0) {
         fprintf(stderr, "%d diagnostic span test(s) failed\n", failures);
         return 1;
