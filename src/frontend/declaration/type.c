@@ -104,8 +104,8 @@ static int named_kind_value(Unit *unit, const F2cToken *token, int *value) {
                    f2c_evaluate_integer_constant(unit, symbol->initializer_expression, &constant) &&
                    constant > 0 && constant <= INT_MAX) {
             *value = (int)constant;
-        } else if (symbol->initializer != NULL &&
-                   f2c_evaluate_integer_text(unit, symbol->initializer, &constant) &&
+        } else if (symbol->initializer_syntax.count != 0U &&
+                   f2c_evaluate_integer_syntax(unit, symbol->initializer_syntax, &constant) &&
                    constant > 0 && constant <= INT_MAX) {
             *value = (int)constant;
         } else {

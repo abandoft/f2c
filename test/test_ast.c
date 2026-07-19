@@ -74,6 +74,8 @@ static void test_kind_shape_and_value_category(void) {
     symbols[0].dimensions[0].kind = F2C_DIMENSION_EXPLICIT;
     symbols[0].dimensions[0].lower = "2";
     symbols[0].dimensions[0].upper = "5";
+    symbols[0].dimensions[0].lower_expression = f2c_expr_new_integer_constant(2);
+    symbols[0].dimensions[0].upper_expression = f2c_expr_new_integer_constant(5);
     symbols[0].dimensions[1].kind = F2C_DIMENSION_ASSUMED_SHAPE;
     symbols[0].dimensions[1].lower = "1";
     symbols[0].dimensions[1].upper = "*";
@@ -187,6 +189,8 @@ static void test_kind_shape_and_value_category(void) {
                strcmp(function.result_derived_type_name, "cell") == 0,
            "derived function headers retain the concrete result type name");
     f2c_free_unit(&function);
+    f2c_expr_free(symbols[0].dimensions[0].lower_expression);
+    f2c_expr_free(symbols[0].dimensions[0].upper_expression);
 }
 
 static void test_typed_numeric_tree(void) {

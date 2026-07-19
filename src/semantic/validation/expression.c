@@ -268,11 +268,17 @@ static void validate_substring_semantics(Context *context, Unit *unit, size_t li
                           f2c_validation_expression_start_column(statement_text, upper), 1,
                           "CHARACTER substring upper bound must be a scalar INTEGER");
     }
-    length_known =
-        expression->symbol->character_length_expression != NULL
-            ? f2c_evaluate_integer_constant(unit, expression->symbol->character_length_expression,
-                                            &length_value)
-            : f2c_evaluate_integer_text(unit, expression->symbol->character_length, &length_value);
+    length_known = expression->symbol->character_length_expression != NULL
+                       ? f2c_evaluate_integer_constant(
+                             unit, expression->symbol->character_length_expression, &length_value)
+                       : expression->symbol->character_length_syntax.count != 0U
+                             ? f2c_evaluate_integer_syntax(
+                                   unit, expression->symbol->character_length_syntax,
+                                   &length_value)
+                             : expression->symbol->character_length == NULL ||
+                                       strcmp(expression->symbol->character_length, "1") == 0
+                                   ? (length_value = 1, 1)
+                                   : 0;
     if (lower != NULL)
         lower_known = f2c_evaluate_integer_constant(unit, lower, &lower_value);
     if (upper != NULL) {

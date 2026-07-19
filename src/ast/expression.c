@@ -61,6 +61,14 @@ F2cExpr *f2c_expr_new_absent(Type type, size_t rank) {
     return expression;
 }
 
+F2cExpr *f2c_expr_new_integer_constant(int64_t value) {
+    char literal[32];
+    const int length = snprintf(literal, sizeof(literal), "%" PRId64, value);
+    if (length <= 0 || (size_t)length >= sizeof(literal))
+        return NULL;
+    return f2c_expr_new(F2C_EXPR_INTEGER_LITERAL, TYPE_INTEGER, literal, (size_t)length);
+}
+
 static const F2cIntegerSubstitution *find_substitution(
     const F2cExpr *expression, const F2cIntegerSubstitution *substitutions,
     size_t substitution_count) {

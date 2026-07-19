@@ -42,11 +42,15 @@ static int character_element_count(Unit *unit, const Symbol *symbol, size_t *cou
         if (!(symbol->dimensions[dimension].lower_expression != NULL
                   ? f2c_evaluate_integer_constant(
                         unit, symbol->dimensions[dimension].lower_expression, &lower)
-                  : f2c_evaluate_integer_text(unit, symbol->dimensions[dimension].lower, &lower)) ||
+                  : symbol->dimension_lower_syntax[dimension].count != 0U
+                        ? f2c_evaluate_integer_syntax(
+                              unit, symbol->dimension_lower_syntax[dimension], &lower)
+                        : (lower = 1, 1)) ||
             !(symbol->dimensions[dimension].upper_expression != NULL
                   ? f2c_evaluate_integer_constant(
                         unit, symbol->dimensions[dimension].upper_expression, &upper)
-                  : f2c_evaluate_integer_text(unit, symbol->dimensions[dimension].upper, &upper)))
+                  : f2c_evaluate_integer_syntax(
+                        unit, symbol->dimension_upper_syntax[dimension], &upper)))
             return 0;
         if (upper >= lower) {
             const uint64_t difference = (uint64_t)upper - (uint64_t)lower;
@@ -150,9 +154,13 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
         !(symbol->character_length_expression != NULL
               ? f2c_evaluate_integer_constant(unit, symbol->character_length_expression,
                                               &evaluated_length)
-              : f2c_evaluate_integer_text(
-                    unit, symbol->character_length != NULL ? symbol->character_length : "1",
-                    &evaluated_length)) ||
+              : symbol->character_length_syntax.count != 0U
+                    ? f2c_evaluate_integer_syntax(unit, symbol->character_length_syntax,
+                                                  &evaluated_length)
+                    : symbol->character_length == NULL ||
+                              strcmp(symbol->character_length, "1") == 0
+                          ? (evaluated_length = 1, 1)
+                          : 0) ||
         !character_element_count(unit, symbol, &element_count))
         return NULL;
     if (evaluated_length > 0 && (uint64_t)evaluated_length > SIZE_MAX)

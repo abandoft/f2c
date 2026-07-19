@@ -250,8 +250,11 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
             !symbol->parameter && !symbol->allocatable && !is_function_result && !symbol->pointer &&
             symbol->character_length != NULL && strcmp(symbol->character_length, "*") != 0) {
             int64_t constant_length;
-            symbol->automatic_character =
-                !f2c_evaluate_integer_text(unit, symbol->character_length, &constant_length);
+            symbol->automatic_character = symbol->character_length_syntax.count != 0U
+                                              ? !f2c_evaluate_integer_syntax(
+                                                    unit, symbol->character_length_syntax,
+                                                    &constant_length)
+                                              : strcmp(symbol->character_length, "1") != 0;
         }
         if (unit->symbols[i].type == TYPE_UNKNOWN) {
             Type implicit_type;

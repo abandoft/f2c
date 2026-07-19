@@ -148,14 +148,17 @@ void f2c_shape_from_symbol(Unit *unit, F2cShape *shape, const Symbol *symbol) {
         target->lower_known =
             source->lower_expression != NULL
                 ? f2c_evaluate_integer_constant(unit, source->lower_expression, &lower)
-                : (source->lower != NULL && f2c_evaluate_integer_text(unit, source->lower, &lower));
+                : symbol->dimension_lower_syntax[dimension].count != 0U
+                      ? f2c_evaluate_integer_syntax(
+                            unit, symbol->dimension_lower_syntax[dimension], &lower)
+                      : (lower = 1, 1);
         if (target->lower_known)
             target->lower = lower;
         if (source->kind == F2C_DIMENSION_EXPLICIT &&
             (source->upper_expression != NULL
                  ? f2c_evaluate_integer_constant(unit, source->upper_expression, &upper)
-                 : (source->upper != NULL &&
-                    f2c_evaluate_integer_text(unit, source->upper, &upper))) &&
+                 : f2c_evaluate_integer_syntax(
+                       unit, symbol->dimension_upper_syntax[dimension], &upper)) &&
             target->lower_known) {
             target->extent_known = 1;
             target->extent = upper >= lower ? (uint64_t)upper - (uint64_t)lower + UINT64_C(1) : 0U;

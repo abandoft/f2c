@@ -185,11 +185,20 @@ static int symbol_constant_extent(Unit *unit, const Symbol *symbol, uint64_t *ex
         int64_t lower;
         int64_t upper;
         uint64_t dimension_extent;
-        if (symbol->dimensions[dimension].lower == NULL ||
-            symbol->dimensions[dimension].upper == NULL ||
+        if (symbol->dimensions[dimension].upper == NULL ||
             strcmp(symbol->dimensions[dimension].upper, "*") == 0 ||
-            !f2c_evaluate_integer_text(unit, symbol->dimensions[dimension].lower, &lower) ||
-            !f2c_evaluate_integer_text(unit, symbol->dimensions[dimension].upper, &upper))
+            !(symbol->dimensions[dimension].lower_expression != NULL
+                  ? f2c_evaluate_integer_constant(
+                        unit, symbol->dimensions[dimension].lower_expression, &lower)
+                  : symbol->dimension_lower_syntax[dimension].count != 0U
+                        ? f2c_evaluate_integer_syntax(
+                              unit, symbol->dimension_lower_syntax[dimension], &lower)
+                        : (lower = 1, 1)) ||
+            !(symbol->dimensions[dimension].upper_expression != NULL
+                  ? f2c_evaluate_integer_constant(
+                        unit, symbol->dimensions[dimension].upper_expression, &upper)
+                  : f2c_evaluate_integer_syntax(
+                        unit, symbol->dimension_upper_syntax[dimension], &upper)))
             return 0;
         if (upper >= lower) {
             dimension_extent = unsigned_distance(lower, upper);

@@ -123,10 +123,17 @@ static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression
     }
     if (expression->kind == F2C_EXPR_NAME && expression->symbol != NULL &&
         expression->symbol->parameter && expression->symbol->initializer != NULL) {
-        F2cExpr *initializer =
-            f2c_parse_expression_ast(unit, expression->symbol->initializer, NULL);
+        F2cExpr *temporary = NULL;
+        const F2cExpr *initializer = expression->symbol->initializer_expression;
+        if (initializer == NULL && expression->symbol->initializer_syntax.count != 0U) {
+            temporary = f2c_parse_expression_tokens(
+                unit, expression->symbol->initializer_syntax.tokens,
+                expression->symbol->initializer_syntax.count,
+                expression->symbol->initializer_syntax.source, NULL);
+            initializer = temporary;
+        }
         const int result = evaluate(evaluation, initializer, value, depth + 1U);
-        f2c_expr_free(initializer);
+        f2c_expr_free(temporary);
         return result;
     }
     if (expression->kind == F2C_EXPR_UNARY && expression->child_count == 1U &&
@@ -153,8 +160,26 @@ static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression
                     return 1;
                 }
             }
-            if (argument->symbol != NULL && argument->symbol->character_length != NULL)
-                return f2c_evaluate_integer_text(unit, argument->symbol->character_length, value);
+            if (argument->symbol != NULL) {
+                F2cExpr *temporary = NULL;
+                const F2cExpr *length = argument->symbol->character_length_expression;
+                int result;
+                if (length == NULL && argument->symbol->character_length_syntax.count != 0U) {
+                    temporary = f2c_parse_expression_tokens(
+                        unit, argument->symbol->character_length_syntax.tokens,
+                        argument->symbol->character_length_syntax.count,
+                        argument->symbol->character_length_syntax.source, NULL);
+                    length = temporary;
+                }
+                if (length == NULL && argument->symbol->character_length != NULL &&
+                    strcmp(argument->symbol->character_length, "1") == 0) {
+                    *value = 1;
+                    return 1;
+                }
+                result = evaluate(evaluation, length, value, depth + 1U);
+                f2c_expr_free(temporary);
+                return result;
+            }
             return 0;
         }
         if ((strcmp(expression->text, "max") == 0 || strcmp(expression->text, "min") == 0) &&
@@ -208,13 +233,14 @@ int f2c_evaluate_integer_constant(Unit *unit, const F2cExpr *expression, int64_t
     return evaluate(&evaluation, expression, value, 0U);
 }
 
-int f2c_evaluate_integer_text(Unit *unit, const char *text, int64_t *value) {
+int f2c_evaluate_integer_syntax(Unit *unit, F2cTokenRange syntax, int64_t *value) {
     const char *error_at = NULL;
     F2cExpr *expression;
     int result;
-    if (text == NULL)
+    if (syntax.count == 0U || syntax.tokens == NULL)
         return 0;
-    expression = f2c_parse_expression_ast(unit, text, &error_at);
+    expression = f2c_parse_expression_tokens(unit, syntax.tokens, syntax.count, syntax.source,
+                                             &error_at);
     result = expression != NULL && error_at == NULL &&
              f2c_evaluate_integer_constant(unit, expression, value);
     f2c_expr_free(expression);

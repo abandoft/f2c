@@ -335,16 +335,19 @@ void f2c_ast_set_array_reference_shape(AstParser *parser, F2cExpr *expression, S
                     : (declared->lower_expression != NULL
                            ? f2c_evaluate_integer_constant(parser->unit, declared->lower_expression,
                                                            &lower)
-                           : (declared->lower != NULL &&
-                              f2c_evaluate_integer_text(parser->unit, declared->lower, &lower)));
+                           : symbol->dimension_lower_syntax[argument].count != 0U
+                                 ? f2c_evaluate_integer_syntax(
+                                       parser->unit,
+                                       symbol->dimension_lower_syntax[argument], &lower)
+                                 : (lower = 1, 1));
             const int upper_known =
                 upper_expression->kind != F2C_EXPR_INVALID
                     ? f2c_evaluate_integer_constant(parser->unit, upper_expression, &upper)
                     : (declared->upper_expression != NULL
                            ? f2c_evaluate_integer_constant(parser->unit, declared->upper_expression,
                                                            &upper)
-                           : (declared->upper != NULL &&
-                              f2c_evaluate_integer_text(parser->unit, declared->upper, &upper)));
+                           : f2c_evaluate_integer_syntax(
+                                 parser->unit, symbol->dimension_upper_syntax[argument], &upper));
             const int stride_known =
                 stride_expression->kind == F2C_EXPR_INVALID ||
                 f2c_evaluate_integer_constant(parser->unit, stride_expression, &stride);

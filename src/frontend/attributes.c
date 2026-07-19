@@ -231,12 +231,21 @@ typedef struct EquivalenceMemberRange {
     size_t end;
 } EquivalenceMemberRange;
 
-static int evaluate_dimension_bound(Unit *unit, const Dimension *dimension, int upper,
-                                    int64_t *value) {
+static int evaluate_dimension_bound(Unit *unit, const Symbol *symbol, size_t dimension_index,
+                                    int upper, int64_t *value) {
+    const Dimension *dimension = &symbol->dimensions[dimension_index];
     const F2cExpr *expression = upper ? dimension->upper_expression : dimension->lower_expression;
-    const char *text = upper ? dimension->upper : dimension->lower;
-    return expression != NULL ? f2c_evaluate_integer_constant(unit, expression, value)
-                              : f2c_evaluate_integer_text(unit, text, value);
+    const F2cTokenRange syntax = upper ? symbol->dimension_upper_syntax[dimension_index]
+                                       : symbol->dimension_lower_syntax[dimension_index];
+    if (expression != NULL)
+        return f2c_evaluate_integer_constant(unit, expression, value);
+    if (syntax.count != 0U)
+        return f2c_evaluate_integer_syntax(unit, syntax, value);
+    if (!upper) {
+        *value = 1;
+        return 1;
+    }
+    return 0;
 }
 
 static int nonnegative_difference(int64_t upper, int64_t lower, int64_t *difference) {
@@ -355,8 +364,8 @@ static int equivalence_designator(Context *context, Unit *unit, const Line *line
                                                      cursor - item_begin, line->text, &error_at);
             if (expression == NULL || error_at != NULL ||
                 !f2c_evaluate_integer_constant(unit, expression, &index_value) ||
-                !evaluate_dimension_bound(unit, &symbol->dimensions[dimension], 0, &lower) ||
-                !evaluate_dimension_bound(unit, &symbol->dimensions[dimension], 1, &upper) ||
+                !evaluate_dimension_bound(unit, symbol, dimension, 0, &lower) ||
+                !evaluate_dimension_bound(unit, symbol, dimension, 1, &upper) ||
                 upper < lower || index_value < lower || index_value > upper) {
                 f2c_expr_free(expression);
                 f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, diagnostic_token,
