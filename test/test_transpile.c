@@ -2053,11 +2053,10 @@ static void test_list_directed_io(void) {
     F2cOptions options = {"io.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "list-directed READ/WRITE/PRINT translate");
-    expect_contains(result.code, "F2C_READ(f2c_unit_stream(5, true), &n)",
-                    "READ maps to typed stream input");
-    expect_contains(result.code, "f2c_finish_read(f2c_unit_stream(5, true))",
+    expect_contains(result.code, "F2C_READ(f2c_io_file, &n)", "READ maps to typed stream input");
+    expect_contains(result.code, "f2c_finish_read(f2c_io_file)",
                     "list-directed READ consumes the complete Fortran record");
-    expect_contains(result.code, "f2c_write_character(f2c_unit_stream(6, false), \"values\"",
+    expect_contains(result.code, "f2c_write_character(f2c_io_file, \"values\"",
                     "WRITE preserves length-aware character output items");
     expect_contains(result.code, "for (i = 1;", "I/O implied-DO maps to a C loop");
     f2c_result_free(&result);
@@ -2119,9 +2118,9 @@ static void test_formatted_record_end_branch(void) {
     expect_contains(result.code, "f2c_read_record", "A edit descriptor reads a complete record");
     expect_contains(result.code, "f2c_io_status == EOF) goto f2c_label_90",
                     "READ END target is preserved");
-    expect_contains(result.code, "f2c_io_status == 0) goto f2c_label_80",
+    expect_contains(result.code, "f2c_io_is_error(f2c_io_status)) goto f2c_label_80",
                     "READ ERR target is preserved");
-    expect_contains(result.code, "status = f2c_io_status == EOF ? -1",
+    expect_contains(result.code, "status = f2c_io_status_value(f2c_io_status)",
                     "READ IOSTAT receives a Fortran-compatible status class");
     expect_contains(result.code, "f2c_label_90", "READ-only target label is emitted");
     f2c_result_free(&result);
