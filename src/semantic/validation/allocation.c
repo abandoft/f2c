@@ -80,12 +80,13 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
         f2c_diagnostic_at(context, statement->line, 1U, 1,
                           "ALLOCATE type specification cannot be combined with SOURCE=/MOLD=");
     }
-    if (allocating && statement->tail != NULL) {
-        if (!f2c_starts_word(statement->tail, "character") ||
+    if (allocating && statement->allocation_has_type_spec) {
+        if (statement->allocation_type != TYPE_CHARACTER ||
             statement->allocation_character_length == NULL) {
-            f2c_diagnostic_at(context, statement->line, 1U, 1,
-                              "unsupported or malformed ALLOCATE type specification '%s'",
-                              statement->tail);
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED,
+                                     &statement->allocation_type_span, 1,
+                                     "unsupported or malformed ALLOCATE type specification '%s'",
+                                     statement->tail != NULL ? statement->tail : "");
         } else {
             f2c_validation_report_parse_error(context, statement->line, statement->text,
                                               statement->allocation_character_length,

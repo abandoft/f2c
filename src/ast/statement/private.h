@@ -12,14 +12,16 @@ int f2c_statement_parse_control(Unit *unit, const Line *line, size_t body_start,
                                 F2cStatement *statement);
 int f2c_statement_parse_nested_tokens(Unit *unit, const Line *line, size_t begin,
                                       F2cStatement **statement);
-char **f2c_statement_split_arguments(const char *text, size_t *count);
+int f2c_statement_parse_action(Unit *unit, const Line *line, size_t body_start,
+                               F2cStatement *statement);
+int f2c_statement_parse_assignment(Unit *unit, const Line *line, size_t body_start,
+                                   F2cStatement *statement);
 void f2c_statement_free_io_item(F2cIoItem *item);
 int f2c_statement_parse_io_item_tokens(Unit *unit, F2cTokenRange range, F2cIoItem *item);
 int f2c_statement_parse_io(Unit *unit, const Line *line, size_t body_start,
                            F2cStatement *statement);
 int f2c_statement_parse_print(Unit *unit, const Line *line, size_t body_start,
                               F2cStatement *statement);
-char *f2c_statement_matching_parenthesis(char *open);
 F2cExpr *f2c_statement_parse_parenthesized_tokens(Unit *unit, const Line *line, size_t begin,
                                                   char **tail);
 int f2c_statement_parse_case(Unit *unit, const Line *line, F2cStatement *statement);

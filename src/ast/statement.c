@@ -1,6 +1,5 @@
 #include "ast/statement/private.h"
 
-#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -133,273 +132,14 @@ static F2cStatementKind classify_tokens(const Line *line, size_t begin) {
     return F2C_STMT_INVALID;
 }
 
-char **f2c_statement_split_arguments(const char *text, size_t *count) {
-    const char *cursor = text;
-    const char *start = text;
-    char **items = NULL;
-    size_t item_count = 0U;
-    size_t capacity = 0U;
-    int depth = 0;
-    int quote = 0;
-    *count = 0U;
-    for (;; ++cursor) {
-        const int at_end = *cursor == '\0';
-        if (!at_end && (*cursor == '\'' || *cursor == '"') &&
-            (quote == 0 || quote == (unsigned char)*cursor)) {
-            quote = quote == 0 ? (unsigned char)*cursor : 0;
-        } else if (!at_end && quote == 0 && *cursor == '(') {
-            ++depth;
-        } else if (!at_end && quote == 0 && *cursor == ')') {
-            --depth;
-        }
-        if (at_end || (*cursor == ',' && quote == 0 && depth == 0)) {
-            char *item = f2c_strdup_n(start, (size_t)(cursor - start));
-            char *clean;
-            char **replacement;
-            if (item == NULL)
-                goto failed;
-            clean = f2c_trim(item);
-            if (clean != item)
-                memmove(item, clean, strlen(clean) + 1U);
-            if (*item != '\0') {
-                if (item_count == capacity) {
-                    capacity = capacity == 0U ? 4U : capacity * 2U;
-                    replacement = (char **)realloc(items, capacity * sizeof(*items));
-                    if (replacement == NULL) {
-                        free(item);
-                        goto failed;
-                    }
-                    items = replacement;
-                }
-                items[item_count++] = item;
-            } else {
-                free(item);
-            }
-            if (at_end)
-                break;
-            start = cursor + 1;
-        }
-    }
-    *count = item_count;
-    return items;
-
-failed:
-    while (item_count != 0U)
-        free(items[--item_count]);
-    free(items);
-    return NULL;
-}
-
-static void parse_expression_list(Unit *unit, const char *source, int parenthesized,
-                                  int preserve_empty, char ***items_out, F2cExpr ***arguments_out,
-                                  size_t *count_out) {
-    char **items;
-    F2cExpr **arguments;
-    size_t count = 0U;
-    size_t i;
-    if (source == NULL)
-        return;
-    items = parenthesized ? (preserve_empty ? f2c_split_actual_arguments(source, &count)
-                                            : f2c_split_arguments(source, &count))
-                          : f2c_statement_split_arguments(source, &count);
-    if (count == 0U)
-        return;
-    arguments = (F2cExpr **)calloc(count, sizeof(*arguments));
-    if (arguments == NULL) {
-        while (count != 0U)
-            free(items[--count]);
-        free(items);
-        return;
-    }
-    for (i = 0U; i < count; ++i) {
-        if (items[i][0] == '\0') {
-            arguments[i] = f2c_expr_new_absent(TYPE_UNKNOWN, 0U);
-            if (arguments[i] != NULL)
-                arguments[i]->source = f2c_strdup("");
-            continue;
-        }
-        char *equals = f2c_find_assignment(items[i]);
-        size_t consumed = 0U;
-        char *keyword = equals != NULL ? f2c_identifier(items[i], &consumed) : NULL;
-        const char *between = keyword != NULL ? items[i] + consumed : NULL;
-        while (between != NULL && between < equals && isspace((unsigned char)*between))
-            ++between;
-        if (keyword != NULL && between == equals) {
-            F2cExpr *value = f2c_parse_expression_ast(unit, equals + 1, NULL);
-            F2cExpr *argument = (F2cExpr *)calloc(1U, sizeof(*argument));
-            if (value != NULL && argument != NULL) {
-                argument->kind = F2C_EXPR_KEYWORD_ARGUMENT;
-                argument->type = value->type;
-                argument->rank = value->rank;
-                argument->definable = value->definable;
-                argument->parse_error_offset = SIZE_MAX;
-                argument->text = keyword;
-                keyword = NULL;
-                argument->source = f2c_strdup(items[i]);
-                argument->children = (F2cExpr **)calloc(1U, sizeof(*argument->children));
-                if (argument->source != NULL && argument->children != NULL) {
-                    argument->children[0] = value;
-                    argument->child_count = 1U;
-                    arguments[i] = argument;
-                    continue;
-                }
-            }
-            free(keyword);
-            f2c_expr_free(value);
-            f2c_expr_free(argument);
-        } else {
-            free(keyword);
-        }
-        arguments[i] = f2c_parse_expression_ast(unit, items[i], NULL);
-    }
-    *items_out = items;
-    *arguments_out = arguments;
-    *count_out = count;
-}
-
-static void parse_item_list(Unit *unit, F2cStatement *statement, const char *source,
-                            int parenthesized) {
-    parse_expression_list(unit, source, parenthesized, 0, &statement->items, &statement->arguments,
-                          &statement->item_count);
-}
-
-static char *find_top_level_double_colon(char *text) {
-    int depth = 0;
-    int quote = 0;
-    char *cursor;
-    for (cursor = text; *cursor != '\0'; ++cursor) {
-        if ((*cursor == '\'' || *cursor == '"') &&
-            (quote == 0 || quote == (unsigned char)*cursor)) {
-            quote = quote == 0 ? (unsigned char)*cursor : 0;
-        } else if (quote == 0 && *cursor == '(') {
-            ++depth;
-        } else if (quote == 0 && *cursor == ')') {
-            --depth;
-        } else if (quote == 0 && depth == 0 && cursor[0] == ':' && cursor[1] == ':') {
-            return cursor;
-        }
-    }
-    return NULL;
-}
-
-static F2cExpr *parse_allocate_character_length(Unit *unit, const char *type_specification) {
-    char *copy = f2c_strdup(type_specification);
-    char *clean = copy != NULL ? f2c_trim(copy) : NULL;
-    char *open;
-    char *close;
-    char *selector;
-    char *value;
-    F2cExpr *expression = NULL;
-    if (clean == NULL || !f2c_starts_word(clean, "character"))
-        goto cleanup;
-    open = strchr(clean + strlen("character"), '(');
-    close = open != NULL ? f2c_statement_matching_parenthesis(open) : NULL;
-    if (open == NULL || close == NULL || *f2c_trim(close + 1) != '\0')
-        goto cleanup;
-    selector = f2c_strdup_n(open + 1, (size_t)(close - open - 1));
-    if (selector == NULL)
-        goto cleanup;
-    value = f2c_trim(selector);
-    if (strncmp(value, "len", strlen("len")) == 0 &&
-        (value[strlen("len")] == '\0' || isspace((unsigned char)value[strlen("len")]) ||
-         value[strlen("len")] == '=')) {
-        value = f2c_trim(value + strlen("len"));
-        if (*value == '=')
-            value = f2c_trim(value + 1);
-    }
-    if (*value != '\0' && strcmp(value, ":") != 0 && strcmp(value, "*") != 0)
-        expression = f2c_parse_expression_ast(unit, value, NULL);
-    free(selector);
-cleanup:
-    free(copy);
-    return expression;
-}
-
-static void parse_allocation_statement(Unit *unit, F2cStatement *statement) {
-    char *open = strchr(statement->text, '(');
-    char *close = open != NULL ? f2c_statement_matching_parenthesis(open) : NULL;
-    char *inside;
-    char *separator;
-    char *entities;
-    if (open == NULL || close == NULL)
-        return;
-    inside = f2c_strdup_n(open + 1, (size_t)(close - open - 1));
-    if (inside == NULL)
-        return;
-    separator = find_top_level_double_colon(inside);
-    if (separator != NULL && statement->kind == F2C_STMT_ALLOCATE) {
-        *separator = '\0';
-        separator[1] = '\0';
-        statement->tail = f2c_strdup(f2c_trim(inside));
-        statement->allocation_character_length =
-            parse_allocate_character_length(unit, f2c_trim(inside));
-        entities = f2c_trim(separator + 2);
-        parse_item_list(unit, statement, entities, 0);
-    } else {
-        parse_item_list(unit, statement, open, 1);
-    }
-    free(inside);
-}
-
-static void parse_call(Unit *unit, F2cStatement *statement) {
-    char *cursor = f2c_trim(statement->text + strlen("call"));
-    char *open = strchr(cursor, '(');
-    size_t consumed = 0U;
-    if (open != NULL && memchr(cursor, '%', (size_t)(open - cursor)) != NULL) {
-        char *designator = f2c_strdup_n(cursor, (size_t)(open - cursor));
-        if (designator != NULL) {
-            statement->expression = f2c_parse_expression_ast(unit, f2c_trim(designator), NULL);
-            free(designator);
-        }
-        parse_expression_list(unit, open, 1, 1, &statement->items, &statement->arguments,
-                              &statement->item_count);
-        return;
-    }
-    statement->name = f2c_identifier(cursor, &consumed);
-    if (statement->name == NULL)
-        return;
-    cursor = f2c_trim(cursor + consumed);
-    if (*cursor == '(')
-        parse_expression_list(unit, cursor, 1, 1, &statement->items, &statement->arguments,
-                              &statement->item_count);
-    if (strcmp(statement->name, "move_alloc") == 0)
-        statement->kind = F2C_STMT_MOVE_ALLOC;
-}
-
-static char *find_pointer_assignment(char *text) {
-    F2cTokenStream lexer;
-    int parenthesis_depth = 0;
-    int bracket_depth = 0;
-    f2c_token_stream_init(&lexer, text, 1U, 1U);
-    for (;;) {
-        f2c_token_stream_next(&lexer);
-        if (lexer.token.kind == F2C_TOKEN_END)
-            return NULL;
-        if (lexer.token.kind == F2C_TOKEN_LEFT_PAREN)
-            ++parenthesis_depth;
-        else if (lexer.token.kind == F2C_TOKEN_RIGHT_PAREN && parenthesis_depth > 0)
-            --parenthesis_depth;
-        else if (lexer.token.kind == F2C_TOKEN_LEFT_BRACKET ||
-                 lexer.token.kind == F2C_TOKEN_ARRAY_BEGIN)
-            ++bracket_depth;
-        else if ((lexer.token.kind == F2C_TOKEN_RIGHT_BRACKET ||
-                  lexer.token.kind == F2C_TOKEN_ARRAY_END) &&
-                 bracket_depth > 0)
-            --bracket_depth;
-        else if (lexer.token.kind == F2C_TOKEN_OPERATOR && parenthesis_depth == 0 &&
-                 bracket_depth == 0 && f2c_token_equals(&lexer.token, "=>"))
-            return (char *)lexer.token.begin;
-    }
-}
-
 static int parse_statement(Unit *unit, const char *text, size_t line, F2cStatement *statement,
                            F2cStatementKind classified_kind, const Line *token_line,
                            size_t body_start) {
-    char *equals;
     Line syntax_line;
     memset(statement, 0, sizeof(*statement));
     statement->state = F2C_IR_SYNTAX;
     statement->control_syntax_valid = 1;
+    statement->action_syntax_valid = 1;
     statement->line = line;
     statement->text = f2c_strdup(text != NULL ? text : "");
     if (statement->text == NULL)
@@ -422,11 +162,11 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
                 : NULL);
     }
     if (statement->kind == F2C_STMT_TYPE_GUARD) {
-        if (f2c_starts_word(statement->text, "class default")) {
+        if (token_words(token_line, body_start, "class", "default")) {
             statement->name = f2c_strdup("default");
         } else {
             statement->name =
-                f2c_strdup(f2c_starts_word(statement->text, "type is") ? "type" : "class");
+                f2c_strdup(token_words(token_line, body_start, "type", "is") ? "type" : "class");
             statement->expression =
                 f2c_statement_parse_parenthesized_tokens(unit, token_line, body_start, NULL);
             if (statement->expression != NULL && statement->expression->kind == F2C_EXPR_NAME &&
@@ -452,23 +192,11 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
          statement->kind == F2C_STMT_ASSIGN_LABEL || statement->kind == F2C_STMT_GOTO) &&
         !f2c_statement_parse_control(unit, token_line, body_start, statement))
         return 0;
-    if (statement->kind == F2C_STMT_CALL)
-        parse_call(unit, statement);
-    if (statement->kind == F2C_STMT_STOP) {
-        const char *code_text;
-        statement->error_stop = f2c_starts_word(statement->text, "error stop");
-        code_text = f2c_trim(statement->text +
-                             (statement->error_stop ? strlen("error stop") : strlen("stop")));
-        if (*code_text != '\0' && *code_text != '\'' && *code_text != '"')
-            statement->expression = f2c_parse_expression_ast(unit, code_text, NULL);
-    }
-    if (statement->kind == F2C_STMT_ALLOCATE || statement->kind == F2C_STMT_DEALLOCATE)
-        parse_allocation_statement(unit, statement);
-    if (statement->kind == F2C_STMT_NULLIFY) {
-        char *open = strchr(statement->text, '(');
-        if (open != NULL)
-            parse_item_list(unit, statement, open, 1);
-    }
+    if ((statement->kind == F2C_STMT_CALL || statement->kind == F2C_STMT_STOP ||
+         statement->kind == F2C_STMT_RETURN || statement->kind == F2C_STMT_ALLOCATE ||
+         statement->kind == F2C_STMT_DEALLOCATE || statement->kind == F2C_STMT_NULLIFY) &&
+        !f2c_statement_parse_action(unit, token_line, body_start, statement))
+        return 0;
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
         statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
         statement->kind == F2C_STMT_BACKSPACE || statement->kind == F2C_STMT_ENDFILE ||
@@ -493,41 +221,9 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
     if (!f2c_statement_parse_construct_syntax(token_line, body_start, statement)) {
         return 0;
     }
-    if (body_start == 0U && statement->kind == F2C_STMT_INVALID &&
-        (equals = find_pointer_assignment(statement->text)) != NULL) {
-        char *left = f2c_strdup_n(statement->text, (size_t)(equals - statement->text));
-        char *right = f2c_strdup(equals + 2);
-        statement->kind = F2C_STMT_POINTER_ASSIGNMENT;
-        if (left != NULL && right != NULL) {
-            statement->left = f2c_parse_expression_ast(unit, f2c_trim(left), NULL);
-            statement->right = f2c_parse_expression_ast(unit, f2c_trim(right), NULL);
-            statement->items = (char **)calloc(2U, sizeof(*statement->items));
-            if (statement->items != NULL) {
-                statement->items[0] = f2c_strdup(f2c_trim(left));
-                statement->items[1] = f2c_strdup(f2c_trim(right));
-                statement->item_count = 2U;
-            }
-        }
-        free(left);
-        free(right);
-    } else if (body_start == 0U && statement->kind == F2C_STMT_INVALID &&
-               (equals = f2c_find_assignment(statement->text)) != NULL) {
-        char *left = f2c_strdup_n(statement->text, (size_t)(equals - statement->text));
-        char *right = f2c_strdup(equals + 1);
-        statement->kind = F2C_STMT_ASSIGNMENT;
-        if (left != NULL && right != NULL) {
-            statement->items = (char **)calloc(2U, sizeof(*statement->items));
-            if (statement->items != NULL) {
-                statement->items[0] = f2c_strdup(f2c_trim(left));
-                statement->items[1] = f2c_strdup(f2c_trim(right));
-                statement->item_count = 2U;
-            }
-            statement->left = f2c_parse_expression_ast(unit, f2c_trim(left), NULL);
-            statement->right = f2c_parse_expression_ast(unit, f2c_trim(right), NULL);
-        }
-        free(left);
-        free(right);
-    }
+    if (statement->kind == F2C_STMT_INVALID &&
+        !f2c_statement_parse_assignment(unit, token_line, body_start, statement))
+        return 0;
     return 1;
 }
 
@@ -620,6 +316,7 @@ void f2c_statement_free(F2cStatement *statement) {
         free(control->keyword);
         f2c_expr_free(control->value);
         f2c_format_free(control->format);
+        free(control->cleanup.symbols);
     }
     free(statement->io_controls);
     while (statement->io_item_count != 0U)
@@ -643,11 +340,25 @@ void f2c_statement_free(F2cStatement *statement) {
     f2c_expr_free(statement->step);
     f2c_expr_free(statement->allocation_character_length);
     f2c_format_free(statement->format);
+    if (statement->label_cleanups != NULL) {
+        size_t cleanup;
+        for (cleanup = 0U; cleanup < statement->label_count; ++cleanup)
+            free(statement->label_cleanups[cleanup].symbols);
+    }
+    free(statement->label_cleanups);
     while (statement->label_count != 0U)
         free(statement->labels[--statement->label_count]);
     free(statement->labels);
     free(statement->label_spans);
     free(statement->terminal_loops);
+    free(statement->transfer_cleanup.symbols);
+    while (statement->resolved_branch_count != 0U) {
+        F2cResolvedBranch *branch =
+            &statement->resolved_branches[--statement->resolved_branch_count];
+        free(branch->label);
+        free(branch->cleanup.symbols);
+    }
+    free(statement->resolved_branches);
     if (statement->nested != NULL) {
         f2c_statement_free(statement->nested);
         free(statement->nested);

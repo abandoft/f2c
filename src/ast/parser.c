@@ -879,7 +879,7 @@ static int materialize_expression_sources(F2cExpr *expression, const char *sourc
     return expression->source != NULL || (!root && expression->source_offset == SIZE_MAX);
 }
 
-static F2cExpr *parse_expression_stream(AstParser *parser, const char *source,
+static F2cExpr *parse_expression_stream(AstParser *parser, const char *source, size_t source_length,
                                         const char **error_at) {
     F2cExpr *result;
     f2c_ast_next_token(parser);
@@ -893,15 +893,14 @@ static F2cExpr *parse_expression_stream(AstParser *parser, const char *source,
     if (result == NULL && parser->error_at != NULL)
         result = f2c_expr_new(F2C_EXPR_INVALID, TYPE_UNKNOWN, parser->error_at, 0U);
     if (result != NULL) {
-        const size_t length = strlen(source);
-        if (!materialize_expression_sources(result, source, length, 1)) {
+        if (!materialize_expression_sources(result, source, source_length, 1)) {
             f2c_expr_free(result);
             result = NULL;
         } else if (parser->error_at != NULL) {
             result->parse_error_offset =
-                parser->error_at >= source && parser->error_at <= source + length
+                parser->error_at >= source && parser->error_at <= source + source_length
                     ? (size_t)(parser->error_at - source)
-                    : length;
+                    : source_length;
             if (parser->token_count != 0U) {
                 size_t token_index;
                 for (token_index = 0U; token_index < parser->token_count; ++token_index) {
@@ -951,22 +950,28 @@ F2cExpr *f2c_parse_expression_ast(Unit *unit, const char *expression, const char
     parser.unit = unit;
     parser.source = source;
     parser.cursor = source;
-    return parse_expression_stream(&parser, source, error_at);
+    return parse_expression_stream(&parser, source, strlen(source), error_at);
 }
 
 F2cExpr *f2c_parse_expression_tokens(Unit *unit, const F2cToken *tokens, size_t token_count,
                                      const char *source, const char **error_at) {
     AstParser parser;
     const char *expression = source != NULL ? source : "";
+    size_t expression_length = 0U;
     memset(&parser, 0, sizeof(parser));
     parser.unit = unit;
     parser.source = expression;
     parser.cursor = expression;
     parser.tokens = tokens;
     parser.token_count = token_count;
-    if (token_count != 0U)
+    if (token_count != 0U) {
+        const F2cToken *last = &tokens[token_count - 1U];
+        parser.source = tokens[0].begin;
         parser.cursor = tokens[0].begin;
-    return parse_expression_stream(&parser, expression, error_at);
+        expression = tokens[0].begin;
+        expression_length = (size_t)((last->begin + last->length) - tokens[0].begin);
+    }
+    return parse_expression_stream(&parser, expression, expression_length, error_at);
 }
 
 Type f2c_expression_type(Unit *unit, const char *expression) {

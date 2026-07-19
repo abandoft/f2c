@@ -49,6 +49,8 @@ set(
     src/ast/parser.c
     src/ast/shape.c
     src/ast/statement.c
+    src/ast/statement/action.c
+    src/ast/statement/assignment.c
     src/ast/statement/case.c
     src/ast/statement/construct.c
     src/ast/statement/control.c

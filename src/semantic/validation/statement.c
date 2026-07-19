@@ -13,6 +13,36 @@ static int ordered_numeric_scalar(const F2cExpr *expression) {
             expression->type == TYPE_DOUBLE);
 }
 
+static int null_pointer_value(const F2cExpr *expression) {
+    return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
+           strcmp(expression->text, "null") == 0;
+}
+
+static void validate_action_statement(Context *context, const Unit *unit,
+                                      const F2cStatement *statement) {
+    const F2cExpr *value = statement->expression;
+    if (!statement->action_syntax_valid) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &statement->span, 1,
+                                 "malformed executable statement syntax");
+        return;
+    }
+    if (statement->kind == F2C_STMT_STOP && value != NULL &&
+        (value->rank != 0U || (value->type != TYPE_INTEGER && value->type != TYPE_CHARACTER))) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &value->span, 1,
+                                 "%s code must be a scalar INTEGER or CHARACTER expression",
+                                 statement->error_stop ? "ERROR STOP" : "STOP");
+    }
+    if (statement->kind == F2C_STMT_STOP && unit->pure) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &statement->span, 1,
+                                 "STOP and ERROR STOP are not permitted in a PURE procedure");
+    }
+    if (statement->kind == F2C_STMT_RETURN && value != NULL) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &value->span, 1,
+                                 "alternate RETURN requires an alternate-return procedure "
+                                 "interface, which is not yet supported");
+    }
+}
+
 static void validate_control_flow_statement(Context *context, Unit *unit,
                                             const F2cStatement *statement) {
     const F2cExpr *expression = statement->expression;
@@ -131,8 +161,7 @@ static void validate_pointer_statement(Context *context, const F2cStatement *sta
                 ? left->symbol
                 : NULL;
         Symbol *target = right != NULL && right->kind == F2C_EXPR_NAME ? right->symbol : NULL;
-        const int null_target = statement->item_count == 2U && statement->items != NULL &&
-                                f2c_starts_word(statement->items[1], "null");
+        const int null_target = null_pointer_value(right);
         if (pointer == NULL || (!pointer->pointer && !pointer->procedure_pointer)) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, left), 1,
@@ -208,6 +237,7 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &statement->span, 1,
                                  "malformed control-flow statement syntax");
     }
+    validate_action_statement(context, unit, statement);
     f2c_validation_report_parse_error(context, statement->line, statement->text,
                                       statement->expression, "statement");
     f2c_validation_constructor(context, unit, statement->line, statement->text,

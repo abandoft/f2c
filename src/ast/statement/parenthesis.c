@@ -1,22 +1,5 @@
 #include "ast/statement/private.h"
 
-char *f2c_statement_matching_parenthesis(char *open) {
-    int depth = 1;
-    int quote = 0;
-    char *cursor;
-    for (cursor = open + 1; *cursor != '\0'; ++cursor) {
-        if ((*cursor == '\'' || *cursor == '"') &&
-            (quote == 0 || quote == (unsigned char)*cursor)) {
-            quote = quote == 0 ? (unsigned char)*cursor : 0;
-        } else if (quote == 0 && *cursor == '(') {
-            ++depth;
-        } else if (quote == 0 && *cursor == ')' && --depth == 0) {
-            return cursor;
-        }
-    }
-    return NULL;
-}
-
 F2cExpr *f2c_statement_parse_parenthesized_tokens(Unit *unit, const Line *line, size_t begin,
                                                   char **tail) {
     size_t open;

@@ -70,6 +70,16 @@ typedef struct F2cIoItem {
     int data_static_initializer;
 } F2cIoItem;
 
+typedef struct F2cScopeCleanupPlan {
+    Symbol **symbols;
+    size_t symbol_count;
+} F2cScopeCleanupPlan;
+
+typedef struct F2cResolvedBranch {
+    char *label;
+    F2cScopeCleanupPlan cleanup;
+} F2cResolvedBranch;
+
 typedef enum F2cIoControlKind {
     F2C_IO_CONTROL_POSITIONAL,
     F2C_IO_CONTROL_UNKNOWN,
@@ -127,6 +137,7 @@ typedef struct F2cIoControl {
     F2cSourceSpan format_span;
     F2cFormatError format_error;
     int asterisk;
+    F2cScopeCleanupPlan cleanup;
 } F2cIoControl;
 
 typedef struct F2cDataValue {
@@ -183,6 +194,10 @@ struct F2cStatement {
     F2cExpr *limit;
     F2cExpr *step;
     F2cExpr *allocation_character_length;
+    Type allocation_type;
+    F2cDerivedType *allocation_derived_type;
+    int allocation_has_type_spec;
+    F2cSourceSpan allocation_type_span;
     F2cFormat *format;
     F2cSourceSpan format_span;
     F2cDerivedType *guard_type;
@@ -195,6 +210,10 @@ struct F2cStatement {
     F2cSourceSpan *label_spans;
     size_t label_count;
     F2cStatement *nested;
+    F2cScopeCleanupPlan transfer_cleanup;
+    F2cScopeCleanupPlan *label_cleanups;
+    F2cResolvedBranch *resolved_branches;
+    size_t resolved_branch_count;
     int block;
     int error_stop;
     int unroll_hint;
@@ -206,6 +225,7 @@ struct F2cStatement {
     F2cFormatError format_error;
     int construct_syntax_valid;
     int control_syntax_valid;
+    int action_syntax_valid;
     F2cSourceSpan label_span;
     F2cSourceSpan terminal_label_span;
 };
