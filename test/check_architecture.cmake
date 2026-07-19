@@ -78,6 +78,9 @@ file(READ "${SOURCE_DIR}/src/frontend/procedure.c" PROCEDURE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/modules.c" USE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/module/dependency.c" MODULE_DEPENDENCIES)
 file(READ "${SOURCE_DIR}/src/frontend/pipeline.c" FRONTEND_PIPELINE)
+file(READ "${SOURCE_DIR}/src/frontend/module/access.c" ACCESS_LOWERING)
+file(READ "${SOURCE_DIR}/src/frontend/declaration/syntax.c" DECLARATION_CLASSIFICATION)
+file(READ "${SOURCE_DIR}/src/codegen/module.c" MODULE_CODEGEN)
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
 endif()
@@ -86,6 +89,21 @@ if(
     OR PROCEDURE_LOWERING MATCHES "f2c_(line_find_token|token_matching_delimiter)[ \t\r\n]*\\("
 )
     message(FATAL_ERROR "PROCEDURE declarations must lower from their canonical syntax AST")
+endif()
+if(
+    NOT ACCESS_LOWERING MATCHES "f2c_parse_access_statement_syntax[ \t\r\n]*\\("
+    OR NOT DECLARATION_CLASSIFICATION MATCHES "f2c_access_statement_candidate[ \t\r\n]*\\("
+)
+    message(FATAL_ERROR
+            "PUBLIC/PRIVATE statements must classify and lower through their canonical syntax AST")
+endif()
+if(
+    NOT SEMANTIC_MODEL MATCHES "int[ \t]+use_associated"
+    OR NOT USE_LOWERING MATCHES "use_associated[ \t]*=[ \t]*1"
+    OR NOT MODULE_CODEGEN MATCHES "symbol->external[ \t]*\\|\\|[ \t]*symbol->use_associated"
+)
+    message(FATAL_ERROR
+            "USE-associated module entities must preserve provider storage ownership")
 endif()
 if(
     NOT USE_LOWERING MATCHES "f2c_parse_use_statement_syntax[ \t\r\n]*\\("
