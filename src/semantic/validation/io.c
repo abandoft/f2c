@@ -104,12 +104,13 @@ static int io_control_supported(F2cStatementKind statement_kind, F2cIoControlKin
                control_kind == F2C_IO_CONTROL_NML || control_kind == F2C_IO_CONTROL_END ||
                control_kind == F2C_IO_CONTROL_EOR || control_kind == F2C_IO_CONTROL_ERR ||
                control_kind == F2C_IO_CONTROL_IOSTAT || control_kind == F2C_IO_CONTROL_IOMSG ||
-               control_kind == F2C_IO_CONTROL_SIZE || control_kind == F2C_IO_CONTROL_ADVANCE;
+               control_kind == F2C_IO_CONTROL_SIZE || control_kind == F2C_IO_CONTROL_ADVANCE ||
+               control_kind == F2C_IO_CONTROL_REC;
     if (statement_kind == F2C_STMT_WRITE)
         return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_FMT ||
                control_kind == F2C_IO_CONTROL_NML || control_kind == F2C_IO_CONTROL_ERR ||
                control_kind == F2C_IO_CONTROL_IOSTAT || control_kind == F2C_IO_CONTROL_IOMSG ||
-               control_kind == F2C_IO_CONTROL_ADVANCE;
+               control_kind == F2C_IO_CONTROL_ADVANCE || control_kind == F2C_IO_CONTROL_REC;
     if (statement_kind == F2C_STMT_OPEN)
         return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_FILE ||
                control_kind == F2C_IO_CONTROL_STATUS || control_kind == F2C_IO_CONTROL_ERR ||
@@ -384,10 +385,11 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
                               "INQUIRE %s= must be a definable scalar CHARACTER variable",
                               io_control_name(semantic_kind));
         }
-    } else if (semantic_kind == F2C_IO_CONTROL_RECL) {
+    } else if (semantic_kind == F2C_IO_CONTROL_RECL || semantic_kind == F2C_IO_CONTROL_REC) {
         if (control->asterisk || !scalar_type(value, TYPE_INTEGER)) {
             f2c_diagnostic_at(context, statement->line, column, 1,
-                              "%s RECL= must be a scalar INTEGER expression", statement_name);
+                              "%s %s= must be a scalar INTEGER expression", statement_name,
+                              io_control_name(semantic_kind));
         }
     } else if (semantic_kind == F2C_IO_CONTROL_ADVANCE || semantic_kind == F2C_IO_CONTROL_FILE ||
                semantic_kind == F2C_IO_CONTROL_STATUS || semantic_kind == F2C_IO_CONTROL_FORM ||
@@ -407,6 +409,21 @@ static const F2cIoControl *find_io_control(const F2cStatement *statement, F2cIoC
     for (index = 0U; index < statement->control_count; ++index)
         if (statement->io_controls[index].kind == kind)
             return &statement->io_controls[index];
+    return NULL;
+}
+
+static const F2cIoControl *find_semantic_io_control(const F2cStatement *statement,
+                                                    F2cIoControlKind kind) {
+    size_t index;
+    size_t positional = 0U;
+    for (index = 0U; index < statement->control_count; ++index) {
+        const F2cIoControl *control = &statement->io_controls[index];
+        F2cIoControlKind semantic_kind = control->kind;
+        if (semantic_kind == F2C_IO_CONTROL_POSITIONAL)
+            semantic_kind = positional_io_control_kind(statement->kind, positional++);
+        if (semantic_kind == kind)
+            return control;
+    }
     return NULL;
 }
 
@@ -562,8 +579,103 @@ static void validate_file_control_relations(Context *context, Unit *unit,
     }
 }
 
+static void validate_transfer_relations(Context *context, Unit *unit, const F2cStatement *statement,
+                                        const unsigned char *seen) {
+    static const char *const yes_no[] = {"yes", "no"};
+    const F2cIoControl *unit_control;
+    const F2cIoControl *record;
+    const F2cIoControl *format;
+    const F2cIoControl *advance;
+    char advance_value[16];
+    int64_t record_value;
+    int internal;
+    int formatted;
+    if (statement->kind != F2C_STMT_READ && statement->kind != F2C_STMT_WRITE)
+        return;
+    unit_control = find_unit_control(statement);
+    record = find_semantic_io_control(statement, F2C_IO_CONTROL_REC);
+    format = find_semantic_io_control(statement, F2C_IO_CONTROL_FMT);
+    advance = find_semantic_io_control(statement, F2C_IO_CONTROL_ADVANCE);
+    internal = unit_control != NULL && unit_control->value != NULL &&
+               unit_control->value->type == TYPE_CHARACTER;
+    formatted = seen[F2C_IO_CONTROL_FMT] || seen[F2C_IO_CONTROL_NML];
+    if (advance != NULL) {
+        validate_character_choices(context, statement, F2C_IO_CONTROL_ADVANCE, yes_no,
+                                   sizeof(yes_no) / sizeof(yes_no[0]));
+        if (character_control_value(advance, advance_value, sizeof(advance_value)) &&
+            strcmp(advance_value, "yes") == 0 &&
+            (seen[F2C_IO_CONTROL_EOR] || seen[F2C_IO_CONTROL_SIZE])) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &advance->span, 1,
+                                     "EOR= and SIZE= require ADVANCE='NO'");
+        }
+    }
+    if (!formatted &&
+        (seen[F2C_IO_CONTROL_ADVANCE] || seen[F2C_IO_CONTROL_EOR] || seen[F2C_IO_CONTROL_SIZE])) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &statement->span, 1,
+                                 "unformatted %s cannot use ADVANCE=, EOR=, or SIZE=",
+                                 io_statement_name(statement->kind));
+    }
+    if (record == NULL)
+        return;
+    if (record->value != NULL &&
+        f2c_evaluate_integer_constant(unit, record->value, &record_value) && record_value <= 0) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &record->span, 1,
+                                 "%s REC= must be positive", io_statement_name(statement->kind));
+    }
+    if (internal) {
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_SEMANTIC, &record->span, 1,
+            "internal-file %s cannot specify REC=", io_statement_name(statement->kind));
+    }
+    if (format != NULL && format->asterisk) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &format->span, 1,
+                                 "direct-access %s cannot use list-directed formatting",
+                                 io_statement_name(statement->kind));
+    }
+    if (seen[F2C_IO_CONTROL_NML]) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &record->span, 1,
+                                 "direct-access %s cannot use NAMELIST",
+                                 io_statement_name(statement->kind));
+    }
+    if (seen[F2C_IO_CONTROL_END] || seen[F2C_IO_CONTROL_ADVANCE] || seen[F2C_IO_CONTROL_EOR] ||
+        seen[F2C_IO_CONTROL_SIZE]) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &record->span, 1,
+                                 "direct-access %s cannot use END=, ADVANCE=, EOR=, or SIZE=",
+                                 io_statement_name(statement->kind));
+    }
+}
+
+static int derived_has_io_binding(const F2cDerivedType *derived, int input, int unformatted) {
+    const F2cDefinedIoKind kind =
+        unformatted ? (input ? F2C_DEFINED_IO_READ_UNFORMATTED : F2C_DEFINED_IO_WRITE_UNFORMATTED)
+                    : (input ? F2C_DEFINED_IO_READ_FORMATTED : F2C_DEFINED_IO_WRITE_FORMATTED);
+    while (derived != NULL) {
+        if (derived->defined_io_bindings[kind] != NULL)
+            return 1;
+        derived = derived->parent;
+    }
+    return 0;
+}
+
+static int derived_requires_defined_io(const F2cDerivedType *derived) {
+    size_t index;
+    if (derived == NULL)
+        return 0;
+    if (derived_requires_defined_io(derived->parent))
+        return 1;
+    for (index = 0U; index < derived->component_count; ++index) {
+        const Symbol *component = &derived->components[index];
+        if (component->allocatable || component->pointer || component->procedure_pointer ||
+            (component->type == TYPE_DERIVED &&
+             derived_requires_defined_io(component->derived_type)))
+            return 1;
+    }
+    return 0;
+}
+
 static void validate_io_item_semantics(Context *context, Unit *unit, const F2cStatement *statement,
-                                       const F2cIoItem *item, int input) {
+                                       const F2cIoItem *item, int input, int unformatted,
+                                       int namelist) {
     size_t i;
     if (item == NULL)
         return;
@@ -588,13 +700,24 @@ static void validate_io_item_semantics(Context *context, Unit *unit, const F2cSt
                               1, "I/O implied-DO step cannot be zero");
         }
         for (i = 0U; i < item->child_count; ++i)
-            validate_io_item_semantics(context, unit, statement, &item->children[i], input);
+            validate_io_item_semantics(context, unit, statement, &item->children[i], input,
+                                       unformatted, namelist);
         return;
     }
     if (input && item->expression != NULL && !item->expression->definable) {
         f2c_diagnostic_at(context, statement->line,
                           f2c_validation_expression_start_column(statement->text, item->expression),
                           1, "READ item must be definable");
+    }
+    if (!namelist && item->expression != NULL && item->expression->type == TYPE_DERIVED &&
+        item->expression->derived_type != NULL &&
+        !derived_has_io_binding(item->expression->derived_type, input, unformatted) &&
+        derived_requires_defined_io(item->expression->derived_type)) {
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_SEMANTIC, &item->expression->span, 1,
+            "%s %s of derived type '%s' with dynamic components requires defined I/O",
+            unformatted ? "unformatted" : "formatted", io_statement_name(statement->kind),
+            item->expression->derived_type->name);
     }
 }
 
@@ -684,7 +807,9 @@ void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *sta
     }
     validate_internal_file_relations(context, statement, seen);
     validate_file_control_relations(context, unit, statement, seen);
+    validate_transfer_relations(context, unit, statement, seen);
     for (i = 0U; i < statement->io_item_count; ++i)
-        validate_io_item_semantics(context, unit, statement, &statement->io_items[i],
-                                   statement->kind == F2C_STMT_READ);
+        validate_io_item_semantics(
+            context, unit, statement, &statement->io_items[i], statement->kind == F2C_STMT_READ,
+            !seen[F2C_IO_CONTROL_FMT] && !seen[F2C_IO_CONTROL_NML], seen[F2C_IO_CONTROL_NML]);
 }
