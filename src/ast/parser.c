@@ -973,19 +973,3 @@ F2cExpr *f2c_parse_expression_tokens(Unit *unit, const F2cToken *tokens, size_t 
     }
     return parse_expression_stream(&parser, expression, expression_length, error_at);
 }
-
-Type f2c_expression_type(Unit *unit, const char *expression) {
-    const char *error_at = NULL;
-    F2cExpr *ast = f2c_parse_expression_ast(unit, expression, &error_at);
-    Type type = ast != NULL && error_at == NULL ? ast->type : TYPE_UNKNOWN;
-    f2c_expr_free(ast);
-    return type;
-}
-
-int f2c_expression_is_designator(Unit *unit, const char *expression) {
-    const char *error_at = NULL;
-    F2cExpr *ast = f2c_parse_expression_ast(unit, expression, &error_at);
-    const int result = ast != NULL && error_at == NULL && ast->definable;
-    f2c_expr_free(ast);
-    return result;
-}

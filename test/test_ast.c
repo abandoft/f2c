@@ -262,16 +262,23 @@ static void test_array_section(void) {
 static void test_single_precision_intrinsic_expression(void) {
     Symbol symbols[3];
     Unit unit;
+    F2cExpr *first;
+    F2cExpr *second;
+    const char *error_at = NULL;
     memset(&unit, 0, sizeof(unit));
     add_symbol(symbols, 0U, "z1", TYPE_REAL, 0U, 0);
     add_symbol(symbols, 1U, "phi", TYPE_REAL, 1U, 0);
     add_symbol(symbols, 2U, "i", TYPE_INTEGER, 0U, 0);
     unit.symbols = symbols;
     unit.symbol_count = 3U;
-    const Type first = f2c_expression_type(&unit, "z1*cos(phi(i-1))");
-    const Type second = f2c_expression_type(&unit, "(-z1)*z1*sin(phi(i))");
-    expect(first == TYPE_REAL, "single-precision intrinsic expression remains REAL");
-    expect(second == TYPE_REAL, "nested single-precision arithmetic remains REAL");
+    first = f2c_parse_expression_ast(&unit, "z1*cos(phi(i-1))", &error_at);
+    second = f2c_parse_expression_ast(&unit, "(-z1)*z1*sin(phi(i))", &error_at);
+    expect(first != NULL && first->type == TYPE_REAL,
+           "single-precision intrinsic expression remains REAL");
+    expect(second != NULL && second->type == TYPE_REAL,
+           "nested single-precision arithmetic remains REAL");
+    f2c_expr_free(first);
+    f2c_expr_free(second);
 }
 
 static void test_intrinsic_type_registry(void) {

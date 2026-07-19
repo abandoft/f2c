@@ -73,8 +73,6 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
                                             const F2cIntegerSubstitution *substitutions,
                                             size_t substitution_count);
 void f2c_expr_free(F2cExpr *expression);
-Type f2c_expression_type(Unit *unit, const char *expression);
-int f2c_expression_is_designator(Unit *unit, const char *expression);
 void f2c_visit_expression(F2cExpr *expression, F2cExpressionVisitor visitor, void *state);
 
 #endif
