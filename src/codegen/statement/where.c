@@ -18,60 +18,6 @@ static int numeric_type(Type type) {
            type == TYPE_COMPLEX || type == TYPE_DOUBLE_COMPLEX;
 }
 
-static int trivial_scalar(const F2cExpr *expression) {
-    return expression->kind == F2C_EXPR_INVALID || expression->kind == F2C_EXPR_INTEGER_LITERAL ||
-           expression->kind == F2C_EXPR_REAL_LITERAL ||
-           expression->kind == F2C_EXPR_STRING_LITERAL ||
-           expression->kind == F2C_EXPR_LOGICAL_LITERAL || expression->kind == F2C_EXPR_NAME ||
-           expression->kind == F2C_EXPR_ABSENT_ARGUMENT;
-}
-
-static int hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_t identifier,
-                                       const char *role, size_t *temporary, Buffer *prelude,
-                                       int depth, int root) {
-    size_t child;
-    if (expression == NULL)
-        return 1;
-    if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
-        return 1;
-    if (!root && expression->rank == 0U && !trivial_scalar(expression) &&
-        expression->kind != F2C_EXPR_KEYWORD_ARGUMENT &&
-        expression->kind != F2C_EXPR_ARRAY_SECTION) {
-        Buffer name = {0};
-        char *code;
-        int supported = 0;
-        if (expression->type == TYPE_CHARACTER || expression->type == TYPE_DERIVED ||
-            expression->type == TYPE_UNKNOWN)
-            return 0;
-        code = f2c_emit_expression_ast(unit, expression, &supported);
-        if (!supported || code == NULL) {
-            free(code);
-            return 0;
-        }
-        f2c_buffer_printf(&name, "f2c_where_%s_%zu_%zu", role, identifier, (*temporary)++);
-        indent(prelude, depth);
-        f2c_buffer_printf(prelude, "const %s %s = %s;\n", f2c_expression_c_type(expression),
-                          name.data, code);
-        free(code);
-        free(expression->lowered_c);
-        expression->lowered_c = f2c_buffer_take(&name);
-        return expression->lowered_c != NULL;
-    }
-    if (expression->kind == F2C_EXPR_IMPLIED_DO && expression->child_count >= 3U) {
-        const size_t value_count = expression->child_count - 3U;
-        for (child = value_count; child < expression->child_count; ++child)
-            if (!hoist_scalar_subexpressions(unit, expression->children[child], identifier, role,
-                                             temporary, prelude, depth, 0))
-                return 0;
-        return 1;
-    }
-    for (child = 0U; child < expression->child_count; ++child)
-        if (!hoist_scalar_subexpressions(unit, expression->children[child], identifier, role,
-                                         temporary, prelude, depth, 0))
-            return 0;
-    return 1;
-}
-
 static char **ordinal_names(size_t identifier, size_t rank) {
     char **names = rank != 0U ? (char **)calloc(rank, sizeof(*names)) : NULL;
     size_t dimension;
@@ -208,8 +154,8 @@ int f2c_emit_where_begin(Context *context, Unit *unit, const F2cStatement *state
     size_t dimension;
     prepared_mask = f2c_array_clone_expression(statement->expression);
     if (prepared_mask == NULL ||
-        !hoist_scalar_subexpressions(unit, prepared_mask, identifier, "mask", &temporary, &prelude,
-                                     *depth + 1, 1) ||
+        !f2c_array_hoist_scalar_subexpressions(unit, prepared_mask, identifier, "where_mask",
+                                               &temporary, &prelude, *depth + 1, 1) ||
         !f2c_array_materialize_constructors(context, unit, prepared_mask, identifier, "mask",
                                             &temporary, &prelude, &cleanup, *depth + 1) ||
         !expression_extents(context, unit, statement, prepared_mask, extents))
@@ -341,8 +287,9 @@ int f2c_emit_elsewhere(Context *context, Unit *unit, const F2cStatement *stateme
         const size_t branch_id = statement_id(unit, statement);
         prepared_mask = f2c_array_clone_expression(statement->expression);
         if (prepared_mask == NULL ||
-            !hoist_scalar_subexpressions(unit, prepared_mask, branch_id, "branch_mask", &temporary,
-                                         &prelude, depth, 1) ||
+            !f2c_array_hoist_scalar_subexpressions(unit, prepared_mask, branch_id,
+                                                   "where_branch_mask", &temporary, &prelude, depth,
+                                                   1) ||
             !f2c_array_materialize_constructors(context, unit, prepared_mask, branch_id,
                                                 "branch_mask", &temporary, &prelude, &cleanup,
                                                 depth) ||
@@ -634,10 +581,10 @@ int f2c_emit_where_assignment(Context *context, Unit *unit, const F2cStatement *
     prepared_left = f2c_array_clone_expression(statement->left);
     prepared_right = f2c_array_clone_expression(statement->right);
     if (prepared_left == NULL || prepared_right == NULL ||
-        !hoist_scalar_subexpressions(unit, prepared_left, identifier, "left", &temporary, &prelude,
-                                     depth + 1, 1) ||
-        !hoist_scalar_subexpressions(unit, prepared_right, identifier, "right", &temporary,
-                                     &prelude, depth + 1, 1) ||
+        !f2c_array_hoist_scalar_subexpressions(unit, prepared_left, identifier, "where_left",
+                                               &temporary, &prelude, depth + 1, 1) ||
+        !f2c_array_hoist_scalar_subexpressions(unit, prepared_right, identifier, "where_right",
+                                               &temporary, &prelude, depth + 1, 1) ||
         !f2c_array_materialize_constructors(context, unit, prepared_left, identifier, "left",
                                             &temporary, &prelude, &cleanup, depth + 1) ||
         !f2c_array_materialize_constructors(context, unit, prepared_right, identifier, "right",

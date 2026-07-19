@@ -3,6 +3,63 @@
 #include <stdlib.h>
 #include <string.h>
 
+static int trivial_scalar(const F2cExpr *expression) {
+    return expression->kind == F2C_EXPR_INVALID || expression->kind == F2C_EXPR_INTEGER_LITERAL ||
+           expression->kind == F2C_EXPR_REAL_LITERAL ||
+           expression->kind == F2C_EXPR_STRING_LITERAL ||
+           expression->kind == F2C_EXPR_LOGICAL_LITERAL || expression->kind == F2C_EXPR_NAME ||
+           expression->kind == F2C_EXPR_ABSENT_ARGUMENT;
+}
+
+int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_t identifier,
+                                          const char *role, size_t *temporary, Buffer *prelude,
+                                          int depth, int root) {
+    size_t child;
+    if (unit == NULL || role == NULL || temporary == NULL || prelude == NULL)
+        return 0;
+    if (expression == NULL)
+        return 1;
+    if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
+        return 1;
+    if (!root && expression->rank == 0U && !trivial_scalar(expression) &&
+        expression->kind != F2C_EXPR_KEYWORD_ARGUMENT &&
+        expression->kind != F2C_EXPR_ARRAY_SECTION) {
+        Buffer name = {0};
+        char *code;
+        int supported = 0;
+        if (expression->type == TYPE_CHARACTER || expression->type == TYPE_DERIVED ||
+            expression->type == TYPE_UNKNOWN)
+            return 0;
+        code = f2c_emit_expression_ast(unit, expression, &supported);
+        if (!supported || code == NULL) {
+            free(code);
+            return 0;
+        }
+        f2c_buffer_printf(&name, "f2c_array_%s_%zu_%zu", role, identifier, (*temporary)++);
+        f2c_array_indent(prelude, depth);
+        f2c_buffer_printf(prelude, "const %s %s = %s;\n", f2c_expression_c_type(expression),
+                          name.data, code);
+        free(code);
+        free(expression->lowered_c);
+        expression->lowered_c = f2c_buffer_take(&name);
+        return expression->lowered_c != NULL;
+    }
+    if (expression->kind == F2C_EXPR_IMPLIED_DO && expression->child_count >= 3U) {
+        const size_t value_count = expression->child_count - 3U;
+        for (child = value_count; child < expression->child_count; ++child)
+            if (!f2c_array_hoist_scalar_subexpressions(unit, expression->children[child],
+                                                       identifier, role, temporary, prelude, depth,
+                                                       0))
+                return 0;
+        return 1;
+    }
+    for (child = 0U; child < expression->child_count; ++child)
+        if (!f2c_array_hoist_scalar_subexpressions(unit, expression->children[child], identifier,
+                                                   role, temporary, prelude, depth, 0))
+            return 0;
+    return 1;
+}
+
 static int flat_array_constructor(const F2cExpr *expression) {
     size_t child;
     if (expression == NULL || expression->kind != F2C_EXPR_ARRAY_CONSTRUCTOR)
