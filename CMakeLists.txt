@@ -229,6 +229,7 @@ set(
     src/semantic/validation/intrinsic/arguments.c
     src/semantic/validation/intrinsic/arguments.h
     src/semantic/validation/intrinsic/bit.c
+    src/semantic/validation/intrinsic/character.c
     src/semantic/validation/lifetime.c
     src/semantic/validation/private.h
     src/semantic/validation/procedure.c
@@ -495,6 +496,10 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_bit_intrinsic_tests test/test_bit_intrinsic.c)
     f2c_configure_test_target(f2c_bit_intrinsic_tests)
     add_test(NAME bit_intrinsic_semantics COMMAND f2c_bit_intrinsic_tests)
+
+    add_executable(f2c_character_intrinsic_tests test/test_character_intrinsic.c)
+    f2c_configure_test_target(f2c_character_intrinsic_tests)
+    add_test(NAME character_intrinsic_semantics COMMAND f2c_character_intrinsic_tests)
 
     add_executable(f2c_inquiry_tests test/test_inquiry.c)
     f2c_configure_test_target(f2c_inquiry_tests)

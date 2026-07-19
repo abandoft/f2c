@@ -606,6 +606,7 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
         const F2cIntrinsicSignature *signature = f2c_find_intrinsic(expression->text);
         validate_intrinsic_arity(context, line, statement_text, expression);
         f2c_validation_bit_intrinsic(context, unit, line, statement_text, expression);
+        f2c_validation_character_intrinsic(context, unit, line, statement_text, expression);
         if (strcmp(expression->text, "size") == 0 || strcmp(expression->text, "shape") == 0 ||
             strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0)
             validate_array_inquiry(context, unit, line, statement_text, expression);

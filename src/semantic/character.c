@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static size_t string_literal_length(const char *text) {
+size_t f2c_character_literal_length(const char *text) {
     const char *quote_begin;
     size_t source_length;
     char quote;
@@ -237,7 +237,7 @@ char *f2c_symbol_character_length(Unit *unit, const Symbol *symbol) {
         return f2c_emit_typed_expression(unit, symbol->character_length_expression);
     if (symbol->parameter && symbol->initializer != NULL &&
         (symbol->initializer[0] == '\'' || symbol->initializer[0] == '"')) {
-        f2c_buffer_printf(&result, "%zuU", string_literal_length(symbol->initializer));
+        f2c_buffer_printf(&result, "%zuU", f2c_character_literal_length(symbol->initializer));
         return f2c_buffer_take(&result);
     }
     return f2c_strdup("1U");
@@ -252,7 +252,7 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
     if (expression->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("0U");
     if (expression->kind == F2C_EXPR_STRING_LITERAL) {
-        f2c_buffer_printf(&result, "%zuU", string_literal_length(expression->text));
+        f2c_buffer_printf(&result, "%zuU", f2c_character_literal_length(expression->text));
         return f2c_buffer_take(&result);
     }
     if (expression->kind == F2C_EXPR_NAME || expression->kind == F2C_EXPR_ARRAY_REFERENCE)
