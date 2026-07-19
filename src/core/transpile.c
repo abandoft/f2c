@@ -706,11 +706,17 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                 "tolower((unsigned char)value[begin + 1U]) == 'o') return false; abort(); }\n"
                 "static inline F2C_UNUSED void f2c_set_iomsg(char *value, size_t length, int "
                 "status) { const char *message = status == EOF ? \"end of file\" : status == "
-                "-2 ? \"end of record\" : status <= 0 ? \"I/O error\" : \"\"; size_t n = "
+                "-2 ? \"end of record\" : status == 2 ? \"invalid unit\" : status == 3 ? "
+                "\"unit action mismatch\" : status == 4 ? \"formatted/unformatted connection "
+                "mismatch\" : status == 5 ? \"sequential/direct access mismatch\" : status == "
+                "6 ? \"record transfer failed\" : status == 7 ? \"corrupt unformatted record\" "
+                ": status == 8 ? \"record offset overflow\" : status <= 0 ? \"I/O error\" : "
+                "\"\"; size_t n = "
                 "strlen(message); if (n > length) n = length; if (n != 0U) memmove(value, "
                 "message, n); if (length > n) memset(value + n, ' ', length - n); }\n");
             f2c_emit_io_stream_support(&context.output);
             f2c_emit_file_unit_support(&context.output);
+            f2c_emit_record_io_support(&context.output);
             f2c_emit_list_io_support(&context.output, needs_complex);
             f2c_emit_namelist_support(&context);
             f2c_emit_format_support(&context);

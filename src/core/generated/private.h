@@ -7,5 +7,6 @@ void f2c_emit_relation_reduction_support(Buffer *output, int needs_complex);
 void f2c_emit_io_stream_support(Buffer *output);
 void f2c_emit_list_io_support(Buffer *output, int needs_complex);
 void f2c_emit_file_unit_support(Buffer *output);
+void f2c_emit_record_io_support(Buffer *output);
 
 #endif

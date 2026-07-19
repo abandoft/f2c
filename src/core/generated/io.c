@@ -13,7 +13,7 @@ static void emit_unit_model(Buffer *output) {
         "typedef enum f2c_unit_delim { F2C_DELIM_NONE, F2C_DELIM_APOSTROPHE, "
         "F2C_DELIM_QUOTE } f2c_unit_delim;\n"
         "typedef struct f2c_unit_entry { int32_t unit; FILE *file; f2c_io_stream stream_storage; "
-        "f2c_io_stream *stream; char *name; int32_t recl; "
+        "f2c_io_stream *stream; f2c_io_stream *active_stream; char *name; int32_t recl; "
         "f2c_unit_access access; f2c_unit_action action; f2c_unit_form form; "
         "f2c_unit_blank blank; f2c_unit_delim delim; bool pad; bool scratch; bool internal; "
         "struct f2c_unit_entry *next; } f2c_unit_entry;\n"
@@ -26,7 +26,8 @@ static void emit_unit_model(Buffer *output) {
         "f2c_inquiry;\n"
         "static _Thread_local f2c_unit_entry *f2c_unit_list;\n"
         "static _Thread_local int32_t f2c_internal_unit_next = -1;\n"
-        "static _Thread_local unsigned f2c_child_io_depth;\n");
+        "static _Thread_local unsigned f2c_child_io_depth;\n"
+        "static inline F2C_UNUSED bool f2c_backspace_unformatted(f2c_unit_entry *entry);\n");
 }
 
 static void emit_unit_utilities(Buffer *output) {
@@ -198,6 +199,8 @@ static void emit_positioning(Buffer *output) {
         "= f2c_find_unit(unit); f2c_io_stream *stream; long cursor; int character; if (entry != "
         "NULL && entry->access != F2C_ACCESS_SEQUENTIAL) return false; stream = entry != NULL ? "
         "entry->stream : f2c_unit_stream(unit, false); if (stream == NULL) return false; "
+        "if (entry != NULL && entry->form == F2C_FORM_UNFORMATTED) return "
+        "f2c_backspace_unformatted(entry); "
         "f2c_stream_clear(stream); cursor = f2c_stream_tell(stream); if "
         "(cursor < 0L) return false; if (cursor == 0L) return true; --cursor; if "
         "(f2c_stream_seek(stream, cursor, SEEK_SET) != 0) return false; character = "

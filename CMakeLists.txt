@@ -122,6 +122,7 @@ set(
     src/core/generated/io.c
     src/core/generated/list.c
     src/core/generated/private.h
+    src/core/generated/record.c
     src/core/generated/relation.c
     src/core/generated/stream.c
     src/core/support.c
