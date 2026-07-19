@@ -52,6 +52,8 @@ jobs:
         run: sh test/elemental_differential.sh build/numerical/f2c
       - name: Differential-test array inquiry intrinsics
         run: sh test/inquiry_differential.sh build/numerical/f2c
+      - name: Differential-test unformatted I/O length inquiries
+        run: sh test/iolength_differential.sh build/numerical/f2c
       - name: Differential-test transformational intrinsics
         run: sh test/transform_differential.sh build/numerical/f2c
       - name: Differential-test file control I/O
