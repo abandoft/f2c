@@ -15,6 +15,7 @@ static int store_assignment(Unit *unit, const Line *line, F2cTokenRange range, s
     if (statement->items == NULL || statement->arguments == NULL)
         return 0;
     statement->item_count = 2U;
+    statement->operator_span = range.tokens[equals].span;
     statement->items[0] = f2c_token_range_text(left);
     statement->items[1] = f2c_token_range_text(right);
     statement->left = f2c_parse_expression_tokens(unit, left.tokens, left.count, line->text, NULL);

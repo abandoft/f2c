@@ -172,6 +172,7 @@ struct F2cStatement {
     size_t line;
     F2cSourceSpan span;
     F2cSourceSpan name_span;
+    F2cSourceSpan operator_span;
     char *text;
     char *tail;
     char *name;
