@@ -202,6 +202,8 @@ set(
     src/ir/type.h
     src/semantic/character.c
     src/semantic/constant.c
+    src/semantic/constant/bit.c
+    src/semantic/constant/private.h
     src/semantic/implicit.c
     src/semantic/implicit/declaration.c
     src/semantic/implicit/private.h

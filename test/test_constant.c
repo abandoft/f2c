@@ -87,10 +87,47 @@ int main(void) {
            "parameter arithmetic and integer powers are folded");
     expect(evaluate_source(&unit, "len('A''B')+max(2,5)", &value) && value == 8,
            "character LEN and variadic MAX are folded");
+    expect(
+        evaluate_source(&unit, "bit_size(0_1)+bit_size(0_2)+bit_size(0_4)+bit_size(0_8)", &value) &&
+            value == 120,
+        "BIT_SIZE is folded from the target INTEGER kind");
+    expect(evaluate_source(&unit, "iand(-1_1,85_1)", &value) && value == 85,
+           "IAND is folded in the target kind bit model");
+    expect(evaluate_source(&unit, "ior(64_1,3_1)", &value) && value == 67,
+           "IOR is folded in the target kind bit model");
+    expect(evaluate_source(&unit, "ieor(85_1,15_1)", &value) && value == 90,
+           "IEOR is folded in the target kind bit model");
+    expect(evaluate_source(&unit, "not(0_1)", &value) && value == -1,
+           "NOT preserves the signed target-kind bit pattern");
+    expect(evaluate_source(&unit, "ibset(0_1,7)", &value) && value == -128,
+           "IBSET folds the sign bit without host signed shifts");
+    expect(evaluate_source(&unit, "ibset(0_8,63)", &value) && value == INT64_MIN,
+           "IBSET folds the 64-bit sign position without signed overflow");
+    expect(evaluate_source(&unit, "ibclr(-1_1,7)", &value) && value == 127,
+           "IBCLR folds the sign bit without host signed masks");
+    expect(evaluate_source(&unit, "ibits(len=4,i=-1_1,pos=4)", &value) && value == 15,
+           "IBITS supports canonical keyword binding and slices");
+    expect(evaluate_source(&unit, "ishft(-1_1,1)", &value) && value == -2,
+           "ISHFT left shifts the finite target bit sequence");
+    expect(evaluate_source(&unit, "ishft(-1_1,-8)", &value) && value == 0,
+           "ISHFT handles a full-width logical right shift");
+    expect(evaluate_source(&unit, "ishft(-1_8,-64)", &value) && value == 0,
+           "ISHFT handles a full 64-bit logical right shift");
+    expect(evaluate_source(&unit, "ishftc(1_1,-1)", &value) && value == -128,
+           "ISHFTC rotates a full-width target bit sequence");
+    expect(evaluate_source(&unit, "ishftc(1_8,-1)", &value) && value == INT64_MIN,
+           "ISHFTC rotates into the 64-bit sign position without overflow");
+    expect(evaluate_source(&unit, "ishftc(-16_1,1,4)", &value) && value == -16,
+           "ISHFTC preserves bits outside the selected field");
+    expect(evaluate_source(&unit, "btest(128_2,7)", &value) && value == 1,
+           "BTEST folds to a logical truth value");
+    expect(!evaluate_source(&unit, "ibits(0_1,7,2)", &value),
+           "invalid IBITS ranges are not folded");
+    expect(!evaluate_source(&unit, "ishftc(1_1,2,1)", &value),
+           "invalid ISHFTC rotations are not folded");
     expect(!evaluate_source(&unit, "9223372036854775807+1", &value),
            "constant addition overflow is rejected");
-    expect(!evaluate_source(&unit, "1/0", &value),
-           "constant division by zero is rejected");
+    expect(!evaluate_source(&unit, "1/0", &value), "constant division by zero is rejected");
     expect(!evaluate_source(&unit, "cycle_a", &value),
            "cyclic parameter references terminate with failure");
 

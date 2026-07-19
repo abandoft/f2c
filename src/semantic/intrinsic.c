@@ -146,8 +146,8 @@ static const F2cExpr *argument_value(const F2cExpr *argument) {
     return argument;
 }
 
-static const F2cExpr *intrinsic_argument(F2cExpr *const *arguments, size_t count,
-                                         const char *keyword, size_t position) {
+const F2cExpr *f2c_intrinsic_argument(F2cExpr *const *arguments, size_t count, const char *keyword,
+                                      size_t position) {
     size_t positional = 0U;
     size_t i;
     for (i = 0U; i < count; ++i) {
@@ -279,17 +279,17 @@ size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, s
     if (strcmp(name, "shape") == 0)
         return 1U;
     if (strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0)
-        return intrinsic_argument(arguments, count, "dim", 1U) != NULL ? 0U : 1U;
+        return f2c_intrinsic_argument(arguments, count, "dim", 1U) != NULL ? 0U : 1U;
     if (strcmp(name, "unpack") == 0) {
-        const F2cExpr *mask = intrinsic_argument(arguments, count, "mask", 1U);
+        const F2cExpr *mask = f2c_intrinsic_argument(arguments, count, "mask", 1U);
         return mask != NULL ? mask->rank : 0U;
     }
     if (strcmp(name, "spread") == 0) {
-        const F2cExpr *source = intrinsic_argument(arguments, count, "source", 0U);
+        const F2cExpr *source = f2c_intrinsic_argument(arguments, count, "source", 0U);
         return source != NULL && source->rank < F2C_MAX_RANK ? source->rank + 1U : 0U;
     }
     if (strcmp(name, "reshape") == 0) {
-        const F2cExpr *shape = intrinsic_argument(arguments, count, "shape", 1U);
+        const F2cExpr *shape = f2c_intrinsic_argument(arguments, count, "shape", 1U);
         if (shape != NULL && shape->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
             return shape->child_count <= F2C_MAX_RANK ? shape->child_count : 0U;
         return shape != NULL && shape->shape.rank == 1U && shape->shape.dimensions[0].extent_known
@@ -300,7 +300,8 @@ size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, s
         strcmp(name, "minloc") == 0) {
         const F2cExpr *array = count != 0U ? argument_value(arguments[0]) : NULL;
         const size_t dim_position = strcmp(name, "findloc") == 0 ? 2U : 1U;
-        const int has_dimension = intrinsic_argument(arguments, count, "dim", dim_position) != NULL;
+        const int has_dimension =
+            f2c_intrinsic_argument(arguments, count, "dim", dim_position) != NULL;
         return has_dimension ? (array != NULL && array->rank != 0U ? array->rank - 1U : 0U) : 1U;
     }
     if (signature->rank_rule == F2C_INTRINSIC_RANK_SCALAR)
@@ -328,7 +329,7 @@ int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size
         return 0;
     if (signature->kind_rule == F2C_INTRINSIC_KIND_DEFAULT)
         return f2c_default_kind(f2c_resolve_intrinsic_type(name, NULL, 0U));
-    first = intrinsic_argument(arguments, count, "i", 0U);
+    first = f2c_intrinsic_argument(arguments, count, "i", 0U);
     return first != NULL && first->type_kind != 0 ? first->type_kind
                                                   : f2c_default_kind(TYPE_INTEGER);
 }

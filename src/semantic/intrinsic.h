@@ -41,6 +41,8 @@ typedef struct F2cIntrinsicSignature {
 
 const F2cIntrinsicSignature *f2c_find_intrinsic(const char *name);
 int f2c_is_intrinsic_name(const char *name);
+const F2cExpr *f2c_intrinsic_argument(F2cExpr *const *arguments, size_t count, const char *keyword,
+                                      size_t position);
 Type f2c_resolve_intrinsic_type(const char *name, const Type *arguments, size_t count);
 size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, size_t count);
 int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size_t count);

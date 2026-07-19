@@ -1,4 +1,5 @@
 #include "internal/f2c.h"
+#include "semantic/constant/private.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -68,6 +69,9 @@ typedef struct F2cConstantEvaluation {
     size_t steps;
 } F2cConstantEvaluation;
 
+static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression, int64_t *value,
+                    size_t depth);
+
 static size_t evaluation_line(const F2cConstantEvaluation *evaluation) {
     if (evaluation->context != NULL && evaluation->unit != NULL &&
         evaluation->unit->begin < evaluation->context->lines.count)
@@ -104,6 +108,85 @@ static int consume_evaluation_step(F2cConstantEvaluation *evaluation, size_t dep
     return 1;
 }
 
+static int evaluate_bit_intrinsic(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
+                                  int64_t *value, size_t depth) {
+    static const char *const unary[] = {"i"};
+    static const char *const binary[] = {"i", "j"};
+    static const char *const position[] = {"i", "pos"};
+    static const char *const bits[] = {"i", "pos", "len"};
+    static const char *const shift[] = {"i", "shift"};
+    static const char *const circular[] = {"i", "shift", "size"};
+    const char *const *names = unary;
+    size_t count = 1U;
+    size_t minimum = 1U;
+    const F2cExpr *model;
+    int64_t arguments[3] = {0, 0, 0};
+    int integer_kind;
+    size_t index;
+    if (expression == NULL || expression->rank != 0U)
+        return 0;
+    switch (expression->intrinsic) {
+    case F2C_INTRINSIC_IAND:
+    case F2C_INTRINSIC_IEOR:
+    case F2C_INTRINSIC_IOR:
+        names = binary;
+        count = 2U;
+        minimum = 2U;
+        break;
+    case F2C_INTRINSIC_BTEST:
+    case F2C_INTRINSIC_IBCLR:
+    case F2C_INTRINSIC_IBSET:
+        names = position;
+        count = 2U;
+        minimum = 2U;
+        break;
+    case F2C_INTRINSIC_IBITS:
+        names = bits;
+        count = 3U;
+        minimum = 3U;
+        break;
+    case F2C_INTRINSIC_ISHFT:
+        names = shift;
+        count = 2U;
+        minimum = 2U;
+        break;
+    case F2C_INTRINSIC_ISHFTC:
+        names = circular;
+        count = 3U;
+        minimum = 2U;
+        break;
+    case F2C_INTRINSIC_BIT_SIZE:
+    case F2C_INTRINSIC_NOT:
+        break;
+    case F2C_INTRINSIC_NONE:
+    case F2C_INTRINSIC_MVBITS:
+    default:
+        return 0;
+    }
+    model = f2c_intrinsic_argument(expression->children, expression->child_count, "i", 0U);
+    if (model == NULL || model->type != TYPE_INTEGER)
+        return 0;
+    integer_kind = model->type_kind != 0 ? model->type_kind : f2c_default_kind(TYPE_INTEGER);
+    if (expression->intrinsic == F2C_INTRINSIC_BIT_SIZE)
+        return f2c_constant_fold_bit_intrinsic(expression->intrinsic, integer_kind, NULL, 0U,
+                                               value);
+    for (index = 0U; index < count; ++index) {
+        const F2cExpr *argument = f2c_intrinsic_argument(
+            expression->children, expression->child_count, names[index], index);
+        if (argument == NULL) {
+            if (index < minimum)
+                return 0;
+            count = index;
+            break;
+        }
+        if (argument->type != TYPE_INTEGER || argument->rank != 0U ||
+            !evaluate(evaluation, argument, &arguments[index], depth + 1U))
+            return 0;
+    }
+    return f2c_constant_fold_bit_intrinsic(expression->intrinsic, integer_kind, arguments, count,
+                                           value);
+}
+
 static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression, int64_t *value,
                     size_t depth) {
     int64_t left;
@@ -126,10 +209,10 @@ static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression
         F2cExpr *temporary = NULL;
         const F2cExpr *initializer = expression->symbol->initializer_expression;
         if (initializer == NULL && expression->symbol->initializer_syntax.count != 0U) {
-            temporary = f2c_parse_expression_tokens(
-                unit, expression->symbol->initializer_syntax.tokens,
-                expression->symbol->initializer_syntax.count,
-                expression->symbol->initializer_syntax.source, NULL);
+            temporary =
+                f2c_parse_expression_tokens(unit, expression->symbol->initializer_syntax.tokens,
+                                            expression->symbol->initializer_syntax.count,
+                                            expression->symbol->initializer_syntax.source, NULL);
             initializer = temporary;
         }
         const int result = evaluate(evaluation, initializer, value, depth + 1U);
@@ -151,6 +234,9 @@ static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression
     if (expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
         expression->child_count != 0U) {
         size_t i;
+        if (expression->intrinsic != F2C_INTRINSIC_NONE &&
+            evaluate_bit_intrinsic(evaluation, expression, value, depth))
+            return 1;
         if (strcmp(expression->text, "len") == 0 && expression->child_count == 1U) {
             const F2cExpr *argument = expression->children[0];
             if (argument->kind == F2C_EXPR_STRING_LITERAL) {
@@ -239,8 +325,8 @@ int f2c_evaluate_integer_syntax(Unit *unit, F2cTokenRange syntax, int64_t *value
     int result;
     if (syntax.count == 0U || syntax.tokens == NULL)
         return 0;
-    expression = f2c_parse_expression_tokens(unit, syntax.tokens, syntax.count, syntax.source,
-                                             &error_at);
+    expression =
+        f2c_parse_expression_tokens(unit, syntax.tokens, syntax.count, syntax.source, &error_at);
     result = expression != NULL && error_at == NULL &&
              f2c_evaluate_integer_constant(unit, expression, value);
     f2c_expr_free(expression);
@@ -262,6 +348,11 @@ int f2c_expression_is_initialization_constant(const F2cExpr *expression) {
     case F2C_EXPR_CALL:
         if (expression->text == NULL || !f2c_is_intrinsic_name(expression->text))
             return 0;
+        if (expression->intrinsic == F2C_INTRINSIC_BIT_SIZE) {
+            const F2cExpr *argument =
+                f2c_intrinsic_argument(expression->children, expression->child_count, "i", 0U);
+            return argument != NULL && argument->type == TYPE_INTEGER;
+        }
         break;
     case F2C_EXPR_ARRAY_REFERENCE:
     case F2C_EXPR_SUBSTRING:
