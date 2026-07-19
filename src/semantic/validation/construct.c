@@ -86,6 +86,12 @@ static const char *terminator_name(F2cStatementKind kind) {
 }
 
 static void report_missing_terminator(Context *context, const F2cStatement *opener) {
+    if (opener->terminal_label != NULL) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &opener->terminal_label_span, 1,
+                                 "DO construct is missing terminal statement label %s",
+                                 opener->terminal_label);
+        return;
+    }
     const char *required =
         opener->kind == F2C_STMT_SELECT_CASE || opener->kind == F2C_STMT_SELECT_TYPE ? "END SELECT"
         : opener->kind == F2C_STMT_BLOCK_SCOPE                                       ? "END BLOCK"
@@ -100,10 +106,86 @@ static size_t matching_frame(const ConstructFrame *frames, size_t depth,
                              F2cStatementKind terminator) {
     while (depth != 0U) {
         --depth;
-        if (terminator_matches(frames[depth].opener->kind, terminator))
+        if (terminator_matches(frames[depth].opener->kind, terminator) &&
+            !(terminator == F2C_STMT_END_DO && frames[depth].opener->terminal_label != NULL))
             return depth;
     }
     return SIZE_MAX;
+}
+
+static int is_loop(const F2cStatement *statement);
+
+static int prohibited_terminal_action(F2cStatementKind kind, int shared) {
+    if (kind == F2C_STMT_ARITHMETIC_IF || kind == F2C_STMT_CYCLE || kind == F2C_STMT_EXIT ||
+        kind == F2C_STMT_GOTO || kind == F2C_STMT_ASSIGNED_GOTO || kind == F2C_STMT_RETURN ||
+        kind == F2C_STMT_STOP)
+        return 1;
+    if (!shared && kind == F2C_STMT_CONTINUE)
+        return 0; /* A labeled CONTINUE is the end of a block DO construct. */
+    return kind == F2C_STMT_INVALID || kind == F2C_STMT_EMPTY || kind == F2C_STMT_DECLARATION ||
+           kind == F2C_STMT_FORMAT || kind == F2C_STMT_DATA || kind == F2C_STMT_END_IF ||
+           kind == F2C_STMT_END_SELECT || kind == F2C_STMT_END_WHERE ||
+           kind == F2C_STMT_END_BLOCK_SCOPE || (shared && kind == F2C_STMT_END_DO);
+}
+
+static int bind_labeled_do_terminal(Context *context, ConstructFrame *frames, size_t *depth,
+                                    F2cStatement *label_statement) {
+    F2cStatement *action;
+    size_t match = SIZE_MAX;
+    size_t outer;
+    size_t index;
+    size_t count;
+    if (label_statement->kind != F2C_STMT_LABEL || label_statement->name == NULL)
+        return 0;
+    for (index = *depth; index != 0U; --index) {
+        F2cStatement *opener = frames[index - 1U].opener;
+        if (is_loop(opener) && opener->terminal_label != NULL &&
+            f2c_statement_labels_equal(opener->terminal_label, label_statement->name)) {
+            match = index - 1U;
+            break;
+        }
+    }
+    if (match == SIZE_MAX)
+        return 0;
+    outer = match;
+    while (outer != 0U) {
+        F2cStatement *candidate = frames[outer - 1U].opener;
+        if (!is_loop(candidate) || candidate->terminal_label == NULL ||
+            !f2c_statement_labels_equal(candidate->terminal_label, label_statement->name))
+            break;
+        --outer;
+    }
+    for (index = *depth; index > match + 1U; --index)
+        report_missing_terminator(context, frames[index - 1U].opener);
+    count = match - outer + 1U;
+    free(label_statement->terminal_loops);
+    label_statement->terminal_loops =
+        (F2cStatement **)calloc(count, sizeof(*label_statement->terminal_loops));
+    label_statement->terminal_loop_count = 0U;
+    if (label_statement->terminal_loops == NULL) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &label_statement->span, 1,
+                                 "out of memory while binding labeled DO termination");
+        *depth = outer;
+        return 1;
+    }
+    for (index = match + 1U; index > outer; --index)
+        label_statement->terminal_loops[label_statement->terminal_loop_count++] =
+            frames[index - 1U].opener;
+    action = label_statement->nested;
+    if (action == NULL) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SYNTAX, &label_statement->span, 1,
+                                 "labeled DO terminal label %s requires a terminal statement",
+                                 label_statement->name);
+    } else if (opens_construct(action) || prohibited_terminal_action(action->kind, count > 1U)) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &action->span, 1,
+                                 "%s cannot terminate %s labeled DO construct%s",
+                                 action->text != NULL ? action->text : "statement",
+                                 count > 1U ? "shared" : "a", count > 1U ? "s" : "");
+    }
+    if (action != NULL)
+        action->construct_owner = label_statement->terminal_loops[0];
+    *depth = outer;
+    return 1;
 }
 
 static int is_loop(const F2cStatement *statement) {
@@ -200,6 +282,11 @@ void f2c_validation_bind_constructs(Context *context, Unit *unit) {
         F2cStatement *statement = &unit->statements[index];
         statement->construct_owner = NULL;
         statement->control_target = NULL;
+        free(statement->terminal_loops);
+        statement->terminal_loops = NULL;
+        statement->terminal_loop_count = 0U;
+        if (bind_labeled_do_terminal(context, frames, &depth, statement))
+            continue;
         if (statement->kind == F2C_STMT_LABEL && statement->nested != NULL) {
             statement = statement->nested;
             statement->construct_owner = NULL;
