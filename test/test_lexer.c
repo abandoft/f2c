@@ -309,13 +309,14 @@ static void test_statement_syntax_predicates(void) {
     Line declaration = tokenized_line("type(child) :: value");
     Line contains_name = tokenized_line("contains_value = 'contains'");
     Line abstract_interface = tokenized_line("abstract interface");
-    const F2cToken *module_name = NULL;
+    F2cModuleHeaderSyntax module_syntax;
     F2cUnitEndSyntax end_syntax;
 
-    expect(f2c_module_header_tokens(&module, &module_name) && module_name != NULL &&
-               f2c_token_equals(module_name, "numerics"),
+    expect(f2c_parse_module_header_syntax(&module, &module_syntax) == F2C_MODULE_HEADER_PARSED &&
+               f2c_token_equals(module_syntax.name, "numerics"),
            "module headers and names are classified from canonical tokens");
-    expect(!f2c_module_header_tokens(&module_procedure, NULL) &&
+    expect(f2c_parse_module_header_syntax(&module_procedure, &module_syntax) ==
+                   F2C_MODULE_HEADER_NOT_MATCHED &&
                f2c_module_procedure_tokens(&module_procedure),
            "MODULE PROCEDURE cannot be mistaken for a module definition");
     expect(f2c_parse_unit_end_syntax(&quoted_end, &end_syntax) == F2C_UNIT_END_NOT_MATCHED,

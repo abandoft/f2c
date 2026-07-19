@@ -39,20 +39,6 @@ int f2c_module_procedure_tokens(const Line *line) {
            word(line, 1U, "procedure");
 }
 
-int f2c_module_header_tokens(const Line *line, const F2cToken **name) {
-    const size_t start = statement_start(line);
-    const size_t count = statement_token_count(line);
-    if (name != NULL)
-        *name = NULL;
-    if (line == NULL || count != 2U || !word(line, 0U, "module") ||
-        line->tokens[start + 1U].kind != F2C_TOKEN_IDENTIFIER || word(line, 1U, "procedure") ||
-        word(line, 1U, "subroutine") || word(line, 1U, "function"))
-        return 0;
-    if (name != NULL)
-        *name = &line->tokens[start + 1U];
-    return 1;
-}
-
 int f2c_contains_tokens(const Line *line) {
     return statement_token_count(line) == 1U && word(line, 0U, "contains");
 }

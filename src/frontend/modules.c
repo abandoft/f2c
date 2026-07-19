@@ -569,15 +569,25 @@ void f2c_import_host_module(Context *context, Unit *unit) {
 int f2c_discover_modules(Context *context) {
     size_t line_index;
     for (line_index = 0U; line_index < context->lines.count; ++line_index) {
-        const F2cToken *name_token = NULL;
+        F2cModuleHeaderSyntax header;
+        F2cModuleHeaderParseStatus header_status;
+        const F2cToken *name_token;
         char *name;
         size_t end;
         size_t contains;
         Unit *replacement;
         Unit module;
         Unit opening;
-        if (!f2c_module_header_tokens(&context->lines.items[line_index], &name_token))
+        header_status = f2c_parse_module_header_syntax(&context->lines.items[line_index], &header);
+        if (header_status == F2C_MODULE_HEADER_NOT_MATCHED)
             continue;
+        if (header_status == F2C_MODULE_HEADER_INVALID) {
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX,
+                                      &context->lines.items[line_index], header.error_token, 1,
+                                      "MODULE statement requires exactly one valid name");
+            continue;
+        }
+        name_token = header.name;
         name = f2c_token_text(name_token);
         if (name == NULL)
             continue;
@@ -630,11 +640,7 @@ int f2c_discover_modules(Context *context) {
         memset(&module, 0, sizeof(module));
         module.context = context;
         module.kind = UNIT_MODULE;
-        module.header_span =
-            f2c_source_span_cover(&context->lines.items[line_index].tokens[0].span,
-                                  &context->lines.items[line_index]
-                                       .tokens[context->lines.items[line_index].token_count - 1U]
-                                       .span);
+        module.header_span = header.span;
         module.name_span = name_token->span;
         module.name = name;
         module.fortran_name = f2c_strdup(name);
@@ -657,9 +663,10 @@ int f2c_discover_modules(Context *context) {
 int f2c_has_la_constants_module(const Context *context) {
     size_t i;
     for (i = 0U; i < context->lines.count; ++i) {
-        const F2cToken *name = NULL;
-        if (f2c_module_header_tokens(&context->lines.items[i], &name) && name != NULL &&
-            f2c_token_equals(name, "la_constants"))
+        F2cModuleHeaderSyntax header;
+        if (f2c_parse_module_header_syntax(&context->lines.items[i], &header) ==
+                F2C_MODULE_HEADER_PARSED &&
+            f2c_token_equals(header.name, "la_constants"))
             return 1;
     }
     return 0;
