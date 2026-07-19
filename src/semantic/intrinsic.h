@@ -24,17 +24,25 @@ typedef enum F2cIntrinsicRankRule {
     F2C_INTRINSIC_RANK_MOLD
 } F2cIntrinsicRankRule;
 
+typedef enum F2cIntrinsicKindRule {
+    F2C_INTRINSIC_KIND_DEFAULT,
+    F2C_INTRINSIC_KIND_FIRST
+} F2cIntrinsicKindRule;
+
 typedef struct F2cIntrinsicSignature {
     const char *name;
     size_t minimum_arguments;
     size_t maximum_arguments;
     F2cIntrinsicTypeRule type_rule;
     F2cIntrinsicRankRule rank_rule;
+    F2cIntrinsicId id;
+    F2cIntrinsicKindRule kind_rule;
 } F2cIntrinsicSignature;
 
 const F2cIntrinsicSignature *f2c_find_intrinsic(const char *name);
 int f2c_is_intrinsic_name(const char *name);
 Type f2c_resolve_intrinsic_type(const char *name, const Type *arguments, size_t count);
 size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, size_t count);
+int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size_t count);
 
 #endif

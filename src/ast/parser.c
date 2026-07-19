@@ -206,6 +206,7 @@ static F2cExpr *parse_postfix(AstParser *parser, const F2cToken *name_token) {
     } else if ((f2c_is_intrinsic_name(expression->text) ||
                 f2c_ast_is_generated_c_intrinsic(expression->text)) &&
                (symbol == NULL || !symbol->statement_function)) {
+        const F2cIntrinsicSignature *signature = f2c_find_intrinsic(expression->text);
         Type *argument_types =
             expression->child_count != 0U
                 ? (Type *)malloc(expression->child_count * sizeof(*argument_types))
@@ -229,6 +230,7 @@ static F2cExpr *parse_postfix(AstParser *parser, const F2cToken *name_token) {
                 expression->type = TYPE_DOUBLE_COMPLEX;
         }
         free(argument_types);
+        expression->intrinsic = signature != NULL ? signature->id : F2C_INTRINSIC_NONE;
         expression->rank = f2c_is_intrinsic_name(expression->text)
                                ? f2c_resolve_intrinsic_rank(expression->text, expression->children,
                                                             expression->child_count)
@@ -307,6 +309,9 @@ static F2cExpr *parse_postfix(AstParser *parser, const F2cToken *name_token) {
             if (selected_kind != 0)
                 expression->type_kind = selected_kind;
         }
+        if (signature != NULL && signature->kind_rule != F2C_INTRINSIC_KIND_DEFAULT)
+            expression->type_kind = f2c_resolve_intrinsic_kind(
+                expression->text, expression->children, expression->child_count);
     } else if (symbol != NULL) {
         expression->type = symbol->type;
         expression->type_kind = symbol->kind != 0 ? symbol->kind : f2c_default_kind(symbol->type);

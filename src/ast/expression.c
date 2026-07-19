@@ -120,6 +120,7 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
     if (clone == NULL)
         return NULL;
     clone->kind = expression->kind;
+    clone->intrinsic = expression->intrinsic;
     clone->type = expression->type;
     clone->type_kind = expression->type_kind;
     clone->rank = expression->rank;

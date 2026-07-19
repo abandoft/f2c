@@ -197,6 +197,7 @@ set(
     src/ir/expression.h
     src/ir/format.c
     src/ir/format.h
+    src/ir/intrinsic.h
     src/ir/statement.h
     src/ir/type.h
     src/semantic/character.c

@@ -317,6 +317,8 @@ static void test_intrinsic_type_registry(void) {
     const Type real_argument[] = {TYPE_REAL};
     const Type complex_argument[] = {TYPE_COMPLEX};
     const Type transfer_arguments[] = {TYPE_REAL, TYPE_COMPLEX, TYPE_INTEGER};
+    F2cExpr integer_eight;
+    F2cExpr *kind_arguments[1];
     F2cExpr array_argument;
     F2cExpr scalar_argument;
     F2cExpr *rank_arguments[3];
@@ -327,6 +329,18 @@ static void test_intrinsic_type_registry(void) {
            "complex ABS has a REAL result");
     expect(f2c_resolve_intrinsic_type("transfer", transfer_arguments, 3U) == TYPE_COMPLEX,
            "TRANSFER result type is determined by its mold");
+    memset(&integer_eight, 0, sizeof(integer_eight));
+    integer_eight.type = TYPE_INTEGER;
+    integer_eight.type_kind = 8;
+    integer_eight.rank = 2U;
+    kind_arguments[0] = &integer_eight;
+    expect(f2c_resolve_intrinsic_kind("iand", kind_arguments, 1U) == 8,
+           "bit intrinsic result kind is inherited from I");
+    expect(f2c_find_intrinsic("ishftc") != NULL &&
+               f2c_find_intrinsic("ishftc")->id == F2C_INTRINSIC_ISHFTC,
+           "bit intrinsics have stable typed-IR identities");
+    expect(f2c_resolve_intrinsic_rank("bit_size", kind_arguments, 1U) == 0U,
+           "BIT_SIZE is scalar even when its model argument is not elemental");
     mod_signature = f2c_find_intrinsic("mod");
     expect(mod_signature != NULL && mod_signature->minimum_arguments == 2U &&
                mod_signature->maximum_arguments == 2U,

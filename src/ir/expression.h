@@ -2,6 +2,7 @@
 #define F2C_IR_EXPRESSION_H
 
 #include "frontend/token.h"
+#include "ir/intrinsic.h"
 #include "semantic/model.h"
 
 typedef enum F2cExprKind {
@@ -28,6 +29,7 @@ typedef enum F2cExprKind {
 
 struct F2cExpr {
     F2cExprKind kind;
+    F2cIntrinsicId intrinsic;
     Type type;
     int type_kind;
     size_t rank;

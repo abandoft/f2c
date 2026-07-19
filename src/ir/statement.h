@@ -168,6 +168,7 @@ typedef struct F2cCaseRange {
 
 struct F2cStatement {
     F2cStatementKind kind;
+    F2cIntrinsicId intrinsic;
     F2cIrState state;
     size_t line;
     F2cSourceSpan span;
