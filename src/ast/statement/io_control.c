@@ -37,6 +37,7 @@ static const IoControlName control_names[] = {
     {"asynchronous", F2C_IO_CONTROL_ASYNCHRONOUS},
     {"id", F2C_IO_CONTROL_ID},
     {"newunit", F2C_IO_CONTROL_NEWUNIT},
+    {"iolength", F2C_IO_CONTROL_IOLENGTH},
     {"exist", F2C_IO_CONTROL_EXIST},
     {"opened", F2C_IO_CONTROL_OPENED},
     {"number", F2C_IO_CONTROL_NUMBER},
@@ -196,6 +197,14 @@ static int parse_io_items(Unit *unit, F2cTokenRange range, F2cStatement *stateme
     return 1;
 }
 
+static int has_control(const F2cStatement *statement, F2cIoControlKind kind) {
+    size_t index;
+    for (index = 0U; index < statement->control_count; ++index)
+        if (statement->io_controls[index].kind == kind)
+            return 1;
+    return 0;
+}
+
 int f2c_statement_parse_io(Unit *unit, const Line *line, size_t body_start,
                            F2cStatement *statement) {
     F2cTokenRange line_range;
@@ -223,7 +232,8 @@ int f2c_statement_parse_io(Unit *unit, const Line *line, size_t body_start,
     }
     if (!parse_control_list(unit, controls, statement))
         return 0;
-    if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE) {
+    if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
+        (statement->kind == F2C_STMT_INQUIRE && has_control(statement, F2C_IO_CONTROL_IOLENGTH))) {
         if (!parse_io_items(unit, tail, statement))
             return 0;
     } else if (tail.count != 0U) {
