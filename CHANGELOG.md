@@ -1,3 +1,12 @@
+## 1.16.0
+
+- Added a structured syntax AST for `USE` statements with nature, empty `ONLY`, entity renames, generic designators, and exact source ranges.
+- Unified `USE` statement classification so `use` remains valid as an ordinary entity name, with precise diagnostics for malformed associations, duplicate local names, and conflicting aliases.
+- Completed module-association lowering for variables, constants, complete external-procedure signatures, and local derived-type aliases while correctly hiding renamed remote names.
+- Added a project-module dependency graph, stable topological ordering, and cycle diagnostics so semantic analysis and C17 emission no longer depend on source module order.
+- Isolated module interface-body scopes to prevent imported symbols, implicit rules, and derived types from leaking into the host module, and completed full and renamed `LA_CONSTANTS` imports.
+- Added structured-syntax, module-order, interface-scope, generated-C17, and exact-diagnostic regressions, then revalidated 36 strict C17 and sanitizer tests together with the pinned Reference BLAS/LAPACK correctness gates.
+
 ## 1.15.0
 
 - Added structured syntax ASTs for `PROGRAM`, `SUBROUTINE`, `FUNCTION`, and `MODULE` headers, preserving procedure prefixes, dummy arguments, function results, and exact source ranges.
