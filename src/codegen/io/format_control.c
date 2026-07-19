@@ -227,7 +227,10 @@ int f2c_io_emit_formatted_transfer(Context *context, Unit *unit, const F2cStatem
     }
     if (status_target != NULL) {
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "%s = f2c_io_format.status;\n", status_target);
+        f2c_buffer_printf(&context->output,
+                          "%s = f2c_stream_error(%s) ? F2C_IO_STATUS_RECORD : "
+                          "f2c_io_format.status;\n",
+                          status_target, file);
     }
     --depth;
     f2c_io_indent(&context->output, depth);
