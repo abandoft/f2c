@@ -100,11 +100,12 @@ if(
 endif()
 if(
     NOT INTERFACE_LOWERING MATCHES
-        "f2c_parse_module_procedure_statement_syntax[ \t\r\n]*\\("
-    OR INTERFACE_LOWERING MATCHES "f2c_module_procedure_tokens[ \t\r\n]*\\("
+        "f2c_parse_interface_header_syntax[ \t\r\n]*\\("
+    OR NOT INTERFACE_LOWERING MATCHES
+        "f2c_parse_interface_specific_syntax[ \t\r\n]*\\("
 )
     message(FATAL_ERROR
-            "MODULE PROCEDURE bindings must lower exclusively from their canonical syntax AST")
+            "INTERFACE headers and PROCEDURE bindings must lower from their canonical syntax AST")
 endif()
 if(
     NOT SEMANTIC_MODEL MATCHES "Unit[ \t]*\\*\\*[ \t]*generic_candidates"
