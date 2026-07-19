@@ -93,6 +93,8 @@ foreach(
        internal_file_array
        internal_file_semantics
        module_use
+       module_dependency_order
+       module_interface_use
        module_procedure
        module_allocatable
        allocatable_scope
