@@ -80,6 +80,10 @@ file(READ "${SOURCE_DIR}/src/frontend/module/dependency.c" MODULE_DEPENDENCIES)
 file(READ "${SOURCE_DIR}/src/frontend/pipeline.c" FRONTEND_PIPELINE)
 file(READ "${SOURCE_DIR}/src/frontend/module/access.c" ACCESS_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/interface.c" INTERFACE_LOWERING)
+file(READ "${SOURCE_DIR}/src/semantic/validation/expression.c" EXPRESSION_VALIDATION)
+file(READ "${SOURCE_DIR}/src/semantic/validation/statement.c" STATEMENT_VALIDATION)
+file(READ "${SOURCE_DIR}/src/codegen/expression.c" EXPRESSION_CODEGEN)
+file(READ "${SOURCE_DIR}/src/codegen/statement/assignment.c" ASSIGNMENT_CODEGEN)
 file(READ "${SOURCE_DIR}/src/frontend/declaration/syntax.c" DECLARATION_CLASSIFICATION)
 file(READ "${SOURCE_DIR}/src/codegen/module.c" MODULE_CODEGEN)
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
@@ -114,6 +118,22 @@ if(
 )
     message(FATAL_ERROR
             "named generic interfaces must retain and import their complete candidate sets")
+endif()
+if(
+    NOT EXPRESSION_VALIDATION MATCHES "f2c_validation_generic_specific[ \t\r\n]*\\("
+    OR NOT EXPRESSION_VALIDATION MATCHES "resolved_procedure[ \t]*=[ \t]*definition"
+    OR NOT EXPRESSION_CODEGEN MATCHES "expression->resolved_procedure"
+)
+    message(FATAL_ERROR
+            "defined and extended operators must lower through typed generic resolution")
+endif()
+if(
+    NOT STATEMENT_VALIDATION MATCHES "assignment\\(=\\)"
+    OR NOT STATEMENT_VALIDATION MATCHES "resolved_procedure[ \t]*=[ \t]*definition"
+    OR NOT ASSIGNMENT_CODEGEN MATCHES "statement->resolved_procedure"
+)
+    message(FATAL_ERROR
+            "defined assignment must lower through typed generic resolution")
 endif()
 if(
     NOT SEMANTIC_MODEL MATCHES "int[ \t]+use_associated"
