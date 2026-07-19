@@ -1,3 +1,11 @@
+## 1.12.0
+
+- Migrated counted, unbounded, `WHILE`, and labeled `DO`, single-line, block, and arithmetic `IF`, `ASSIGN`, and direct, computed, and assigned `GOTO` statements to the canonical token, AST, and typed IR pipeline.
+- Removed labeled-DO source rewriting and added explicit single and shared terminal-label ownership, legal terminal-action execution, canonical statement labels, and exact source spans.
+- Added program-unit label-graph validation for duplicate, undefined, and nonexecutable targets, illegal construct entry, sibling branch transfers, assigned labels, and I/O `ERR`, `END`, and `EOR` edges.
+- Split loop code generation into a dedicated emitter with stable IDs for labeled statement wrappers, correct loop-variable final values, and structured `CYCLE` and `EXIT` targets.
+- Added malformed-syntax and semantic regressions, strict C17 execution, sanitizer coverage, a byte-exact native legacy-control differential, and full pinned Reference BLAS/LAPACK validation.
+
 ## 1.11.0
 
 - Added a complete token, AST, typed IR, semantic-validation, and C17 code-generation pipeline for `INQUIRE(IOLENGTH=)`.
