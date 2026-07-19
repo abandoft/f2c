@@ -51,6 +51,12 @@ foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
     if(CONTENT MATCHES "f2c_(program_unit|module)_end_tokens[ \t\r\n]*\\(")
         message(FATAL_ERROR "${RELATIVE_FILE} bypasses the program-unit END syntax AST")
     endif()
+    if(
+        NOT RELATIVE_FILE STREQUAL "src/ast/declaration/use.c"
+        AND CONTENT MATCHES "f2c_line_token_equals[^\n]*\"use\""
+    )
+        message(FATAL_ERROR "${RELATIVE_FILE} guesses USE statements outside the canonical AST")
+    endif()
     if(CONTENT MATCHES "netlib-f2c")
         message(FATAL_ERROR "${RELATIVE_FILE} references the archived netlib-f2c tree")
     endif()
@@ -69,6 +75,9 @@ endif()
 
 file(READ "${SOURCE_DIR}/src/semantic/model.h" SEMANTIC_MODEL)
 file(READ "${SOURCE_DIR}/src/frontend/procedure.c" PROCEDURE_LOWERING)
+file(READ "${SOURCE_DIR}/src/frontend/modules.c" USE_LOWERING)
+file(READ "${SOURCE_DIR}/src/frontend/module/dependency.c" MODULE_DEPENDENCIES)
+file(READ "${SOURCE_DIR}/src/frontend/pipeline.c" FRONTEND_PIPELINE)
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
 endif()
@@ -77,6 +86,24 @@ if(
     OR PROCEDURE_LOWERING MATCHES "f2c_(line_find_token|token_matching_delimiter)[ \t\r\n]*\\("
 )
     message(FATAL_ERROR "PROCEDURE declarations must lower from their canonical syntax AST")
+endif()
+if(
+    NOT USE_LOWERING MATCHES "f2c_parse_use_statement_syntax[ \t\r\n]*\\("
+    OR USE_LOWERING MATCHES "(parse_use_syntax|next_use_association|UseSyntax)"
+)
+    message(FATAL_ERROR "USE statements must lower exclusively from their canonical syntax AST")
+endif()
+if(
+    NOT MODULE_DEPENDENCIES MATCHES "f2c_parse_use_statement_syntax[ \t\r\n]*\\("
+    OR NOT FRONTEND_PIPELINE MATCHES "f2c_build_module_analysis_order[ \t\r\n]*\\("
+)
+    message(FATAL_ERROR "project modules must be analyzed from structured USE dependencies")
+endif()
+if(
+    SEMANTIC_MODEL MATCHES "F2cDerivedType[ \t]*\\*[ \t]*\\*[ \t]*imported_derived_types"
+    OR NOT SEMANTIC_MODEL MATCHES "F2cImportedDerivedType[ \t]*\\*[ \t]*imported_derived_types"
+)
+    message(FATAL_ERROR "imported derived types must retain explicit local association names")
 endif()
 
 file(READ "${SOURCE_DIR}/include/f2c/f2c.h" PUBLIC_API)
