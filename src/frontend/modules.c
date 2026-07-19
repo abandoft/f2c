@@ -761,14 +761,12 @@ void f2c_import_module(Context *context, Unit *unit, Line *source_line) {
         const F2cUseAssociationSyntax *association = &syntax.items[index];
         char *local_name;
         char *remote_name;
-        if (association->local.kind != F2C_USE_DESIGNATOR_NAME ||
-            association->remote.kind != F2C_USE_DESIGNATOR_NAME) {
-            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &association->span, 1,
-                                     "generic USE association requires module generic binding");
-            continue;
-        }
-        local_name = f2c_token_text(association->local.name);
-        remote_name = f2c_token_text(association->remote.name);
+        local_name = association->local.kind == F2C_USE_DESIGNATOR_NAME
+                         ? f2c_token_text(association->local.name)
+                         : f2c_generic_designator_key(&association->local);
+        remote_name = association->remote.kind == F2C_USE_DESIGNATOR_NAME
+                          ? f2c_token_text(association->remote.name)
+                          : f2c_generic_designator_key(&association->remote);
         if (local_name == NULL || remote_name == NULL) {
             f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &association->span, 1,
                                      "out of memory importing module association");
