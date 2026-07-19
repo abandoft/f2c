@@ -120,8 +120,10 @@ set(
     src/core/config.c
     src/core/cleanup.c
     src/core/generated/io.c
+    src/core/generated/list.c
     src/core/generated/private.h
     src/core/generated/relation.c
+    src/core/generated/stream.c
     src/core/support.c
     src/core/transpile.c
     src/frontend/analyze.c

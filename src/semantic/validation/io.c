@@ -410,6 +410,38 @@ static const F2cIoControl *find_io_control(const F2cStatement *statement, F2cIoC
     return NULL;
 }
 
+static const F2cIoControl *find_unit_control(const F2cStatement *statement) {
+    size_t index;
+    size_t positional = 0U;
+    for (index = 0U; index < statement->control_count; ++index) {
+        const F2cIoControl *control = &statement->io_controls[index];
+        F2cIoControlKind kind = control->kind;
+        if (kind == F2C_IO_CONTROL_POSITIONAL)
+            kind = positional_io_control_kind(statement->kind, positional++);
+        if (kind == F2C_IO_CONTROL_UNIT)
+            return control;
+    }
+    return NULL;
+}
+
+static void validate_internal_file_relations(Context *context, const F2cStatement *statement,
+                                             const unsigned char *seen) {
+    const F2cIoControl *unit = find_unit_control(statement);
+    if ((statement->kind != F2C_STMT_READ && statement->kind != F2C_STMT_WRITE) || unit == NULL ||
+        unit->value == NULL || unit->value->type != TYPE_CHARACTER)
+        return;
+    if (seen[F2C_IO_CONTROL_ADVANCE] || seen[F2C_IO_CONTROL_EOR] || seen[F2C_IO_CONTROL_SIZE]) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &unit->span, 1,
+                                 "internal-file %s cannot use ADVANCE=, EOR=, or SIZE=",
+                                 io_statement_name(statement->kind));
+    }
+    if (!seen[F2C_IO_CONTROL_FMT] && !seen[F2C_IO_CONTROL_NML]) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &unit->span, 1,
+                                 "internal-file %s must be formatted",
+                                 io_statement_name(statement->kind));
+    }
+}
+
 static int character_control_value(const F2cIoControl *control, char *value, size_t capacity) {
     const char *text = control != NULL && control->value != NULL ? control->value->text : NULL;
     const char *quote = text != NULL ? f2c_character_literal_quote(text) : NULL;
@@ -650,6 +682,7 @@ void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *sta
     if ((seen[F2C_IO_CONTROL_EOR] || seen[F2C_IO_CONTROL_SIZE]) && !seen[F2C_IO_CONTROL_ADVANCE]) {
         f2c_diagnostic_at(context, statement->line, 1U, 1, "EOR= and SIZE= require ADVANCE='NO'");
     }
+    validate_internal_file_relations(context, statement, seen);
     validate_file_control_relations(context, unit, statement, seen);
     for (i = 0U; i < statement->io_item_count; ++i)
         validate_io_item_semantics(context, unit, statement, &statement->io_items[i],

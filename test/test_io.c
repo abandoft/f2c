@@ -169,15 +169,16 @@ static void test_print_codegen(void) {
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
     expect(result.error_count == 0U,
            "literal, labeled, and runtime CHARACTER PRINT formats lower without diagnostics");
-    expect_contains(result.code,
-                    "static const f2c_format_instruction f2c_io_format_program_6[]",
+    expect_contains(result.code, "static const f2c_format_instruction f2c_io_format_program_6[]",
                     "PRINT character literals lower to immutable FORMAT programs");
     expect_contains(result.code,
-                    "f2c_format_initialize_program(&f2c_io_format, stdout, "
+                    "f2c_format_initialize_program(&f2c_io_format, "
+                    "f2c_unit_stream(6, false), "
                     "f2c_io_format_program_6",
                     "PRINT character literals bypass runtime FORMAT text parsing");
     expect_contains(result.code,
-                    "f2c_format_initialize_program(&f2c_io_format, stdout, "
+                    "f2c_format_initialize_program(&f2c_io_format, "
+                    "f2c_unit_stream(6, false), "
                     "f2c_io_format_program_7",
                     "PRINT statement labels use their bound structured FORMAT program");
     expect_contains(result.code, "runtime_format, (size_t)(16)",
@@ -186,9 +187,53 @@ static void test_print_codegen(void) {
                     "formatted PRINT implied-DO items lower through the structured item tree");
     expect_contains(result.code, "switch ((int32_t)(assigned_format))",
                     "assigned FORMAT variables lower to an explicit runtime selector");
-    expect_contains(result.code,
-                    "case 200: f2c_io_format_program = f2c_io_assigned_format_10_200",
+    expect_contains(result.code, "case 200: f2c_io_format_program = f2c_io_assigned_format_10_200",
                     "assigned FORMAT selectors reference only resolved immutable programs");
+    f2c_result_free(&result);
+}
+
+static void test_internal_file_constraints(void) {
+    static const char source[] = "program invalid_internal_file\n"
+                                 "  implicit none\n"
+                                 "  character(8) :: record\n"
+                                 "  integer :: value, status, transferred\n"
+                                 "  read(record, '(I2)', advance='no', size=transferred, "
+                                 "iostat=status) value\n"
+                                 "  write(record, '(I2)', advance='no', iostat=status) value\n"
+                                 "  read(record, iostat=status) value\n"
+                                 "end program invalid_internal_file\n";
+    F2cOptions options = {"invalid_internal_file.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count >= 3U,
+           "invalid internal-file controls produce independent hard errors");
+    expect(result.code == NULL, "invalid internal-file controls suppress generated C");
+    expect_contains(result.diagnostics, "internal-file READ cannot use ADVANCE=, EOR=, or SIZE=",
+                    "internal READ rejects nonadvancing controls");
+    expect_contains(result.diagnostics, "internal-file WRITE cannot use ADVANCE=, EOR=, or SIZE=",
+                    "internal WRITE rejects nonadvancing controls");
+    expect_contains(result.diagnostics, "internal-file READ must be formatted",
+                    "internal READ rejects unformatted transfer");
+    f2c_result_free(&result);
+}
+
+static void test_internal_file_codegen(void) {
+    static const char source[] = "program internal_file_codegen\n"
+                                 "  implicit none\n"
+                                 "  character(8) :: records(2)\n"
+                                 "  integer :: value\n"
+                                 "  value = 17\n"
+                                 "  write(records, '(I3/I3)') value, value\n"
+                                 "  read(records, '(I3)') value\n"
+                                 "end program internal_file_codegen\n";
+    F2cOptions options = {"internal_file_codegen.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count == 0U, "valid internal-file transfers lower without diagnostics");
+    expect_contains(result.code, "f2c_io_stream f2c_internal_stream",
+                    "internal files lower to a memory record stream");
+    expect_contains(result.code, "f2c_stream_initialize_internal(&f2c_internal_stream, records",
+                    "internal CHARACTER arrays bind directly to their record storage");
+    expect(result.code == NULL || strstr(result.code, "FILE *f2c_internal_file") == NULL,
+           "internal transfers never allocate a temporary libc file");
     f2c_result_free(&result);
 }
 
@@ -197,6 +242,8 @@ int main(void) {
     test_file_control_codegen();
     test_print_semantics();
     test_print_codegen();
+    test_internal_file_constraints();
+    test_internal_file_codegen();
     if (failures != 0) {
         fprintf(stderr, "%d I/O semantic test(s) failed\n", failures);
         return 1;

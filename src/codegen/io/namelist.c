@@ -263,7 +263,11 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
             ++depth;
         } else {
             f2c_io_indent(&context->output, depth);
-            f2c_buffer_printf(&context->output, "fprintf(%s, \" %%s=\", %s);\n", file, path);
+            f2c_buffer_printf(&context->output,
+                              "(void)f2c_stream_putc(' ', %s); "
+                              "f2c_stream_write_string(%s, %s); "
+                              "(void)f2c_stream_putc('=', %s);\n",
+                              file, file, path, file);
         }
         if (symbol->rank == 0U) {
             Buffer scalar = {0};
@@ -448,7 +452,10 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
         ++depth;
     } else {
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "fprintf(%s, \" %%s=\", %s);\n", file, path);
+        f2c_buffer_printf(&context->output,
+                          "(void)f2c_stream_putc(' ', %s); f2c_stream_write_string(%s, %s); "
+                          "(void)f2c_stream_putc('=', %s);\n",
+                          file, file, path, file);
     }
     if (symbol->rank == 0U || scalarized) {
         Buffer scalar = {0};
@@ -503,13 +510,14 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
     if (input) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
-                          "long f2c_namelist_start = ftell(%s);\n"
+                          "long f2c_namelist_start = f2c_stream_tell(%s);\n"
                           "%*slong f2c_namelist_group_start = "
                           "f2c_namelist_group(%s, f2c_namelist_start, \"%s\");\n",
                           file, depth * 4, "", file, group->name);
     } else {
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "fputs(\"&%s\", %s);\n", group->name, file);
+        f2c_buffer_printf(&context->output, "f2c_stream_write_string(%s, \"&%s\");\n", file,
+                          group->name);
     }
     for (i = 0U; i < group->member_count; ++i) {
         Symbol *symbol = f2c_find_symbol(unit, group->members[i]);
@@ -530,7 +538,7 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
         f2c_buffer_printf(&context->output, "f2c_namelist_end(%s, f2c_namelist_group_start);\n",
                           file);
     } else {
-        f2c_buffer_printf(&context->output, "fputs(\" /\\n\", %s);\n", file);
+        f2c_buffer_printf(&context->output, "f2c_stream_write_string(%s, \" /\\n\");\n", file);
     }
     return 1;
 }

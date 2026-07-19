@@ -218,7 +218,7 @@ void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cI
         if (symbol->rank == 0U) {
             if (!input && iotype != NULL && strcmp(iotype, "\"LISTDIRECTED\"") == 0) {
                 f2c_io_indent(&context->output, depth);
-                f2c_buffer_printf(&context->output, "fputc(' ', %s);\n", file);
+                f2c_buffer_printf(&context->output, "(void)f2c_stream_putc(' ', %s);\n", file);
             }
             if (!f2c_io_emit_defined_io_call(context, name, symbol->derived_type, defined_kind,
                                              unit_number, iotype, NULL, "0U", status, depth)) {
@@ -237,7 +237,7 @@ void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cI
                 f2c_buffer_printf(&value, "%s[f2c_dtio_index]", name);
                 if (!input && iotype != NULL && strcmp(iotype, "\"LISTDIRECTED\"") == 0) {
                     f2c_io_indent(&context->output, depth + 1);
-                    f2c_buffer_printf(&context->output, "fputc(' ', %s);\n", file);
+                    f2c_buffer_printf(&context->output, "(void)f2c_stream_putc(' ', %s);\n", file);
                 }
                 if (!f2c_io_emit_defined_io_call(context, value.data, symbol->derived_type,
                                                  defined_kind, unit_number, iotype, NULL, "0U",
@@ -427,16 +427,16 @@ static char *io_file_expression(Unit *unit, const F2cStatement *statement, int i
     char *unit_value;
     Buffer result = {0};
     if (control == NULL)
-        return f2c_strdup(input ? "stdin" : "stdout");
+        return f2c_strdup(input ? "f2c_unit_stream(5, true)" : "f2c_unit_stream(6, false)");
     if (control->asterisk) {
-        unit_value = f2c_strdup(input ? "stdin" : "stdout");
+        unit_value = f2c_strdup(input ? "f2c_unit_stream(5, true)" : "f2c_unit_stream(6, false)");
     } else if (control->value != NULL && control->value->type == TYPE_CHARACTER) {
-        unit_value = f2c_strdup("f2c_internal_file");
+        unit_value = f2c_strdup("&f2c_internal_stream");
     } else {
         char *translated = f2c_io_emit_required_expression(unit, control->value);
         if (translated == NULL)
             return NULL;
-        f2c_buffer_printf(&result, "f2c_unit_file((int32_t)(%s), %s)", translated,
+        f2c_buffer_printf(&result, "f2c_unit_stream((int32_t)(%s), %s)", translated,
                           input ? "true" : "false");
         free(translated);
         unit_value = f2c_buffer_take(&result);
@@ -529,32 +529,16 @@ int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStateme
         f2c_buffer_append(&context->output, "{\n");
         ++depth;
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "FILE *f2c_internal_file = tmpfile();\n");
+        f2c_buffer_append(&context->output, "f2c_io_stream f2c_internal_stream;\n");
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "if (f2c_internal_file == NULL) abort();\n");
+        f2c_buffer_printf(&context->output,
+                          "if (!f2c_stream_initialize_internal(&f2c_internal_stream, %s, "
+                          "(size_t)(%s), (size_t)(%s), %s)) abort();\n",
+                          internal_pointer, internal_length, internal_record_count,
+                          input ? "true" : "false");
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(
-            &context->output,
-            "const int32_t f2c_internal_unit = f2c_register_internal_unit(f2c_internal_file);\n");
-        if (input) {
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_printf(&context->output,
-                              "for (size_t f2c_internal_record = 0U; f2c_internal_record < "
-                              "(size_t)(%s); ++f2c_internal_record) {\n",
-                              internal_record_count);
-            f2c_io_indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "if ((size_t)(%s) != 0U) (void)fwrite(%s + "
-                              "f2c_internal_record * (size_t)(%s), 1U, (size_t)(%s), "
-                              "f2c_internal_file);\n",
-                              internal_length, internal_pointer, internal_length, internal_length);
-            f2c_io_indent(&context->output, depth + 1);
-            f2c_buffer_append(&context->output, "fputc('\\n', f2c_internal_file);\n");
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_append(&context->output, "}\n");
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_append(&context->output, "rewind(f2c_internal_file);\n");
-        }
+        f2c_buffer_append(&context->output, "const int32_t f2c_internal_unit = "
+                                            "f2c_register_internal_unit(&f2c_internal_stream);\n");
     }
     end_control = input ? f2c_io_control(statement, F2C_IO_CONTROL_END, (size_t)-1) : NULL;
     eor_control = input ? f2c_io_control(statement, F2C_IO_CONTROL_EOR, (size_t)-1) : NULL;
@@ -634,9 +618,9 @@ int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStateme
             return 0;
         }
     } else if (formatted) {
-        if (!f2c_io_emit_formatted_transfer(
-                context, unit, statement, format_control, file, unit_number, input,
-                advance_expression, size_value, needs_status ? "f2c_io_status" : NULL, depth)) {
+        if (!f2c_io_emit_formatted_transfer(context, unit, statement, format_control, file,
+                                            unit_number, input, advance_expression, size_value,
+                                            needs_status ? "f2c_io_status" : NULL, depth)) {
             free(file);
             free(unit_number);
             return 0;
@@ -671,12 +655,13 @@ int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStateme
     } else if (namelist_group == NULL && !formatted) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
-                          "if ((%s) && f2c_child_io_depth == 0U) fputc('\\n', %s);\n",
+                          "if ((%s) && f2c_child_io_depth == 0U) "
+                          "(void)f2c_stream_putc('\\n', %s);\n",
                           advance_expression, file);
     }
     if (!input && needs_status) {
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "if (ferror(%s)) f2c_io_status = 0;\n", file);
+        f2c_buffer_printf(&context->output, "if (f2c_stream_error(%s)) f2c_io_status = 0;\n", file);
     }
     if (iostat != NULL) {
         f2c_io_indent(&context->output, depth);
@@ -711,52 +696,8 @@ int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStateme
         f2c_buffer_append(&context->output, "}\n");
     }
     if (internal_file) {
-        if (!input) {
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_append(&context->output, "rewind(f2c_internal_file);\n");
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_append(&context->output, "{ int f2c_internal_character = EOF;\n");
-            f2c_io_indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "for (size_t f2c_internal_record = 0U; f2c_internal_record < "
-                              "(size_t)(%s); ++f2c_internal_record) {\n",
-                              internal_record_count);
-            f2c_io_indent(&context->output, depth + 2);
-            f2c_buffer_append(&context->output, "size_t f2c_internal_index = 0U;\n");
-            f2c_io_indent(&context->output, depth + 2);
-            f2c_buffer_printf(&context->output,
-                              "char *f2c_internal_destination = %s + f2c_internal_record * "
-                              "(size_t)(%s);\n",
-                              internal_pointer, internal_length);
-            f2c_io_indent(&context->output, depth + 2);
-            f2c_buffer_printf(&context->output,
-                              "while (f2c_internal_index < (size_t)(%s) && "
-                              "(f2c_internal_character = fgetc(f2c_internal_file)) != EOF && "
-                              "f2c_internal_character != '\\n' && f2c_internal_character != '\\r') "
-                              "f2c_internal_destination[f2c_internal_index++] = "
-                              "(char)f2c_internal_character;\n",
-                              internal_length);
-            f2c_io_indent(&context->output, depth + 2);
-            f2c_buffer_printf(&context->output,
-                              "if (f2c_internal_index < (size_t)(%s)) "
-                              "memset(f2c_internal_destination + f2c_internal_index, ' ', "
-                              "(size_t)(%s) - f2c_internal_index);\n",
-                              internal_length, internal_length);
-            f2c_io_indent(&context->output, depth + 2);
-            f2c_buffer_append(&context->output,
-                              "if (f2c_internal_character == '\\r') { int f2c_internal_next = "
-                              "fgetc(f2c_internal_file); if (f2c_internal_next != '\\n' && "
-                              "f2c_internal_next != EOF) (void)ungetc(f2c_internal_next, "
-                              "f2c_internal_file); }\n");
-            f2c_io_indent(&context->output, depth + 1);
-            f2c_buffer_append(&context->output, "}\n");
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_append(&context->output, "}\n");
-        }
         f2c_io_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "f2c_unregister_internal_unit(f2c_internal_unit);\n");
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "fclose(f2c_internal_file);\n");
         --depth;
         f2c_io_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");

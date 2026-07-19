@@ -2053,10 +2053,11 @@ static void test_list_directed_io(void) {
     F2cOptions options = {"io.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "list-directed READ/WRITE/PRINT translate");
-    expect_contains(result.code, "F2C_READ(stdin, &n)", "READ maps to typed libc input");
-    expect_contains(result.code, "f2c_finish_read(stdin)",
+    expect_contains(result.code, "F2C_READ(f2c_unit_stream(5, true), &n)",
+                    "READ maps to typed stream input");
+    expect_contains(result.code, "f2c_finish_read(f2c_unit_stream(5, true))",
                     "list-directed READ consumes the complete Fortran record");
-    expect_contains(result.code, "f2c_write_character(stdout, \"values\"",
+    expect_contains(result.code, "f2c_write_character(f2c_unit_stream(6, false), \"values\"",
                     "WRITE preserves length-aware character output items");
     expect_contains(result.code, "for (i = 1;", "I/O implied-DO maps to a C loop");
     f2c_result_free(&result);
