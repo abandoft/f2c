@@ -37,6 +37,7 @@ struct Symbol {
     char **statement_function_arguments;
     size_t statement_function_argument_count;
     char *statement_function_text;
+    F2cTokenRange statement_function_syntax;
     F2cExpr *statement_function_expression;
     size_t statement_function_line;
     int statement_function_expanding;

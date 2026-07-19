@@ -114,6 +114,7 @@ static void clear_statement_function(Symbol *function) {
     function->statement_function_argument_count = 0U;
     free(function->statement_function_text);
     function->statement_function_text = NULL;
+    memset(&function->statement_function_syntax, 0, sizeof(function->statement_function_syntax));
     f2c_expr_free(function->statement_function_expression);
     function->statement_function_expression = NULL;
 }
@@ -228,8 +229,10 @@ int f2c_mark_statement_function_symbols(Unit *unit, const Line *line) {
         function->statement_function = 0;
         return 1;
     }
-    function->statement_function_text = f2c_token_range_text(
-        f2c_line_token_range(line, close + 2U, line->token_count));
+    function->statement_function_syntax =
+        f2c_line_token_range(line, close + 2U, line->token_count);
+    function->statement_function_text =
+        f2c_token_range_text(function->statement_function_syntax);
     if (function->statement_function_text == NULL && unit->context != NULL) {
         f2c_diagnostic_code(unit->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line->number, 1,
                             "out of memory recording statement function '%s'", function->name);

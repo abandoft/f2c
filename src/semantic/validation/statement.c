@@ -401,7 +401,8 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
     symbol->statement_function_expression =
         symbol->statement_function
             ? parse_specification_expression(context, unit, symbol->statement_function_line,
-                                             symbol->statement_function_text, (F2cTokenRange){0},
+                                             symbol->statement_function_text,
+                                             symbol->statement_function_syntax,
                                              "statement-function result")
             : NULL;
     f2c_validation_expression_calls(context, unit, line, source_line,

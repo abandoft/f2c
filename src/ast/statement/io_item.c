@@ -1,5 +1,7 @@
 #include "ast/statement/private.h"
 
+#include "ast/internal.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -71,7 +73,8 @@ static int parse_implied_do(Unit *unit, F2cTokenRange range, F2cIoItem *item) {
     item->initial = parse_range(unit, initial_range);
     item->limit = parse_range(unit, parts[control + 1U]);
     item->step = part_count == control + 3U ? parse_range(unit, parts[control + 2U])
-                                            : f2c_parse_expression_ast(unit, "1", NULL);
+                                            : f2c_expr_new(F2C_EXPR_INTEGER_LITERAL,
+                                                           TYPE_INTEGER, "1", 1U);
     free(parts);
     return item->iterator != NULL && item->initial != NULL && item->limit != NULL &&
            item->step != NULL;
