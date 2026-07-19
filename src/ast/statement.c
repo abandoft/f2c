@@ -133,97 +133,6 @@ static F2cStatementKind classify_tokens(const Line *line, size_t begin) {
     return F2C_STMT_INVALID;
 }
 
-static void parse_counted_do(Unit *unit, F2cStatement *statement, char *syntax_text) {
-    char *control = f2c_strdup(f2c_trim(syntax_text + 2));
-    char *equals = control != NULL ? strchr(control, '=') : NULL;
-    char **bounds = NULL;
-    size_t count = 0U;
-    if (equals == NULL) {
-        free(control);
-        return;
-    }
-    *equals = '\0';
-    bounds = f2c_split_comma_list(equals + 1, &count);
-    statement->left = f2c_parse_expression_ast(unit, f2c_trim(control), NULL);
-    if (count >= 2U) {
-        statement->right = f2c_parse_expression_ast(unit, f2c_trim(bounds[0]), NULL);
-        statement->limit = f2c_parse_expression_ast(unit, f2c_trim(bounds[1]), NULL);
-        statement->step =
-            f2c_parse_expression_ast(unit, count >= 3U ? f2c_trim(bounds[2]) : "1", NULL);
-    }
-    while (count != 0U)
-        free(bounds[--count]);
-    free(bounds);
-    free(control);
-}
-
-static void parse_assign_label(Unit *unit, F2cStatement *statement) {
-    const char *cursor = f2c_trim(statement->text + strlen("assign"));
-    const char *label_begin = cursor;
-    size_t name_length = 0U;
-    while (isdigit((unsigned char)*cursor))
-        ++cursor;
-    if (cursor == label_begin)
-        return;
-    statement->labels = (char **)calloc(1U, sizeof(*statement->labels));
-    if (statement->labels == NULL)
-        return;
-    statement->labels[0] = f2c_strdup_n(label_begin, (size_t)(cursor - label_begin));
-    if (statement->labels[0] == NULL)
-        return;
-    statement->label_count = 1U;
-    cursor = f2c_trim((char *)cursor);
-    if (!f2c_starts_word(cursor, "to"))
-        return;
-    cursor = f2c_trim((char *)cursor + strlen("to"));
-    statement->name = f2c_identifier(cursor, &name_length);
-    if (statement->name == NULL || *f2c_trim((char *)cursor + name_length) != '\0')
-        return;
-    statement->expression = f2c_parse_expression_ast(unit, statement->name, NULL);
-}
-
-static void parse_goto(Unit *unit, F2cStatement *statement) {
-    char *target =
-        f2c_strdup(f2c_trim(statement->text + (f2c_starts_word(statement->text, "goto") ? 4 : 5)));
-    if (target == NULL)
-        return;
-    if (*target == '(') {
-        char *close = f2c_statement_matching_parenthesis(target);
-        if (close != NULL) {
-            char *selector;
-            *close = '\0';
-            statement->labels = f2c_split_arguments(target + 1, &statement->label_count);
-            selector = f2c_trim(close + 1);
-            if (*selector == ',')
-                selector = f2c_trim(selector + 1);
-            statement->expression = f2c_parse_expression_ast(unit, selector, NULL);
-        }
-    } else if (isdigit((unsigned char)*target)) {
-        statement->name = f2c_strdup(target);
-    } else {
-        const char *cursor = target;
-        size_t name_length = 0U;
-        statement->kind = F2C_STMT_ASSIGNED_GOTO;
-        statement->name = f2c_identifier(cursor, &name_length);
-        if (statement->name != NULL) {
-            char *open;
-            statement->expression = f2c_parse_expression_ast(unit, statement->name, NULL);
-            cursor = f2c_trim((char *)cursor + name_length);
-            if (*cursor == ',')
-                cursor = f2c_trim((char *)cursor + 1);
-            open = *cursor == '(' ? (char *)cursor : NULL;
-            if (open != NULL) {
-                char *close = f2c_statement_matching_parenthesis(open);
-                if (close != NULL) {
-                    *close = '\0';
-                    statement->labels = f2c_split_arguments(open + 1, &statement->label_count);
-                }
-            }
-        }
-    }
-    free(target);
-}
-
 char **f2c_statement_split_arguments(const char *text, size_t *count) {
     const char *cursor = text;
     const char *start = text;
@@ -487,11 +396,10 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
                            F2cStatementKind classified_kind, const Line *token_line,
                            size_t body_start) {
     char *equals;
-    char *owned_syntax_text = NULL;
-    char *syntax_text;
     Line syntax_line;
     memset(statement, 0, sizeof(*statement));
     statement->state = F2C_IR_SYNTAX;
+    statement->control_syntax_valid = 1;
     statement->line = line;
     statement->text = f2c_strdup(text != NULL ? text : "");
     if (statement->text == NULL)
@@ -502,22 +410,14 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
             memmove(statement->text, trimmed, strlen(trimmed) + 1U);
     }
     statement->kind = classified_kind;
-    syntax_text = statement->text;
-    if (body_start < token_line->token_count && body_start != 0U) {
-        owned_syntax_text = f2c_strdup(token_line->tokens[body_start].begin);
-        if (owned_syntax_text == NULL)
-            return 0;
-        syntax_text = f2c_trim(owned_syntax_text);
-    }
-    if (statement->kind == F2C_STMT_IF || statement->kind == F2C_STMT_ELSE_IF ||
-        statement->kind == F2C_STMT_DO_WHILE || statement->kind == F2C_STMT_SELECT_CASE ||
-        statement->kind == F2C_STMT_SELECT_TYPE || statement->kind == F2C_STMT_WHERE ||
+    if (statement->kind == F2C_STMT_ELSE_IF || statement->kind == F2C_STMT_DO_WHILE ||
+        statement->kind == F2C_STMT_SELECT_CASE || statement->kind == F2C_STMT_SELECT_TYPE ||
+        statement->kind == F2C_STMT_WHERE ||
         (statement->kind == F2C_STMT_ELSEWHERE && body_start + 1U < token_line->token_count &&
          token_line->tokens[body_start + 1U].kind == F2C_TOKEN_LEFT_PAREN)) {
         statement->expression = f2c_statement_parse_parenthesized_tokens(
             unit, token_line, body_start,
-            statement->kind == F2C_STMT_IF || statement->kind == F2C_STMT_ELSE_IF ||
-                    statement->kind == F2C_STMT_WHERE
+            statement->kind == F2C_STMT_ELSE_IF || statement->kind == F2C_STMT_WHERE
                 ? &statement->tail
                 : NULL);
     }
@@ -534,19 +434,7 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
                 statement->guard_type = f2c_find_derived_type(unit, statement->expression->text);
         }
     }
-    if (statement->kind == F2C_STMT_IF && statement->tail != NULL) {
-        statement->block = f2c_starts_word(statement->tail, "then");
-        if (!statement->block && f2c_statement_parse_arithmetic_labels(statement)) {
-            statement->block = 0;
-        } else if (!statement->block && statement->tail[0] != '\0') {
-            statement->nested = (F2cStatement *)calloc(1U, sizeof(*statement->nested));
-            if (statement->nested != NULL &&
-                !f2c_parse_statement(unit, statement->tail, line, statement->nested)) {
-                free(statement->nested);
-                statement->nested = NULL;
-            }
-        }
-    } else if (statement->kind == F2C_STMT_ELSE_IF) {
+    if (statement->kind == F2C_STMT_ELSE_IF) {
         statement->block = 1;
     }
     if (statement->kind == F2C_STMT_WHERE && statement->tail != NULL) {
@@ -560,12 +448,10 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
             }
         }
     }
-    if (statement->kind == F2C_STMT_DO)
-        parse_counted_do(unit, statement, syntax_text);
-    if (statement->kind == F2C_STMT_ASSIGN_LABEL)
-        parse_assign_label(unit, statement);
-    if (statement->kind == F2C_STMT_GOTO)
-        parse_goto(unit, statement);
+    if ((statement->kind == F2C_STMT_IF || statement->kind == F2C_STMT_DO ||
+         statement->kind == F2C_STMT_ASSIGN_LABEL || statement->kind == F2C_STMT_GOTO) &&
+        !f2c_statement_parse_control(unit, token_line, body_start, statement))
+        return 0;
     if (statement->kind == F2C_STMT_CALL)
         parse_call(unit, statement);
     if (statement->kind == F2C_STMT_STOP) {
@@ -592,7 +478,6 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         (void)f2c_statement_parse_print(unit, token_line, body_start, statement);
     if (statement->kind == F2C_STMT_DATA &&
         !f2c_statement_parse_data(unit, token_line, body_start, statement)) {
-        free(owned_syntax_text);
         return 0;
     }
     syntax_line = *token_line;
@@ -601,13 +486,11 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
     syntax_line.token_count -= body_start;
     if (statement->kind == F2C_STMT_CASE &&
         !f2c_statement_parse_case(unit, &syntax_line, statement)) {
-        free(owned_syntax_text);
         return 0;
     }
     if (statement->kind == F2C_STMT_LABEL)
         f2c_statement_parse_label(unit, token_line, statement);
     if (!f2c_statement_parse_construct_syntax(token_line, body_start, statement)) {
-        free(owned_syntax_text);
         return 0;
     }
     if (body_start == 0U && statement->kind == F2C_STMT_INVALID &&
@@ -645,7 +528,41 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
         free(left);
         free(right);
     }
-    free(owned_syntax_text);
+    return 1;
+}
+
+int f2c_statement_parse_nested_tokens(Unit *unit, const Line *line, size_t begin,
+                                      F2cStatement **statement) {
+    F2cTokenRange range;
+    F2cStatement *nested;
+    Line view;
+    char *text;
+    size_t body_start;
+    if (unit == NULL || line == NULL || statement == NULL || begin >= line->token_count)
+        return 0;
+    range = f2c_line_token_range(line, begin, line->token_count);
+    text = f2c_token_range_text(range);
+    if (text == NULL)
+        return 0;
+    nested = (F2cStatement *)calloc(1U, sizeof(*nested));
+    if (nested == NULL) {
+        free(text);
+        return 0;
+    }
+    view = *line;
+    view.tokens += begin;
+    view.token_count -= begin;
+    body_start = statement_body_start(&view);
+    if (!parse_statement(unit, text, line->number, nested, classify_tokens(&view, body_start),
+                         &view, body_start)) {
+        f2c_statement_free(nested);
+        free(nested);
+        free(text);
+        return 0;
+    }
+    set_statement_span(&view, nested);
+    free(text);
+    *statement = nested;
     return 1;
 }
 
@@ -687,6 +604,7 @@ void f2c_statement_free(F2cStatement *statement) {
     free(statement->text);
     free(statement->tail);
     free(statement->name);
+    free(statement->terminal_label);
     free(statement->construct_name);
     free(statement->control_name);
     while (statement->item_count != 0U) {
@@ -728,6 +646,8 @@ void f2c_statement_free(F2cStatement *statement) {
     while (statement->label_count != 0U)
         free(statement->labels[--statement->label_count]);
     free(statement->labels);
+    free(statement->label_spans);
+    free(statement->terminal_loops);
     if (statement->nested != NULL) {
         f2c_statement_free(statement->nested);
         free(statement->nested);

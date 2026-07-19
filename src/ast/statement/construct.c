@@ -26,6 +26,15 @@ static int parenthesized_opener_ends_at(const Line *line, size_t open, size_t ex
 static int opener_syntax_valid(const Line *line, size_t begin, const F2cStatement *statement) {
     if (statement->kind == F2C_STMT_WHERE && statement->block)
         return parenthesized_opener_ends_at(line, begin + 1U, 1U);
+    if (statement->kind == F2C_STMT_DO_WHILE && statement->terminal_label != NULL) {
+        size_t while_token = begin + 2U;
+        if (while_token < line->token_count && line->tokens[while_token].kind == F2C_TOKEN_COMMA)
+            ++while_token;
+        return while_token < line->token_count &&
+               line->tokens[while_token].kind == F2C_TOKEN_IDENTIFIER &&
+               f2c_token_equals(&line->tokens[while_token], "while") &&
+               parenthesized_opener_ends_at(line, while_token + 1U, 1U);
+    }
     if (statement->kind == F2C_STMT_SELECT_CASE || statement->kind == F2C_STMT_SELECT_TYPE ||
         statement->kind == F2C_STMT_DO_WHILE)
         return parenthesized_opener_ends_at(line, begin + 2U, 1U);

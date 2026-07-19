@@ -6,6 +6,36 @@
 #include <stdlib.h>
 #include <string.h>
 
+char *f2c_statement_copy_label_token(const F2cToken *token) {
+    size_t first = 0U;
+    size_t index;
+    if (token == NULL || token->kind != F2C_TOKEN_NUMBER || token->length == 0U ||
+        token->length > 5U)
+        return NULL;
+    for (index = 0U; index < token->length; ++index)
+        if (!isdigit((unsigned char)token->begin[index]))
+            return NULL;
+    while (first < token->length && token->begin[first] == '0')
+        ++first;
+    if (first == token->length)
+        return NULL;
+    return f2c_strdup_n(token->begin + first, token->length - first);
+}
+
+const char *f2c_statement_label_canonical(const char *label) {
+    if (label == NULL)
+        return NULL;
+    while (label[0] == '0' && label[1] != '\0')
+        ++label;
+    return label;
+}
+
+int f2c_statement_labels_equal(const char *left, const char *right) {
+    left = f2c_statement_label_canonical(left);
+    right = f2c_statement_label_canonical(right);
+    return left != NULL && right != NULL && strcmp(left, right) == 0;
+}
+
 void f2c_statement_parse_label(Unit *unit, const Line *line, F2cStatement *statement) {
     F2cTokenRange tail;
     F2cSourceSpan format_span = {0};
@@ -14,9 +44,12 @@ void f2c_statement_parse_label(Unit *unit, const Line *line, F2cStatement *state
         statement->kind = F2C_STMT_INVALID;
         return;
     }
-    statement->name = f2c_token_text(&line->tokens[0]);
-    if (statement->name == NULL)
+    statement->name = f2c_statement_copy_label_token(&line->tokens[0]);
+    statement->label_span = line->tokens[0].span;
+    if (statement->name == NULL) {
+        statement->control_syntax_valid = 0;
         return;
+    }
     if (line->token_count == 1U)
         return;
     if (line->tokens[1].kind == F2C_TOKEN_IDENTIFIER &&
@@ -46,45 +79,5 @@ void f2c_statement_parse_label(Unit *unit, const Line *line, F2cStatement *state
         statement->format_syntax_valid = statement->format != NULL;
         return;
     }
-    tail = f2c_line_token_range(line, 1U, line->token_count);
-    text = f2c_token_range_text(tail);
-    if (text == NULL)
-        return;
-    statement->nested = (F2cStatement *)calloc(1U, sizeof(*statement->nested));
-    if (statement->nested != NULL &&
-        !f2c_parse_statement(unit, text, statement->line, statement->nested)) {
-        free(statement->nested);
-        statement->nested = NULL;
-    }
-    free(text);
-}
-
-int f2c_statement_parse_arithmetic_labels(F2cStatement *statement) {
-    char **labels;
-    size_t count = 0U;
-    size_t index;
-    if (statement->tail == NULL)
-        return 0;
-    labels = f2c_statement_split_arguments(statement->tail, &count);
-    if (labels == NULL || count != 3U)
-        goto failed;
-    for (index = 0U; index < count; ++index) {
-        const char *cursor = labels[index];
-        if (*cursor == '\0')
-            goto failed;
-        while (isdigit((unsigned char)*cursor))
-            ++cursor;
-        if (*cursor != '\0')
-            goto failed;
-    }
-    statement->labels = labels;
-    statement->label_count = count;
-    statement->kind = F2C_STMT_ARITHMETIC_IF;
-    return 1;
-
-failed:
-    while (count != 0U)
-        free(labels[--count]);
-    free(labels);
-    return 0;
+    (void)f2c_statement_parse_nested_tokens(unit, line, 1U, &statement->nested);
 }
