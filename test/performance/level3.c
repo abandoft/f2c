@@ -130,8 +130,8 @@ static int run_dtrsm(const Level3Case *test, double *a, double *input, double *g
             generated_second = measure_dtrsm(dtrsm, test, a, input, generated);
             fortran_second = measure_dtrsm(dtrsm_, test, a, input, native);
         }
-        samples[round] = f2c_benchmark_paired_sample(
-            round, generated_first, fortran_first, fortran_second, generated_second);
+        samples[round] = f2c_benchmark_paired_sample(round, generated_first, fortran_first,
+                                                     fortran_second, generated_second);
     }
     return f2c_benchmark_report("DTRSM", description, samples,
                                 sizeof(samples) / sizeof(samples[0]));
@@ -208,8 +208,8 @@ static int run_dsyrk(const Level3Case *test, double *a, double *generated, doubl
             initialize_dense(native, test->n, 43);
             fortran_second = measure_dsyrk(dsyrk_, test, a, native);
         }
-        samples[round] = f2c_benchmark_paired_sample(
-            round, generated_first, fortran_first, fortran_second, generated_second);
+        samples[round] = f2c_benchmark_paired_sample(round, generated_first, fortran_first,
+                                                     fortran_second, generated_second);
     }
     return f2c_benchmark_report("DSYRK", description, samples,
                                 sizeof(samples) / sizeof(samples[0]));
@@ -217,9 +217,9 @@ static int run_dsyrk(const Level3Case *test, double *a, double *generated, doubl
 
 int f2c_benchmark_level3(void) {
     static const Level3Case dtrsm_cases[] = {
-        {32, 'L', 'N', 16384}, {32, 'L', 'T', 16384}, {32, 'R', 'N', 16384}, {32, 'R', 'T', 16384},
-        {96, 'L', 'N', 1024},  {96, 'L', 'T', 1024},  {96, 'R', 'N', 1024},  {96, 'R', 'T', 1024},
-        {192, 'L', 'N', 128},  {192, 'L', 'T', 128},  {192, 'R', 'N', 128},  {192, 'R', 'T', 128}};
+        {32, 'L', 'N', 65536}, {32, 'L', 'T', 65536}, {32, 'R', 'N', 65536}, {32, 'R', 'T', 65536},
+        {96, 'L', 'N', 4096},  {96, 'L', 'T', 4096},  {96, 'R', 'N', 4096},  {96, 'R', 'T', 4096},
+        {192, 'L', 'N', 512},  {192, 'L', 'T', 512},  {192, 'R', 'N', 512},  {192, 'R', 'T', 512}};
     static const Level3Case dsyrk_cases[] = {{32, 'N', 0, 16384}, {32, 'T', 0, 16384},
                                              {96, 'N', 0, 1024},  {96, 'T', 0, 1024},
                                              {192, 'N', 0, 128},  {192, 'T', 0, 128}};
