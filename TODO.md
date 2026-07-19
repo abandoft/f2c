@@ -45,10 +45,11 @@
 - [x] 自由格式、固定格式、续行和分号拆分现在使用紧凑的连续区间源码映射；token、表达式 AST、
   语句 AST 及结构化词法诊断均保留原始文件的物理起止行列。自由/固定续行、分号拆句及续行声明
   诊断已有回归，映射不会按输入字符分配独立位置对象。
-- [ ] 旧式标号 `DO` 的结构改写目前只能把合成 token 回指到原语句起点，尚未提供逐片段精确映射。
-  预处理对象宏已经保留 expansion/spelling 双范围和重映射源码名，文本与结构化诊断均可同时呈现；
-  仍需让所有 parser/semantic 诊断直接消费 token/AST span，并增加完整宏/include 栈 related location，
-  才能满足“任意诊断均有精确范围”的验收标准。
+- [ ] 旧式标号 `DO` 已删除源码文本改写和合成 token 路径，终止标签、循环控制、共享终止语句及
+  嵌套动作均直接从 canonical token 构建 AST，并保留标签和表达式的精确物理 span。预处理对象宏
+  已经保留 expansion/spelling 双范围和重映射源码名，文本与结构化诊断均可同时呈现；仍需让其余
+  parser/semantic 诊断全部直接消费 token/AST span，并增加完整宏/include 栈 related location，才能
+  满足“任意诊断均有精确范围”的验收标准。
 - [ ] 让声明、程序单元头、`USE`、`NAMELIST`、旧式语句和 I/O 全部消费统一 token 流，删除
   `f2c_identifier`、`f2c_split_*`、`f2c_starts_word`、括号/引号手工扫描等生产解析路径。表达式和
   语句入口现已接受预先生成的 canonical token 流；程序单元、模块/接口/派生类型边界、过程引用、
@@ -59,7 +60,8 @@
   `PARAMETER`、`SAVE` 和 `EQUIVALENCE` 作为合法变量名时不再被误判为声明。`DATA` 的组、重复因子、
   设计子和嵌套隐式 DO 已完全消费 canonical token range；`READ/WRITE`、文件控制语句及其控制项和
   I/O item、`PRINT` 的格式与输出项以及带标签的 `FORMAT` 语句均已消费 canonical token range；
-  旧式控制语句和少量字符串入口仍有文本扫描。
+  计数/无控制/`WHILE`/标号 `DO`、单行/块/算术 `IF`、直接/计算/赋值 `GOTO`、`ASSIGN` 和带标签
+  嵌套动作也已迁移。`STOP`、分配语句、调用等少量语句入口仍有文本扫描。
   源码归一化层的注释识别、分号拆句和代码大小写处理已经
   改为消费 canonical token，不会在 token 化之前破坏字符或 Hollerith 载荷。
 - [x] 只保留 `frontend/token.h` 定义的 `F2cToken/F2cTokenStream`。表达式 AST 已删除独立的
@@ -221,9 +223,15 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   均通过通用动态 shape/value 临时量先完整求值再按掩码选择，覆盖嵌套构造值、隐式 DO、整数组值、
   动态字符长度以及派生对象 clone/finalization。具体派生函数结果类型也会从 unit header 传播到结果
   符号、过程签名和调用表达式。严格 C17 生成执行夹具和 gfortran 差分已加入数值验证 CI；该任务仍
-  因其他合法 `DO`/旧式控制形式未完成而保持未关闭。
-- [ ] 将标签、计算/赋值 `GOTO`、算术 IF、旧式标号 DO、`RETURN`、`STOP`、`CYCLE` 和 `EXIT`
-  建模为显式控制流图，统一验证不可达目标、非法跨构造跳转和清理边。
+  因其他语句及完整控制流生命周期分析未完成而保持未关闭。F90 的计数、无控制和 `WHILE` DO，
+  以及旧式单一/共享终止标签、非 `CONTINUE` 合法终止动作和带标签 `END DO` 已建立显式 AST/typed
+  IR 所有者；终止动作会在正确循环层级执行，循环后控制变量语义与原生 Fortran 差分一致。
+- [x] 标签、直接/计算/赋值 `GOTO`、算术 IF、旧式标号 DO 及 I/O `ERR/END/EOR` 已进入显式
+  语句标签图。语义阶段统一规范化前导零，拒绝重复/未定义/非可执行目标、从外部进入结构化构造，
+  以及 IF/SELECT CASE/SELECT TYPE/WHERE 兄弟分支块之间的非法跳转；单一/共享 DO 终止标签在
+  typed IR 中按内到外顺序绑定。正向、负向、严格 C17、sanitizer 和 gfortran 字节差分已进入 CI。
+- [ ] 将 `RETURN`、`STOP`、`CYCLE`、`EXIT`、交替返回及异常 I/O 边整合为完整过程级 CFG，补齐
+  可达性、赋值标签数据流和每条边的生命周期证明，而不是只依赖局部构造所有者与标签范围。
 - [ ] 对任何离开作用域的边执行正确的临时量释放、可分配对象清理和派生对象终结；异常 I/O 分支
   也必须走同一生命周期模型。
 - [ ] 完成语句级错误恢复，在单个输入中报告多个独立错误，同时保证错误结果不生成半成品 C。
