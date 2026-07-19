@@ -1,3 +1,11 @@
+## 1.11.0
+
+- Added a complete token, AST, typed IR, semantic-validation, and C17 code-generation pipeline for `INQUIRE(IOLENGTH=)`.
+- Reused the actual unformatted-transfer rules through a filesystem-free counting stream, supporting every integer result kind and direct use as `RECL` for an equivalent output list.
+- Expanded unformatted array transfer to arbitrary-rank named arrays, affine sections, vector subscripts, array constructors, and elementizable array expressions.
+- Hardened unformatted implied DO evaluation, zero-step handling, and integer boundaries while preventing repeated evaluation of complex and default-derived output expressions.
+- Added positive and negative `IOLENGTH` semantics, strict C17 execution, native Fortran differentials, and sanitizer regression coverage to numerical-validation CI.
+
 ## 1.10.0
 
 - Added a record-based transfer layer for sequential and direct formatted and unformatted files, including checked `REC`/`RECL` addressing and fixed record boundaries.
