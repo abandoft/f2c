@@ -106,11 +106,14 @@ static int copy_lower(char *destination, size_t *offset, const F2cToken *token) 
 }
 
 char *f2c_generic_operator_key(const char *operator_text) {
-    const size_t source_length = operator_text != NULL ? strlen(operator_text) : 0U;
+    size_t source_length;
     const char prefix[] = "operator(";
     size_t offset = sizeof(prefix) - 1U;
     size_t index;
     char *key;
+    if (operator_text == NULL)
+        return NULL;
+    source_length = strlen(operator_text);
     if (source_length > SIZE_MAX - sizeof(prefix) - 1U)
         return NULL;
     key = (char *)malloc(sizeof(prefix) + source_length + 1U);
@@ -130,7 +133,7 @@ char *f2c_generic_operator_key(const char *operator_text) {
 
 char *f2c_generic_designator_key(const F2cGenericDesignatorSyntax *designator) {
     const F2cToken *value;
-    const char *prefix;
+    const char *prefix = NULL;
     size_t prefix_length;
     size_t length;
     size_t offset = 0U;
@@ -156,8 +159,8 @@ char *f2c_generic_designator_key(const F2cGenericDesignatorSyntax *designator) {
             prefix = f2c_token_equals(&designator->range.tokens[0U], "read") ? "read(" : "write(";
             break;
         case F2C_GENERIC_DESIGNATOR_NAME:
-            prefix = "";
-            break;
+        default:
+            return NULL;
         }
         prefix_length = strlen(prefix);
     }

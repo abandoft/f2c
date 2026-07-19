@@ -152,6 +152,18 @@ static void test_nonreserved_names(void) {
     }
 }
 
+static void test_invalid_generic_key_inputs(void) {
+    F2cToken tokens[4] = {0};
+    F2cGenericDesignatorSyntax designator = {0};
+    designator.kind = (F2cGenericDesignatorKind)99;
+    designator.range.tokens = tokens;
+    designator.range.count = 4U;
+    expect(f2c_generic_designator_key(&designator) == NULL,
+           "an invalid generic designator kind cannot produce a semantic key");
+    expect(f2c_generic_operator_key(NULL) == NULL,
+           "a missing operator spelling cannot produce a semantic key");
+}
+
 static void test_large_access_list(void) {
     char source[4096];
     size_t length;
@@ -186,6 +198,7 @@ int main(void) {
     test_complete_access_list();
     test_invalid_access_lists();
     test_nonreserved_names();
+    test_invalid_generic_key_inputs();
     test_large_access_list();
     if (failures != 0) {
         fprintf(stderr, "%d access statement AST test(s) failed\n", failures);
