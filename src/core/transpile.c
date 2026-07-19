@@ -78,6 +78,8 @@ static void collect_statement_features(F2cStatement *statement, F2cRequiredFeatu
     if (statement->kind == F2C_STMT_CALL && statement->name != NULL &&
         strcmp(statement->name, "random_number") == 0)
         features->random = 1;
+    if (statement->intrinsic == F2C_INTRINSIC_MVBITS)
+        features->bit_intrinsic = 1;
     f2c_visit_statement_expressions(statement, collect_expression_feature, features);
     collect_statement_features(statement->nested, features);
 }

@@ -20,5 +20,7 @@ int f2c_emit_pointer_assignment_statement(Context *context, Unit *unit,
                                           const F2cStatement *statement, size_t line, int depth);
 int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                   size_t line, int depth);
+int f2c_emit_mvbits_statement(Context *context, Unit *unit, const F2cStatement *statement,
+                              int depth);
 
 #endif

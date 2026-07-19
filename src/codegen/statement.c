@@ -230,6 +230,10 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             f2c_diagnostic(context, source_line->number, 1, "malformed DEALLOCATE statement");
     } else if (statement->kind == F2C_STMT_DATA) {
         /* DATA initialization is emitted once in the procedure prologue. */
+    } else if (statement->kind == F2C_STMT_CALL &&
+               statement->intrinsic == F2C_INTRINSIC_MVBITS) {
+        if (!f2c_emit_mvbits_statement(context, unit, statement, *depth))
+            f2c_diagnostic(context, source_line->number, 1, "cannot lower MVBITS invocation");
     } else if (statement->kind == F2C_STMT_CALL) {
         if (f2c_array_emit_elemental_call(context, unit, statement, *depth)) {
             return 1;

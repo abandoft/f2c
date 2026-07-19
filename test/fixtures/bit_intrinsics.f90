@@ -5,6 +5,7 @@ program bit_intrinsics
   integer(4) :: i32
   integer(8) :: i64
   integer(4) :: values(4)
+  integer(4) :: moving(5)
   logical :: flags(4)
 
   i8 = ibset(0_1, 7)
@@ -30,13 +31,27 @@ program bit_intrinsics
   if (ishftc(-16_1, 1, 4) /= -16_1) error stop 11
   if (bit_size(i8) /= 8_1 .or. bit_size(i16) /= 16_2 .or. &
       bit_size(i32) /= 32_4 .or. bit_size(i64) /= 64_8) error stop 12
+  call mvbits(i8, 8, 0, i8, 8)
+
+  i32 = 1_4
+  call mvbits(i32, 0, 1, i32, 4)
+  if (i32 /= 17_4) error stop 13
+  i16 = 0_2
+  call mvbits(to=i16, from=15_2, len=4, topos=4, frompos=0)
+  if (i16 /= 240_2) error stop 14
 
   values = [1_4, 2_4, 4_4, 8_4]
   values = ior(values, [16_4, 32_4, 64_4, 128_4])
   flags = btest(values, [4, 5, 6, 7])
-  if (.not. all(flags)) error stop 13
+  if (.not. all(flags)) error stop 15
   values = ieor(values, [17_4, 34_4, 68_4, 136_4])
-  if (any(values /= 0_4)) error stop 14
+  if (any(values /= 0_4)) error stop 16
+  call mvbits(7_4, 0, 3, values, 0)
+  if (any(values /= 7_4)) error stop 17
+
+  moving = [1_4, 2_4, 3_4, 4_4, 5_4]
+  call mvbits(moving(1:4), 0, 3, moving(2:5), 0)
+  if (any(moving /= [1_4, 1_4, 2_4, 3_4, 4_4])) error stop 18
 
   print '(A,1X,4(I0,1X))', 'BITS', bit_size(i8), bit_size(i16), &
     bit_size(i32), bit_size(i64)
