@@ -28,7 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建基线已经建立；本轮普通与 ASan/UBSan 严格 CTest 均为 38/38，架构边界检查作为独立测试运行。
+  构建基线已经建立；本轮普通与 ASan/UBSan 严格 CTest 均为 39/39，架构边界检查作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -223,7 +223,11 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 完成 F90 全部 intrinsic 及项目承诺的旧式 intrinsic；重点补齐位操作、字符处理、数值模型、
   kind 选择、数组 inquiry 和随机数语义。数组 inquiry 子集已覆盖非默认下界、零 extent 的标准
   `LBOUND=1/UBOUND=0`、动态 `DIM`、`KIND=1/2/4/8`、切片/构造器/elemental 数组表达式、可分配
-  结果和假定形状哑实参；独立负向语义测试、严格 C17 执行及 gfortran 差分已进入 CI。
+  结果和假定形状哑实参；独立负向语义测试、严格 C17 执行及 gfortran 差分已进入 CI。位操作
+  `BIT_SIZE/BTEST/IAND/IBCLR/IBITS/IBSET/IEOR/IOR/ISHFT/ISHFTC/NOT/MVBITS` 已覆盖
+  `INTEGER(KIND=1/2/4/8)`、关键字参数、常量折叠、elemental 数组、符号位及完整位宽边界；
+  `MVBITS` 对标量别名、重叠数组段和标量广播使用写入前快照。严格 C17、UBSan 及 gfortran
+  逐项差分已进入 CI，但其他 F90 intrinsic 尚未全部完成，因此本项保持未关闭。
 - [ ] 让 `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/TRANSPOSE/MATMUL` 等支持任意合法数组
   表达式、所有已支持 kind/rank、零大小数组和非默认下界，而不是只接受具名整数组。上述 intrinsic
   的数值、LOGICAL、COMPLEX 和 CHARACTER 输入现共用列主序数组视图与一次性临时量引擎；
@@ -343,7 +347,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   已绑定的表达式与符号；标签和 I/O 跳转仅消费语义阶段生成的目标及清理计划。其他 codegen 模块
   仍存在少量源码字符串识别和生成期语义判断，因此本项保持未关闭。
 - [ ] 系统审计严格别名、整数溢出、移位、浮点收缩、复数、求值顺序和指针算术，保证生成代码
-  不依赖未定义行为或编译器扩展。
+  不依赖未定义行为或编译器扩展。位操作 intrinsic 已统一使用固定位宽无符号表示和 `memcpy`
+  位复制，规避有符号移位、移位量等于位宽及别名未定义行为，并以符号位、完整位宽、零长度和
+  重叠 `MVBITS` 的 UBSan 执行覆盖；其他生成路径仍需继续审计。
 - [ ] 对辅助函数做基于 IR 使用信息的可达性生成，控制单文件输出的体积、C 编译时间和链接重复；
   不得以引入新的独立运行时库解决该问题。
 - [ ] 为数组描述符、I/O、格式、NAMELIST、派生类型复制/终结等生成逻辑建立结构化 emitter，
