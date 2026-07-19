@@ -68,7 +68,7 @@ static void emit_transfer_model(Buffer *output) {
         "payload_length; bool input; bool formatted; bool direct; bool sequential_unformatted; "
         "bool child; bool active; } f2c_io_transfer;\n"
         "static inline F2C_UNUSED int f2c_transfer_direct_begin(f2c_io_transfer *transfer, "
-        "int64_t record) { uint64_t ordinal, offset, length; long file_size; f2c_unit_entry "
+        "int64_t record) { uint64_t ordinal, offset, length; long file_size = 0L; f2c_unit_entry "
         "*entry = transfer->unit; if (record <= 0 || entry->recl <= 0 || entry->file == NULL) "
         "return F2C_IO_STATUS_RECORD; ordinal = (uint64_t)record - UINT64_C(1); length = "
         "(uint64_t)(uint32_t)entry->recl; if (ordinal > UINT64_MAX / length) return "
