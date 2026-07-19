@@ -46,6 +46,8 @@ jobs:
         run: sh test/select_case_differential.sh build/numerical/f2c
       - name: Differential-test named construct control flow
         run: sh test/named_construct_differential.sh build/numerical/f2c
+      - name: Differential-test legacy labeled control flow
+        run: sh test/legacy_control_differential.sh build/numerical/f2c
       - name: Differential-test WHERE array semantics
         run: sh test/where_differential.sh build/numerical/f2c
       - name: Differential-test user ELEMENTAL procedures
