@@ -12,7 +12,9 @@ enum F2cDeclarationAttributeFlag {
     F2C_DECL_SAVE = 1U << 5,
     F2C_DECL_TARGET = 1U << 6,
     F2C_DECL_INTENT = 1U << 7,
-    F2C_DECL_DIMENSION = 1U << 8
+    F2C_DECL_DIMENSION = 1U << 8,
+    F2C_DECL_PUBLIC = 1U << 9,
+    F2C_DECL_PRIVATE = 1U << 10
 };
 
 typedef struct F2cDeclarationAttributes {
@@ -20,6 +22,8 @@ typedef struct F2cDeclarationAttributes {
     F2cIntent intent;
     size_t dimension_open;
     size_t dimension_close;
+    F2cAccessibility access;
+    const F2cToken *access_token;
 } F2cDeclarationAttributes;
 
 typedef struct F2cEntitySpec {
@@ -83,6 +87,10 @@ static unsigned int simple_attribute_flag(const F2cToken *token) {
         return F2C_DECL_SAVE;
     if (f2c_token_equals(token, "target"))
         return F2C_DECL_TARGET;
+    if (f2c_token_equals(token, "public"))
+        return F2C_DECL_PUBLIC;
+    if (f2c_token_equals(token, "private"))
+        return F2C_DECL_PRIVATE;
     return 0U;
 }
 
@@ -149,8 +157,23 @@ static int parse_attribute(Context *context, const Line *line, size_t begin, siz
     if (f2c_token_equals(&line->tokens[begin], "dimension"))
         return parse_dimension_attribute(context, line, begin, end, attributes);
     flag = simple_attribute_flag(&line->tokens[begin]);
-    if (flag != 0U && end == begin + 1U)
-        return record_attribute(context, line, &line->tokens[begin], flag, attributes);
+    if (flag != 0U && end == begin + 1U) {
+        if ((flag == F2C_DECL_PUBLIC && (attributes->flags & F2C_DECL_PRIVATE) != 0U) ||
+            (flag == F2C_DECL_PRIVATE && (attributes->flags & F2C_DECL_PUBLIC) != 0U)) {
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, &line->tokens[begin],
+                                      1,
+                                      "declaration cannot have both PUBLIC and PRIVATE attributes");
+            return 0;
+        }
+        if (!record_attribute(context, line, &line->tokens[begin], flag, attributes))
+            return 0;
+        if (flag == F2C_DECL_PUBLIC || flag == F2C_DECL_PRIVATE) {
+            attributes->access =
+                flag == F2C_DECL_PUBLIC ? F2C_ACCESSIBILITY_PUBLIC : F2C_ACCESSIBILITY_PRIVATE;
+            attributes->access_token = &line->tokens[begin];
+        }
+        return 1;
+    }
     f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, line, &line->tokens[begin], 1,
                               "unsupported declaration attribute");
     return 0;
@@ -361,6 +384,7 @@ static int apply_entity(Context *context, Unit *unit, const Line *line,
     symbol->value_category =
         (flags & F2C_DECL_PARAMETER) != 0U ? F2C_VALUE_CONSTANT : F2C_VALUE_VARIABLE;
     symbol->declaration_line = line->number;
+    symbol->declaration_span = line->tokens[entity->begin].span;
     symbol->allocatable |= (flags & F2C_DECL_ALLOCATABLE) != 0U;
     symbol->pointer |= (flags & F2C_DECL_POINTER) != 0U;
     symbol->polymorphic |= type_spec->polymorphic;
@@ -368,6 +392,10 @@ static int apply_entity(Context *context, Unit *unit, const Line *line,
     symbol->optional |= (flags & F2C_DECL_OPTIONAL) != 0U;
     symbol->parameter |= (flags & F2C_DECL_PARAMETER) != 0U;
     symbol->saved |= (flags & F2C_DECL_SAVE) != 0U;
+    if (attributes->access != F2C_ACCESS_UNSPECIFIED) {
+        symbol->access = attributes->access;
+        symbol->access_span = attributes->access_token->span;
+    }
     if ((flags & F2C_DECL_INTENT) != 0U)
         symbol->intent = attributes->intent;
     if ((flags & F2C_DECL_EXTERNAL) != 0U) {
@@ -465,6 +493,12 @@ void f2c_parse_entity_declaration(Context *context, Unit *unit, Line *source_lin
     if (double_colon != SIZE_MAX) {
         if (!parse_attributes(context, source_line, type_spec.end, double_colon, &attributes))
             goto cleanup;
+        if (attributes.access != F2C_ACCESS_UNSPECIFIED && unit->kind != UNIT_MODULE) {
+            f2c_diagnostic_token_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, source_line, attributes.access_token, 1,
+                "PUBLIC and PRIVATE declaration attributes are valid only in a module");
+            goto cleanup;
+        }
         entity_begin = double_colon + 1U;
     } else {
         memset(&attributes, 0, sizeof(attributes));
