@@ -102,6 +102,8 @@ void f2c_emit_project_modules(Context *context) {
         f2c_buffer_printf(&context->output, "/* Fortran module %s. */\n", module->name);
         for (symbol_index = 0U; symbol_index < module->symbol_count; ++symbol_index) {
             Symbol *symbol = &module->symbols[symbol_index];
+            if (symbol->external)
+                continue;
             const char *name = f2c_symbol_c_name(module, symbol);
             const size_t line = symbol->declaration_line != 0U
                                     ? symbol->declaration_line
