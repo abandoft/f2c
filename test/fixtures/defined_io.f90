@@ -1,6 +1,12 @@
 module defined_io_types
   implicit none
 
+  type :: plain_payload
+    integer :: code
+    real :: amount
+    character(3) :: name
+  end type plain_payload
+
   type :: payload
     integer :: value
   contains
@@ -65,6 +71,7 @@ program defined_io
   use defined_io_types
   implicit none
   type(payload) :: source, restored
+  type(plain_payload) :: plain, plain_restored
   character(32) :: buffer
   character(160) :: runtime_format
 
@@ -90,6 +97,36 @@ program defined_io
   buffer = ''
   write(buffer, *) source
   if (buffer(2:3) /= '42') stop 3
+
+  buffer = ''
+  write(buffer, '(I2)') source
+  if (buffer(1:2) /= '42') stop 7
+  buffer = '31'
+  read(buffer, '(I2)') restored
+  if (restored%value /= 31) stop 8
+
+  plain%code = 17
+  plain%amount = 2.5
+  plain%name = 'xyz'
+  buffer = ''
+  write(buffer, '(I2,1X,F4.1,1X,A3)') plain
+  plain_restored%code = 0
+  plain_restored%amount = 0.0
+  plain_restored%name = '---'
+  read(buffer, '(I2,1X,F4.1,1X,A3)') plain_restored
+  if (plain_restored%code /= plain%code) stop 9
+  if (abs(plain_restored%amount - plain%amount) > epsilon(plain%amount)) stop 10
+  if (plain_restored%name /= plain%name) stop 11
+
+  buffer = ''
+  write(buffer, *) plain
+  plain_restored%code = 0
+  plain_restored%amount = 0.0
+  plain_restored%name = '---'
+  read(buffer, *) plain_restored
+  if (plain_restored%code /= plain%code) stop 12
+  if (abs(plain_restored%amount - plain%amount) > epsilon(plain%amount)) stop 13
+  if (plain_restored%name /= plain%name) stop 14
 
   open(unit=27, status='scratch', form='unformatted')
   write(27) source
