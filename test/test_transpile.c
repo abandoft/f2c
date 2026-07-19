@@ -2306,6 +2306,110 @@ static void test_control_flow_semantics(void) {
     f2c_result_free(&result);
 }
 
+static void test_labeled_do_semantics(void) {
+    static const char source[] = "subroutine invalid_labeled_do(i)\n"
+                                 "  implicit none\n"
+                                 "  integer :: i\n"
+                                 "  do 10 i = 1, 2\n"
+                                 "  end do\n"
+                                 "10 continue\n"
+                                 "  do 20 i = 1, 2\n"
+                                 "20 goto 30\n"
+                                 "30 continue\n"
+                                 "  do 40 i = 1, 2\n"
+                                 "  do 40 i = 1, 2\n"
+                                 "40 end do\n"
+                                 "  do 50 i = 1, 2\n"
+                                 "end subroutine invalid_labeled_do\n";
+    F2cOptions options = {"invalid_labeled_do.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count == 4U,
+           "invalid labeled DO termination forms produce one structured error each");
+    expect(result.code == NULL, "invalid labeled DO constructs suppress generated C17");
+    expect_contains(result.diagnostics, "END DO has no matching opening construct",
+                    "an unlabeled END DO cannot close a labeled DO construct");
+    expect_contains(result.diagnostics, "goto 30 cannot terminate a labeled DO construct",
+                    "a prohibited nonblock DO terminal action is rejected");
+    expect_contains(result.diagnostics, "end do cannot terminate shared labeled DO constructs",
+                    "shared labeled loops reject END DO as their common action statement");
+    expect_contains(result.diagnostics, "missing terminal statement label 50",
+                    "a missing labeled DO terminal is diagnosed at its label token");
+    f2c_result_free(&result);
+}
+
+static void test_statement_label_control_flow(void) {
+    static const char source[] = "subroutine invalid_branches(i)\n"
+                                 "  implicit none\n"
+                                 "  integer :: i\n"
+                                 "  goto 90\n"
+                                 "  goto 100\n"
+                                 "  goto 20\n"
+                                 "  do i = 1, 2\n"
+                                 "20 continue\n"
+                                 "  end do\n"
+                                 "100 format(i4)\n"
+                                 "30 continue\n"
+                                 "030 continue\n"
+                                 "  if (i > 0) then\n"
+                                 "40 continue\n"
+                                 "  else\n"
+                                 "    goto 40\n"
+                                 "  end if\n"
+                                 "  select case (i)\n"
+                                 "  case (1)\n"
+                                 "50 continue\n"
+                                 "  case default\n"
+                                 "    goto 50\n"
+                                 "  end select\n"
+                                 "end subroutine invalid_branches\n";
+    F2cOptions options = {"invalid_branches.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count == 6U,
+           "statement-label graph validation rejects six independent invalid branches");
+    expect(result.code == NULL, "invalid statement-label control flow suppresses generated C17");
+    expect_contains(result.diagnostics, "GOTO target label 90 is not defined",
+                    "direct GOTO requires an in-unit target label");
+    expect_contains(result.diagnostics,
+                    "GOTO target label 100 does not identify an executable branch target",
+                    "FORMAT labels cannot be used as executable branch targets");
+    expect_contains(result.diagnostics, "GOTO target label 20 illegally enters a DO construct",
+                    "a branch cannot enter a DO range from outside");
+    expect_contains(result.diagnostics, "statement label 30 is defined more than once",
+                    "leading-zero-equivalent duplicate labels are rejected");
+    expect_contains(result.diagnostics,
+                    "GOTO target label 40 illegally enters a branch block of an IF construct",
+                    "control cannot transfer between sibling IF branch blocks");
+    expect_contains(result.diagnostics,
+                    "GOTO target label 50 illegally enters a case block of a SELECT CASE construct",
+                    "control cannot transfer between sibling SELECT CASE blocks");
+    f2c_result_free(&result);
+
+    {
+        static const char valid_source[] = "subroutine normalized_labels(value)\n"
+                                           "  implicit none\n"
+                                           "  integer :: value\n"
+                                           "  read(5, *, end=00090, err=00100) value\n"
+                                           "  assign 00120 to value\n"
+                                           "  goto value, (00120)\n"
+                                           "00090 continue\n"
+                                           "00100 continue\n"
+                                           "00120 continue\n"
+                                           "end subroutine normalized_labels\n";
+        result = f2c_transpile(valid_source, sizeof(valid_source) - 1U, &options);
+        expect(result.error_count == 0U,
+               "equivalent leading-zero statement labels pass semantic graph validation");
+        expect_contains(result.code, "goto f2c_label_90",
+                        "I/O END labels are emitted with their canonical C identifier");
+        expect_contains(result.code, "goto f2c_label_100",
+                        "I/O ERR labels are emitted with their canonical C identifier");
+        expect_contains(result.code, "goto f2c_label_120",
+                        "assigned GOTO labels share canonical control-flow identifiers");
+        expect_not_contains(result.code, "f2c_label_000",
+                            "generated C never retains leading-zero label spellings");
+        f2c_result_free(&result);
+    }
+}
+
 static void test_select_case_semantics(void) {
     static const char source[] =
         "subroutine invalid_select_case(i, candidate, values, flag, text)\n"
@@ -3157,6 +3261,8 @@ int main(void) {
     test_malformed_character_prefix_cleanup();
     test_implicit_mapping_semantics();
     test_control_flow_semantics();
+    test_labeled_do_semantics();
+    test_statement_label_control_flow();
     test_select_case_semantics();
     test_named_construct_semantics();
     test_where_semantics();
