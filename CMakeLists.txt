@@ -42,6 +42,10 @@ option(F2C_BUILD_LIBFUZZER "Build the coverage-guided libFuzzer target" OFF)
 set(
     F2C_CORE_SOURCES
     src/ast/budget.c
+    src/ast/declaration/access.c
+    src/ast/declaration/access.h
+    src/ast/declaration/designator.c
+    src/ast/declaration/designator.h
     src/ast/declaration/procedure.c
     src/ast/declaration/procedure.h
     src/ast/declaration/use.c
@@ -157,6 +161,8 @@ set(
     src/frontend/frontend.h
     src/frontend/interface.c
     src/frontend/lexer.c
+    src/frontend/module/access.c
+    src/frontend/module/access.h
     src/frontend/module/dependency.c
     src/frontend/module/dependency.h
     src/frontend/module_constants.h
@@ -405,6 +411,11 @@ if(F2C_BUILD_TESTING)
     target_include_directories(f2c_use_ast_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_use_ast_tests)
     add_test(NAME use_statement_ast COMMAND f2c_use_ast_tests)
+
+    add_executable(f2c_access_ast_tests test/test_access_ast.c)
+    target_include_directories(f2c_access_ast_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_access_ast_tests)
+    add_test(NAME access_statement_ast COMMAND f2c_access_ast_tests)
 
     add_executable(f2c_format_tests test/test_format.c)
     target_include_directories(f2c_format_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
