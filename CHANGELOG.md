@@ -1,3 +1,11 @@
+## 1.14.0
+
+- Migrated character lengths, array bounds, declaration initializers, statement-function results, and intrinsic-module constants to canonical token ranges and typed expression IR.
+- Removed legacy identifier, argument-splitting, integer-text evaluation, and expression-query helpers from production frontend and semantic paths.
+- Added architecture gates that prevent production code from restoring source-text expression parsing or removed text-parser entry points.
+- Preserved exact procedure-designator and keyword-association spans through semantic validation, with stable structured diagnostic codes and complete source ranges.
+- Clarified CHARACTER initializer length evaluation for strict MSVC analysis, expanded diagnostic regressions, and revalidated strict C17, sanitizers, all pinned Reference BLAS/LAPACK correctness gates, and the 71-case performance matrix.
+
 ## 1.13.0
 
 - Migrated call, allocation, stop, return, normal assignment, and pointer assignment statements to the canonical token, AST, and typed IR pipeline with exact source spans.
