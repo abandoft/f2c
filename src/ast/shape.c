@@ -335,11 +335,10 @@ void f2c_ast_set_array_reference_shape(AstParser *parser, F2cExpr *expression, S
                     : (declared->lower_expression != NULL
                            ? f2c_evaluate_integer_constant(parser->unit, declared->lower_expression,
                                                            &lower)
-                           : symbol->dimension_lower_syntax[argument].count != 0U
-                                 ? f2c_evaluate_integer_syntax(
-                                       parser->unit,
-                                       symbol->dimension_lower_syntax[argument], &lower)
-                                 : (lower = 1, 1));
+                       : symbol->dimension_lower_syntax[argument].count != 0U
+                           ? f2c_evaluate_integer_syntax(
+                                 parser->unit, symbol->dimension_lower_syntax[argument], &lower)
+                           : (lower = 1, 1));
             const int upper_known =
                 upper_expression->kind != F2C_EXPR_INVALID
                     ? f2c_evaluate_integer_constant(parser->unit, upper_expression, &upper)
@@ -377,26 +376,37 @@ Type f2c_ast_common_constructor_type(Type left, Type right) {
 }
 
 int f2c_ast_precedence(const F2cToken *token) {
+    if (f2c_ast_is_defined_operator(token))
+        return 1;
     if (f2c_token_equals(token, ".or.") || f2c_token_equals(token, ".eqv.") ||
         f2c_token_equals(token, ".neqv."))
-        return 1;
-    if (f2c_token_equals(token, ".and."))
         return 2;
+    if (f2c_token_equals(token, ".and."))
+        return 3;
     if (f2c_token_equals(token, "==") || f2c_token_equals(token, "/=") ||
         f2c_token_equals(token, "<") || f2c_token_equals(token, ">") ||
         f2c_token_equals(token, "<=") || f2c_token_equals(token, ">=") ||
         f2c_token_equals(token, ".eq.") || f2c_token_equals(token, ".ne.") ||
         f2c_token_equals(token, ".lt.") || f2c_token_equals(token, ".le.") ||
         f2c_token_equals(token, ".gt.") || f2c_token_equals(token, ".ge."))
-        return 3;
+        return 4;
     if (f2c_token_equals(token, "+") || f2c_token_equals(token, "-") ||
         f2c_token_equals(token, "//"))
-        return 4;
-    if (f2c_token_equals(token, "*") || f2c_token_equals(token, "/"))
         return 5;
-    if (f2c_token_equals(token, "**"))
+    if (f2c_token_equals(token, "*") || f2c_token_equals(token, "/"))
         return 6;
+    if (f2c_token_equals(token, "**"))
+        return 7;
     return 0;
+}
+
+int f2c_ast_is_defined_operator(const F2cToken *token) {
+    return token != NULL && token->kind == F2C_TOKEN_OPERATOR && token->length >= 3U &&
+           token->begin[0] == '.' && token->begin[token->length - 1U] == '.' &&
+           !f2c_token_equals(token, ".true.") && !f2c_token_equals(token, ".false.") &&
+           !f2c_token_equals(token, ".not.") && !f2c_token_equals(token, ".and.") &&
+           !f2c_token_equals(token, ".or.") && !f2c_token_equals(token, ".eqv.") &&
+           !f2c_token_equals(token, ".neqv.") && !f2c_ast_is_comparison(token);
 }
 
 int f2c_ast_is_comparison(const F2cToken *token) {

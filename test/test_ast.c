@@ -227,6 +227,38 @@ static void test_typed_numeric_tree(void) {
     f2c_expr_free(expression);
 }
 
+static void test_defined_operator_tree(void) {
+    Symbol symbols[3];
+    Unit unit;
+    F2cExpr *expression;
+    const char *error_at = NULL;
+    memset(&unit, 0, sizeof(unit));
+    add_symbol(symbols, 0U, "left", TYPE_INTEGER, 0U, 0);
+    add_symbol(symbols, 1U, "right", TYPE_INTEGER, 0U, 0);
+    add_symbol(symbols, 2U, "third", TYPE_INTEGER, 0U, 0);
+    unit.symbols = symbols;
+    unit.symbol_count = 3U;
+
+    expression = f2c_parse_expression_ast(&unit, ".invert. left ** 2", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->kind == F2C_EXPR_BINARY &&
+               strcmp(expression->text, "**") == 0 &&
+               expression->children[0]->kind == F2C_EXPR_UNARY &&
+               strcmp(expression->children[0]->text, ".invert.") == 0,
+           "a defined unary operator binds more tightly than exponentiation");
+    f2c_expr_free(expression);
+
+    error_at = NULL;
+    expression = f2c_parse_expression_ast(&unit, "left + right .combine. third * left", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->kind == F2C_EXPR_BINARY &&
+               strcmp(expression->text, ".combine.") == 0 &&
+               expression->children[0]->kind == F2C_EXPR_BINARY &&
+               strcmp(expression->children[0]->text, "+") == 0 &&
+               expression->children[1]->kind == F2C_EXPR_BINARY &&
+               strcmp(expression->children[1]->text, "*") == 0,
+           "a defined binary operator has lower precedence than every intrinsic operator");
+    f2c_expr_free(expression);
+}
+
 static void test_array_section(void) {
     Symbol symbols[3];
     Unit unit;
@@ -542,6 +574,7 @@ static void test_integer_iteration_counts(void) {
 int main(void) {
     test_kind_shape_and_value_category();
     test_typed_numeric_tree();
+    test_defined_operator_tree();
     test_array_section();
     test_single_precision_intrinsic_expression();
     test_intrinsic_type_registry();
