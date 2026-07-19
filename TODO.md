@@ -61,7 +61,10 @@
   设计子和嵌套隐式 DO 已完全消费 canonical token range；`READ/WRITE`、文件控制语句及其控制项和
   I/O item、`PRINT` 的格式与输出项以及带标签的 `FORMAT` 语句均已消费 canonical token range；
   计数/无控制/`WHILE`/标号 `DO`、单行/块/算术 `IF`、直接/计算/赋值 `GOTO`、`ASSIGN` 和带标签
-  嵌套动作也已迁移。`STOP`、分配语句、调用等少量语句入口仍有文本扫描。
+  嵌套动作也已迁移。`CALL/MOVE_ALLOC`、`ALLOCATE/DEALLOCATE/NULLIFY`、`STOP/ERROR STOP`、
+  `RETURN`、普通赋值和指针赋值现同样直接从 canonical token range 构建 AST；关键字实参、分配
+  类型说明、停止码及赋值两端均保留精确物理 span。该任务仍因程序单元、部分声明/属性和其他旧式
+  规格语句中的文本解析路径未全部删除而保持未关闭。
   源码归一化层的注释识别、分号拆句和代码大小写处理已经
   改为消费 canonical token，不会在 token 化之前破坏字符或 Hollerith 载荷。
 - [x] 只保留 `frontend/token.h` 定义的 `F2cToken/F2cTokenStream`。表达式 AST 已删除独立的
@@ -229,11 +232,17 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [x] 标签、直接/计算/赋值 `GOTO`、算术 IF、旧式标号 DO 及 I/O `ERR/END/EOR` 已进入显式
   语句标签图。语义阶段统一规范化前导零，拒绝重复/未定义/非可执行目标、从外部进入结构化构造，
   以及 IF/SELECT CASE/SELECT TYPE/WHERE 兄弟分支块之间的非法跳转；单一/共享 DO 终止标签在
-  typed IR 中按内到外顺序绑定。正向、负向、严格 C17、sanitizer 和 gfortran 字节差分已进入 CI。
+  typed IR 中按内到外顺序绑定。每个直接、计算、赋值和算术分支以及 I/O `ERR/END/EOR` 控制项
+  都在语义阶段绑定目标并保存离开 BLOCK 所需的逆序清理计划，emitter 不再根据源码行重新推断
+  目标或扫描 `ASSIGN` 语句。正向、负向、严格 C17、sanitizer 和 gfortran 执行回归已进入测试。
 - [ ] 将 `RETURN`、`STOP`、`CYCLE`、`EXIT`、交替返回及异常 I/O 边整合为完整过程级 CFG，补齐
-  可达性、赋值标签数据流和每条边的生命周期证明，而不是只依赖局部构造所有者与标签范围。
+  可达性、基本块、赋值标签数据流和每条边的生命周期证明。当前显式转移和异常 I/O 已有语义阶段
+  清理计划，`RETURN` 走统一单元清理，`CYCLE/EXIT` 已绑定具体 DO；但仍不是完整 CFG，裸赋值
+  `GOTO` 的目标集合仍按全单元 `ASSIGN` 来源保守解析，交替返回也尚未实现。
 - [ ] 对任何离开作用域的边执行正确的临时量释放、可分配对象清理和派生对象终结；异常 I/O 分支
-  也必须走同一生命周期模型。
+  也必须走同一生命周期模型。当前正常 BLOCK 结束、`RETURN`、`CYCLE/EXIT`、所有标签分支及
+  `ERR/END/EOR` 会复用 typed cleanup plan，覆盖 BLOCK 内可分配对象和标量/数组派生对象；仍需把
+  表达式临时量、函数结果、隐式错误边和后续完整 CFG 的所有边纳入同一所有权数据流后才能关闭。
 - [ ] 完成语句级错误恢复，在单个输入中报告多个独立错误，同时保证错误结果不生成半成品 C。
 
 ### P0-IO-01 F90 外部与内部 I/O
@@ -292,7 +301,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 ### P0-CG-01 C17 代码生成正确性和质量
 
 - [ ] 代码生成只接受已验证的不可变 IR；消除 `codegen` 中的源码字符串识别、语义诊断和重新
-  解析。
+  解析。普通/字符/派生类型赋值、指针赋值和 `NULLIFY` 已拆入独立 statement emitter，并仅消费
+  已绑定的表达式与符号；标签和 I/O 跳转仅消费语义阶段生成的目标及清理计划。其他 codegen 模块
+  仍存在少量源码字符串识别和生成期语义判断，因此本项保持未关闭。
 - [ ] 系统审计严格别名、整数溢出、移位、浮点收缩、复数、求值顺序和指针算术，保证生成代码
   不依赖未定义行为或编译器扩展。
 - [ ] 对辅助函数做基于 IR 使用信息的可达性生成，控制单文件输出的体积、C 编译时间和链接重复；
@@ -337,7 +348,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [x] 拆分当前超大实现文件：`semantic/validation.c`、`frontend/parser.c`、`codegen/io.c`、
   `codegen/array.c`、`ast/parser.c`、`codegen/expression.c` 和 `codegen/unit.c`。按声明、接口、
   控制流、I/O 语义、数组构造、transform、过程调用、生命周期和 emitter 职责划分；当前生产
-  C/H 文件均少于 1,000 行。数组 inquiry、数组关系归约、transform inquiry、`SELECT TYPE`
+  C/H 文件均少于 1,000 行。动作/分配语句 AST、赋值 AST、赋值 emitter 和控制流生命周期规划
+  也已分别落入 `ast/statement/`、`codegen/statement/` 和 `semantic/validation/`。数组 inquiry、
+  数组关系归约、transform inquiry、`SELECT TYPE`
   guard、矩阵 transformational intrinsic 及关系归约生成支持分别位于独立模块，避免重新堆回通用
   call/statement/transpile 文件。
 - [x] 将 `src/internal/f2c.h` 从 730 行全局定义缩减为轻量跨域聚合头；基础设施、token、type、
