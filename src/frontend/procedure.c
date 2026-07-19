@@ -119,6 +119,11 @@ static void report_declaration_error(Context *context, const Line *line,
         free(name);
         break;
     }
+    case F2C_PROCEDURE_DECLARATION_ERROR_CONFLICTING_ACCESS:
+        f2c_diagnostic_token_code(
+            context, F2C_DIAGNOSTIC_SEMANTIC, line, token, 1,
+            "PROCEDURE declaration cannot have both PUBLIC and PRIVATE attributes");
+        break;
     case F2C_PROCEDURE_DECLARATION_ERROR_INTENT:
         f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1,
                                   "malformed PROCEDURE INTENT attribute");
@@ -169,6 +174,8 @@ static void lower_declaration(Context *context, Unit *unit, const Line *line,
     char *interface_name = f2c_token_text(syntax->interface_name);
     Unit *signature;
     F2cIntent intent = lower_intent(syntax->intent);
+    const F2cToken *access_token =
+        syntax->public_attribute != NULL ? syntax->public_attribute : syntax->private_attribute;
     size_t index;
     if (interface_name == NULL) {
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &syntax->span, 1,
@@ -190,6 +197,10 @@ static void lower_declaration(Context *context, Unit *unit, const Line *line,
     if (intent != F2C_INTENT_UNSPECIFIED && syntax->pointer_attribute == NULL)
         f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, syntax->intent_attribute,
                                   1, "INTENT on a PROCEDURE entity requires the POINTER attribute");
+    if (access_token != NULL && unit->kind != UNIT_MODULE)
+        f2c_diagnostic_token_code(
+            context, F2C_DIAGNOSTIC_SEMANTIC, line, access_token, 1,
+            "PUBLIC and PRIVATE PROCEDURE attributes are valid only in a module");
     for (index = 0U; index < syntax->entity_count; ++index) {
         const F2cToken *entity = syntax->entities[index];
         char *name = f2c_token_text(entity);
@@ -206,6 +217,11 @@ static void lower_declaration(Context *context, Unit *unit, const Line *line,
             symbol->intent = intent;
             symbol->declaration_line = entity->span.begin.line;
             symbol->declaration_span = entity->span;
+            if (access_token != NULL && unit->kind == UNIT_MODULE) {
+                symbol->access = syntax->public_attribute != NULL ? F2C_ACCESSIBILITY_PUBLIC
+                                                                  : F2C_ACCESSIBILITY_PRIVATE;
+                symbol->access_span = access_token->span;
+            }
         }
         free(name);
     }

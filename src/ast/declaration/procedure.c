@@ -98,6 +98,18 @@ static int parse_attribute(const Line *line, size_t *index, size_t end,
         ++*index;
         return set_once(syntax, &syntax->pass_attribute, attribute);
     }
+    if (f2c_token_equals(attribute, "public")) {
+        ++*index;
+        if (syntax->private_attribute != NULL)
+            return set_error(syntax, F2C_PROCEDURE_DECLARATION_ERROR_CONFLICTING_ACCESS, attribute);
+        return set_once(syntax, &syntax->public_attribute, attribute);
+    }
+    if (f2c_token_equals(attribute, "private")) {
+        ++*index;
+        if (syntax->public_attribute != NULL)
+            return set_error(syntax, F2C_PROCEDURE_DECLARATION_ERROR_CONFLICTING_ACCESS, attribute);
+        return set_once(syntax, &syntax->private_attribute, attribute);
+    }
     if (f2c_token_equals(attribute, "intent"))
         return parse_intent(line, index, end, syntax);
     return set_error(syntax, F2C_PROCEDURE_DECLARATION_ERROR_UNKNOWN_ATTRIBUTE, attribute);

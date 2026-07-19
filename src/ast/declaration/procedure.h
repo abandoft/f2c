@@ -24,6 +24,7 @@ typedef enum F2cProcedureDeclarationError {
     F2C_PROCEDURE_DECLARATION_ERROR_ATTRIBUTE,
     F2C_PROCEDURE_DECLARATION_ERROR_UNKNOWN_ATTRIBUTE,
     F2C_PROCEDURE_DECLARATION_ERROR_DUPLICATE_ATTRIBUTE,
+    F2C_PROCEDURE_DECLARATION_ERROR_CONFLICTING_ACCESS,
     F2C_PROCEDURE_DECLARATION_ERROR_INTENT,
     F2C_PROCEDURE_DECLARATION_ERROR_ENTITY_LIST,
     F2C_PROCEDURE_DECLARATION_ERROR_ENTITY,
@@ -38,6 +39,8 @@ typedef struct F2cProcedureDeclarationSyntax {
     const F2cToken *intent_attribute;
     const F2cToken *nopass_attribute;
     const F2cToken *pass_attribute;
+    const F2cToken *public_attribute;
+    const F2cToken *private_attribute;
     F2cProcedureIntentSyntax intent;
     const F2cToken **entities;
     size_t entity_count;
