@@ -5,6 +5,7 @@
 - Completed execution paths for nested and unlimited groups, positioning, scaling, sign and decimal controls, and defined-I/O format metadata.
 - Corrected `E`, `D`, and `G` mantissas, exponents, significant digits, extreme values, and positioned records to match native Fortran output.
 - Fixed temporary AST ownership cleanup after invalid FORMAT descriptors, eliminating a sanitizer-detected parser leak.
+- Fixed `(/` being misclassified as an array-constructor delimiter inside FORMAT, restoring official BLAS labeled formats.
 - Added byte-exact native FORMAT differentials, deep and long resource boundaries, strict C17, and sanitizer regression coverage.
 - Revalidated all 3,535 Reference LAPACK sources and all 52,512 RFP numerical differentials on the new format pipeline.
 
