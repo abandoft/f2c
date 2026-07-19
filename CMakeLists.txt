@@ -385,6 +385,11 @@ if(F2C_BUILD_TESTING)
     f2c_configure_internal_test_target(f2c_ast_tests)
     add_test(NAME ast COMMAND f2c_ast_tests)
 
+    add_executable(f2c_unit_header_tests test/test_unit_header.c)
+    target_include_directories(f2c_unit_header_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_unit_header_tests)
+    add_test(NAME unit_header_ast COMMAND f2c_unit_header_tests)
+
     add_executable(f2c_format_tests test/test_format.c)
     target_include_directories(f2c_format_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_format_tests)

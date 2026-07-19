@@ -108,9 +108,59 @@ static void test_call_designator_span(void) {
     f2c_result_free(&result);
 }
 
+static void test_continued_dummy_span(void) {
+    static const char source[] = "subroutine repeated(first, &\n"
+                                 " & second, first)\n"
+                                 "end subroutine repeated\n";
+    DiagnosticCapture capture = {.needle = "duplicate dummy argument"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "duplicate continued dummy suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "duplicate dummy emits one typed semantic diagnostic");
+    expect(capture.begin.line == 2U && capture.begin.column == 12U && capture.end.line == 2U &&
+               capture.end.column == 17U,
+           "continued header diagnostics retain the repeated dummy's physical token span");
+    f2c_result_free(&result);
+}
+
+static void test_result_name_span(void) {
+    static const char source[] = "integer function compute(value) result(compute)\n"
+                                 "  integer, intent(in) :: value\n"
+                                 "end function compute\n";
+    DiagnosticCapture capture = {.needle = "FUNCTION result name"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "conflicting function result name suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "conflicting function result emits one typed semantic diagnostic");
+    expect(capture.begin.line == 1U && capture.begin.column == 40U && capture.end.line == 1U &&
+               capture.end.column == 47U,
+           "result-name diagnostics use the RESULT designator rather than the function name");
+    f2c_result_free(&result);
+}
+
+static void test_trailing_header_token_span(void) {
+    static const char source[] = "integer function compute() result(answer) junk\n"
+                                 "end function compute\n";
+    DiagnosticCapture capture = {.needle = "unexpected tokens after program-unit header"};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "trailing header syntax suppresses generated C17");
+    expect(capture.count == 1U && capture.code == F2C_DIAGNOSTIC_SYNTAX,
+           "trailing header token emits one typed syntax diagnostic");
+    expect(capture.begin.line == 1U && capture.begin.column == 43U && capture.end.line == 1U &&
+               capture.end.column == 47U,
+           "trailing header diagnostics use the first unconsumed token span");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_keyword_association_span();
     test_call_designator_span();
+    test_continued_dummy_span();
+    test_result_name_span();
+    test_trailing_header_token_span();
     if (failures != 0) {
         fprintf(stderr, "%d diagnostic span test(s) failed\n", failures);
         return 1;
