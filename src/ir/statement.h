@@ -171,6 +171,7 @@ struct F2cStatement {
     F2cIrState state;
     size_t line;
     F2cSourceSpan span;
+    F2cSourceSpan name_span;
     char *text;
     char *tail;
     char *name;

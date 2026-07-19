@@ -25,14 +25,12 @@ void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *sta
 const char *f2c_validation_type_name(Type type);
 Unit *f2c_validation_find_procedure(Context *context, Unit *caller, const char *name);
 const F2cExpr *f2c_validation_actual_value(const F2cExpr *actual);
-size_t f2c_validation_call_column(const char *statement_text, const char *name);
-size_t f2c_validation_keyword_column(const char *statement_text, const F2cExpr *argument);
 int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const Symbol *actual,
                                                    unsigned int depth);
 Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
                                     const char *statement_text, const char *name,
-                                    F2cExpr ***arguments, char ***argument_texts,
-                                    size_t *argument_count, int subroutine);
+                                    const F2cSourceSpan *call_span, F2cExpr ***arguments,
+                                    char ***argument_texts, size_t *argument_count, int subroutine);
 void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                                      const char *statement_text, F2cExpr *expression);
 void f2c_validation_io_item_calls(Context *context, Unit *unit, size_t line,

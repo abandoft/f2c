@@ -300,10 +300,9 @@ static int bind_move_alloc_arguments(Context *context, F2cStatement *statement) 
             saw_keyword = 1;
             slot = move_alloc_argument_slot(actual->text);
             if (slot == SIZE_MAX) {
-                f2c_diagnostic_at(context, statement->line,
-                                  f2c_validation_keyword_column(statement->text, actual), 1,
-                                  "MOVE_ALLOC has no argument named '%s'",
-                                  actual->text != NULL ? actual->text : "<unknown>");
+                f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &actual->span, 1,
+                                         "MOVE_ALLOC has no argument named '%s'",
+                                         actual->text != NULL ? actual->text : "<unknown>");
                 valid = 0;
                 continue;
             }
@@ -348,9 +347,9 @@ static int bind_move_alloc_arguments(Context *context, F2cStatement *statement) 
     }
     for (i = 0U; i < 2U; ++i) {
         if (!assigned[i]) {
-            f2c_diagnostic_at(context, statement->line,
-                              f2c_validation_call_column(statement->text, "move_alloc"), 1,
-                              "required MOVE_ALLOC argument '%s' has no actual argument", names[i]);
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &statement->name_span, 1,
+                                     "required MOVE_ALLOC argument '%s' has no actual argument",
+                                     names[i]);
             valid = 0;
         }
     }
@@ -360,9 +359,8 @@ static int bind_move_alloc_arguments(Context *context, F2cStatement *statement) 
         if (arguments == NULL || items == NULL) {
             free(arguments);
             free(items);
-            f2c_diagnostic_at(context, statement->line,
-                              f2c_validation_call_column(statement->text, "move_alloc"), 1,
-                              "out of memory while binding MOVE_ALLOC arguments");
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &statement->name_span,
+                                     1, "out of memory while binding MOVE_ALLOC arguments");
             return 0;
         }
         for (i = 0U; i < 4U; ++i) {

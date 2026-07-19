@@ -290,8 +290,8 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         f2c_validation_move_alloc(context, unit, statement);
     } else if (statement->kind == F2C_STMT_CALL && statement->expression == NULL) {
         Unit *definition = f2c_validation_procedure_call(
-            context, unit, statement->line, statement->text, statement->name, &statement->arguments,
-            &statement->items, &statement->item_count, 1);
+            context, unit, statement->line, statement->text, statement->name, &statement->name_span,
+            &statement->arguments, &statement->items, &statement->item_count, 1);
         statement->resolved_procedure = definition;
         if (definition != NULL && definition->name != NULL && !definition->interface_abstract &&
             strcmp(statement->name, definition->name) != 0) {
@@ -342,8 +342,8 @@ static F2cExpr *parse_specification_syntax(Context *context, Unit *unit, size_t 
     F2cExpr *expression;
     if (syntax.count == 0U || syntax.tokens == NULL)
         return NULL;
-    expression = f2c_parse_expression_tokens(unit, syntax.tokens, syntax.count, syntax.source,
-                                             &error_at);
+    expression =
+        f2c_parse_expression_tokens(unit, syntax.tokens, syntax.count, syntax.source, &error_at);
     source_line = f2c_validation_unit_line(context, unit, line);
     if (expression == NULL) {
         f2c_diagnostic_at(context, line, 1U, 1, "out of memory while validating %s expression",
@@ -355,10 +355,9 @@ static F2cExpr *parse_specification_syntax(Context *context, Unit *unit, size_t 
 }
 
 static int specification_sentinel(F2cTokenRange syntax) {
-    return syntax.count == 1U &&
-           ((syntax.tokens[0].kind == F2C_TOKEN_OPERATOR &&
-             f2c_token_equals(&syntax.tokens[0], "*")) ||
-            syntax.tokens[0].kind == F2C_TOKEN_COLON);
+    return syntax.count == 1U && ((syntax.tokens[0].kind == F2C_TOKEN_OPERATOR &&
+                                   f2c_token_equals(&syntax.tokens[0], "*")) ||
+                                  syntax.tokens[0].kind == F2C_TOKEN_COLON);
 }
 
 static void validate_integer_specification(Context *context, size_t line, const char *source_line,
@@ -410,9 +409,8 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
     symbol->character_length_expression = NULL;
     if (symbol->type == TYPE_CHARACTER && symbol->character_length_syntax.count != 0U &&
         !specification_sentinel(symbol->character_length_syntax)) {
-        symbol->character_length_expression =
-            parse_specification_syntax(context, unit, line, symbol->character_length_syntax,
-                                       "character length");
+        symbol->character_length_expression = parse_specification_syntax(
+            context, unit, line, symbol->character_length_syntax, "character length");
     } else if (symbol->type == TYPE_CHARACTER &&
                (symbol->character_length == NULL || strcmp(symbol->character_length, "1") == 0)) {
         symbol->character_length_expression = f2c_expr_new_integer_constant(1);
@@ -461,12 +459,12 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
         Dimension *shape = &symbol->dimensions[dimension];
         f2c_expr_free(shape->lower_expression);
         f2c_expr_free(shape->upper_expression);
-        shape->lower_expression = symbol->dimension_lower_syntax[dimension].count != 0U
-                                      ? parse_specification_syntax(
-                                            context, unit, line,
-                                            symbol->dimension_lower_syntax[dimension],
-                                            "array lower bound")
-                                      : f2c_expr_new_integer_constant(1);
+        shape->lower_expression =
+            symbol->dimension_lower_syntax[dimension].count != 0U
+                ? parse_specification_syntax(context, unit, line,
+                                             symbol->dimension_lower_syntax[dimension],
+                                             "array lower bound")
+                : f2c_expr_new_integer_constant(1);
         shape->upper_expression =
             shape->kind == F2C_DIMENSION_EXPLICIT
                 ? parse_specification_syntax(context, unit, line,

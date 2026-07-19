@@ -170,10 +170,14 @@ static size_t select_explicit_interface(Context *context, Unit *caller, const ch
     return count;
 }
 
-size_t f2c_validation_call_column(const char *statement_text, const char *name) {
-    const char *match =
-        statement_text != NULL && name != NULL ? strstr(statement_text, name) : NULL;
-    return match != NULL ? (size_t)(match - statement_text) + 1U : 1U;
+static F2cSourceSpan diagnostic_span(const F2cSourceSpan *span, size_t line) {
+    F2cSourceSpan result = {0};
+    if (span != NULL && span->begin.line != 0U)
+        return *span;
+    result.begin.line = line;
+    result.begin.column = 1U;
+    result.end = result.begin;
+    return result;
 }
 
 static int has_explicit_argument_association(F2cExpr *const *arguments, size_t argument_count) {
@@ -187,17 +191,10 @@ static int has_explicit_argument_association(F2cExpr *const *arguments, size_t a
     return 0;
 }
 
-size_t f2c_validation_keyword_column(const char *statement_text, const F2cExpr *argument) {
-    const char *match = statement_text != NULL && argument != NULL && argument->text != NULL
-                            ? strstr(statement_text, argument->text)
-                            : NULL;
-    return match != NULL ? (size_t)(match - statement_text) + 1U : 1U;
-}
-
 static int bind_procedure_arguments(Context *context, Unit *definition, size_t line,
                                     const char *statement_text, const char *name,
-                                    F2cExpr ***arguments_io, char ***items_io,
-                                    size_t *argument_count_io) {
+                                    const F2cSourceSpan *call_span, F2cExpr ***arguments_io,
+                                    char ***items_io, size_t *argument_count_io) {
     F2cExpr **ordered_arguments = NULL;
     char **ordered_items = NULL;
     unsigned char *assigned = NULL;
@@ -209,6 +206,7 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
     size_t i;
     int saw_keyword = 0;
     int valid = 1;
+    const F2cSourceSpan call_diagnostic_span = diagnostic_span(call_span, line);
     if (definition->argument_count != 0U) {
         ordered_arguments =
             (F2cExpr **)calloc(definition->argument_count, sizeof(*ordered_arguments));
@@ -218,13 +216,15 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
     }
     if (definition->argument_count != 0U && (ordered_arguments == NULL || ordered_items == NULL ||
                                              assigned == NULL || created == NULL)) {
-        f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name), 1,
-                          "out of memory binding %zu arguments to procedure '%s'",
-                          definition->argument_count, name);
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &call_diagnostic_span, 1,
+                                 "out of memory binding %zu arguments to procedure '%s'",
+                                 definition->argument_count, name);
         goto failed;
     }
     for (i = 0U; i < argument_count; ++i) {
         F2cExpr *actual = arguments != NULL ? arguments[i] : NULL;
+        const F2cSourceSpan actual_diagnostic_span =
+            diagnostic_span(actual != NULL ? &actual->span : NULL, line);
         size_t target = SIZE_MAX;
         if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT) {
             size_t dummy_index;
@@ -237,10 +237,9 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
                 }
             }
             if (target == SIZE_MAX) {
-                f2c_diagnostic_at(context, line,
-                                  f2c_validation_keyword_column(statement_text, actual), 1,
-                                  "procedure '%s' has no dummy argument named '%s'", name,
-                                  actual->text != NULL ? actual->text : "<unknown>");
+                f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &actual_diagnostic_span,
+                                         1, "procedure '%s' has no dummy argument named '%s'", name,
+                                         actual->text != NULL ? actual->text : "<unknown>");
                 valid = 0;
                 continue;
             }
@@ -266,11 +265,10 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
             continue;
         }
         if (assigned[target]) {
-            f2c_diagnostic_at(context, line, f2c_validation_keyword_column(statement_text, actual),
-                              1,
-                              "dummy argument '%s' is associated more than once in call to "
-                              "procedure '%s'",
-                              definition->arguments[target], name);
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &actual_diagnostic_span, 1,
+                "dummy argument '%s' is associated more than once in call to procedure '%s'",
+                definition->arguments[target], name);
             valid = 0;
             continue;
         }
@@ -281,19 +279,17 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
         if (actual != NULL && actual->kind == F2C_EXPR_ABSENT_ARGUMENT) {
             Symbol *dummy = f2c_find_symbol(definition, definition->arguments[target]);
             if (actual->source != NULL) {
-                f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name),
-                                  1,
-                                  "an actual argument cannot be omitted with an empty positional "
-                                  "slot in call to procedure '%s'; use a keyword for later "
-                                  "arguments",
-                                  name);
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
+                    "an actual argument cannot be omitted with an empty positional slot in call "
+                    "to procedure '%s'; use a keyword for later arguments",
+                    name);
                 valid = 0;
             } else if (dummy == NULL || !dummy->optional) {
-                f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name),
-                                  1,
-                                  "dummy argument '%s' of procedure '%s' is not OPTIONAL and "
-                                  "cannot be omitted",
-                                  definition->arguments[target], name);
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
+                    "dummy argument '%s' of procedure '%s' is not OPTIONAL and cannot be omitted",
+                    definition->arguments[target], name);
                 valid = 0;
             } else {
                 actual->type = dummy->type;
@@ -307,17 +303,17 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
             continue;
         dummy = f2c_find_symbol(definition, definition->arguments[i]);
         if (dummy == NULL || !dummy->optional) {
-            f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name), 1,
-                              "required dummy argument '%s' of procedure '%s' has no actual "
-                              "argument",
-                              definition->arguments[i], name);
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
+                "required dummy argument '%s' of procedure '%s' has no actual argument",
+                definition->arguments[i], name);
             valid = 0;
             continue;
         }
         ordered_arguments[i] = f2c_expr_new_absent(dummy->type, dummy->rank);
         if (ordered_arguments[i] == NULL) {
-            f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name), 1,
-                              "out of memory while binding call to procedure '%s'", name);
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &call_diagnostic_span,
+                                     1, "out of memory while binding call to procedure '%s'", name);
             valid = 0;
             continue;
         }
@@ -325,8 +321,9 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
         if (items != NULL) {
             ordered_items[i] = f2c_strdup("");
             if (ordered_items[i] == NULL) {
-                f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name),
-                                  1, "out of memory while binding call to procedure '%s'", name);
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &call_diagnostic_span, 1,
+                    "out of memory while binding call to procedure '%s'", name);
                 valid = 0;
             }
         }
@@ -340,8 +337,9 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
                 ? (F2cExpr **)realloc(arguments, definition->argument_count * sizeof(*arguments))
                 : NULL;
         if (definition->argument_count != 0U && replacement == NULL) {
-            f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name), 1,
-                              "out of memory while expanding call to procedure '%s'", name);
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &call_diagnostic_span,
+                                     1, "out of memory while expanding call to procedure '%s'",
+                                     name);
             goto failed;
         }
         arguments = replacement;
@@ -352,8 +350,9 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
                     ? (char **)realloc(items, definition->argument_count * sizeof(*items))
                     : NULL;
             if (definition->argument_count != 0U && item_replacement == NULL) {
-                f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name),
-                                  1, "out of memory while expanding call to procedure '%s'", name);
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &call_diagnostic_span, 1,
+                    "out of memory while expanding call to procedure '%s'", name);
                 goto failed;
             }
             items = item_replacement;
@@ -863,23 +862,24 @@ static void validate_elemental_conformance(Context *context, const Unit *definit
 
 Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
                                     const char *statement_text, const char *name,
-                                    F2cExpr ***arguments, char ***items, size_t *argument_count,
-                                    int subroutine_call) {
+                                    const F2cSourceSpan *call_span, F2cExpr ***arguments,
+                                    char ***items, size_t *argument_count, int subroutine_call) {
     Unit *definition = NULL;
     size_t matching_interfaces = 0U;
     const size_t interface_count =
         select_explicit_interface(context, caller, name, arguments != NULL ? *arguments : NULL,
                                   argument_count != NULL ? *argument_count : 0U, subroutine_call,
                                   &definition, &matching_interfaces);
+    const F2cSourceSpan call_diagnostic_span = diagnostic_span(call_span, line);
     size_t i;
     if (interface_count > 1U && matching_interfaces != 1U) {
-        f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name), 1,
-                          matching_interfaces == 0U
-                              ? "generic interface '%s' has no specific procedure matching this "
-                                "actual argument list"
-                              : "generic interface '%s' is ambiguous for this actual argument "
-                                "list",
-                          name);
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
+            matching_interfaces == 0U
+                ? "generic interface '%s' has no specific procedure matching this actual argument "
+                  "list"
+                : "generic interface '%s' is ambiguous for this actual argument list",
+            name);
         return NULL;
     }
     if (interface_count == 0U)
@@ -888,29 +888,30 @@ Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
         if (interface_count == 0U &&
             has_explicit_argument_association(arguments != NULL ? *arguments : NULL,
                                               argument_count != NULL ? *argument_count : 0U)) {
-            f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name), 1,
-                              "keyword arguments in call to procedure '%s' require a visible "
-                              "explicit interface",
-                              name);
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
+                "keyword arguments in call to procedure '%s' require a visible explicit interface",
+                name);
         }
         return NULL;
     }
     if ((subroutine_call && definition->kind != UNIT_SUBROUTINE) ||
         (!subroutine_call && definition->kind != UNIT_FUNCTION)) {
-        f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name), 1,
-                          "procedure '%s' is called as a %s but is defined as a %s", name,
-                          subroutine_call ? "SUBROUTINE" : "FUNCTION",
-                          definition->kind == UNIT_SUBROUTINE ? "SUBROUTINE" : "FUNCTION");
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
+                                 "procedure '%s' is called as a %s but is defined as a %s", name,
+                                 subroutine_call ? "SUBROUTINE" : "FUNCTION",
+                                 definition->kind == UNIT_SUBROUTINE ? "SUBROUTINE" : "FUNCTION");
         return NULL;
     }
     if (argument_count != NULL && *argument_count > definition->argument_count) {
-        f2c_diagnostic_at(context, line, f2c_validation_call_column(statement_text, name), 1,
-                          "procedure '%s' is called with %zu arguments but is defined with %zu",
-                          name, *argument_count, definition->argument_count);
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
+            "procedure '%s' is called with %zu arguments but is defined with %zu", name,
+            *argument_count, definition->argument_count);
         return NULL;
     }
-    if (!bind_procedure_arguments(context, definition, line, statement_text, name, arguments, items,
-                                  argument_count))
+    if (!bind_procedure_arguments(context, definition, line, statement_text, name, call_span,
+                                  arguments, items, argument_count))
         return NULL;
     for (i = 0U; i < *argument_count; ++i) {
         Symbol *dummy = f2c_find_symbol(definition, definition->arguments[i]);

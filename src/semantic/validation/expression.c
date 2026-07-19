@@ -271,14 +271,13 @@ static void validate_substring_semantics(Context *context, Unit *unit, size_t li
     length_known = expression->symbol->character_length_expression != NULL
                        ? f2c_evaluate_integer_constant(
                              unit, expression->symbol->character_length_expression, &length_value)
-                       : expression->symbol->character_length_syntax.count != 0U
-                             ? f2c_evaluate_integer_syntax(
-                                   unit, expression->symbol->character_length_syntax,
-                                   &length_value)
-                             : expression->symbol->character_length == NULL ||
-                                       strcmp(expression->symbol->character_length, "1") == 0
-                                   ? (length_value = 1, 1)
-                                   : 0;
+                   : expression->symbol->character_length_syntax.count != 0U
+                       ? f2c_evaluate_integer_syntax(
+                             unit, expression->symbol->character_length_syntax, &length_value)
+                   : expression->symbol->character_length == NULL ||
+                           strcmp(expression->symbol->character_length, "1") == 0
+                       ? (length_value = 1, 1)
+                       : 0;
     if (lower != NULL)
         lower_known = f2c_evaluate_integer_constant(unit, lower, &lower_value);
     if (upper != NULL) {
@@ -549,9 +548,9 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                               "%zu",
                               expression->text, expected_count, explicit_count);
     } else if (expression->kind == F2C_EXPR_CALL && !f2c_is_intrinsic_name(expression->text)) {
-        Unit *definition =
-            f2c_validation_procedure_call(context, unit, line, statement_text, expression->text,
-                                          &expression->children, NULL, &expression->child_count, 0);
+        Unit *definition = f2c_validation_procedure_call(
+            context, unit, line, statement_text, expression->text, &expression->span,
+            &expression->children, NULL, &expression->child_count, 0);
         expression->child_capacity = expression->child_count;
         expression->resolved_procedure = definition;
         if (definition != NULL && definition->kind == UNIT_FUNCTION) {

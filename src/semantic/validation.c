@@ -14,24 +14,33 @@ const char *f2c_validation_unit_line(const Context *context, const Unit *unit, s
 }
 
 size_t f2c_validation_expression_column(const char *statement_text, const F2cExpr *expression) {
-    const char *match;
     size_t source_length;
     size_t offset;
-    if (expression == NULL || expression->source == NULL)
+    if (expression == NULL)
+        return 1U;
+    if (expression->parse_error_span.begin.line != 0U)
+        return expression->parse_error_span.begin.column;
+    if (expression->span.begin.line != 0U)
+        return expression->span.begin.column;
+    if (expression->source == NULL)
         return 1U;
     source_length = strlen(expression->source);
     offset = expression->parse_error_offset < source_length ? expression->parse_error_offset
                                                             : source_length;
-    match = statement_text != NULL ? strstr(statement_text, expression->source) : NULL;
-    return match != NULL ? (size_t)(match - statement_text) + offset + 1U : offset + 1U;
+    (void)statement_text;
+    return expression->source_offset != SIZE_MAX && expression->source_offset <= SIZE_MAX - offset
+               ? expression->source_offset + offset + 1U
+               : offset + 1U;
 }
 
 size_t f2c_validation_expression_start_column(const char *statement_text,
                                               const F2cExpr *expression) {
-    const char *match = expression != NULL && expression->source != NULL && statement_text != NULL
-                            ? strstr(statement_text, expression->source)
-                            : NULL;
-    return match != NULL ? (size_t)(match - statement_text) + 1U : 1U;
+    (void)statement_text;
+    if (expression == NULL)
+        return 1U;
+    if (expression->span.begin.line != 0U)
+        return expression->span.begin.column;
+    return expression->source_offset != SIZE_MAX ? expression->source_offset + 1U : 1U;
 }
 
 void f2c_validation_report_parse_error(Context *context, size_t line, const char *statement_text,
@@ -190,15 +199,15 @@ static int symbol_constant_extent(Unit *unit, const Symbol *symbol, uint64_t *ex
             !(symbol->dimensions[dimension].lower_expression != NULL
                   ? f2c_evaluate_integer_constant(
                         unit, symbol->dimensions[dimension].lower_expression, &lower)
-                  : symbol->dimension_lower_syntax[dimension].count != 0U
-                        ? f2c_evaluate_integer_syntax(
-                              unit, symbol->dimension_lower_syntax[dimension], &lower)
-                        : (lower = 1, 1)) ||
+              : symbol->dimension_lower_syntax[dimension].count != 0U
+                  ? f2c_evaluate_integer_syntax(unit, symbol->dimension_lower_syntax[dimension],
+                                                &lower)
+                  : (lower = 1, 1)) ||
             !(symbol->dimensions[dimension].upper_expression != NULL
                   ? f2c_evaluate_integer_constant(
                         unit, symbol->dimensions[dimension].upper_expression, &upper)
-                  : f2c_evaluate_integer_syntax(
-                        unit, symbol->dimension_upper_syntax[dimension], &upper)))
+                  : f2c_evaluate_integer_syntax(unit, symbol->dimension_upper_syntax[dimension],
+                                                &upper)))
             return 0;
         if (upper >= lower) {
             dimension_extent = unsigned_distance(lower, upper);
@@ -401,7 +410,6 @@ void f2c_validation_constructor_assignment(Context *context, Unit *unit,
                           (unsigned long long)right_extent, (unsigned long long)left_extent);
     }
 }
-
 
 const char *f2c_validation_type_name(Type type) {
     switch (type) {

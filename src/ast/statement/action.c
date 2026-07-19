@@ -177,6 +177,7 @@ static int parse_call(Unit *unit, const Line *line, size_t begin, F2cStatement *
     designator = f2c_line_token_range(line, designator_begin, designator_end);
     if (designator.count == 1U && designator.tokens[0].kind == F2C_TOKEN_IDENTIFIER) {
         statement->name = f2c_token_text(&designator.tokens[0]);
+        statement->name_span = designator.tokens[0].span;
         if (statement->name == NULL)
             return 0;
         if (f2c_token_equals(&designator.tokens[0], "move_alloc"))
