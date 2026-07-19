@@ -45,7 +45,7 @@ static void emit_class_guard_ids(Buffer *output, Unit *unit, const F2cDerivedTyp
         emitted = 1;
     }
     for (index = 0U; index < unit->imported_derived_type_count; ++index) {
-        F2cDerivedType *candidate = unit->imported_derived_types[index];
+        F2cDerivedType *candidate = unit->imported_derived_types[index].type;
         if (!derived_extends(candidate, guard))
             continue;
         f2c_buffer_printf(output, "%s%s == F2C_TYPE_ID_%s", emitted ? " || " : "", tag,
