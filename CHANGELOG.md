@@ -5,6 +5,7 @@
 - Expanded unformatted array transfer to arbitrary-rank named arrays, affine sections, vector subscripts, array constructors, and elementizable array expressions.
 - Hardened unformatted implied DO evaluation, zero-step handling, and integer boundaries while preventing repeated evaluation of complex and default-derived output expressions.
 - Added positive and negative `IOLENGTH` semantics, strict C17 execution, native Fortran differentials, and sanitizer regression coverage to numerical-validation CI.
+- Lengthened short DGER measurement windows to reduce shared-runner noise without relaxing the per-case 5% performance threshold.
 
 ## 1.10.0
 
