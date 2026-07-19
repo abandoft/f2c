@@ -94,6 +94,20 @@ static void test_optional_separator(void) {
     parsed_line_discard(&parsed);
 }
 
+static void test_access_attribute(void) {
+    ParsedLine parsed;
+    F2cProcedureDeclarationSyntax syntax;
+    expect(parsed_line_init(&parsed, "procedure(operation), pointer, public :: callback"),
+           "PUBLIC PROCEDURE declaration tokenizes");
+    expect(f2c_parse_procedure_declaration_syntax(&parsed.line, &syntax) ==
+                   F2C_PROCEDURE_DECLARATION_PARSED &&
+               syntax.public_attribute != NULL && syntax.private_attribute == NULL &&
+               syntax.public_attribute->span.begin.column == 32U,
+           "PROCEDURE access attributes retain their exact token identity and span");
+    f2c_procedure_declaration_syntax_discard(&syntax);
+    parsed_line_discard(&parsed);
+}
+
 static void expect_invalid(const char *source, F2cProcedureDeclarationError error,
                            const char *token_text, const char *message) {
     ParsedLine parsed;
@@ -117,6 +131,9 @@ static void test_invalid_declarations(void) {
     expect_invalid("procedure(operation), pointer, pointer :: callback",
                    F2C_PROCEDURE_DECLARATION_ERROR_DUPLICATE_ATTRIBUTE, "pointer",
                    "duplicate PROCEDURE attribute fails at the repeated token");
+    expect_invalid("procedure(operation), public, private :: callback",
+                   F2C_PROCEDURE_DECLARATION_ERROR_CONFLICTING_ACCESS, "private",
+                   "conflicting PROCEDURE accessibility fails at the second attribute");
     expect_invalid("procedure(operation) pointer :: callback",
                    F2C_PROCEDURE_DECLARATION_ERROR_ATTRIBUTE_SEPARATOR, "pointer",
                    "missing attribute comma fails before semantic lowering");
@@ -131,6 +148,7 @@ static void test_invalid_declarations(void) {
 int main(void) {
     test_complete_declaration();
     test_optional_separator();
+    test_access_attribute();
     test_invalid_declarations();
     if (failures != 0) {
         fprintf(stderr, "%d PROCEDURE AST test(s) failed\n", failures);
