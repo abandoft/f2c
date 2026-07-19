@@ -74,6 +74,7 @@ foreach(
        nonadvancing_io
        file_control
        record_io
+       iolength
        corrupt_record_io
        allocatable_component
        finalization
