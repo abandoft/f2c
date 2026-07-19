@@ -1,98 +1,9 @@
+#include "ast/declaration/use.h"
 #include "frontend/module_constants.h"
 #include "internal/f2c.h"
 
 #include <stdlib.h>
 #include <string.h>
-
-typedef struct UseSyntax {
-    const F2cToken *module_name;
-    size_t association_begin;
-    int intrinsic;
-    int non_intrinsic;
-    int only;
-    int valid;
-} UseSyntax;
-
-static size_t statement_start(const Line *line) {
-    if (line != NULL && line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER)
-        return 1U;
-    return 0U;
-}
-
-static int parse_use_syntax(const Line *line, UseSyntax *syntax) {
-    const size_t start = statement_start(line);
-    size_t index = start + 1U;
-    memset(syntax, 0, sizeof(*syntax));
-    syntax->association_begin = line != NULL ? line->token_count : 0U;
-    if (line == NULL || !f2c_line_token_equals(line, start, "use"))
-        return 0;
-    if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_COMMA) {
-        ++index;
-        if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_IDENTIFIER)
-            return 1;
-        syntax->intrinsic = f2c_token_equals(&line->tokens[index], "intrinsic");
-        syntax->non_intrinsic = f2c_token_equals(&line->tokens[index], "non_intrinsic");
-        if (!syntax->intrinsic && !syntax->non_intrinsic)
-            return 1;
-        ++index;
-        if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_DOUBLE_COLON)
-            return 1;
-        ++index;
-    } else if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_DOUBLE_COLON) {
-        ++index;
-    }
-    if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_IDENTIFIER)
-        return 1;
-    syntax->module_name = &line->tokens[index++];
-    if (index == line->token_count) {
-        syntax->valid = 1;
-        return 1;
-    }
-    if (line->tokens[index].kind != F2C_TOKEN_COMMA)
-        return 1;
-    ++index;
-    if (index < line->token_count && f2c_line_token_equals(line, index, "only")) {
-        syntax->only = 1;
-        ++index;
-        if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_COLON)
-            return 1;
-        ++index;
-    }
-    syntax->association_begin = index;
-    syntax->valid = 1;
-    return 1;
-}
-
-static int next_use_association(const Line *line, size_t *cursor, const F2cToken **local,
-                                const F2cToken **remote, int *renamed) {
-    size_t index = *cursor;
-    *local = NULL;
-    *remote = NULL;
-    *renamed = 0;
-    if (index >= line->token_count)
-        return 0;
-    if (line->tokens[index].kind != F2C_TOKEN_IDENTIFIER)
-        return -1;
-    *local = &line->tokens[index++];
-    *remote = *local;
-    if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_OPERATOR &&
-        f2c_token_equals(&line->tokens[index], "=>")) {
-        *renamed = 1;
-        ++index;
-        if (index >= line->token_count || line->tokens[index].kind != F2C_TOKEN_IDENTIFIER)
-            return -1;
-        *remote = &line->tokens[index++];
-    }
-    if (index < line->token_count) {
-        if (line->tokens[index].kind != F2C_TOKEN_COMMA)
-            return -1;
-        ++index;
-        if (index == line->token_count)
-            return -1;
-    }
-    *cursor = index;
-    return 1;
-}
 
 static const F2cModuleConstant la_constants[] = {
     {"sp", TYPE_INTEGER, "4"},
@@ -203,17 +114,32 @@ cleanup:
     return expression;
 }
 
-static void import_la_constant(Context *context, Unit *unit, Line *line, const char *local_name,
-                               const char *module_name) {
+static int use_name_is_renamed(const F2cUseStatementSyntax *syntax, const char *name) {
+    size_t index;
+    if (syntax == NULL)
+        return 0;
+    for (index = 0U; index < syntax->item_count; ++index) {
+        const F2cUseAssociationSyntax *association = &syntax->items[index];
+        if (association->renamed && association->remote.kind == F2C_USE_DESIGNATOR_NAME &&
+            f2c_token_equals(association->remote.name, name))
+            return 1;
+    }
+    return 0;
+}
+
+static void import_la_constant(Context *context, Unit *unit, const char *local_name,
+                               const char *module_name, const F2cSourceSpan *span) {
     const F2cModuleConstant *constant = find_la_constant(module_name);
     Symbol *symbol;
     if (constant == NULL) {
-        f2c_diagnostic(context, line->number, 1, "LA_CONSTANTS has no member '%s'", module_name);
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, span, 1,
+                                 "LA_CONSTANTS has no member '%s'", module_name);
         return;
     }
     symbol = f2c_ensure_symbol(unit, local_name);
     if (symbol == NULL) {
-        f2c_diagnostic(context, line->number, 1, "out of memory importing '%s'", local_name);
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, span, 1,
+                                 "out of memory importing '%s'", local_name);
         return;
     }
     symbol->type = constant->type;
@@ -229,8 +155,9 @@ static void import_la_constant(Context *context, Unit *unit, Line *line, const c
     f2c_expr_free(symbol->initializer_expression);
     symbol->initializer_expression = parse_compiler_constant(unit, constant->initializer);
     if (symbol->initializer == NULL || symbol->initializer_expression == NULL) {
-        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line->number, 1,
-                            "unable to build typed intrinsic-module constant '%s'", local_name);
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, span, 1,
+                                 "unable to build typed intrinsic-module constant '%s'",
+                                 local_name);
     }
     if (constant->type == TYPE_CHARACTER) {
         free(symbol->character_length);
@@ -238,40 +165,39 @@ static void import_la_constant(Context *context, Unit *unit, Line *line, const c
     }
 }
 
-static void import_la_constants(Context *context, Unit *unit, Line *source_line,
-                                const UseSyntax *syntax) {
-    size_t cursor = syntax->association_begin;
-    int status;
-    if (!syntax->only) {
-        f2c_diagnostic(context, source_line->number, 1,
-                       "USE LA_CONSTANTS without ONLY is not supported");
-        return;
+static void import_la_constants(Context *context, Unit *unit, const F2cUseStatementSyntax *syntax) {
+    size_t index;
+    if (syntax->only_token == NULL) {
+        for (index = 0U; index < sizeof(la_constants) / sizeof(la_constants[0]); ++index) {
+            const F2cModuleConstant *constant = &la_constants[index];
+            if (!use_name_is_renamed(syntax, constant->name))
+                import_la_constant(context, unit, constant->name, constant->name,
+                                   &syntax->module_name->span);
+        }
     }
-    do {
-        const F2cToken *local_token;
-        const F2cToken *module_token;
-        int renamed;
+    for (index = 0U; index < syntax->item_count; ++index) {
+        const F2cUseAssociationSyntax *association = &syntax->items[index];
         char *local_name;
         char *module_name;
-        status = next_use_association(source_line, &cursor, &local_token, &module_token, &renamed);
-        if (status <= 0)
-            break;
-        local_name = f2c_token_text(local_token);
-        module_name = f2c_token_text(module_token);
+        if (association->local.kind != F2C_USE_DESIGNATOR_NAME ||
+            association->remote.kind != F2C_USE_DESIGNATOR_NAME) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &association->span, 1,
+                                     "LA_CONSTANTS exposes only named entities");
+            continue;
+        }
+        local_name = f2c_token_text(association->local.name);
+        module_name = f2c_token_text(association->remote.name);
         if (local_name == NULL || module_name == NULL) {
-            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
-                                "out of memory importing LA_CONSTANTS");
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &association->span, 1,
+                                     "out of memory importing LA_CONSTANTS");
             free(local_name);
             free(module_name);
             return;
         }
-        import_la_constant(context, unit, source_line, local_name, module_name);
+        import_la_constant(context, unit, local_name, module_name, &association->span);
         free(local_name);
         free(module_name);
-        (void)renamed;
-    } while (status > 0);
-    if (status < 0)
-        f2c_diagnostic(context, source_line->number, 1, "malformed USE LA_CONSTANTS association");
+    }
 }
 
 static Unit *find_project_module(Context *context, const char *name) {
@@ -283,53 +209,102 @@ static Unit *find_project_module(Context *context, const char *name) {
     return NULL;
 }
 
-static int import_derived_type(Unit *unit, F2cDerivedType *derived) {
-    F2cDerivedType **replacement;
+static int import_derived_type(Unit *unit, F2cDerivedType *derived, const char *local_name,
+                               const F2cSourceSpan *association_span) {
+    F2cImportedDerivedType *replacement;
+    char *owned_name;
     size_t i;
-    for (i = 0U; i < unit->imported_derived_type_count; ++i) {
-        if (unit->imported_derived_types[i] == derived ||
-            strcmp(unit->imported_derived_types[i]->name, derived->name) == 0)
-            return 1;
+    for (i = 0U; i < unit->derived_type_count; ++i) {
+        if (strcmp(unit->derived_types[i].name, local_name) == 0)
+            return &unit->derived_types[i] == derived ? 1 : -1;
     }
+    for (i = 0U; i < unit->imported_derived_type_count; ++i) {
+        F2cImportedDerivedType *existing = &unit->imported_derived_types[i];
+        if (strcmp(existing->local_name, local_name) == 0)
+            return existing->type == derived ? 1 : -1;
+    }
+    owned_name = f2c_strdup(local_name);
+    if (owned_name == NULL)
+        return 0;
     if (unit->imported_derived_type_count == unit->imported_derived_type_capacity) {
         const size_t capacity = unit->imported_derived_type_capacity == 0U
                                     ? 4U
                                     : unit->imported_derived_type_capacity * 2U;
-        replacement = (F2cDerivedType **)realloc(unit->imported_derived_types,
-                                                 capacity * sizeof(*replacement));
-        if (replacement == NULL)
+        if (capacity < unit->imported_derived_type_capacity ||
+            capacity > SIZE_MAX / sizeof(*replacement)) {
+            free(owned_name);
             return 0;
+        }
+        replacement = (F2cImportedDerivedType *)realloc(unit->imported_derived_types,
+                                                        capacity * sizeof(*replacement));
+        if (replacement == NULL) {
+            free(owned_name);
+            return 0;
+        }
         unit->imported_derived_types = replacement;
         unit->imported_derived_type_capacity = capacity;
     }
-    unit->imported_derived_types[unit->imported_derived_type_count++] = derived;
+    unit->imported_derived_types[unit->imported_derived_type_count].local_name = owned_name;
+    unit->imported_derived_types[unit->imported_derived_type_count].type = derived;
+    if (association_span != NULL)
+        unit->imported_derived_types[unit->imported_derived_type_count].association_span =
+            *association_span;
+    else
+        memset(&unit->imported_derived_types[unit->imported_derived_type_count].association_span, 0,
+               sizeof(F2cSourceSpan));
+    ++unit->imported_derived_type_count;
     return 1;
 }
 
 static int clone_module_symbol(Unit *unit, const Symbol *source, const char *local_name) {
     Symbol *target = f2c_ensure_symbol(unit, local_name);
+    char *procedure_interface_name = source->procedure_interface_name != NULL
+                                         ? f2c_strdup(source->procedure_interface_name)
+                                         : NULL;
     size_t dimension;
-    if (target == NULL)
+    size_t parameter;
+    if (target == NULL ||
+        (source->procedure_interface_name != NULL && procedure_interface_name == NULL)) {
+        free(procedure_interface_name);
         return 0;
+    }
+    if (!f2c_symbol_resize_external_parameters(
+            target, source->external ? source->external_parameter_count : 0U)) {
+        free(procedure_interface_name);
+        return 0;
+    }
     target->type = source->type;
     target->kind_type = source->kind_type;
     target->kind = source->kind;
     target->value_category = source->value_category;
     target->shape = source->shape;
     target->rank = source->rank;
+    target->intent = source->intent;
     target->parameter = source->parameter;
-    target->saved = 1;
+    target->external = source->external;
+    target->external_declared = source->external_declared;
+    target->external_subroutine = source->external_subroutine;
+    target->external_result_allocatable = source->external_result_allocatable;
+    target->external_result_rank = source->external_result_rank;
+    target->external_signature_observed = source->external_signature_observed;
+    target->external_signature_explicit = source->external_signature_explicit;
+    target->procedure_interface = source->procedure_interface;
+    free(target->procedure_interface_name);
+    target->procedure_interface_name = procedure_interface_name;
+    target->saved = !source->external;
     target->allocatable = source->allocatable;
     target->pointer = source->pointer;
     target->procedure_pointer = source->procedure_pointer;
     target->polymorphic = source->polymorphic;
     target->target = source->target;
-    target->module_entity = 1;
+    target->module_entity = !source->external;
     target->deferred_character = source->deferred_character;
+    target->optional = source->optional;
     target->derived_type = source->derived_type;
     target->declaration_line = source->declaration_line;
     target->initializer_syntax = source->initializer_syntax;
     target->character_length_syntax = source->character_length_syntax;
+    target->declaration_span = source->declaration_span;
     free(target->c_name);
     target->c_name = f2c_strdup(source->c_name);
     free(target->initializer);
@@ -344,18 +319,52 @@ static int clone_module_symbol(Unit *unit, const Symbol *source, const char *loc
     target->c_type = source->c_type != NULL ? f2c_strdup(source->c_type) : NULL;
     if (target->c_name == NULL || (source->initializer != NULL && target->initializer == NULL) ||
         (source->character_length != NULL && target->character_length == NULL) ||
+        (source->derived_type_name != NULL && target->derived_type_name == NULL) ||
         (source->c_type != NULL && target->c_type == NULL))
         return 0;
     for (dimension = 0U; dimension < source->rank; ++dimension) {
+        char *lower = source->dimensions[dimension].lower != NULL
+                          ? f2c_strdup(source->dimensions[dimension].lower)
+                          : NULL;
+        char *upper = source->dimensions[dimension].upper != NULL
+                          ? f2c_strdup(source->dimensions[dimension].upper)
+                          : NULL;
+        if ((source->dimensions[dimension].lower != NULL && lower == NULL) ||
+            (source->dimensions[dimension].upper != NULL && upper == NULL)) {
+            free(lower);
+            free(upper);
+            return 0;
+        }
+        free(target->dimensions[dimension].lower);
+        free(target->dimensions[dimension].upper);
         target->dimensions[dimension].kind = source->dimensions[dimension].kind;
-        target->dimensions[dimension].lower = source->dimensions[dimension].lower != NULL
-                                                  ? f2c_strdup(source->dimensions[dimension].lower)
-                                                  : NULL;
-        target->dimensions[dimension].upper = source->dimensions[dimension].upper != NULL
-                                                  ? f2c_strdup(source->dimensions[dimension].upper)
-                                                  : NULL;
+        target->dimensions[dimension].lower = lower;
+        target->dimensions[dimension].upper = upper;
         target->dimension_lower_syntax[dimension] = source->dimension_lower_syntax[dimension];
         target->dimension_upper_syntax[dimension] = source->dimension_upper_syntax[dimension];
+    }
+    target->external_parameter_count = source->external ? source->external_parameter_count : 0U;
+    for (parameter = 0U; parameter < target->external_parameter_count; ++parameter) {
+        target->external_parameter_types[parameter] = source->external_parameter_types[parameter];
+        target->external_parameter_kinds[parameter] = source->external_parameter_kinds[parameter];
+        target->external_parameter_ranks[parameter] = source->external_parameter_ranks[parameter];
+        target->external_parameter_intents[parameter] =
+            source->external_parameter_intents[parameter];
+        target->external_parameter_optional[parameter] =
+            source->external_parameter_optional[parameter];
+        target->external_parameter_allocatable[parameter] =
+            source->external_parameter_allocatable[parameter];
+        target->external_parameter_pointer[parameter] =
+            source->external_parameter_pointer[parameter];
+        target->external_parameter_descriptor[parameter] =
+            source->external_parameter_descriptor[parameter];
+        target->external_parameter_derived_types[parameter] =
+            source->external_parameter_derived_types[parameter];
+        target->external_parameter_polymorphic[parameter] =
+            source->external_parameter_polymorphic[parameter];
+        target->external_parameter_procedures[parameter] =
+            source->external_parameter_procedures[parameter];
+        target->external_parameter_const[parameter] = source->external_parameter_const[parameter];
     }
     return 1;
 }
@@ -421,34 +430,76 @@ static int import_module_procedure(Unit *unit, Unit *procedure, const char *loca
 }
 
 static int import_project_member(Context *context, Unit *unit, Unit *module, const char *local_name,
-                                 const char *module_name, size_t line) {
+                                 const char *module_name,
+                                 const F2cUseAssociationSyntax *association) {
     Symbol *symbol = f2c_find_symbol(module, module_name);
     F2cDerivedType *derived = f2c_find_derived_type(module, module_name);
     Unit *procedure = find_module_procedure(context, module, module_name);
-    if (symbol != NULL)
-        return clone_module_symbol(unit, symbol, local_name);
+    if (symbol != NULL) {
+        if (!clone_module_symbol(unit, symbol, local_name)) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                                     &association->local.span, 1,
+                                     "out of memory importing module entity '%s'", local_name);
+            return 0;
+        } else {
+            return 1;
+        }
+    }
     if (derived != NULL) {
-        if (strcmp(local_name, module_name) != 0) {
-            f2c_diagnostic(context, line, 1,
-                           "renaming a derived type in USE association is not yet supported");
+        const int imported =
+            import_derived_type(unit, derived, local_name, &association->local.span);
+        if (imported < 0) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &association->local.span, 1,
+                                     "USE local name '%s' denotes conflicting derived types",
+                                     local_name);
             return 0;
         }
-        return import_derived_type(unit, derived);
+        if (imported == 0)
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                                     &association->local.span, 1,
+                                     "out of memory importing derived type '%s'", local_name);
+        return imported;
     }
-    if (procedure != NULL)
-        return import_module_procedure(unit, procedure, local_name);
-    f2c_diagnostic(context, line, 1, "module '%s' has no public entity '%s'", module->name,
-                   module_name);
+    if (procedure != NULL) {
+        if (!import_module_procedure(unit, procedure, local_name)) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                                     &association->local.span, 1,
+                                     "out of memory importing module procedure '%s'", local_name);
+            return 0;
+        }
+        return 1;
+    }
+    f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &association->remote.span, 1,
+                             "module '%s' has no public entity '%s'", module->name, module_name);
     return 0;
 }
 
-static void import_entire_project_module(Context *context, Unit *unit, Unit *module, size_t line) {
+static void import_entire_project_module(Context *context, Unit *unit, Unit *module, size_t line,
+                                         const F2cUseStatementSyntax *syntax) {
     size_t i;
     for (i = 0U; i < module->derived_type_count; ++i) {
-        if (!import_derived_type(unit, &module->derived_types[i]))
+        int imported;
+        if (use_name_is_renamed(syntax, module->derived_types[i].name))
+            continue;
+        imported = import_derived_type(unit, &module->derived_types[i],
+                                       module->derived_types[i].name, NULL);
+        if (imported == 0) {
             f2c_diagnostic(context, line, 1, "out of memory importing module type");
+        } else if (imported < 0) {
+            if (syntax != NULL)
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, &syntax->module_name->span, 1,
+                    "module association creates conflicting derived type name '%s'",
+                    module->derived_types[i].name);
+            else
+                f2c_diagnostic(context, line, 1,
+                               "host association creates conflicting derived type name '%s'",
+                               module->derived_types[i].name);
+        }
     }
     for (i = 0U; i < module->symbol_count; ++i) {
+        if (use_name_is_renamed(syntax, module->symbols[i].name))
+            continue;
         if (!clone_module_symbol(unit, &module->symbols[i], module->symbols[i].name))
             f2c_diagnostic(context, line, 1, "out of memory importing module entity");
     }
@@ -457,89 +508,130 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
         const char *visible =
             procedure->fortran_name != NULL ? procedure->fortran_name : procedure->name;
         if (procedure != unit && procedure->begin > module->end &&
-            procedure->begin < module->container_end &&
+            procedure->begin < module->container_end && !use_name_is_renamed(syntax, visible) &&
             !import_module_procedure(unit, procedure, visible))
             f2c_diagnostic(context, line, 1, "out of memory importing module procedure");
     }
 }
 
+static void report_use_error(Context *context, const Line *line,
+                             const F2cUseStatementSyntax *syntax) {
+    const F2cToken *token = syntax->error_token != NULL ? syntax->error_token : syntax->keyword;
+    const char *message = "malformed USE statement";
+    switch (syntax->error) {
+    case F2C_USE_ERROR_MODULE_NATURE:
+        message = "USE module nature must be INTRINSIC or NON_INTRINSIC";
+        break;
+    case F2C_USE_ERROR_DOUBLE_COLON:
+        message = "USE module nature must be followed by ::";
+        break;
+    case F2C_USE_ERROR_MODULE_NAME:
+        message = "USE statement requires a module name";
+        break;
+    case F2C_USE_ERROR_LIST_SEPARATOR:
+        message = "malformed USE association separator";
+        break;
+    case F2C_USE_ERROR_ONLY_COLON:
+        message = "ONLY must be followed by a colon";
+        break;
+    case F2C_USE_ERROR_ITEM:
+        message = "malformed USE association designator";
+        break;
+    case F2C_USE_ERROR_RENAME_REQUIRED:
+        message = "USE rename list item requires =>";
+        break;
+    case F2C_USE_ERROR_RENAME_TARGET:
+        message = "USE rename requires a valid target designator";
+        break;
+    case F2C_USE_ERROR_RENAME_KIND:
+        message = "USE rename designator kinds do not match";
+        break;
+    case F2C_USE_ERROR_DUPLICATE_LOCAL_NAME:
+        message = "duplicate local name in USE association list";
+        break;
+    case F2C_USE_ERROR_TRAILING_COMMA:
+        message = "USE association list cannot end with a comma";
+        break;
+    case F2C_USE_ERROR_NONE:
+        break;
+    }
+    f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, line, token, 1, "%s", message);
+}
+
 void f2c_import_module(Context *context, Unit *unit, Line *source_line) {
-    UseSyntax syntax;
-    char *module_name;
-    Unit *module;
-    if (!parse_use_syntax(source_line, &syntax))
+    F2cUseStatementSyntax syntax;
+    const F2cUseStatementStatus status = f2c_parse_use_statement_syntax(source_line, &syntax);
+    char *module_name = NULL;
+    Unit *module = NULL;
+    size_t index;
+    if (status == F2C_USE_STATEMENT_NOT_MATCHED)
         return;
-    if (!syntax.valid || syntax.module_name == NULL) {
-        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, source_line,
-                                  source_line->token_count != 0U ? &source_line->tokens[0] : NULL,
-                                  1, "malformed USE statement");
+    if (status == F2C_USE_STATEMENT_NO_MEMORY) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &syntax.span, 1,
+                                 "out of memory parsing USE statement");
+        f2c_use_statement_syntax_discard(&syntax);
+        return;
+    }
+    if (status == F2C_USE_STATEMENT_INVALID) {
+        report_use_error(context, source_line, &syntax);
+        f2c_use_statement_syntax_discard(&syntax);
         return;
     }
     module_name = f2c_token_text(syntax.module_name);
     if (module_name == NULL) {
-        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
-                            "out of memory parsing USE statement");
-        return;
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &syntax.span, 1,
+                                 "out of memory lowering USE statement");
+        goto cleanup;
     }
-    if (strcmp(module_name, "la_constants") == 0) {
-        free(module_name);
-        import_la_constants(context, unit, source_line, &syntax);
-        return;
+    if (syntax.nature != F2C_USE_NATURE_INTRINSIC && strcmp(module_name, "la_constants") == 0) {
+        import_la_constants(context, unit, &syntax);
+        goto cleanup;
+    }
+    if (syntax.nature == F2C_USE_NATURE_INTRINSIC ||
+        (syntax.nature == F2C_USE_NATURE_UNSPECIFIED &&
+         (strcmp(module_name, "iso_fortran_env") == 0 ||
+          strcmp(module_name, "iso_c_binding") == 0 ||
+          strncmp(module_name, "ieee_", strlen("ieee_")) == 0))) {
+        goto cleanup;
     }
     module = find_project_module(context, module_name);
-    if (module == NULL &&
-        (strcmp(module_name, "iso_fortran_env") == 0 || strcmp(module_name, "iso_c_binding") == 0 ||
-         strncmp(module_name, "ieee_", strlen("ieee_")) == 0 || syntax.intrinsic)) {
-        free(module_name);
-        return;
-    }
-    free(module_name);
     if (module == NULL) {
         /* A project translation may intentionally consume one source at a time.  In that mode
          * the provider of a non-intrinsic module is external to this translation request; any
          * names that are not covered by the intrinsic registry retain their ordinary external
          * procedure handling.  When the provider is present in the same request, the branch
          * below imports its typed entities and interfaces. */
-        return;
+        goto cleanup;
     }
-    if (syntax.association_begin == source_line->token_count) {
-        import_entire_project_module(context, unit, module, source_line->number);
-    } else {
-        size_t cursor = syntax.association_begin;
-        int status;
-        if (!syntax.only)
-            import_entire_project_module(context, unit, module, source_line->number);
-        do {
-            const F2cToken *local_token;
-            const F2cToken *remote_token;
-            int renamed;
-            char *local_name;
-            char *remote_name;
-            status =
-                next_use_association(source_line, &cursor, &local_token, &remote_token, &renamed);
-            if (status <= 0)
-                break;
-            local_name = f2c_token_text(local_token);
-            remote_name = f2c_token_text(remote_token);
-            if (local_name == NULL || remote_name == NULL) {
-                f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
-                                    "out of memory importing module association");
-                free(local_name);
-                free(remote_name);
-                return;
-            }
-            (void)import_project_member(context, unit, module, local_name, remote_name,
-                                        source_line->number);
+    if (syntax.only_token == NULL)
+        import_entire_project_module(context, unit, module, source_line->number, &syntax);
+    for (index = 0U; index < syntax.item_count; ++index) {
+        const F2cUseAssociationSyntax *association = &syntax.items[index];
+        char *local_name;
+        char *remote_name;
+        if (association->local.kind != F2C_USE_DESIGNATOR_NAME ||
+            association->remote.kind != F2C_USE_DESIGNATOR_NAME) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &association->span, 1,
+                                     "generic USE association requires module generic binding");
+            continue;
+        }
+        local_name = f2c_token_text(association->local.name);
+        remote_name = f2c_token_text(association->remote.name);
+        if (local_name == NULL || remote_name == NULL) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &association->span, 1,
+                                     "out of memory importing module association");
             free(local_name);
             free(remote_name);
-            (void)renamed;
-        } while (status > 0);
-        if (status < 0)
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, source_line,
-                                      source_line->token_count != 0U ? &source_line->tokens[0]
-                                                                     : NULL,
-                                      1, "malformed USE association list");
+            goto cleanup;
+        }
+        (void)import_project_member(context, unit, module, local_name, remote_name, association);
+        free(local_name);
+        free(remote_name);
     }
+
+cleanup:
+    free(module_name);
+    f2c_use_statement_syntax_discard(&syntax);
 }
 
 void f2c_import_host_module(Context *context, Unit *unit) {
@@ -547,20 +639,25 @@ void f2c_import_host_module(Context *context, Unit *unit) {
     if (unit->signature_host != NULL) {
         Unit *host = unit->signature_host;
         for (i = 0U; i < host->derived_type_count; ++i)
-            (void)import_derived_type(unit, &host->derived_types[i]);
-        for (i = 0U; i < host->imported_derived_type_count; ++i)
-            (void)import_derived_type(unit, host->imported_derived_types[i]);
+            (void)import_derived_type(unit, &host->derived_types[i], host->derived_types[i].name,
+                                      NULL);
+        for (i = 0U; i < host->imported_derived_type_count; ++i) {
+            F2cImportedDerivedType *imported = &host->imported_derived_types[i];
+            (void)import_derived_type(unit, imported->type, imported->local_name,
+                                      &imported->association_span);
+        }
     }
     if (unit->internal && unit->host_index < context->units.count) {
         Unit *host = &context->units.items[unit->host_index];
         for (i = 0U; i < host->derived_type_count; ++i)
-            (void)import_derived_type(unit, &host->derived_types[i]);
+            (void)import_derived_type(unit, &host->derived_types[i], host->derived_types[i].name,
+                                      NULL);
     }
     for (i = 0U; i < context->modules.count; ++i) {
         Unit *module = &context->modules.items[i];
         if (unit->begin > module->end && unit->begin < module->container_end) {
             import_entire_project_module(context, unit, module,
-                                         context->lines.items[unit->begin].number);
+                                         context->lines.items[unit->begin].number, NULL);
             return;
         }
     }
@@ -601,8 +698,20 @@ int f2c_discover_modules(Context *context) {
         contains = context->lines.count;
         {
             size_t derived_type_depth = 0U;
+            size_t interface_depth = 0U;
             for (end = line_index + 1U; end < context->lines.count; ++end) {
                 Line *candidate = &context->lines.items[end];
+                if (f2c_interface_start_tokens(candidate)) {
+                    ++interface_depth;
+                    candidate->interface_depth = interface_depth;
+                    continue;
+                }
+                if (interface_depth != 0U) {
+                    candidate->interface_depth = interface_depth;
+                    if (f2c_interface_end_tokens(candidate))
+                        --interface_depth;
+                    continue;
+                }
                 if (derived_type_depth != 0U && f2c_derived_type_end_tokens(candidate)) {
                     --derived_type_depth;
                     continue;
