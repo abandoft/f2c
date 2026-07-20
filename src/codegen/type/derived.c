@@ -104,6 +104,19 @@ static void emit_component(Context *context, Unit *unit, Symbol *component) {
     f2c_buffer_append(output, ";\n");
 }
 
+static void emit_unit_type_declarations(Context *context, Units *units) {
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < units->count; ++unit_index) {
+        Unit *unit = &units->items[unit_index];
+        size_t type_index;
+        for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
+            F2cDerivedType *derived = &unit->derived_types[type_index];
+            f2c_buffer_printf(&context->output, "typedef struct %s %s;\n", derived->c_name,
+                              derived->c_name);
+        }
+    }
+}
+
 static void emit_unit_types(Context *context, Units *units) {
     size_t unit_index;
     for (unit_index = 0U; unit_index < units->count; ++unit_index) {
@@ -112,7 +125,7 @@ static void emit_unit_types(Context *context, Units *units) {
         for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
             F2cDerivedType *derived = &unit->derived_types[type_index];
             size_t component;
-            f2c_buffer_printf(&context->output, "typedef struct %s {\n", derived->c_name);
+            f2c_buffer_printf(&context->output, "struct %s {\n", derived->c_name);
             if (derived->parent != NULL)
                 f2c_buffer_printf(&context->output, "    %s parent;\n", derived->parent->c_name);
             f2c_buffer_append(&context->output, "    uint64_t f2c_type_tag;\n");
@@ -128,7 +141,7 @@ static void emit_unit_types(Context *context, Units *units) {
                                                 binding->name);
                 f2c_buffer_append(&context->output, ";\n");
             }
-            f2c_buffer_printf(&context->output, "} %s;\n\n", derived->c_name);
+            f2c_buffer_append(&context->output, "};\n\n");
         }
     }
 }
@@ -662,6 +675,9 @@ void f2c_emit_derived_types(Context *context) {
     uint64_t next_identifier = UINT64_C(1);
     emit_type_identifiers(context, &context->modules, &next_identifier);
     emit_type_identifiers(context, &context->units, &next_identifier);
+    f2c_buffer_append(&context->output, "\n");
+    emit_unit_type_declarations(context, &context->modules);
+    emit_unit_type_declarations(context, &context->units);
     f2c_buffer_append(&context->output, "\n");
     emit_unit_types(context, &context->modules);
     emit_unit_types(context, &context->units);
