@@ -217,6 +217,8 @@ set(
     src/semantic/intrinsic.c
     src/semantic/intrinsic.h
     src/semantic/model.h
+    src/semantic/numeric_model.c
+    src/semantic/numeric_model.h
     src/semantic/procedure.c
     src/semantic/semantic.h
     src/semantic/signature.c
@@ -467,6 +469,14 @@ if(F2C_BUILD_TESTING)
     target_include_directories(f2c_constant_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_constant_tests)
     add_test(NAME constant COMMAND f2c_constant_tests)
+
+    add_executable(f2c_numeric_model_tests test/test_numeric_model.c)
+    target_include_directories(
+        f2c_numeric_model_tests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    f2c_configure_internal_test_target(f2c_numeric_model_tests)
+    add_test(NAME numeric_model COMMAND f2c_numeric_model_tests)
 
     add_executable(f2c_fuzz_tests test/test_fuzz.c)
     f2c_configure_test_target(f2c_fuzz_tests)
