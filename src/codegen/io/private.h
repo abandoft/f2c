@@ -6,6 +6,9 @@
 void f2c_io_indent(Buffer *output, int depth);
 char *f2c_io_emit_item_expression(Unit *unit, const F2cIoItem *item);
 char *f2c_io_emit_required_expression(Unit *unit, const F2cExpr *expression);
+int f2c_io_begin_unaligned_input(Context *context, Unit *unit, const F2cIoItem *item, int depth,
+                                 F2cIoItem *lowered_item, F2cExpr *lowered_expression);
+void f2c_io_end_unaligned_input(Context *context, const Symbol *symbol, int depth);
 char *f2c_io_c_string_literal(const char *text, size_t length);
 void f2c_io_emit_format_state_support(Context *context);
 void f2c_io_emit_format_program_support(Context *context);
