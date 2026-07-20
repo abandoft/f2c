@@ -87,12 +87,19 @@ static void test_equivalence_storage_views(void) {
                                     "  real :: words(2)\n"
                                     "  double precision :: value\n"
                                     "  equivalence (words(2), value)\n"
+                                    "  value = 1.25d0\n"
+                                    "  value = value + 2.5d0\n"
                                     "end program unaligned_equivalence\n";
     static const char common_association[] = "program common_equivalence\n"
                                              "  integer :: shared(2), local(2)\n"
                                              "  common /state/ shared\n"
                                              "  equivalence (shared(2), local(1))\n"
                                              "end program common_equivalence\n";
+    static const char unaligned_character[] = "program unaligned_character_equivalence\n"
+                                              "  integer(kind=1) :: bytes(9)\n"
+                                              "  character(kind=4, len=2) :: text\n"
+                                              "  equivalence (bytes(2), text)\n"
+                                              "end program unaligned_character_equivalence\n";
     static const char different_blocks[] = "program invalid_common_equivalence\n"
                                            "  integer :: left, right\n"
                                            "  common /left_block/ left\n"
@@ -122,9 +129,20 @@ static void test_equivalence_storage_views(void) {
 
     memset(&capture, 0, sizeof(capture));
     result = transpile_with_diagnostics(unaligned, &capture);
+    expect(result.error_count == 0U && result.code != NULL,
+           "unaligned EQUIVALENCE reaches portable code generation");
+    expect(result.code != NULL && strstr(result.code, "unsigned char bytes[12]") != NULL &&
+               strstr(result.code, "f2c_unaligned_load_r8") != NULL &&
+               strstr(result.code, "f2c_unaligned_store_r8") != NULL,
+           "unaligned EQUIVALENCE uses byte storage and memcpy accessors");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile_with_diagnostics(unaligned_character, &capture);
     expect(result.error_count != 0U && result.code == NULL && result.diagnostics != NULL &&
-               strstr(result.diagnostics, "alignment not representable by portable C17") != NULL,
-           "unaligned EQUIVALENCE storage fails before unsafe C is emitted");
+               strstr(result.diagnostics,
+                      "unaligned CHARACTER EQUIVALENCE storage is not yet supported") != NULL,
+           "unsupported unaligned CHARACTER storage has an explicit diagnostic");
     f2c_result_free(&result);
 
     memset(&capture, 0, sizeof(capture));
