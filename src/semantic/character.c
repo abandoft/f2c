@@ -629,7 +629,8 @@ int f2c_emit_character_assignment(Context *context, Unit *unit, Symbol *left_sym
          left->kind != F2C_EXPR_ARRAY_REFERENCE && left->kind != F2C_EXPR_COMPONENT) ||
         !left->definable || right == NULL || right->type != TYPE_CHARACTER || left_code == NULL)
         return 0;
-    if (left_symbol->deferred_character && left_symbol->rank == 0U && left->kind == F2C_EXPR_NAME) {
+    if (left_symbol->deferred_character && left_symbol->allocatable && left_symbol->rank == 0U &&
+        left->kind == F2C_EXPR_NAME) {
         const char *name = f2c_symbol_c_name(unit, left_symbol);
         source_length = f2c_character_length_expression(unit, right);
         source_pointer = f2c_character_source_pointer(unit, right, right_code);
@@ -695,7 +696,8 @@ int f2c_emit_character_assignment(Context *context, Unit *unit, Symbol *left_sym
     } else if (unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER &&
                unit->result_name != NULL && strcmp(left_symbol->name, unit->result_name) == 0) {
         target_pointer = f2c_strdup("f2c_result");
-    } else if (left_symbol->argument || left_symbol->character_length != NULL) {
+    } else if (left_symbol->argument || left_symbol->pointer ||
+               left_symbol->character_length != NULL) {
         target_pointer = f2c_strdup(f2c_symbol_c_name(unit, left_symbol));
     } else {
         f2c_buffer_printf(&target, "&%s", f2c_symbol_c_name(unit, left_symbol));
