@@ -98,6 +98,11 @@ struct Symbol {
     size_t data_element_initializer_count;
     char *alias_to;
     int64_t alias_offset;
+    int equivalence_associated;
+    size_t equivalence_group;
+    uint64_t equivalence_offset;
+    uint64_t equivalence_size;
+    uint64_t equivalence_alignment;
     char *common_block;
     size_t common_index;
     uint64_t common_offset;
@@ -134,6 +139,17 @@ typedef struct F2cNamelistGroup {
     char **members;
     size_t member_count;
 } F2cNamelistGroup;
+
+typedef struct F2cEquivalenceMember {
+    char *symbol_name;
+    int64_t element_offset;
+    F2cSourceSpan span;
+} F2cEquivalenceMember;
+
+typedef struct F2cEquivalenceGroup {
+    F2cEquivalenceMember *members;
+    size_t member_count;
+} F2cEquivalenceGroup;
 
 typedef enum F2cDefinedIoKind {
     F2C_DEFINED_IO_READ_FORMATTED,
@@ -227,6 +243,9 @@ struct Unit {
     F2cNamelistGroup *namelists;
     size_t namelist_count;
     size_t namelist_capacity;
+    F2cEquivalenceGroup *equivalence_groups;
+    size_t equivalence_group_count;
+    size_t equivalence_group_capacity;
     F2cDerivedType *derived_types;
     size_t derived_type_count;
     size_t derived_type_capacity;

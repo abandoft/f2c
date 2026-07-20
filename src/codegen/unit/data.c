@@ -218,7 +218,7 @@ char *f2c_unit_static_storage_initializer(Unit *unit, const Symbol *symbol) {
         if (symbol->rank != 0U && symbol->data_element_initializers != NULL)
             return character_data_array_initializer(unit, symbol);
         if (symbol->initializer_expression != NULL) {
-            if (symbol->common_block != NULL)
+            if (symbol->common_block != NULL || symbol->equivalence_associated)
                 return fixed_character_initializer(unit, symbol, symbol->initializer_expression);
             int supported = 0;
             char *initializer = f2c_character_declaration_initializer(unit, symbol, &supported);

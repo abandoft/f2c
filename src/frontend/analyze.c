@@ -341,6 +341,7 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
         symbol->value_category = symbol->parameter ? F2C_VALUE_CONSTANT : F2C_VALUE_VARIABLE;
         f2c_shape_from_symbol(unit, &symbol->shape, symbol);
     }
+    f2c_resolve_equivalence_storage(context, unit);
     if (function_result != NULL && function_result->type != TYPE_UNKNOWN) {
         unit->return_type = function_result->type;
         unit->return_kind = function_result->kind != 0 ? function_result->kind

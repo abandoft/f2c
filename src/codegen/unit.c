@@ -8,6 +8,7 @@
 static void emit_declarations(Context *context, Unit *unit) {
     Buffer *output = &context->output;
     size_t i;
+    f2c_unit_emit_equivalence_declarations(context, unit);
     for (i = 0U; i < unit->symbol_count; ++i) {
         Symbol *symbol = &unit->symbols[i];
         size_t dimension;
@@ -115,8 +116,8 @@ static void emit_declarations(Context *context, Unit *unit) {
             continue;
         }
         if (symbol->argument || symbol->parameter || symbol->external || symbol->module_entity ||
-            symbol->common_block != NULL || symbol->alias_to != NULL ||
-            symbol->statement_function ||
+            symbol->common_block != NULL || symbol->equivalence_associated ||
+            symbol->alias_to != NULL || symbol->statement_function ||
             (unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
              strcmp(symbol->name, unit->result_name) == 0)) {
             continue;
@@ -337,8 +338,8 @@ static void emit_declarations(Context *context, Unit *unit) {
 
 static int has_local_declaration(Unit *unit, Symbol *symbol) {
     return !symbol->argument && !symbol->parameter && !symbol->external && !symbol->module_entity &&
-           symbol->common_block == NULL && symbol->alias_to == NULL &&
-           !symbol->statement_function &&
+           symbol->common_block == NULL && !symbol->equivalence_associated &&
+           symbol->alias_to == NULL && !symbol->statement_function &&
            !(unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
              strcmp(symbol->name, unit->result_name) == 0);
 }

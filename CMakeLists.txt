@@ -150,6 +150,7 @@ set(
     src/codegen/type/derived.c
     src/codegen/unit.c
     src/codegen/unit/data.c
+    src/codegen/unit/equivalence.c
     src/codegen/unit/interface.c
     src/codegen/unit/private.h
     src/codegen/unit/temporary.c

@@ -121,13 +121,22 @@ static int common_element_count(Unit *unit, const Symbol *symbol, uint64_t *coun
         int64_t lower;
         int64_t upper;
         uint64_t extent;
-        if (symbol->dimensions[dimension].kind != F2C_DIMENSION_EXPLICIT ||
-            symbol->dimensions[dimension].lower_expression == NULL ||
-            symbol->dimensions[dimension].upper_expression == NULL ||
-            !f2c_evaluate_integer_constant(unit, symbol->dimensions[dimension].lower_expression,
-                                           &lower) ||
-            !f2c_evaluate_integer_constant(unit, symbol->dimensions[dimension].upper_expression,
-                                           &upper))
+        const int lower_known =
+            symbol->dimensions[dimension].lower_expression != NULL
+                ? f2c_evaluate_integer_constant(
+                      unit, symbol->dimensions[dimension].lower_expression, &lower)
+            : symbol->dimension_lower_syntax[dimension].count != 0U
+                ? f2c_evaluate_integer_syntax(unit, symbol->dimension_lower_syntax[dimension],
+                                              &lower)
+                : (lower = 1, 1);
+        const int upper_known =
+            symbol->dimensions[dimension].upper_expression != NULL
+                ? f2c_evaluate_integer_constant(
+                      unit, symbol->dimensions[dimension].upper_expression, &upper)
+                : f2c_evaluate_integer_syntax(unit, symbol->dimension_upper_syntax[dimension],
+                                              &upper);
+        if (symbol->dimensions[dimension].kind != F2C_DIMENSION_EXPLICIT || !lower_known ||
+            !upper_known)
             return 0;
         if (upper < lower) {
             extent = 0U;
@@ -145,13 +154,25 @@ static int common_element_count(Unit *unit, const Symbol *symbol, uint64_t *coun
 }
 
 static int common_character_length(Unit *unit, const Symbol *symbol, int64_t *length) {
+    char *end = NULL;
+    long long parsed;
     if (symbol->type != TYPE_CHARACTER) {
         *length = 0;
         return 1;
     }
-    return symbol->character_length_expression != NULL &&
-           f2c_evaluate_integer_constant(unit, symbol->character_length_expression, length) &&
-           *length >= 0;
+    if (symbol->character_length_expression != NULL)
+        return f2c_evaluate_integer_constant(unit, symbol->character_length_expression, length) &&
+               *length >= 0;
+    if (symbol->character_length_syntax.count != 0U)
+        return f2c_evaluate_integer_syntax(unit, symbol->character_length_syntax, length) &&
+               *length >= 0;
+    if (symbol->character_length == NULL)
+        return 0;
+    parsed = strtoll(symbol->character_length, &end, 10);
+    if (end == symbol->character_length || *end != '\0' || parsed < 0)
+        return 0;
+    *length = (int64_t)parsed;
+    return 1;
 }
 
 static int resolved_kind(const Symbol *symbol) {
@@ -359,6 +380,277 @@ static void assign_common_c_name(Context *context, size_t unit_index, Symbol *sy
     if (symbol->c_name == NULL)
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &symbol->common_span, 1,
                                  "out of memory naming COMMON entity '%s'", symbol->name);
+}
+
+static size_t symbol_index_by_name(const Unit *unit, const char *name) {
+    size_t index;
+    for (index = 0U; index < unit->symbol_count; ++index)
+        if (strcmp(unit->symbols[index].name, name) == 0)
+            return index;
+    return SIZE_MAX;
+}
+
+static int equivalence_designator_byte_offset(Unit *unit, const F2cEquivalenceMember *member,
+                                              int64_t *offset) {
+    const size_t symbol_index = symbol_index_by_name(unit, member->symbol_name);
+    uint64_t element_size;
+    uint64_t alignment;
+    uint64_t byte_offset;
+    if (symbol_index == SIZE_MAX || member->element_offset < 0 ||
+        !common_element_layout(unit, &unit->symbols[symbol_index], &element_size, &alignment) ||
+        !checked_multiply(element_size, (uint64_t)member->element_offset, &byte_offset) ||
+        byte_offset > (uint64_t)INT64_MAX)
+        return 0;
+    *offset = (int64_t)byte_offset;
+    return 1;
+}
+
+static int checked_signed_add(int64_t left, int64_t right, int64_t *result) {
+    if ((right > 0 && left > INT64_MAX - right) || (right < 0 && left < INT64_MIN - right))
+        return 0;
+    *result = left + right;
+    return 1;
+}
+
+static int checked_signed_subtract(int64_t left, int64_t right, int64_t *result) {
+    if (right == INT64_MIN) {
+        if (left >= 0)
+            return 0;
+        *result = left - right;
+        return 1;
+    }
+    return checked_signed_add(left, -right, result);
+}
+
+static void report_equivalence_conflict(Context *context, const F2cEquivalenceMember *member) {
+    f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &member->span, 1,
+                             "conflicting EQUIVALENCE storage associations");
+}
+
+static int validate_equivalence_member(Context *context, Unit *unit,
+                                       const F2cEquivalenceMember *member, size_t symbol_index) {
+    Symbol *symbol = &unit->symbols[symbol_index];
+    uint64_t size;
+    uint64_t alignment;
+    int64_t designator_offset;
+    if (symbol->argument || symbol->parameter || symbol->external || symbol->allocatable ||
+        symbol->pointer || symbol->procedure_pointer || symbol->automatic_character ||
+        symbol->deferred_character || symbol->module_entity) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &member->span, 1,
+                                 "EQUIVALENCE entity '%s' must have fixed local non-dummy storage",
+                                 symbol->name);
+        return 0;
+    }
+    if (symbol->common_block != NULL) {
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_UNSUPPORTED, &member->span, 1,
+            "EQUIVALENCE association with COMMON entity '%s' is not yet representable in the "
+            "portable storage model",
+            symbol->name);
+        return 0;
+    }
+    if (!common_symbol_layout(unit, symbol, &size, &alignment) ||
+        !equivalence_designator_byte_offset(unit, member, &designator_offset)) {
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_UNSUPPORTED, &member->span, 1,
+            "EQUIVALENCE entity '%s' requires constant nonempty intrinsic storage", symbol->name);
+        return 0;
+    }
+    symbol->equivalence_size = size;
+    symbol->equivalence_alignment = alignment;
+    return 1;
+}
+
+static void assign_equivalence_c_name(Context *context, Unit *unit, size_t group_index,
+                                      size_t symbol_index) {
+    Symbol *symbol = &unit->symbols[symbol_index];
+    Buffer name = {0};
+    f2c_buffer_printf(&name, "f2c_equivalence_%zu.view_%zu.value", group_index, symbol_index);
+    free(symbol->c_name);
+    symbol->c_name = f2c_buffer_take(&name);
+    if (symbol->c_name == NULL)
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &symbol->declaration_span,
+                                 1, "out of memory naming EQUIVALENCE entity '%s'", symbol->name);
+}
+
+void f2c_resolve_equivalence_storage(Context *context, Unit *unit) {
+    unsigned char *involved;
+    unsigned char *known;
+    unsigned char *assigned;
+    unsigned char *conflict_reported;
+    int64_t *offsets;
+    size_t declaration_index;
+    size_t component_index = 0U;
+    size_t seed;
+    if (context == NULL || unit == NULL || unit->equivalence_group_count == 0U)
+        return;
+    involved = (unsigned char *)calloc(unit->symbol_count, sizeof(*involved));
+    known = (unsigned char *)calloc(unit->symbol_count, sizeof(*known));
+    assigned = (unsigned char *)calloc(unit->symbol_count, sizeof(*assigned));
+    conflict_reported =
+        (unsigned char *)calloc(unit->equivalence_group_count, sizeof(*conflict_reported));
+    offsets = (int64_t *)calloc(unit->symbol_count, sizeof(*offsets));
+    if (involved == NULL || known == NULL || assigned == NULL || conflict_reported == NULL ||
+        offsets == NULL) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &unit->header_span, 1,
+                                 "out of memory resolving EQUIVALENCE storage");
+        goto cleanup;
+    }
+    for (declaration_index = 0U; declaration_index < unit->equivalence_group_count;
+         ++declaration_index) {
+        F2cEquivalenceGroup *group = &unit->equivalence_groups[declaration_index];
+        size_t member_index;
+        for (member_index = 0U; member_index < group->member_count; ++member_index) {
+            const size_t symbol_index =
+                symbol_index_by_name(unit, group->members[member_index].symbol_name);
+            if (symbol_index == SIZE_MAX ||
+                !validate_equivalence_member(context, unit, &group->members[member_index],
+                                             symbol_index))
+                continue;
+            involved[symbol_index] = 1U;
+        }
+    }
+    for (seed = 0U; seed < unit->symbol_count; ++seed) {
+        int changed = 1;
+        int64_t minimum_offset = 0;
+        uint64_t extent = 0U;
+        uint64_t maximum_alignment = 1U;
+        size_t root_index = SIZE_MAX;
+        size_t symbol_index;
+        if (!involved[seed] || assigned[seed])
+            continue;
+        known[seed] = 1U;
+        offsets[seed] = 0;
+        while (changed) {
+            changed = 0;
+            for (declaration_index = 0U; declaration_index < unit->equivalence_group_count;
+                 ++declaration_index) {
+                F2cEquivalenceGroup *group = &unit->equivalence_groups[declaration_index];
+                int anchor_known = 0;
+                int64_t anchor = 0;
+                size_t member_index;
+                for (member_index = 0U; member_index < group->member_count; ++member_index) {
+                    const size_t candidate =
+                        symbol_index_by_name(unit, group->members[member_index].symbol_name);
+                    int64_t designator_offset;
+                    if (candidate == SIZE_MAX || !known[candidate] ||
+                        !equivalence_designator_byte_offset(unit, &group->members[member_index],
+                                                            &designator_offset))
+                        continue;
+                    if (!checked_signed_add(offsets[candidate], designator_offset, &anchor)) {
+                        if (!conflict_reported[declaration_index])
+                            report_equivalence_conflict(context, &group->members[member_index]);
+                        conflict_reported[declaration_index] = 1U;
+                    } else {
+                        anchor_known = 1;
+                    }
+                    break;
+                }
+                if (!anchor_known)
+                    continue;
+                for (member_index = 0U; member_index < group->member_count; ++member_index) {
+                    const size_t candidate =
+                        symbol_index_by_name(unit, group->members[member_index].symbol_name);
+                    int64_t designator_offset;
+                    int64_t expected;
+                    if (candidate == SIZE_MAX || !involved[candidate] ||
+                        !equivalence_designator_byte_offset(unit, &group->members[member_index],
+                                                            &designator_offset) ||
+                        !checked_signed_subtract(anchor, designator_offset, &expected)) {
+                        if (!conflict_reported[declaration_index])
+                            report_equivalence_conflict(context, &group->members[member_index]);
+                        conflict_reported[declaration_index] = 1U;
+                        continue;
+                    }
+                    if (!known[candidate]) {
+                        known[candidate] = 1U;
+                        offsets[candidate] = expected;
+                        changed = 1;
+                    } else if (offsets[candidate] != expected &&
+                               !conflict_reported[declaration_index]) {
+                        report_equivalence_conflict(context, &group->members[member_index]);
+                        conflict_reported[declaration_index] = 1U;
+                    }
+                }
+            }
+        }
+        minimum_offset = offsets[seed];
+        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+            if (!known[symbol_index] || assigned[symbol_index])
+                continue;
+            if (offsets[symbol_index] < minimum_offset)
+                minimum_offset = offsets[symbol_index];
+        }
+        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+            Symbol *symbol = &unit->symbols[symbol_index];
+            uint64_t normalized;
+            uint64_t end;
+            if (!known[symbol_index] || assigned[symbol_index])
+                continue;
+            normalized = (uint64_t)offsets[symbol_index] - (uint64_t)minimum_offset;
+            if (symbol->equivalence_alignment == 0U ||
+                normalized % symbol->equivalence_alignment != 0U) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_UNSUPPORTED, &symbol->declaration_span, 1,
+                    "EQUIVALENCE places '%s' at an alignment not representable by portable C17",
+                    symbol->name);
+                continue;
+            }
+            if (symbol->equivalence_size > UINT64_MAX - normalized) {
+                f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT,
+                                         &symbol->declaration_span, 1,
+                                         "EQUIVALENCE storage exceeds the supported size range");
+                continue;
+            }
+            end = normalized + symbol->equivalence_size;
+            symbol->equivalence_associated = 1;
+            symbol->equivalence_group = component_index;
+            symbol->equivalence_offset = normalized;
+            if (root_index == SIZE_MAX)
+                root_index = symbol_index;
+            if (end > extent)
+                extent = end;
+            if (symbol->equivalence_alignment > maximum_alignment)
+                maximum_alignment = symbol->equivalence_alignment;
+        }
+        if (!checked_align(extent, maximum_alignment, &extent)) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, &unit->header_span, 1,
+                                     "EQUIVALENCE storage exceeds the supported size range");
+        }
+        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+            Symbol *symbol = &unit->symbols[symbol_index];
+            if (!known[symbol_index] || assigned[symbol_index])
+                continue;
+            assigned[symbol_index] = 1U;
+            if (!symbol->equivalence_associated || root_index == SIZE_MAX)
+                continue;
+            if (symbol_index != root_index) {
+                int64_t alias_offset;
+                free(symbol->alias_to);
+                symbol->alias_to = f2c_strdup(unit->symbols[root_index].name);
+                if (checked_signed_subtract(offsets[symbol_index], offsets[root_index],
+                                            &alias_offset))
+                    symbol->alias_offset = alias_offset;
+                else
+                    f2c_diagnostic_span_code(
+                        context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, &symbol->declaration_span, 1,
+                        "EQUIVALENCE alias offset exceeds the supported size range");
+                if (symbol->alias_to == NULL)
+                    f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                                             &symbol->declaration_span, 1,
+                                             "out of memory recording EQUIVALENCE root");
+            }
+            assign_equivalence_c_name(context, unit, component_index, symbol_index);
+        }
+        ++component_index;
+    }
+
+cleanup:
+    free(involved);
+    free(known);
+    free(assigned);
+    free(conflict_reported);
+    free(offsets);
 }
 
 void f2c_validate_project_storage(Context *context) {

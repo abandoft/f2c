@@ -365,8 +365,8 @@ static int equivalence_designator(Context *context, Unit *unit, const Line *line
             if (expression == NULL || error_at != NULL ||
                 !f2c_evaluate_integer_constant(unit, expression, &index_value) ||
                 !evaluate_dimension_bound(unit, symbol, dimension, 0, &lower) ||
-                !evaluate_dimension_bound(unit, symbol, dimension, 1, &upper) ||
-                upper < lower || index_value < lower || index_value > upper) {
+                !evaluate_dimension_bound(unit, symbol, dimension, 1, &upper) || upper < lower ||
+                index_value < lower || index_value > upper) {
                 f2c_expr_free(expression);
                 f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, diagnostic_token,
                                           1, "EQUIVALENCE subscript must be an in-bounds constant");
@@ -403,50 +403,33 @@ static int equivalence_designator(Context *context, Unit *unit, const Line *line
     return 1;
 }
 
-static int resolve_equivalence_root(Unit *unit, Symbol *symbol, int64_t designator_offset,
-                                    Symbol **root_out, int64_t *offset_out) {
-    size_t traversed = 0U;
-    int64_t offset = designator_offset;
-    while (symbol != NULL && symbol->alias_to != NULL) {
-        if (++traversed > unit->symbol_count ||
-            (symbol->alias_offset > 0 && offset > INT64_MAX - symbol->alias_offset) ||
-            (symbol->alias_offset < 0 && offset < INT64_MIN - symbol->alias_offset))
+static int append_equivalence_group(Unit *unit, F2cEquivalenceMember *members, size_t count) {
+    F2cEquivalenceGroup *replacement;
+    size_t capacity;
+    if (unit->equivalence_group_count == unit->equivalence_group_capacity) {
+        capacity =
+            unit->equivalence_group_capacity == 0U ? 8U : unit->equivalence_group_capacity * 2U;
+        if (capacity < unit->equivalence_group_capacity ||
+            capacity > SIZE_MAX / sizeof(*replacement))
             return 0;
-        offset += symbol->alias_offset;
-        symbol = f2c_find_symbol(unit, symbol->alias_to);
+        replacement = (F2cEquivalenceGroup *)realloc(unit->equivalence_groups,
+                                                     capacity * sizeof(*replacement));
+        if (replacement == NULL)
+            return 0;
+        unit->equivalence_groups = replacement;
+        unit->equivalence_group_capacity = capacity;
     }
-    if (symbol == NULL)
-        return 0;
-    *root_out = symbol;
-    *offset_out = offset;
+    unit->equivalence_groups[unit->equivalence_group_count].members = members;
+    unit->equivalence_groups[unit->equivalence_group_count].member_count = count;
+    ++unit->equivalence_group_count;
     return 1;
 }
 
-static char *equivalence_alias_c_name(const Symbol *root, const Symbol *alias,
-                                      int64_t element_offset) {
-    Buffer result = {0};
-
-    if (root == NULL || alias == NULL || root->c_name == NULL || element_offset < 0)
-        return NULL;
-
-    if (alias->rank != 0U) {
-        if (root->rank == 0U) {
-            if (element_offset != 0)
-                return NULL;
-            f2c_buffer_printf(&result, "(&%s)", root->c_name);
-        } else if (element_offset == 0) {
-            f2c_buffer_append(&result, root->c_name);
-        } else {
-            f2c_buffer_printf(&result, "(&%s[%lld])", root->c_name, (long long)element_offset);
-        }
-    } else if (root->rank != 0U) {
-        f2c_buffer_printf(&result, "(%s[%lld])", root->c_name, (long long)element_offset);
-    } else if (element_offset == 0) {
-        f2c_buffer_append(&result, root->c_name);
-    } else {
-        return NULL;
-    }
-    return f2c_buffer_take(&result);
+static void free_equivalence_members(F2cEquivalenceMember *members, size_t count) {
+    size_t member;
+    for (member = 0U; member < count; ++member)
+        free(members[member].symbol_name);
+    free(members);
 }
 
 void f2c_parse_equivalence_declaration(Context *context, Unit *unit, Line *source_line) {
@@ -487,59 +470,38 @@ void f2c_parse_equivalence_declaration(Context *context, Unit *unit, Line *sourc
                                       &source_line->tokens[index], 1,
                                       "EQUIVALENCE group requires at least two designators");
         } else {
-            Symbol *first = NULL;
-            Symbol *root;
-            int64_t first_offset = 0;
-            int64_t root_offset;
+            F2cEquivalenceMember *members = (F2cEquivalenceMember *)calloc(count, sizeof(*members));
+            size_t member;
+            int valid = members != NULL;
+            int allocation_failed = members == NULL;
             cursor = index + 1U;
-            (void)next_equivalence_member(source_line, close, &cursor, &range);
-            if (equivalence_designator(context, unit, source_line, range, &first, &first_offset)) {
-                if (!resolve_equivalence_root(unit, first, first_offset, &root, &root_offset)) {
-                    f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, source_line,
-                                              &source_line->tokens[range.begin], 1,
-                                              "EQUIVALENCE storage association is cyclic or "
-                                              "out of range");
-                } else {
-                    size_t member;
-                    for (member = 1U; member < count; ++member) {
-                        Symbol *alias = NULL;
-                        int64_t alias_designator_offset = 0;
-                        int64_t alias_offset;
-                        Symbol *alias_root;
-                        int64_t existing_offset;
-                        (void)next_equivalence_member(source_line, close, &cursor, &range);
-                        if (!equivalence_designator(context, unit, source_line, range, &alias,
-                                                    &alias_designator_offset))
-                            continue;
-                        if (alias->alias_to != NULL || alias == root) {
-                            if (!resolve_equivalence_root(unit, alias, alias_designator_offset,
-                                                          &alias_root, &existing_offset) ||
-                                alias_root != root || existing_offset != root_offset) {
-                                f2c_diagnostic_token_code(
-                                    context, F2C_DIAGNOSTIC_SEMANTIC, source_line,
-                                    &source_line->tokens[range.begin], 1,
-                                    "conflicting EQUIVALENCE storage associations");
-                            }
-                            continue;
-                        }
-                        alias_offset = root_offset - alias_designator_offset;
-                        free(alias->alias_to);
-                        alias->alias_to = f2c_strdup(root->name);
-                        alias->alias_offset = alias_offset;
-                        free(alias->c_name);
-                        alias->c_name = equivalence_alias_c_name(root, alias, alias_offset);
-                        if (alias->alias_to == NULL)
-                            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
-                                                      source_line,
-                                                      &source_line->tokens[range.begin], 1,
-                                                      "out of memory in EQUIVALENCE declaration");
-                        else if (alias->c_name == NULL)
-                            f2c_diagnostic_token_code(
-                                context, F2C_DIAGNOSTIC_UNSUPPORTED, source_line,
-                                &source_line->tokens[range.begin], 1,
-                                "unsupported EQUIVALENCE storage layout for '%s'", alias->name);
-                    }
+            for (member = 0U; member < count; ++member) {
+                Symbol *symbol = NULL;
+                int64_t element_offset = 0;
+                (void)next_equivalence_member(source_line, close, &cursor, &range);
+                if (!valid || !equivalence_designator(context, unit, source_line, range, &symbol,
+                                                      &element_offset)) {
+                    valid = 0;
+                    continue;
                 }
+                members[member].symbol_name = f2c_strdup(symbol->name);
+                members[member].element_offset = element_offset;
+                members[member].span = source_line->tokens[range.begin].span;
+                if (members[member].symbol_name == NULL) {
+                    valid = 0;
+                    allocation_failed = 1;
+                }
+            }
+            if (valid && !append_equivalence_group(unit, members, count)) {
+                valid = 0;
+                allocation_failed = 1;
+            }
+            if (!valid) {
+                free_equivalence_members(members, count);
+                if (allocation_failed)
+                    f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line,
+                                              &source_line->tokens[index], 1,
+                                              "out of memory recording EQUIVALENCE group");
             }
         }
         index = close + 1U;

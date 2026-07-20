@@ -89,6 +89,13 @@ void f2c_free_unit(Unit *unit) {
         free(unit->namelists[index].members);
     }
     free(unit->namelists);
+    for (index = 0U; index < unit->equivalence_group_count; ++index) {
+        size_t member;
+        for (member = 0U; member < unit->equivalence_groups[index].member_count; ++member)
+            free(unit->equivalence_groups[index].members[member].symbol_name);
+        free(unit->equivalence_groups[index].members);
+    }
+    free(unit->equivalence_groups);
     for (index = 0U; index < unit->symbol_count; ++index)
         free_symbol(&unit->symbols[index]);
     free(unit->symbols);

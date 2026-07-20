@@ -711,7 +711,7 @@ int f2c_emit_character_assignment(Context *context, Unit *unit, Symbol *left_sym
     emit_character_copy(context, target_pointer, target_length, source_pointer, source_length,
                         depth);
     if (left->kind == F2C_EXPR_NAME && !left_symbol->argument &&
-        left_symbol->common_block == NULL &&
+        left_symbol->common_block == NULL && !left_symbol->equivalence_associated &&
         !(unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER &&
           unit->result_name != NULL && strcmp(left_symbol->name, unit->result_name) == 0) &&
         left_symbol->character_length != NULL) {
