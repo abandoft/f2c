@@ -22,6 +22,38 @@ static int null_pointer_value(const F2cExpr *expression) {
            strcmp(expression->text, "null") == 0;
 }
 
+static char *pointer_metadata_designator(const char *pointer_name, const char *field) {
+    Buffer result = {0};
+    if (pointer_name == NULL || field == NULL)
+        return NULL;
+    f2c_buffer_printf(&result, "%s_%s", pointer_name, field);
+    return f2c_buffer_take(&result);
+}
+
+static char *pointer_target_deallocatable(Unit *unit, const F2cExpr *target) {
+    const Symbol *symbol;
+    Buffer result = {0};
+    int supported = 0;
+    char *designator;
+    if (target == NULL || target->symbol == NULL ||
+        (target->kind != F2C_EXPR_NAME && target->kind != F2C_EXPR_COMPONENT))
+        return f2c_strdup("false");
+    symbol = target->symbol;
+    if (symbol->pointer) {
+        designator = f2c_emit_pointer_designator(unit, target, &supported);
+        if (!supported || designator == NULL) {
+            free(designator);
+            return NULL;
+        }
+        f2c_buffer_printf(&result, "%s_deallocatable", designator);
+        free(designator);
+        return f2c_buffer_take(&result);
+    }
+    if (symbol->allocatable)
+        return f2c_strdup("false");
+    return f2c_strdup("false");
+}
+
 static int emit_character_length_check(Context *context, Unit *unit, const Symbol *pointer,
                                        const F2cExpr *target, int depth) {
     char *pointer_length;
@@ -51,10 +83,15 @@ static int emit_array_pointer_assignment(Context *context, Unit *unit,
     const int null_target = null_pointer_value(target);
     F2cDescriptorView view = {0};
     char *character_length = NULL;
+    char *deallocatable_name = pointer_metadata_designator(pointer_name, "deallocatable");
+    char *target_deallocatable =
+        null_target ? f2c_strdup("false") : pointer_target_deallocatable(unit, target);
     size_t dimension;
     int success = 0;
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
+    if (deallocatable_name == NULL || target_deallocatable == NULL)
+        goto cleanup;
     if (!null_target &&
         !f2c_descriptor_association_view(&context->output, unit, target, depth + 1, &view))
         goto cleanup;
@@ -69,6 +106,8 @@ static int emit_array_pointer_assignment(Context *context, Unit *unit,
     indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output, "%s = %s;\n", pointer_name,
                       null_target ? "NULL" : view.data);
+    indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "%s = %s;\n", deallocatable_name, target_deallocatable);
     if (character_length != NULL) {
         indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output, "f2c_char_len_%s = (size_t)(%s);\n", pointer_name,
@@ -104,6 +143,8 @@ static int emit_array_pointer_assignment(Context *context, Unit *unit,
 
 cleanup:
     free(character_length);
+    free(deallocatable_name);
+    free(target_deallocatable);
     f2c_descriptor_view_free(&view);
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
@@ -118,6 +159,14 @@ static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
     const int null_target = null_pointer_value(target_expression);
     char *target_code = NULL;
     char *character_length = NULL;
+    char *deallocatable_name = pointer_metadata_designator(pointer_name, "deallocatable");
+    char *target_deallocatable =
+        null_target ? f2c_strdup("false") : pointer_target_deallocatable(unit, target_expression);
+    if (deallocatable_name == NULL || target_deallocatable == NULL) {
+        free(deallocatable_name);
+        free(target_deallocatable);
+        return 0;
+    }
     if (!null_target && target_expression != NULL &&
         target_expression->kind == F2C_EXPR_ARRAY_REFERENCE) {
         target_code = f2c_emit_statement_expression(context, unit, target_expression, line);
@@ -125,6 +174,8 @@ static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
     if (!null_target && !emit_character_length_check(context, unit, statement->left->symbol,
                                                      target_expression, depth)) {
         free(target_code);
+        free(deallocatable_name);
+        free(target_deallocatable);
         return 0;
     }
     indent(&context->output, depth);
@@ -141,12 +192,18 @@ static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
                           f2c_symbol_c_name(unit, target));
     } else {
         free(target_code);
+        free(deallocatable_name);
+        free(target_deallocatable);
         return 0;
     }
+    indent(&context->output, depth);
+    f2c_buffer_printf(&context->output, "%s = %s;\n", deallocatable_name, target_deallocatable);
     if (!null_target && statement->left->symbol->deferred_character) {
         character_length = f2c_character_length_expression(unit, target_expression);
         if (character_length == NULL) {
             free(target_code);
+            free(deallocatable_name);
+            free(target_deallocatable);
             return 0;
         }
         indent(&context->output, depth);
@@ -158,6 +215,8 @@ static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
     }
     free(character_length);
     free(target_code);
+    free(deallocatable_name);
+    free(target_deallocatable);
     return 1;
 }
 
@@ -183,6 +242,16 @@ int f2c_emit_nullify_statement(Context *context, Unit *unit, const F2cStatement 
         }
         indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "%s = NULL;\n", pointer_name);
+        if (!symbol->procedure_pointer) {
+            char *deallocatable_name = pointer_metadata_designator(pointer_name, "deallocatable");
+            if (deallocatable_name == NULL) {
+                free(pointer_name);
+                return 0;
+            }
+            indent(&context->output, depth);
+            f2c_buffer_printf(&context->output, "%s = false;\n", deallocatable_name);
+            free(deallocatable_name);
+        }
         if (!symbol->procedure_pointer && symbol->deferred_character &&
             expression->kind == F2C_EXPR_NAME) {
             indent(&context->output, depth);
