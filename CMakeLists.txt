@@ -150,6 +150,8 @@ set(
     src/codegen/unit/data.c
     src/codegen/unit/interface.c
     src/codegen/unit/private.h
+    src/codegen/value/derived.c
+    src/codegen/value/private.h
     src/core/config.c
     src/core/cleanup.c
     src/core/generated/bit.c
