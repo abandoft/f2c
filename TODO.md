@@ -28,7 +28,8 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建基线已经建立；本轮普通与 ASan/UBSan 严格 CTest 均为 40/40，架构边界检查作为独立测试运行。
+  构建基线已经建立；本轮普通、Release 与 ASan/UBSan 严格 CTest 均为 42/42，架构边界检查作为
+  独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -122,8 +123,11 @@
   统一临时量引擎。
 - [ ] 将参数、kind、字符长度、数组边界和初始化中的规格表达式全部纳入溢出安全的常量求值器，
   补齐标准允许的 inquiry/specification intrinsic。`SIZE/SHAPE/LBOUND/UBOUND` 现已建立 typed
-  rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级，仍需补齐其余规格
-  intrinsic 和所有允许出现位置。字符常量求值现已覆盖 `ACHAR/ADJUSTL/ADJUSTR/CHAR/IACHAR`、
+  rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级。数值模型 inquiry
+  `DIGITS/EPSILON/HUGE/KIND/MAXEXPONENT/MINEXPONENT/PRECISION/RADIX/RANGE/TINY` 以及
+  `SELECTED_INT_KIND/SELECTED_REAL_KIND` 已进入 typed IR 和同一常量求值器，可用于参数和类型
+  kind 选择器；查询实参不会被求值。仍需补齐其余规格 intrinsic 和所有允许出现位置。字符常量
+  求值现已覆盖 `ACHAR/ADJUSTL/ADJUSTR/CHAR/IACHAR`、
   `ICHAR/INDEX/LEN/LEN_TRIM/REPEAT/SCAN/TRIM/VERIFY`、连接、参数引用、嵌入 NUL、空串、反向搜索
   和结果 kind 范围，并可直接生成 CHARACTER 声明初始化器。
 - [x] 移除 `f2c_emit_cached_expression` 和 `f2c_translate_expression` 原始文本降级路径；模块实体、
@@ -141,7 +145,10 @@
 ### P0-SEM-01 类型、kind 和 ABI
 
 - [ ] 建立目标 ABI 数据模型，覆盖所承诺的 INTEGER、REAL、COMPLEX、LOGICAL 和 CHARACTER
-  kind，不再把 kind 仅当作附加整数元数据。
+  kind，不再把 kind 仅当作附加整数元数据。当前已集中定义 `INTEGER(KIND=1/2/4/8)`、IEEE
+  binary32 `REAL(KIND=4)` 和 binary64 `REAL(KIND=8)` 的 radix、digits、precision、range、指数
+  边界及极值，并在生成 C 中使用静态断言拒绝不匹配的目标模型；其他 REAL、LOGICAL、
+  CHARACTER kind 及完整目标 ABI 仍需完成。
 - [ ] 完整区分显式形状、假定大小、假定形状和延迟形状，统一标量、数组、字符、可分配及指针
   哑实参和函数结果的描述符契约。假定形状哑实参现在通过签名元数据和数组描述符传递逐维 extent，
   保留哑实参声明下界，并支持固定形状/可分配整数组实参、内部子程序和函数表达式；DT I/O 与
@@ -232,8 +239,11 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   逐项差分已进入 CI。字符 intrinsic `ACHAR/ADJUSTL/ADJUSTR/CHAR/IACHAR/ICHAR/INDEX/LEN`、
   `LEN_TRIM/REPEAT/SCAN/TRIM/VERIFY` 现已覆盖类型化参数关联、结果 kind/长度、常量折叠、关键字
   `BACK/KIND`、标量与 elemental 数组、空串及嵌入 NUL；生成端使用无符号字节、溢出检查和有界
-  临时存储，严格 C17、UBSan 及 gfortran 字节级差分已进入 CI。其他 F90 intrinsic 尚未全部完成，
-  因此本项保持未关闭。
+  临时存储，严格 C17、UBSan 及 gfortran 字节级差分已进入 CI。数值模型 intrinsic
+  `DIGITS/EPSILON/HUGE/KIND/MAXEXPONENT/MINEXPONENT/PRECISION/RADIX/RANGE/TINY` 和
+  `SELECTED_INT_KIND/SELECTED_REAL_KIND` 已覆盖类型与 kind 契约、关键字关联、失败码、常量折叠、
+  声明选择器和动态实参一次求值；生成端仅依赖固定宽度整数及 `float.h` 常量，查询实参不求值，
+  严格 C17、UBSan 与 gfortran 差分已进入 CI。其他 F90 intrinsic 尚未全部完成，因此本项保持未关闭。
 - [ ] 让 `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/TRANSPOSE/MATMUL` 等支持任意合法数组
   表达式、所有已支持 kind/rank、零大小数组和非默认下界，而不是只接受具名整数组。上述 intrinsic
   的数值、LOGICAL、COMPLEX 和 CHARACTER 输入现共用列主序数组视图与一次性临时量引擎；
@@ -356,7 +366,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   不依赖未定义行为或编译器扩展。位操作 intrinsic 已统一使用固定位宽无符号表示和 `memcpy`
   位复制，规避有符号移位、移位量等于位宽及别名未定义行为，并以符号位、完整位宽、零长度和
   重叠 `MVBITS` 的 UBSan 执行覆盖；字符 intrinsic 已使用无符号字节、`size_t` 溢出检查、显式
-  长度和可复用临时存储覆盖空串、嵌入 NUL 及嵌套变换；其他生成路径仍需继续审计。
+  长度和可复用临时存储覆盖空串、嵌入 NUL 及嵌套变换；数值模型 inquiry 已改为不求值实参的
+  typed 常量降级，并以 C17 静态断言锁定整数宽度和 binary32/binary64 模型；其他生成路径仍需
+  继续审计。
 - [ ] 对辅助函数做基于 IR 使用信息的可达性生成，控制单文件输出的体积、C 编译时间和链接重复；
   不得以引入新的独立运行时库解决该问题。
 - [ ] 为数组描述符、I/O、格式、NAMELIST、派生类型复制/终结等生成逻辑建立结构化 emitter，
@@ -404,6 +416,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   数组关系归约、transform inquiry、`SELECT TYPE`
   guard、矩阵 transformational intrinsic 及关系归约生成支持分别位于独立模块，避免重新堆回通用
   call/statement/transpile 文件。
+  数值模型定义、常量折叠、语义验证、表达式降低和生成端支持也分别位于 `semantic/`、
+  `semantic/constant/`、`semantic/validation/intrinsic/`、`codegen/expression/` 和
+  `core/generated/`，未恢复通用调用生成器中的名称分派。
 - [x] 将 `src/internal/f2c.h` 从 730 行全局定义缩减为轻量跨域聚合头；基础设施、token、type、
   expression IR、statement IR、symbol/model、context、semantic 与 codegen 分别使用私有头文件。
 - [x] 用 `F2cCompilationPhase`、`F2cUnitPhase` 和 `F2cIrState` 明确 source → token/syntax AST →
@@ -441,7 +456,7 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 
 - [ ] 按 lexer、preprocessor、parser、AST、语义、常量折叠、intrinsic、I/O、生命周期、IR 和
   emitter 建立独立单元测试，并保留项目级端到端测试。preprocessor 已从超大端到端测试拆为独立
-  测试目标，其他模块仍需继续拆分。
+  测试目标；数值模型契约及其 intrinsic 语义也已有独立测试目标，其他模块仍需继续拆分。
 - [ ] 建立完整负向语料库，断言错误码、源码范围、恢复位置和输出抑制；禁止只匹配易变英文文本。
 - [ ] 增加行/分支覆盖率门禁和历史趋势，分别统计转译器、生成辅助代码和数值脚本。
 - [ ] 当 `F2C_BUILD_TESTING=ON` 时，数值脚本所需 Python 应成为明确依赖或由独立选项控制；不能
