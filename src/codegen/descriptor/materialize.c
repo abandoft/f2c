@@ -1,6 +1,7 @@
 #include "codegen/descriptor/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/value/private.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,43 +94,42 @@ static void append_ordinal_decode(Buffer *output, const F2cDescriptorView *view,
                           identifier, view->extent[dimension]);
 }
 
-static void append_copy_in(Buffer *prelude, const F2cExpr *expression, const F2cExpr *element,
-                           const char *element_code, const char *storage, const char *count,
-                           const char *character_length, size_t identifier, int depth,
-                           const F2cDescriptorView *view) {
+static int append_copy_in(Buffer *prelude, Unit *unit, const F2cExpr *expression,
+                          const F2cExpr *element, const char *element_code, const char *storage,
+                          const char *count, const char *character_length, size_t identifier,
+                          int depth, const F2cDescriptorView *view) {
     indent(prelude, depth);
     f2c_buffer_printf(prelude,
                       "for (size_t f2c_call_actual_%zu_index = 0U; "
                       "f2c_call_actual_%zu_index < %s; ++f2c_call_actual_%zu_index) { ",
                       identifier, identifier, count, identifier);
     append_ordinal_decode(prelude, view, identifier, "index");
+    f2c_buffer_append(prelude, "\n");
     if (expression->type == TYPE_CHARACTER) {
+        indent(prelude, depth + 1);
         f2c_buffer_printf(prelude,
                           "if (%s != 0U) memmove(%s + f2c_call_actual_%zu_index * %s, %s(%s), "
-                          "%s); }\n",
+                          "%s);\n",
                           character_length, storage, identifier, character_length,
                           element->definable ? "&" : "", element_code, character_length);
     } else if (expression->type == TYPE_DERIVED) {
-        if (element->definable) {
-            f2c_buffer_printf(prelude, "f2c_clone_%s(&%s[f2c_call_actual_%zu_index], &(%s)); }\n",
-                              expression->derived_type->c_name, storage, identifier, element_code);
-        } else {
-            f2c_buffer_printf(prelude, "%s f2c_call_actual_%zu_source = (%s); ",
-                              expression->derived_type->c_name, identifier, element_code);
-            if (element->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR)
-                f2c_buffer_printf(prelude, "f2c_initialize_%s(&f2c_call_actual_%zu_source); ",
-                                  expression->derived_type->c_name, identifier);
-            f2c_buffer_printf(prelude,
-                              "f2c_clone_%s(&%s[f2c_call_actual_%zu_index], "
-                              "&f2c_call_actual_%zu_source); "
-                              "f2c_destroy_%s(&f2c_call_actual_%zu_source); }\n",
-                              expression->derived_type->c_name, storage, identifier, identifier,
-                              expression->derived_type->c_name, identifier);
+        Buffer destination = {0};
+        f2c_buffer_printf(&destination, "%s[f2c_call_actual_%zu_index]", storage, identifier);
+        if (destination.data == NULL ||
+            !f2c_emit_derived_clone_expression(prelude, unit, element, destination.data,
+                                               "descriptor", identifier, depth + 1)) {
+            free(destination.data);
+            return 0;
         }
+        free(destination.data);
     } else {
-        f2c_buffer_printf(prelude, "%s[f2c_call_actual_%zu_index] = (%s); }\n", storage, identifier,
+        indent(prelude, depth + 1);
+        f2c_buffer_printf(prelude, "%s[f2c_call_actual_%zu_index] = (%s);\n", storage, identifier,
                           element_code);
     }
+    indent(prelude, depth);
+    f2c_buffer_append(prelude, "}\n");
+    return 1;
 }
 
 static void append_copy_out(Buffer *cleanup, const F2cExpr *expression, const char *element_code,
@@ -238,9 +238,9 @@ int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit
     }
     indent(prelude, depth);
     f2c_buffer_printf(prelude, "if (%s == NULL) abort();\n", view->data);
-    if (copy_in)
-        append_copy_in(prelude, expression, element, element_code, view->data, count,
-                       character_length, identifier, depth, view);
+    if (copy_in && !append_copy_in(prelude, unit, expression, element, element_code, view->data,
+                                   count, character_length, identifier, depth, view))
+        goto failed;
     if (copy_out)
         append_copy_out(cleanup, expression, element_code, view->data, count, character_length,
                         identifier, depth, view);
