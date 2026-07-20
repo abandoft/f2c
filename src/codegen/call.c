@@ -53,6 +53,18 @@ static int actual_designates_const_dummy(const F2cExpr *actual) {
     return 0;
 }
 
+static int actual_guaranteed_contiguous(const F2cExpr *actual) {
+    const Symbol *symbol;
+    if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT && actual->child_count == 1U)
+        actual = actual->children[0];
+    if (actual == NULL || actual->kind != F2C_EXPR_NAME || actual->symbol == NULL)
+        return 0;
+    symbol = actual->symbol;
+    if (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol)))
+        return symbol->contiguous;
+    return 1;
+}
+
 char *f2c_bridge_implicit_mutable_actual(const Symbol *callee, size_t parameter,
                                          const F2cExpr *actual, const char *code) {
     Buffer result = {0};
@@ -441,6 +453,7 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
         Buffer deallocatable = {0};
         F2cDescriptorView view = {0};
         int has_view;
+        int force_contiguous_temporary;
         size_t dimension;
         if (!callee->external_parameter_descriptor[i])
             continue;
@@ -464,6 +477,13 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
         has_view = actual != NULL && actual->equivalence_unaligned
                        ? 0
                        : f2c_descriptor_view(unit, expression, &view);
+        force_contiguous_temporary = callee->external_parameter_contiguous[i] &&
+                                     !callee->external_parameter_pointer[i] &&
+                                     !actual_guaranteed_contiguous(expression);
+        if (has_view && force_contiguous_temporary) {
+            f2c_descriptor_view_free(&view);
+            has_view = 0;
+        }
         if (!has_view &&
             (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i] ||
              !f2c_descriptor_materialize_view(&call->prelude, &call->postlude, unit, expression,

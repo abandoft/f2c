@@ -88,6 +88,17 @@ static void emit_declarations(Context *context, Unit *unit) {
                               dimension + 1U, name, name, dimension);
             free(declared_lower);
         }
+        if (symbol->contiguous) {
+            f2c_unit_indent(output, 1);
+            f2c_buffer_printf(output,
+                              "if (f2c_descriptor_%s != NULL && "
+                              "!f2c_descriptor_is_contiguous(%zuU, (const size_t[]){",
+                              name, symbol->rank);
+            for (dimension = 0U; dimension < symbol->rank; ++dimension)
+                f2c_buffer_printf(output, "%s(size_t)f2c_descriptor_%s->extent[%zu]",
+                                  dimension == 0U ? "" : ", ", name, dimension);
+            f2c_buffer_printf(output, "}, f2c_descriptor_%s->stride)) abort();\n", name);
+        }
     }
     {
         Symbol *result = f2c_unit_function_result(unit);
