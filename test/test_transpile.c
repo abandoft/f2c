@@ -614,7 +614,7 @@ static void test_fixed_form_spaced_exponent(void) {
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U,
            "fixed-form blanks inside an exponent do not split the numeric literal");
-    expect_contains(result.code, "-1.e0f",
+    expect_contains(result.code, "(-(1.e0f))",
                     "fixed-form spaced exponent is normalized before typed AST parsing");
     f2c_result_free(&result);
 }
@@ -810,7 +810,8 @@ static void test_typed_integer_and_nested_call_expressions(void) {
                     "adjacent dotted comparison is not consumed as a real literal");
     expect_contains(result.code, "((int32_t)pow((double)",
                     "integer exponentiation retains INTEGER result type");
-    expect_contains(result.code, "abs((-(*n)))", "integer ABS resolves to the integer C function");
+    expect_contains(result.code, "abs((-((*n))))",
+                    "integer ABS resolves to the integer C function");
     expect_contains(result.code, "&(double){dnrm2(",
                     "nested DOUBLE function result uses a DOUBLE temporary");
     f2c_result_free(&result);
@@ -2064,7 +2065,7 @@ static void test_dynamic_array_sections(void) {
                "rank-three negative-stride section assignment translates successfully");
         expect_contains(rank3.code, "int32_t f2c_extent_2",
                         "rank-three section lowering emits all shape dimensions");
-        expect_contains(rank3.code, "f2c_section_2) * ((-1))",
+        expect_contains(rank3.code, "f2c_section_2) * ((-(1)))",
                         "rank-three section lowering preserves negative strides");
         f2c_result_free(&rank3);
     }

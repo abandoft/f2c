@@ -109,6 +109,7 @@ static void test_typed_lowering(void) {
         "  i1 = ceiling(r4, kind=1)\n"
         "  i2 = floor(a=r8, kind=2)\n"
         "  i8 = nint(kind=8, a=r8)\n"
+        "  i4 = -floor(-537.0)\n"
         "  r4 = aint(r4) + anint(r4)\n"
         "  r8 = aint(a=r8, kind=8) + anint(kind=8, a=r8)\n"
         "  r4 = dim(r4, s4) + mod(r4, s4) + modulo(r4, s4) + sign(r4, s4)\n"
@@ -138,8 +139,8 @@ static void test_typed_lowering(void) {
                strstr(result.code, "f2c_sign_r8(") != NULL,
            "real operations preserve binary32 and binary64 kinds");
     expect(result.code != NULL && strstr(result.code, "F2C_MOD") == NULL &&
-               strstr(result.code, "lrint") == NULL,
-           "legacy untyped MOD and rounding lowering is absent");
+               strstr(result.code, "lrint") == NULL && strstr(result.code, "--INT32_C") == NULL,
+           "legacy untyped lowering and colliding unary tokens are absent");
     f2c_result_free(&result);
 }
 

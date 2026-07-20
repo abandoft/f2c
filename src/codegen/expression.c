@@ -340,7 +340,7 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
             f2c_buffer_printf(&result, "%s(%s)",
                               expression->type == TYPE_COMPLEX ? "f2c_cneg" : "f2c_zneg", left);
         } else {
-            f2c_buffer_printf(&result, "(%s%s)",
+            f2c_buffer_printf(&result, "(%s(%s))",
                               strcmp(expression->text, ".not.") == 0 ? "!" : expression->text,
                               left);
         }
