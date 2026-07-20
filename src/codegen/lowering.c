@@ -199,8 +199,6 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
     size_t i;
     if (strcmp(name, "abs") == 0 || strcmp(name, "dabs") == 0)
         mapped = count != 0U && argument_types[0] == TYPE_INTEGER ? "abs" : "F2C_ABS";
-    else if (strcmp(name, "mod") == 0)
-        mapped = "F2C_MOD";
     else if (strcmp(name, "dsqrt") == 0)
         mapped = "sqrt";
     else if (strcmp(name, "dexp") == 0)
@@ -285,8 +283,6 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
                        : ((strcmp(name, "real") == 0 || strcmp(name, "float") == 0) ? "float"
                                                                                     : "int32_t"));
         f2c_buffer_printf(&result, "((%s)(%s))", cast, count != 0U ? args[0] : "0");
-    } else if (strcmp(name, "nint") == 0 || strcmp(name, "idnint") == 0) {
-        f2c_buffer_printf(&result, "((int32_t)lrint(%s))", count != 0U ? args[0] : "0");
     } else if (strcmp(name, "cmplx") == 0 || strcmp(name, "dcmplx") == 0) {
         const int double_precision =
             strcmp(name, "dcmplx") == 0 || result_type == TYPE_DOUBLE_COMPLEX;
@@ -323,17 +319,6 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
         } else {
             f2c_buffer_printf(&result, "((int32_t)strlen(%s))", value);
         }
-    } else if (strcmp(name, "sign") == 0 || strcmp(name, "dsign") == 0) {
-        if (strcmp(name, "sign") == 0 && count != 0U && argument_types[0] == TYPE_REAL)
-            f2c_buffer_printf(&result, "copysignf(fabsf(%s), %s)", count >= 1U ? args[0] : "0.0f",
-                              count >= 2U ? args[1] : "0.0f");
-        else
-            f2c_buffer_printf(&result, "copysign(fabs((double)(%s)), (double)(%s))",
-                              count >= 1U ? args[0] : "0", count >= 2U ? args[1] : "0");
-    } else if (strcmp(name, "ceiling") == 0) {
-        f2c_buffer_printf(&result, "((int32_t)ceil((double)(%s)))", count != 0U ? args[0] : "0");
-    } else if (strcmp(name, "floor") == 0) {
-        f2c_buffer_printf(&result, "((int32_t)floor((double)(%s)))", count != 0U ? args[0] : "0");
     } else if (strcmp(name, "alog") == 0) {
         f2c_buffer_printf(&result, "logf(%s)", count != 0U ? args[0] : "0");
     } else if (strcmp(name, "log10") == 0) {
