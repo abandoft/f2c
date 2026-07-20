@@ -763,6 +763,46 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
                 f2c_symbol_c_name(unit, right_symbol), left_symbol->derived_type->c_name,
                 f2c_symbol_c_name(unit, left_symbol), left_symbol->rank,
                 f2c_symbol_c_name(unit, left_symbol), f2c_symbol_c_name(unit, left_symbol));
+        } else if (left_symbol->equivalence_unaligned || right_symbol->equivalence_unaligned) {
+            char *right_value =
+                right_symbol->equivalence_unaligned
+                    ? f2c_emit_unaligned_linear_load(unit, right_symbol, "f2c_whole_index")
+                    : NULL;
+            char *left_address =
+                left_symbol->equivalence_unaligned
+                    ? f2c_emit_unaligned_linear_address(unit, left_symbol, "f2c_whole_index")
+                    : NULL;
+            const char *left_suffix = f2c_unaligned_access_suffix(left_symbol);
+            f2c_buffer_printf(
+                &context->output,
+                "{ const size_t f2c_whole_count = (size_t)(%s); "
+                "if ((size_t)(%s) != f2c_whole_count) abort(); "
+                "if (f2c_whole_count > SIZE_MAX / sizeof(%s)) abort(); "
+                "%s *f2c_whole_temporary = (%s *)malloc("
+                "F2C_MAX((size_t)1U, f2c_whole_count) * sizeof(%s)); "
+                "if (f2c_whole_temporary == NULL) abort(); "
+                "for (size_t f2c_whole_index = 0U; f2c_whole_index < f2c_whole_count; "
+                "++f2c_whole_index) f2c_whole_temporary[f2c_whole_index] = %s%s%s; "
+                "for (size_t f2c_whole_index = 0U; f2c_whole_index < f2c_whole_count; "
+                "++f2c_whole_index) ",
+                element_count, right_count, f2c_symbol_c_type(left_symbol),
+                f2c_symbol_c_type(left_symbol), f2c_symbol_c_type(left_symbol),
+                f2c_symbol_c_type(left_symbol),
+                right_value != NULL ? right_value : f2c_symbol_c_name(unit, right_symbol),
+                right_value != NULL ? "" : "[f2c_whole_index]", "");
+            if (left_address != NULL)
+                f2c_buffer_printf(&context->output,
+                                  "f2c_unaligned_store_%s(%s, "
+                                  "f2c_whole_temporary[f2c_whole_index]); ",
+                                  left_suffix, left_address);
+            else
+                f2c_buffer_printf(&context->output,
+                                  "%s[f2c_whole_index] = "
+                                  "f2c_whole_temporary[f2c_whole_index]; ",
+                                  f2c_symbol_c_name(unit, left_symbol));
+            f2c_buffer_append(&context->output, "free(f2c_whole_temporary); }\n");
+            free(right_value);
+            free(left_address);
         } else {
             f2c_buffer_printf(&context->output,
                               "{ const size_t f2c_whole_count = (size_t)(%s); "
@@ -790,10 +830,19 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
                           "{ const %s f2c_whole_scalar = (%s)(%s); "
                           "size_t f2c_fill_index; for (f2c_fill_index = 0; ",
                           f2c_symbol_c_type(left_symbol), f2c_symbol_c_type(left_symbol), value);
-        f2c_buffer_printf(&context->output,
-                          "f2c_fill_index < %s; ++f2c_fill_index) %s[f2c_fill_index] = "
-                          "f2c_whole_scalar; }\n",
-                          element_count, f2c_symbol_c_name(unit, left_symbol));
+        if (left_symbol->equivalence_unaligned) {
+            char *address = f2c_emit_unaligned_linear_address(unit, left_symbol, "f2c_fill_index");
+            f2c_buffer_printf(&context->output,
+                              "f2c_fill_index < %s; ++f2c_fill_index) "
+                              "f2c_unaligned_store_%s(%s, f2c_whole_scalar); }\n",
+                              element_count, f2c_unaligned_access_suffix(left_symbol), address);
+            free(address);
+        } else {
+            f2c_buffer_printf(&context->output,
+                              "f2c_fill_index < %s; ++f2c_fill_index) %s[f2c_fill_index] = "
+                              "f2c_whole_scalar; }\n",
+                              element_count, f2c_symbol_c_name(unit, left_symbol));
+        }
         free(value);
     }
 cleanup:

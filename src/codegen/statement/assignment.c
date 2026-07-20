@@ -305,6 +305,34 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
         (statement->left->kind == F2C_EXPR_CALL ||
          statement->left->kind == F2C_EXPR_ARRAY_REFERENCE))
         return 1;
+    if (left_symbol != NULL && left_symbol->equivalence_unaligned && statement->left != NULL &&
+        statement->left->rank == 0U) {
+        const char *suffix = f2c_unaligned_access_suffix(left_symbol);
+        char *address =
+            f2c_emit_unaligned_designator_address(unit, statement->left, &left_supported);
+        right = f2c_emit_expression_ast(unit, statement->right, &right_supported);
+        if (suffix == NULL || !left_supported || address == NULL || !right_supported ||
+            right == NULL) {
+            free(address);
+            free(right);
+            f2c_diagnostic(context, line, 1,
+                           "unaligned EQUIVALENCE assignment requires a supported intrinsic "
+                           "scalar designator");
+            return 0;
+        }
+        if (numeric_type(left_symbol->type) && numeric_type(right_type) &&
+            left_symbol->type != right_type) {
+            char *converted = f2c_emit_numeric_conversion(right, right_type, left_symbol->type);
+            free(right);
+            right = converted;
+        }
+        indent(&context->output, depth);
+        f2c_buffer_printf(&context->output, "f2c_unaligned_store_%s(%s, %s);\n", suffix, address,
+                          right);
+        free(address);
+        free(right);
+        return 1;
+    }
     left = f2c_emit_expression_ast(unit, statement->left, &left_supported);
     right = f2c_emit_expression_ast(unit, statement->right, &right_supported);
     if (!left_supported || left == NULL || !right_supported || right == NULL) {
