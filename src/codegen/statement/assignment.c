@@ -1,5 +1,7 @@
 #include "codegen/statement/private.h"
 
+#include "codegen/array/private.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -149,7 +151,8 @@ static int emit_derived_assignment(Context *context, const F2cStatement *stateme
                           statement->right->derived_type->c_name);
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
-    } else if (statement->right->kind == F2C_EXPR_CALL ||
+    } else if ((statement->right->kind == F2C_EXPR_CALL &&
+                statement->right->intrinsic != F2C_INTRINSIC_MERGE) ||
                statement->right->resolved_procedure != NULL) {
         f2c_buffer_printf(&context->output, "{ %s f2c_assignment_result = %s;\n",
                           statement->right->derived_type->c_name, right);
@@ -166,6 +169,89 @@ static int emit_derived_assignment(Context *context, const F2cStatement *stateme
                           statement->left->derived_type->c_name, left, right);
     }
     return 1;
+}
+
+static int emit_derived_merge_assignment(Context *context, Unit *unit,
+                                         const F2cStatement *statement, int depth,
+                                         size_t merge_depth) {
+    const size_t output_start = context != NULL ? context->output.length : 0U;
+    const F2cExpr *merge = statement != NULL ? statement->right : NULL;
+    const F2cExpr *true_source;
+    const F2cExpr *false_source;
+    const F2cExpr *mask;
+    F2cStatement branch;
+    char *left;
+    char *true_code;
+    char *false_code;
+    char *mask_code;
+    int supported = 1;
+    if (context == NULL || unit == NULL || statement == NULL || statement->left == NULL ||
+        merge == NULL || merge->kind != F2C_EXPR_CALL || merge->intrinsic != F2C_INTRINSIC_MERGE ||
+        statement->left->type != TYPE_DERIVED || merge->type != TYPE_DERIVED ||
+        statement->left->rank != 0U || merge->rank != 0U || statement->left->derived_type == NULL ||
+        statement->left->derived_type != merge->derived_type)
+        return 0;
+    true_source = f2c_intrinsic_argument(merge->children, merge->child_count, "tsource", 0U);
+    false_source = f2c_intrinsic_argument(merge->children, merge->child_count, "fsource", 1U);
+    mask = f2c_intrinsic_argument(merge->children, merge->child_count, "mask", 2U);
+    if (true_source == NULL || false_source == NULL || mask == NULL)
+        return 0;
+    left = f2c_emit_expression_ast(unit, statement->left, &supported);
+    true_code = supported ? f2c_emit_expression_ast(unit, true_source, &supported) : NULL;
+    false_code = supported ? f2c_emit_expression_ast(unit, false_source, &supported) : NULL;
+    mask_code = supported ? f2c_emit_expression_ast(unit, mask, &supported) : NULL;
+    if (!supported || left == NULL || true_code == NULL || false_code == NULL ||
+        mask_code == NULL) {
+        free(left);
+        free(true_code);
+        free(false_code);
+        free(mask_code);
+        return 0;
+    }
+    branch = *statement;
+    indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "{\n");
+    indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "const bool f2c_merge_mask_%zu = (bool)(%s);\n",
+                      merge_depth, mask_code);
+    indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "if (f2c_merge_mask_%zu) {\n", merge_depth);
+    branch.right = (F2cExpr *)true_source;
+    if (true_source->kind == F2C_EXPR_CALL && true_source->intrinsic == F2C_INTRINSIC_MERGE) {
+        if (!emit_derived_merge_assignment(context, unit, &branch, depth + 2, merge_depth + 1U))
+            goto failed;
+    } else if (!emit_derived_assignment(context, &branch, left, true_code, depth + 2)) {
+        goto failed;
+    }
+    indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output, "} else {\n");
+    branch.right = (F2cExpr *)false_source;
+    if (false_source->kind == F2C_EXPR_CALL && false_source->intrinsic == F2C_INTRINSIC_MERGE) {
+        if (!emit_derived_merge_assignment(context, unit, &branch, depth + 2, merge_depth + 1U))
+            goto failed;
+    } else if (!emit_derived_assignment(context, &branch, left, false_code, depth + 2)) {
+        goto failed;
+    }
+    indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output, "}\n");
+    indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+    free(left);
+    free(true_code);
+    free(false_code);
+    free(mask_code);
+    return 1;
+
+failed:
+    if (context != NULL && context->output.data != NULL && output_start <= context->output.length) {
+        context->output.length = output_start;
+        context->output.data[output_start] = '\0';
+    }
+    free(left);
+    free(true_code);
+    free(false_code);
+    free(mask_code);
+    return 0;
 }
 
 int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStatement *statement,
@@ -200,6 +286,19 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
                                           depth) ||
         f2c_emit_whole_array_assignment(context, unit, statement->left, statement->right, line,
                                         depth))
+        return 1;
+    if (statement->left != NULL && statement->right != NULL &&
+        statement->left->kind == F2C_EXPR_COMPONENT && statement->left->symbol != NULL &&
+        statement->left->symbol->allocatable && statement->left->rank == 1U &&
+        statement->right->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
+        if (!f2c_array_emit_allocatable_component_constructor(context, unit, statement->left,
+                                                              statement->right, depth))
+            f2c_diagnostic(context, line, 1,
+                           "allocatable component array-constructor assignment requires "
+                           "compatible rank-one values");
+        return 1;
+    }
+    if (emit_derived_merge_assignment(context, unit, statement, depth, 0U))
         return 1;
     if (left_symbol != NULL && left_symbol->rank == 0U && !left_symbol->argument &&
         !left_symbol->external && left_symbol->type != TYPE_CHARACTER &&
