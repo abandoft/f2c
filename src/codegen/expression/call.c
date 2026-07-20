@@ -361,83 +361,6 @@ int f2c_expression_children(Unit *unit, const F2cExpr *expression, char ***argum
     return 1;
 }
 
-static int derived_expression_is_owned(const F2cExpr *expression) {
-    return expression != NULL &&
-           (expression->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR ||
-            (expression->kind == F2C_EXPR_CALL && expression->intrinsic != F2C_INTRINSIC_MERGE) ||
-            expression->resolved_procedure != NULL);
-}
-
-static char *emit_derived_actual_pointer_with_index(Unit *unit, const F2cExpr *expression,
-                                                    size_t temporary, int *supported) {
-    const char *type_name;
-    Buffer result = {0};
-    if (expression == NULL || expression->type != TYPE_DERIVED ||
-        expression->derived_type == NULL || expression->rank != 0U || temporary == SIZE_MAX) {
-        *supported = 0;
-        return NULL;
-    }
-    type_name = expression->derived_type->c_name;
-    if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_MERGE) {
-        const F2cExpr *true_source =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "tsource", 0U);
-        const F2cExpr *false_source =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "fsource", 1U);
-        const F2cExpr *mask =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "mask", 2U);
-        char *true_pointer;
-        char *false_pointer;
-        char *mask_code;
-        if (true_source == NULL || false_source == NULL || mask == NULL || mask->rank != 0U) {
-            *supported = 0;
-            return NULL;
-        }
-        true_pointer =
-            emit_derived_actual_pointer_with_index(unit, true_source, temporary, supported);
-        false_pointer = *supported ? emit_derived_actual_pointer_with_index(unit, false_source,
-                                                                            temporary, supported)
-                                   : NULL;
-        mask_code = *supported ? f2c_expression_emit(unit, mask, supported) : NULL;
-        if (!*supported || true_pointer == NULL || false_pointer == NULL || mask_code == NULL) {
-            free(true_pointer);
-            free(false_pointer);
-            free(mask_code);
-            *supported = 0;
-            return NULL;
-        }
-        f2c_buffer_printf(&result, "((bool)(%s) ? (%s) : (%s))", mask_code, true_pointer,
-                          false_pointer);
-        free(true_pointer);
-        free(false_pointer);
-        free(mask_code);
-        return f2c_buffer_take(&result);
-    }
-    {
-        char *code = f2c_expression_emit(unit, expression, supported);
-        if (!*supported || code == NULL) {
-            free(code);
-            return NULL;
-        }
-        if (derived_expression_is_owned(expression))
-            f2c_buffer_printf(&result,
-                              "f2c_materialize_move_%s(&f2c_derived_actual_%zu, "
-                              "&f2c_derived_actual_live_%zu, %s)",
-                              type_name, temporary, temporary, code);
-        else
-            f2c_buffer_printf(&result,
-                              "f2c_materialize_copy_%s(&f2c_derived_actual_%zu, "
-                              "&f2c_derived_actual_live_%zu, &(%s))",
-                              type_name, temporary, temporary, code);
-        free(code);
-    }
-    return f2c_buffer_take(&result);
-}
-
-static char *emit_derived_actual_pointer(Unit *unit, const F2cExpr *expression, int *supported) {
-    return emit_derived_actual_pointer_with_index(
-        unit, expression, expression != NULL ? expression->temporary_index : SIZE_MAX, supported);
-}
-
 static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char *code,
                                   int *supported) {
     Buffer result = {0};
@@ -483,7 +406,7 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
     if (actual->type == TYPE_CHARACTER)
         return f2c_strdup(code);
     if (actual->type == TYPE_DERIVED && !actual->definable)
-        return emit_derived_actual_pointer(unit, actual, supported);
+        return f2c_expression_derived_actual_pointer(unit, actual, supported);
     return f2c_emit_scalar_temporary_address(
         actual->type != TYPE_UNKNOWN ? f2c_expression_c_type(actual) : f2c_c_type(TYPE_REAL),
         actual->type != TYPE_UNKNOWN ? actual->type : TYPE_REAL, code);
@@ -528,22 +451,6 @@ static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supp
     free(character_length);
     f2c_descriptor_view_free(&view);
     return f2c_buffer_take(&result);
-}
-
-static void append_derived_actual_releases(Buffer *result, const F2cExpr *expression,
-                                           size_t first) {
-    size_t child;
-    for (child = first; expression != NULL && child < expression->child_count; ++child) {
-        const F2cExpr *actual = intrinsic_argument_value(expression->children[child]);
-        if (actual == NULL || actual->type != TYPE_DERIVED || actual->derived_type == NULL ||
-            actual->rank != 0U || actual->definable)
-            continue;
-        f2c_buffer_printf(result,
-                          ", f2c_release_%s(&f2c_derived_actual_%zu, "
-                          "&f2c_derived_actual_live_%zu)",
-                          actual->derived_type->c_name, actual->temporary_index,
-                          actual->temporary_index);
-    }
 }
 
 static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *supported) {
@@ -678,7 +585,7 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
                           expression->temporary_index,
                           result_length != NULL ? result_length : "1U");
         if (derived_actual_count != 0U)
-            append_derived_actual_releases(&result, expression, 1U);
+            f2c_expression_append_derived_actual_releases(&result, expression, 1U);
         f2c_buffer_printf(&result, ", f2c_character_result_%zu)", expression->temporary_index);
         free(result_length);
     } else {
@@ -687,7 +594,7 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
             f2c_buffer_append(&result, ")");
     }
     if (derived_actual_count != 0U && !character_result) {
-        append_derived_actual_releases(&result, expression, 1U);
+        f2c_expression_append_derived_actual_releases(&result, expression, 1U);
         if (expression->type == TYPE_DERIVED)
             f2c_buffer_printf(&result,
                               ", f2c_take_%s(&f2c_derived_result_%zu, "
@@ -1062,7 +969,7 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
                           expression->temporary_index,
                           result_length != NULL ? result_length : "1U");
         if (derived_actual_count != 0U)
-            append_derived_actual_releases(&result, expression, 0U);
+            f2c_expression_append_derived_actual_releases(&result, expression, 0U);
         f2c_buffer_printf(&result, ", f2c_character_result_%zu)", expression->temporary_index);
         free(result_length);
     } else {
@@ -1071,7 +978,7 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
             f2c_buffer_append(&result, ")");
     }
     if (derived_actual_count != 0U && expression->type != TYPE_CHARACTER) {
-        append_derived_actual_releases(&result, expression, 0U);
+        f2c_expression_append_derived_actual_releases(&result, expression, 0U);
         if (expression->type == TYPE_DERIVED)
             f2c_buffer_printf(&result,
                               ", f2c_take_%s(&f2c_derived_result_%zu, "

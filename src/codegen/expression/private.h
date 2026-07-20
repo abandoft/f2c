@@ -21,6 +21,9 @@ char *f2c_expression_character_intrinsic(Unit *unit, const F2cExpr *expression, 
 char *f2c_expression_numeric_model_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_numeric_operation_intrinsic(Unit *unit, const F2cExpr *expression,
                                                  int *supported);
+char *f2c_expression_derived_actual_pointer(Unit *unit, const F2cExpr *expression, int *supported);
+void f2c_expression_append_derived_actual_releases(Buffer *output, const F2cExpr *expression,
+                                                   size_t first);
 char *f2c_expression_real_representation_intrinsic(Unit *unit, const F2cExpr *expression,
                                                    int *supported);
 char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *supported);

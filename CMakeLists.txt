@@ -95,6 +95,7 @@ set(
     src/codegen/expression/bit.c
     src/codegen/expression/call.c
     src/codegen/expression/character.c
+    src/codegen/expression/derived_actual.c
     src/codegen/expression/inquiry.c
     src/codegen/expression/model.c
     src/codegen/expression/numeric.c
