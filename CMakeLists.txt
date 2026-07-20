@@ -156,6 +156,7 @@ set(
     src/core/generated/io.c
     src/core/generated/list.c
     src/core/generated/model.c
+    src/core/generated/numeric.c
     src/core/generated/private.h
     src/core/generated/representation.c
     src/core/generated/record.c

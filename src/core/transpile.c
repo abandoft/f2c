@@ -19,7 +19,6 @@ static int extension_equals(const char *extension, const char *expected) {
 
 typedef struct F2cRequiredFeatures {
     int complex_values;
-    int mod;
     int transfer;
     int maxloc;
     int maxval;
@@ -31,6 +30,7 @@ typedef struct F2cRequiredFeatures {
     int bit_intrinsic;
     int character_intrinsic;
     int numeric_model_intrinsic;
+    int numeric_operation_intrinsic;
     int real_representation_intrinsic;
 } F2cRequiredFeatures;
 
@@ -49,12 +49,12 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
         features->character_intrinsic = 1;
     if (f2c_intrinsic_is_numeric_model(expression->intrinsic))
         features->numeric_model_intrinsic = 1;
+    if (f2c_intrinsic_is_numeric_operation(expression->intrinsic))
+        features->numeric_operation_intrinsic = 1;
     if (f2c_intrinsic_is_real_representation(expression->intrinsic))
         features->real_representation_intrinsic = 1;
     name = expression->text;
-    if (strcmp(name, "mod") == 0)
-        features->mod = 1;
-    else if (strcmp(name, "transfer") == 0)
+    if (strcmp(name, "transfer") == 0)
         features->transfer = 1;
     else if (strcmp(name, "maxloc") == 0) {
         features->maxloc = 1;
@@ -243,7 +243,6 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
         if (f2c_supported_module_needs_complex(&context))
             features.complex_values = 1;
         const int needs_complex = features.complex_values;
-        const int needs_mod = features.mod;
         const int needs_transfer = features.transfer;
         const int needs_maxloc = features.maxloc;
         const int needs_maxval = features.maxval;
@@ -255,6 +254,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
         const int needs_bit_intrinsic = features.bit_intrinsic;
         const int needs_character_intrinsic = features.character_intrinsic;
         const int needs_numeric_model_intrinsic = features.numeric_model_intrinsic;
+        const int needs_numeric_operation_intrinsic = features.numeric_operation_intrinsic;
         const int needs_real_representation_intrinsic = features.real_representation_intrinsic;
         f2c_buffer_append(
             &context.output,
@@ -297,6 +297,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             f2c_emit_numeric_model_contract(&context.output);
         if (needs_numeric_model_intrinsic)
             f2c_emit_numeric_model_support(&context.output);
+        if (needs_numeric_operation_intrinsic)
+            f2c_emit_numeric_operation_support(&context.output);
         if (needs_real_representation_intrinsic)
             f2c_emit_real_representation_support(&context.output);
         f2c_buffer_append(&context.output,
@@ -595,13 +597,6 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                 "#define F2C_FORTRAN_MIN(a, b) _Generic(((a) + (b)), float: "
                 "f2c_fortran_smin, double: f2c_fortran_dmin, default: "
                 "f2c_fortran_imin)((a), (b))\n");
-        }
-        if (needs_mod) {
-            f2c_buffer_append(
-                &context.output,
-                "static inline int32_t f2c_mod_i32(int32_t a, int32_t b) { return a % b; }\n"
-                "#define F2C_MOD(a, b) _Generic((a), int32_t: f2c_mod_i32, "
-                "float: fmodf, double: fmod, long double: fmodl, default: fmod)((a), (b))\n");
         }
         if (needs_maxloc) {
             f2c_buffer_append(
