@@ -78,6 +78,25 @@ static int same_shape_contract(const Symbol *left, const Symbol *right) {
     return 1;
 }
 
+static int same_dummy_layout(const Unit *left, const Unit *right) {
+    const size_t left_count =
+        left->dummy_argument_indices != NULL ? left->dummy_count : left->argument_count;
+    const size_t right_count =
+        right->dummy_argument_indices != NULL ? right->dummy_count : right->argument_count;
+    size_t index;
+    if (left_count != right_count || left->alternate_return_count != right->alternate_return_count)
+        return 0;
+    for (index = 0U; index < left_count; ++index) {
+        const int left_alternate =
+            left->dummy_argument_indices != NULL && left->dummy_argument_indices[index] == SIZE_MAX;
+        const int right_alternate = right->dummy_argument_indices != NULL &&
+                                    right->dummy_argument_indices[index] == SIZE_MAX;
+        if (left_alternate != right_alternate)
+            return 0;
+    }
+    return 1;
+}
+
 static const char *function_character_length(Unit *definition) {
     Symbol *result;
     if (definition == NULL || definition->kind != UNIT_FUNCTION ||
@@ -92,10 +111,10 @@ static const char *function_character_length(Unit *definition) {
 
 static int copy_function_character_length(Symbol *target, Unit *definition) {
     const char *length = function_character_length(definition);
-    Symbol *result = definition != NULL && definition->kind == UNIT_FUNCTION &&
-                             definition->result_name != NULL
-                         ? f2c_find_symbol(definition, definition->result_name)
-                         : NULL;
+    Symbol *result =
+        definition != NULL && definition->kind == UNIT_FUNCTION && definition->result_name != NULL
+            ? f2c_find_symbol(definition, definition->result_name)
+            : NULL;
     char *copy;
     if (length == NULL)
         return 1;
@@ -105,7 +124,7 @@ static int copy_function_character_length(Symbol *target, Unit *definition) {
     free(target->character_length);
     target->character_length = copy;
     target->character_length_syntax = result != NULL ? result->character_length_syntax
-                                                      : definition->result_character_length_syntax;
+                                                     : definition->result_character_length_syntax;
     return 1;
 }
 
@@ -135,10 +154,17 @@ static void validate_interface_definition(Context *context, Unit *caller, const 
                        visible_name, f2c_c_type(interface->return_type),
                        f2c_c_type(definition->return_type));
     }
+    if (!same_dummy_layout(interface, definition)) {
+        f2c_diagnostic(context, line, 1,
+                       "explicit interface for '%s' has an incompatible ordinary/alternate-return "
+                       "dummy argument layout",
+                       visible_name);
+        return;
+    }
     if (interface->argument_count != definition->argument_count) {
         f2c_diagnostic(context, line, 1,
-                       "explicit interface for '%s' has %zu dummy arguments but the project "
-                       "definition has %zu",
+                       "explicit interface for '%s' has %zu ordinary dummy arguments but the "
+                       "project definition has %zu",
                        visible_name, interface->argument_count, definition->argument_count);
         return;
     }
@@ -253,6 +279,7 @@ static void bind_external(Context *context, Unit *caller, Symbol *external) {
         return;
     }
     external->external_subroutine = definition->kind == UNIT_SUBROUTINE;
+    external->external_alternate_return_count = definition->alternate_return_count;
     if (!f2c_copy_function_result_metadata(external, definition)) {
         f2c_diagnostic(context, context->lines.items[definition->begin].number, 1,
                        "out of memory while binding result of procedure '%s'", external->name);
@@ -309,6 +336,7 @@ static int bind_internal(Context *context, Unit *definition) {
     symbol->external = 1;
     symbol->external_declared = 1;
     symbol->external_subroutine = definition->kind == UNIT_SUBROUTINE;
+    symbol->external_alternate_return_count = definition->alternate_return_count;
     symbol->external_signature_observed = 1;
     if (!f2c_copy_function_result_metadata(symbol, definition))
         return 0;
