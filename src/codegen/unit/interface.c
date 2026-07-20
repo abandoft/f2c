@@ -523,7 +523,8 @@ static uint64_t common_storage_extent(const Unit *unit, const char *block) {
         end = offset + size;
         if (end > extent)
             extent = end;
-        if (size != 0U && alignment > maximum_alignment)
+        if (size != 0U && (!associated || !symbol->equivalence_unaligned) &&
+            alignment > maximum_alignment)
             maximum_alignment = alignment;
     }
     if (maximum_alignment != 0U && extent % maximum_alignment != 0U)
@@ -565,6 +566,8 @@ static void emit_common_equivalence_view_definitions(Context *context, Unit *uni
         uint64_t suffix;
         if (symbol->equivalence_common_block == NULL ||
             strcmp(symbol->equivalence_common_block, block) != 0)
+            continue;
+        if (symbol->equivalence_unaligned)
             continue;
         suffix = extent - symbol->equivalence_common_offset - symbol->equivalence_size;
         f2c_buffer_append(&context->output, "struct ");
@@ -734,12 +737,29 @@ static void emit_common_equivalence_union_members(Context *context, Unit *unit, 
         if (symbol->equivalence_common_block == NULL ||
             strcmp(symbol->equivalence_common_block, block) != 0)
             continue;
+        if (symbol->equivalence_unaligned)
+            continue;
         f2c_buffer_append(&context->output, "    struct ");
         append_common_equivalence_view_type_name(&context->output, block, unit_index,
                                                  symbol->equivalence_group, symbol_index);
         f2c_buffer_printf(&context->output, " equivalence_%zu_%zu_%zu;\n", unit_index,
                           symbol->equivalence_group, symbol_index);
     }
+}
+
+static uint64_t project_common_storage_extent(Context *context, const char *block) {
+    uint64_t extent = 0U;
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < context->units.count; ++unit_index) {
+        Unit *unit = &context->units.items[unit_index];
+        uint64_t candidate;
+        if (!unit_has_common_block(unit, block))
+            continue;
+        candidate = common_storage_extent(unit, block);
+        if (candidate > extent)
+            extent = candidate;
+    }
+    return extent;
 }
 
 void f2c_emit_common_blocks(Context *context) {
@@ -750,6 +770,7 @@ void f2c_emit_common_blocks(Context *context) {
         size_t symbol_index;
         for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
             Symbol *first = &unit->symbols[symbol_index];
+            uint64_t raw_extent;
             size_t view_index;
             size_t initializer_owner_index = 0U;
             Unit *initializer_owner;
@@ -790,6 +811,9 @@ void f2c_emit_common_blocks(Context *context) {
                                                     : "F2C_COMMON_STORAGE union ");
             append_common_storage_name(&context->output, first->common_block);
             f2c_buffer_append(&context->output, "_storage {\n");
+            raw_extent = project_common_storage_extent(context, first->common_block);
+            f2c_buffer_printf(&context->output, "    unsigned char bytes[%llu];\n",
+                              (unsigned long long)(raw_extent != 0U ? raw_extent : 1U));
             for (view_index = 0U; view_index < context->units.count; ++view_index) {
                 if (!unit_has_common_block(&context->units.items[view_index], first->common_block))
                     continue;

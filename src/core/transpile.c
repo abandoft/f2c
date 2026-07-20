@@ -339,6 +339,30 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                               "#endif\n"
                               "#endif\n");
         }
+        f2c_buffer_append(
+            &context.output,
+            "#define F2C_DEFINE_UNALIGNED_ACCESS(suffix, type) \\\n"
+            "static inline F2C_UNUSED type f2c_unaligned_load_##suffix("
+            "const unsigned char *address) { \\\n"
+            "    type value; memcpy(&value, address, sizeof(value)); return value; \\\n"
+            "} \\\n"
+            "static inline F2C_UNUSED void f2c_unaligned_store_##suffix("
+            "unsigned char *address, type value) { \\\n"
+            "    memcpy(address, &value, sizeof(value)); \\\n"
+            "}\n"
+            "F2C_DEFINE_UNALIGNED_ACCESS(i8, int8_t)\n"
+            "F2C_DEFINE_UNALIGNED_ACCESS(i16, int16_t)\n"
+            "F2C_DEFINE_UNALIGNED_ACCESS(i32, int32_t)\n"
+            "F2C_DEFINE_UNALIGNED_ACCESS(i64, int64_t)\n"
+            "F2C_DEFINE_UNALIGNED_ACCESS(r4, float)\n"
+            "F2C_DEFINE_UNALIGNED_ACCESS(r8, double)\n"
+            "F2C_DEFINE_UNALIGNED_ACCESS(r16, long double)\n");
+        if (needs_complex)
+            f2c_buffer_append(&context.output,
+                              "F2C_DEFINE_UNALIGNED_ACCESS(c4, f2c_complex_float)\n"
+                              "F2C_DEFINE_UNALIGNED_ACCESS(c8, f2c_complex_double)\n"
+                              "F2C_DEFINE_UNALIGNED_ACCESS(c16, f2c_complex_long_double)\n");
+        f2c_buffer_append(&context.output, "#undef F2C_DEFINE_UNALIGNED_ACCESS\n");
         f2c_buffer_append(&context.output, "typedef struct f2c_descriptor {\n"
                                            "    void *data;\n"
                                            "    size_t element_size;\n"

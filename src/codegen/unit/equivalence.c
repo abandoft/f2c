@@ -15,7 +15,7 @@ static uint64_t equivalence_group_extent(const Unit *unit, size_t group_index) {
         end = symbol->equivalence_offset + symbol->equivalence_size;
         if (end > extent)
             extent = end;
-        if (symbol->equivalence_alignment > maximum_alignment)
+        if (!symbol->equivalence_unaligned && symbol->equivalence_alignment > maximum_alignment)
             maximum_alignment = symbol->equivalence_alignment;
     }
     if (maximum_alignment != 0U && extent % maximum_alignment != 0U)
@@ -80,6 +80,8 @@ void f2c_unit_emit_equivalence_declarations(Context *context, Unit *unit) {
             uint64_t suffix;
             if (!symbol->equivalence_associated || symbol->equivalence_group != group_index)
                 continue;
+            if (symbol->equivalence_unaligned)
+                continue;
             suffix = extent - symbol->equivalence_offset - symbol->equivalence_size;
             if (symbol->saved || symbol->initializer_expression != NULL ||
                 symbol->data_element_initializers != NULL)
@@ -128,9 +130,14 @@ void f2c_unit_emit_equivalence_declarations(Context *context, Unit *unit) {
         if (persistent)
             f2c_buffer_append(&context->output, "static ");
         f2c_buffer_append(&context->output, "union {\n");
+        f2c_unit_indent(&context->output, 2);
+        f2c_buffer_printf(&context->output, "unsigned char bytes[%llu];\n",
+                          (unsigned long long)(extent != 0U ? extent : 1U));
         for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
             const Symbol *symbol = &unit->symbols[symbol_index];
             if (!symbol->equivalence_associated || symbol->equivalence_group != group_index)
+                continue;
+            if (symbol->equivalence_unaligned)
                 continue;
             f2c_unit_indent(&context->output, 2);
             f2c_buffer_printf(&context->output, "struct f2c_equivalence_%zu_view_%zu view_%zu;\n",
@@ -139,7 +146,9 @@ void f2c_unit_emit_equivalence_declarations(Context *context, Unit *unit) {
         f2c_unit_indent(&context->output, 1);
         f2c_buffer_printf(&context->output, "} f2c_equivalence_%zu", group_index);
         if (initializer_symbol != NULL) {
-            initializer = f2c_unit_static_storage_initializer(unit, initializer_symbol);
+            initializer = initializer_symbol->equivalence_unaligned
+                              ? NULL
+                              : f2c_unit_static_storage_initializer(unit, initializer_symbol);
             if (initializer == NULL)
                 f2c_diagnostic_span_code(
                     context, F2C_DIAGNOSTIC_UNSUPPORTED, &initializer_symbol->declaration_span, 1,
