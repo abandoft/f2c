@@ -129,13 +129,17 @@ void f2c_emit_project_modules(Context *context) {
                 f2c_buffer_printf(&context->output, "%s *%s = NULL;\n", f2c_symbol_c_type(symbol),
                                   name);
                 if (symbol->deferred_character)
-                    f2c_buffer_printf(&context->output, "static size_t f2c_char_len_%s = 0U;\n",
-                                      name);
+                    f2c_buffer_printf(&context->output,
+                                      "static F2C_UNUSED size_t f2c_char_len_%s = 0U;\n", name);
                 for (dimension = 0U; dimension < symbol->rank; ++dimension) {
                     f2c_buffer_printf(&context->output,
-                                      "static int32_t %s_lower_%zu = 1;\n"
-                                      "static int32_t %s_extent_%zu = 0;\n",
+                                      "static F2C_UNUSED int32_t %s_lower_%zu = 1;\n"
+                                      "static F2C_UNUSED int32_t %s_extent_%zu = 0;\n",
                                       name, dimension + 1U, name, dimension + 1U);
+                    if (symbol->pointer)
+                        f2c_buffer_printf(&context->output,
+                                          "static F2C_UNUSED ptrdiff_t %s_stride_%zu = 0;\n", name,
+                                          dimension + 1U);
                 }
                 free(initializer);
                 continue;

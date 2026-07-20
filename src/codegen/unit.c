@@ -149,6 +149,13 @@ static void emit_declarations(Context *context, Unit *unit) {
                     f2c_buffer_append(output, "static ");
                 f2c_buffer_printf(output, "int32_t %s_extent_%zu = 0;\n",
                                   f2c_symbol_c_name(unit, symbol), d + 1U);
+                if (symbol->pointer) {
+                    f2c_unit_indent(output, 1);
+                    if (persistent)
+                        f2c_buffer_append(output, "static ");
+                    f2c_buffer_printf(output, "ptrdiff_t %s_stride_%zu = 0;\n",
+                                      f2c_symbol_c_name(unit, symbol), d + 1U);
+                }
             }
             continue;
         }
@@ -291,15 +298,30 @@ static void emit_declarations(Context *context, Unit *unit) {
         Symbol *symbol = &unit->symbols[i];
         const char *name;
         char *count;
-        if (!symbol->argument || symbol->type != TYPE_DERIVED || symbol->derived_type == NULL ||
-            symbol->intent != F2C_INTENT_OUT)
+        size_t dimension;
+        if (!symbol->argument || symbol->intent != F2C_INTENT_OUT)
             continue;
         name = f2c_symbol_c_name(unit, symbol);
+        if (symbol->pointer) {
+            f2c_unit_indent(output, 1);
+            f2c_buffer_printf(output, "%s = NULL;\n", name);
+            if (symbol->deferred_character) {
+                f2c_unit_indent(output, 1);
+                f2c_buffer_printf(output, "f2c_char_len_%s = 0U;\n", name);
+            }
+            for (dimension = 0U; dimension < symbol->rank; ++dimension) {
+                f2c_unit_indent(output, 1);
+                f2c_buffer_printf(output,
+                                  "%s_lower_%zu = 1; %s_extent_%zu = 0; %s_stride_%zu = 0;\n", name,
+                                  dimension + 1U, name, dimension + 1U, name, dimension + 1U);
+            }
+            continue;
+        }
+        if (symbol->type != TYPE_DERIVED || symbol->derived_type == NULL)
+            continue;
         count = symbol->rank == 0U ? f2c_strdup("1U") : f2c_symbol_element_count(unit, symbol);
         f2c_unit_indent(output, 1);
-        if (symbol->pointer) {
-            f2c_buffer_printf(output, "%s = NULL;\n", name);
-        } else if (symbol->allocatable) {
+        if (symbol->allocatable) {
             f2c_buffer_printf(output, "if (%s != NULL) {\n", name);
             f2c_unit_indent(output, 2);
             f2c_buffer_printf(output, "%s_%s(%s, (size_t)(%s), %zuU);\n",
@@ -772,6 +794,11 @@ static void emit_unused_suppression(Buffer *output, Unit *unit) {
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output, "(void)%s_extent_%zu;\n", f2c_symbol_c_name(unit, symbol),
                               dimension + 1U);
+            if (symbol->pointer) {
+                f2c_unit_indent(output, 1);
+                f2c_buffer_printf(output, "(void)%s_stride_%zu;\n", f2c_symbol_c_name(unit, symbol),
+                                  dimension + 1U);
+            }
         }
     }
 }
