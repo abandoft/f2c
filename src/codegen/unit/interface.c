@@ -277,6 +277,7 @@ void f2c_emit_interface_header(Context *context) {
                               "#endif\n\n"
                               "typedef struct f2c_descriptor {\n"
                               "    void *data;\n"
+                              "    bool deallocatable;\n"
                               "    size_t element_size;\n"
                               "    size_t rank;\n"
                               "    int64_t lower[15];\n"

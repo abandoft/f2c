@@ -376,8 +376,18 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                               "F2C_DEFINE_UNALIGNED_ACCESS(c8, f2c_complex_double)\n"
                               "F2C_DEFINE_UNALIGNED_ACCESS(c16, f2c_complex_long_double)\n");
         f2c_buffer_append(&context.output, "#undef F2C_DEFINE_UNALIGNED_ACCESS\n");
+        f2c_buffer_append(
+            &context.output,
+            "static inline F2C_UNUSED void f2c_store_message(char *target, size_t length, "
+            "const char *message) { size_t message_length; size_t copy_length; if (target == "
+            "NULL || message == NULL) return; message_length = strlen(message); copy_length = "
+            "length < message_length ? length : message_length; if (copy_length != 0U) "
+            "memmove(target, message, "
+            "copy_length); if (length > copy_length) memset(target + copy_length, ' ', length - "
+            "copy_length); }\n");
         f2c_buffer_append(&context.output, "typedef struct f2c_descriptor {\n"
                                            "    void *data;\n"
+                                           "    bool deallocatable;\n"
                                            "    size_t element_size;\n"
                                            "    size_t rank;\n"
                                            "    int64_t lower[15];\n"
