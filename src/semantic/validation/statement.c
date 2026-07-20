@@ -331,8 +331,11 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         if (intrinsic_subroutine) {
             if (strcmp(statement->name, "mvbits") == 0)
                 f2c_validation_mvbits(context, unit, statement);
-            else
+            else if (strcmp(statement->name, "random_number") == 0 ||
+                     strcmp(statement->name, "random_seed") == 0)
                 f2c_validation_random_intrinsic(context, statement);
+            else
+                f2c_validation_time_intrinsic(context, statement);
         } else {
             definition = f2c_validation_procedure_call(
                 context, unit, statement->line, statement->text, statement->name,

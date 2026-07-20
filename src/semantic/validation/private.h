@@ -48,6 +48,7 @@ void f2c_validation_numeric_operation_intrinsic(Context *context, Unit *unit, si
 void f2c_validation_real_representation_intrinsic(Context *context, Unit *unit, size_t line,
                                                   const char *statement_text, F2cExpr *expression);
 void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement);
+void f2c_validation_time_intrinsic(Context *context, F2cStatement *statement);
 void f2c_validation_random_intrinsic(Context *context, F2cStatement *statement);
 void f2c_validation_io_item_calls(Context *context, Unit *unit, size_t line,
                                   const char *statement_text, F2cIoItem *item);

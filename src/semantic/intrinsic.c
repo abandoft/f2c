@@ -272,8 +272,9 @@ const F2cIntrinsicSignature *f2c_find_intrinsic(const char *name) {
 int f2c_is_intrinsic_name(const char *name) { return f2c_find_intrinsic(name) != NULL; }
 
 int f2c_is_intrinsic_subroutine(const char *name) {
-    return name != NULL && (strcmp(name, "mvbits") == 0 || strcmp(name, "random_number") == 0 ||
-                            strcmp(name, "random_seed") == 0);
+    return name != NULL && (strcmp(name, "cpu_time") == 0 || strcmp(name, "date_and_time") == 0 ||
+                            strcmp(name, "mvbits") == 0 || strcmp(name, "random_number") == 0 ||
+                            strcmp(name, "random_seed") == 0 || strcmp(name, "system_clock") == 0);
 }
 
 int f2c_intrinsic_is_bit(F2cIntrinsicId intrinsic) {
