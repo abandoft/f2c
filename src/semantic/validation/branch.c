@@ -213,6 +213,13 @@ static void validate_statement_branches(Context *context, const Unit *unit,
                 statement->kind == F2C_STMT_ARITHMETIC_IF   ? "arithmetic IF target"
                 : statement->kind == F2C_STMT_ASSIGNED_GOTO ? "assigned GOTO target"
                                                             : "computed GOTO target");
+    } else if (statement->kind == F2C_STMT_CALL && statement->label_count != 0U) {
+        for (label = 0U; label < statement->label_count; ++label)
+            validate_branch_target(context, targets, target_count, ranges, range_count,
+                                   source_index, statement->labels[label],
+                                   statement->label_spans != NULL ? &statement->label_spans[label]
+                                                                  : &statement->span,
+                                   "alternate return target");
     } else if (statement->kind == F2C_STMT_ASSIGNED_GOTO && statement->name != NULL) {
         size_t assignment;
         size_t found = 0U;
