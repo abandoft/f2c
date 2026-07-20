@@ -238,6 +238,16 @@ void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *i
         free(step);
         return;
     }
+    if (input) {
+        F2cIoItem lowered_item;
+        F2cExpr lowered_expression;
+        if (f2c_io_begin_unaligned_input(context, unit, item, depth, &lowered_item,
+                                         &lowered_expression)) {
+            f2c_io_emit_formatted_item(context, unit, &lowered_item, input, unit_number, depth + 1);
+            f2c_io_end_unaligned_input(context, item->expression->symbol, depth);
+            return;
+        }
+    }
     expression = item->expression;
     symbol = expression != NULL ? expression->symbol : NULL;
     if (expression == NULL)
@@ -253,13 +263,41 @@ void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *i
                           count != NULL ? count : "0U");
         {
             Buffer value = {0};
+            char *unaligned_address = NULL;
             if (symbol->type == TYPE_CHARACTER)
                 f2c_buffer_printf(&value, "%s + f2c_format_index * (size_t)(%s)",
                                   f2c_symbol_c_name(unit, symbol),
                                   character_length != NULL ? character_length : "1U");
+            else if (symbol->equivalence_unaligned)
+                unaligned_address =
+                    f2c_emit_unaligned_linear_address(unit, symbol, "f2c_format_index");
             else
                 f2c_buffer_printf(&value, "%s[f2c_format_index]", f2c_symbol_c_name(unit, symbol));
-            if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL)
+            if (unaligned_address != NULL) {
+                const char *suffix = f2c_unaligned_access_suffix(symbol);
+                f2c_io_indent(&context->output, depth + 1);
+                f2c_buffer_append(&context->output, "{\n");
+                f2c_io_indent(&context->output, depth + 2);
+                f2c_buffer_printf(&context->output,
+                                  "unsigned char *f2c_unaligned_io_address = %s;\n",
+                                  unaligned_address);
+                f2c_io_indent(&context->output, depth + 2);
+                f2c_buffer_printf(&context->output,
+                                  "%s f2c_unaligned_io_value = f2c_unaligned_load_%s("
+                                  "f2c_unaligned_io_address);\n",
+                                  f2c_symbol_c_type(symbol), suffix);
+                emit_formatted_scalar(context, unit, NULL, symbol, "f2c_unaligned_io_value", input,
+                                      depth + 2);
+                if (input) {
+                    f2c_io_indent(&context->output, depth + 2);
+                    f2c_buffer_printf(&context->output,
+                                      "f2c_unaligned_store_%s(f2c_unaligned_io_address, "
+                                      "f2c_unaligned_io_value);\n",
+                                      suffix);
+                }
+                f2c_io_indent(&context->output, depth + 1);
+                f2c_buffer_append(&context->output, "}\n");
+            } else if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL)
                 emit_formatted_derived(context, unit,
                                        value.data != NULL ? value.data
                                                           : f2c_symbol_c_name(unit, symbol),
@@ -269,6 +307,7 @@ void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *i
                                       value.data != NULL ? value.data
                                                          : f2c_symbol_c_name(unit, symbol),
                                       input, depth + 1);
+            free(unaligned_address);
             free(value.data);
         }
         f2c_io_indent(&context->output, depth);

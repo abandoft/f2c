@@ -70,7 +70,18 @@ int f2c_io_emit_unformatted_array(Context *context, Unit *unit, const F2cIoItem 
                           ordinals[current], ordinals[current], current + 1U, ordinals[current]);
         ++emitted_depth;
     }
-    if (element->type == TYPE_DERIVED && element->derived_type != NULL) {
+    if (input && element->symbol != NULL && element->symbol->equivalence_unaligned) {
+        F2cIoItem element_item = {0};
+        F2cIoItem lowered_item;
+        F2cExpr lowered_expression;
+        element_item.expression = element;
+        if (!f2c_io_begin_unaligned_input(context, unit, &element_item, emitted_depth,
+                                          &lowered_item, &lowered_expression))
+            goto cleanup;
+        f2c_io_emit_unformatted_scalar(context, unit, &lowered_expression, "f2c_unaligned_io_value",
+                                       input, stream, status, emitted_depth + 1);
+        f2c_io_end_unaligned_input(context, element->symbol, emitted_depth);
+    } else if (element->type == TYPE_DERIVED && element->derived_type != NULL) {
         f2c_io_emit_unformatted_derived_scalar(context, unit, element->derived_type, value, input,
                                                stream, unit_number, status, emitted_depth);
     } else {

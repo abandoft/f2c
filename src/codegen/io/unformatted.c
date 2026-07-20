@@ -305,6 +305,17 @@ int f2c_io_emit_unformatted_item(Context *context, Unit *unit, const F2cIoItem *
         return 0;
     if (item->implied_do)
         return emit_implied_do(context, unit, item, input, stream, unit_number, status, depth);
+    if (input) {
+        F2cIoItem lowered_item;
+        F2cExpr lowered_expression;
+        if (f2c_io_begin_unaligned_input(context, unit, item, depth, &lowered_item,
+                                         &lowered_expression)) {
+            const int result = f2c_io_emit_unformatted_item(context, unit, &lowered_item, input,
+                                                            stream, unit_number, status, depth + 1);
+            f2c_io_end_unaligned_input(context, item->expression->symbol, depth);
+            return result;
+        }
+    }
     expression = item->expression;
     if (expression == NULL)
         return 0;
