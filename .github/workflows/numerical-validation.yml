@@ -58,6 +58,8 @@ jobs:
         run: sh test/bit_intrinsic_differential.sh build/numerical/f2c
       - name: Differential-test numeric model intrinsics
         run: sh test/numeric_model_intrinsic_differential.sh build/numerical/f2c
+      - name: Differential-test numeric operation intrinsics
+        run: sh test/numeric_operation_intrinsic_differential.sh build/numerical/f2c
       - name: Differential-test real representation intrinsics
         run: sh test/real_representation_intrinsic_differential.sh build/numerical/f2c
       - name: Differential-test character intrinsics
