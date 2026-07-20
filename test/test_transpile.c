@@ -1239,7 +1239,7 @@ static void test_common_block_storage(void) {
     expect(result.error_count == 0U, "named COMMON block translates");
     expect_contains(result.code, "struct f2c_common_infoc",
                     "COMMON block emits shared namespaced storage");
-    expect_contains(result.code, "f2c_common_infoc.field_0 = (*value)",
+    expect_contains(result.code, "f2c_common_infoc.view_0.field_0 = (*value)",
                     "COMMON members map by storage position");
     f2c_result_free(&result);
 }
@@ -1950,7 +1950,7 @@ static void test_lapack_driver_data_semantics(void) {
     expect(result.error_count == 0U, "LAPACK driver storage and DATA semantics translate");
     expect_contains(result.code, "double *f2c_constructor_values",
                     "F90 array constructors use typed, shape-checked temporary storage");
-    expect_contains(result.code, "memset(f2c_common_srnamc.field_0",
+    expect_contains(result.code, "f2c_common_srnamc.view_0.field_0",
                     "character COMMON assignment uses shared storage");
     expect_contains(result.code, "F2C_FORTRAN_MIN",
                     "Fortran MIN uses NaN-propagating numeric semantics");
