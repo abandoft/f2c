@@ -245,6 +245,7 @@ set(
     src/semantic/validation/intrinsic/bit.c
     src/semantic/validation/intrinsic/character.c
     src/semantic/validation/intrinsic/model.c
+    src/semantic/validation/intrinsic/numeric.c
     src/semantic/validation/intrinsic/representation.c
     src/semantic/validation/lifetime.c
     src/semantic/validation/private.h
@@ -498,6 +499,13 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_numeric_model_intrinsic_tests test/test_numeric_model_intrinsic.c)
     f2c_configure_test_target(f2c_numeric_model_intrinsic_tests)
     add_test(NAME numeric_model_intrinsic_semantics COMMAND f2c_numeric_model_intrinsic_tests)
+
+    add_executable(f2c_numeric_operation_intrinsic_tests test/test_numeric_operation_intrinsic.c)
+    f2c_configure_test_target(f2c_numeric_operation_intrinsic_tests)
+    add_test(
+        NAME numeric_operation_intrinsic_semantics
+        COMMAND f2c_numeric_operation_intrinsic_tests
+    )
 
     add_executable(
         f2c_real_representation_intrinsic_tests
