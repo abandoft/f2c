@@ -17,26 +17,20 @@ static Type normalized_kind_type(Type type) {
     return type;
 }
 
-static int intrinsic_selected_kind(const F2cExpr *expression, Type *kind_type) {
-    int64_t precision = 0;
-    int64_t range = 0;
+static int intrinsic_real_kind_type(const F2cExpr *expression, Type *kind_type) {
+    int64_t kind = 0;
     if (expression == NULL || expression->kind != F2C_EXPR_CALL || expression->text == NULL)
         return 0;
-    if (strcmp(expression->text, "selected_real_kind") == 0 && expression->child_count != 0U &&
-        f2c_evaluate_integer_constant(NULL, expression->children[0], &precision)) {
-        if (expression->child_count >= 2U &&
-            !f2c_evaluate_integer_constant(NULL, expression->children[1], &range))
-            return 0;
-        if (precision <= 6 && (range == 0 || range <= 37)) {
-            *kind_type = TYPE_REAL;
-            return 1;
-        }
-        if (precision <= 15 && (range == 0 || range <= 307)) {
-            *kind_type = TYPE_DOUBLE;
-            return 1;
-        }
-    }
-    return 0;
+    if (expression->intrinsic != F2C_INTRINSIC_SELECTED_REAL_KIND ||
+        !f2c_evaluate_integer_constant(NULL, expression, &kind))
+        return 0;
+    if (kind == f2c_default_kind(TYPE_REAL))
+        *kind_type = TYPE_REAL;
+    else if (kind == f2c_default_kind(TYPE_DOUBLE))
+        *kind_type = TYPE_DOUBLE;
+    else
+        return 0;
+    return 1;
 }
 
 Type f2c_kind_type_from_tokens(Unit *unit, const Line *line, size_t begin, size_t end) {
@@ -67,7 +61,7 @@ Type f2c_kind_type_from_tokens(Unit *unit, const Line *line, size_t begin, size_
             strcmp(expression->text, "kind") == 0 && expression->child_count == 1U)
             result = normalized_kind_type(expression->children[0]->type);
         else
-            (void)intrinsic_selected_kind(expression, &result);
+            (void)intrinsic_real_kind_type(expression, &result);
     }
     f2c_expr_free(expression);
     return result == TYPE_REAL || result == TYPE_DOUBLE ? result : TYPE_UNKNOWN;

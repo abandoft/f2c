@@ -108,10 +108,36 @@ static void test_attribute_keywords_as_identifiers(void) {
     f2c_result_free(&result);
 }
 
+static void test_selected_kind_type_selectors(void) {
+    static const char source[] = "program selected_kind_type_selectors\n"
+                                 "  implicit none\n"
+                                 "  integer, parameter :: wide_integer = selected_int_kind(18)\n"
+                                 "  integer(kind=wide_integer) :: integer_value\n"
+                                 "  real(selected_real_kind(6)) :: single_value\n"
+                                 "  real(kind=selected_real_kind(r=307)) :: double_value\n"
+                                 "  integer_value = 1_wide_integer\n"
+                                 "  single_value = 2.0\n"
+                                 "  double_value = 3.0d0\n"
+                                 "end program selected_kind_type_selectors\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code != NULL && result.error_count == 0U,
+           "SELECTED_*_KIND constants are accepted in declaration type selectors");
+    expect(result.code != NULL && strstr(result.code, "int64_t integer_value") != NULL,
+           "SELECTED_INT_KIND drives the declared INTEGER width");
+    expect(result.code != NULL && strstr(result.code, "float single_value") != NULL,
+           "precision-only SELECTED_REAL_KIND selects binary32");
+    expect(result.code != NULL && strstr(result.code, "double double_value") != NULL,
+           "range-only SELECTED_REAL_KIND selects binary64");
+    expect(!capture.captured, "valid selected-kind type selectors have no diagnostics");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_duplicate_attribute();
     test_duplicate_shape();
     test_continued_initializer_location();
     test_attribute_keywords_as_identifiers();
+    test_selected_kind_type_selectors();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
