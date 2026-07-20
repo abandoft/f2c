@@ -591,6 +591,8 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
     if (f2c_intrinsic_is_bit(expression->intrinsic) &&
         expression->intrinsic != F2C_INTRINSIC_MVBITS)
         return f2c_expression_bit_intrinsic(unit, expression, supported);
+    if (f2c_intrinsic_is_character(expression->intrinsic))
+        return f2c_expression_character_intrinsic(unit, expression, supported);
     if (expression->text != NULL && strcmp(expression->text, "present") == 0 &&
         expression->child_count == 1U && expression->children[0] != NULL &&
         expression->children[0]->kind == F2C_EXPR_NAME && expression->children[0]->symbol != NULL) {
@@ -655,58 +657,6 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
          ((strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0) &&
           expression->rank == 0U)))
         return f2c_expression_array_inquiry(unit, expression, supported);
-    if (expression->text != NULL && expression->child_count == 1U &&
-        expression->children[0]->type == TYPE_CHARACTER &&
-        (strcmp(expression->text, "len") == 0 || strcmp(expression->text, "len_trim") == 0)) {
-        char *length = f2c_character_length_expression(unit, expression->children[0]);
-        if (length == NULL) {
-            *supported = 0;
-            return NULL;
-        }
-        if (strcmp(expression->text, "len") == 0) {
-            f2c_buffer_printf(&result, "((int32_t)(%s))", length);
-        } else {
-            char *value;
-            char *pointer;
-            if (expression->children[0]->rank != 0U) {
-                free(length);
-                *supported = 0;
-                return NULL;
-            }
-            value = f2c_expression_emit(unit, expression->children[0], supported);
-            pointer = *supported && value != NULL
-                          ? f2c_character_source_pointer(unit, expression->children[0], value)
-                          : NULL;
-            if (pointer == NULL) {
-                free(value);
-                free(length);
-                *supported = 0;
-                return NULL;
-            }
-            f2c_buffer_printf(&result, "((int32_t)f2c_character_trim_length(%s, (size_t)(%s)))",
-                              pointer, length);
-            free(value);
-            free(pointer);
-        }
-        free(length);
-        return f2c_buffer_take(&result);
-    }
-    if (expression->text != NULL && strcmp(expression->text, "ichar") == 0 &&
-        expression->child_count >= 1U && expression->children[0]->type == TYPE_CHARACTER) {
-        char *value = f2c_expression_emit(unit, expression->children[0], supported);
-        char *pointer = *supported && value != NULL
-                            ? f2c_character_source_pointer(unit, expression->children[0], value)
-                            : NULL;
-        if (pointer == NULL) {
-            free(value);
-            *supported = 0;
-            return NULL;
-        }
-        f2c_buffer_printf(&result, "((int32_t)(unsigned char)(%s[0]))", pointer);
-        free(value);
-        free(pointer);
-        return f2c_buffer_take(&result);
-    }
     {
         int matched = 0;
         char *reduction = f2c_expression_relation_reduction(unit, expression, supported, &matched);

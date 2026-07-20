@@ -347,10 +347,15 @@ static int is_character_temporary(const F2cExpr *expression) {
     const int function_call = expression != NULL && expression->kind == F2C_EXPR_CALL &&
                               expression->type == TYPE_CHARACTER && expression->text != NULL &&
                               !f2c_is_intrinsic_name(expression->text);
+    const int intrinsic_call = expression != NULL && expression->kind == F2C_EXPR_CALL &&
+                               (expression->intrinsic == F2C_INTRINSIC_ADJUSTL ||
+                                expression->intrinsic == F2C_INTRINSIC_ADJUSTR ||
+                                expression->intrinsic == F2C_INTRINSIC_REPEAT ||
+                                expression->intrinsic == F2C_INTRINSIC_TRIM);
     const int concatenation = expression != NULL && expression->kind == F2C_EXPR_BINARY &&
                               expression->type == TYPE_CHARACTER && expression->text != NULL &&
                               strcmp(expression->text, "//") == 0;
-    return function_call || concatenation;
+    return function_call || intrinsic_call || concatenation;
 }
 
 static int statement_function_definition_line(const Unit *unit, size_t statement) {

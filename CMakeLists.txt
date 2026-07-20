@@ -93,6 +93,7 @@ set(
     src/codegen/expression.c
     src/codegen/expression/bit.c
     src/codegen/expression/call.c
+    src/codegen/expression/character.c
     src/codegen/expression/inquiry.c
     src/codegen/expression/private.h
     src/codegen/expression/reduction.c
@@ -146,6 +147,7 @@ set(
     src/core/config.c
     src/core/cleanup.c
     src/core/generated/bit.c
+    src/core/generated/character.c
     src/core/generated/io.c
     src/core/generated/list.c
     src/core/generated/private.h

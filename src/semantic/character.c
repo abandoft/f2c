@@ -272,8 +272,57 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
     if (expression->kind == F2C_EXPR_COMPONENT)
         return f2c_symbol_character_length(unit, expression->symbol);
     if (expression->kind == F2C_EXPR_CALL) {
-        if (expression->text != NULL && strcmp(expression->text, "char") == 0)
+        if (expression->intrinsic == F2C_INTRINSIC_CHAR ||
+            expression->intrinsic == F2C_INTRINSIC_ACHAR)
             return f2c_strdup("1U");
+        if (expression->intrinsic == F2C_INTRINSIC_ADJUSTL ||
+            expression->intrinsic == F2C_INTRINSIC_ADJUSTR) {
+            const F2cExpr *string =
+                f2c_intrinsic_argument(expression->children, expression->child_count, "string", 0U);
+            return f2c_character_length_expression(unit, string);
+        }
+        if (expression->intrinsic == F2C_INTRINSIC_REPEAT) {
+            const F2cExpr *string =
+                f2c_intrinsic_argument(expression->children, expression->child_count, "string", 0U);
+            const F2cExpr *ncopies = f2c_intrinsic_argument(expression->children,
+                                                            expression->child_count, "ncopies", 1U);
+            char *string_length = f2c_character_length_expression(unit, string);
+            int supported = 1;
+            char *count =
+                ncopies != NULL ? f2c_emit_expression_ast(unit, ncopies, &supported) : NULL;
+            if (!supported || string_length == NULL || count == NULL) {
+                free(string_length);
+                free(count);
+                return NULL;
+            }
+            f2c_buffer_printf(&result, "f2c_character_repeat_length((size_t)(%s), (int64_t)(%s))",
+                              string_length, count);
+            free(string_length);
+            free(count);
+            return f2c_buffer_take(&result);
+        }
+        if (expression->intrinsic == F2C_INTRINSIC_TRIM) {
+            const F2cExpr *string =
+                f2c_intrinsic_argument(expression->children, expression->child_count, "string", 0U);
+            char *string_length = f2c_character_length_expression(unit, string);
+            int supported = 1;
+            char *value = string != NULL ? f2c_emit_expression_ast(unit, string, &supported) : NULL;
+            char *pointer = supported && value != NULL
+                                ? f2c_character_source_pointer(unit, string, value)
+                                : NULL;
+            if (!supported || string_length == NULL || value == NULL || pointer == NULL) {
+                free(string_length);
+                free(value);
+                free(pointer);
+                return NULL;
+            }
+            f2c_buffer_printf(&result, "f2c_character_trim_length(%s, (size_t)(%s))", pointer,
+                              string_length);
+            free(string_length);
+            free(value);
+            free(pointer);
+            return f2c_buffer_take(&result);
+        }
         if (expression->text != NULL && expression->child_count != 0U &&
             (strcmp(expression->text, "reshape") == 0 || strcmp(expression->text, "pack") == 0 ||
              strcmp(expression->text, "unpack") == 0 || strcmp(expression->text, "spread") == 0 ||
@@ -401,7 +450,7 @@ char *f2c_character_source_pointer(Unit *unit, const F2cExpr *right, const char 
         return f2c_buffer_take(&result);
     }
     if (right->kind == F2C_EXPR_CALL && right->type == TYPE_CHARACTER) {
-        if (right->text != NULL && strcmp(right->text, "char") == 0) {
+        if (right->intrinsic == F2C_INTRINSIC_CHAR || right->intrinsic == F2C_INTRINSIC_ACHAR) {
             f2c_buffer_printf(&result, "&(char){%s}", right_code);
             return f2c_buffer_take(&result);
         }
