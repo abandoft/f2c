@@ -116,6 +116,7 @@ foreach(
        elemental_procedure
        array_inquiry
        bit_intrinsics
+       real_representation_intrinsics
        character_intrinsics
        descriptor_temporary
        equivalence_group
