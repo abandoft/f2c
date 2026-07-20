@@ -19,6 +19,13 @@ static int symbol_has_storage_initializer(const Symbol *symbol) {
             symbol->data_initializer);
 }
 
+static const char *symbol_common_storage_block(const Symbol *symbol) {
+    if (symbol == NULL)
+        return NULL;
+    return symbol->equivalence_common_block != NULL ? symbol->equivalence_common_block
+                                                    : symbol->common_block;
+}
+
 static void validate_block_data_unit(Context *context, Unit *unit) {
     size_t index;
     if (unit == NULL || unit->kind != UNIT_BLOCK_DATA)
@@ -38,9 +45,10 @@ static void validate_block_data_unit(Context *context, Unit *unit) {
     }
     for (index = 0U; index < unit->symbol_count; ++index) {
         const Symbol *symbol = &unit->symbols[index];
+        const char *block = symbol_common_storage_block(symbol);
         if (!symbol_has_storage_initializer(symbol) || symbol->parameter)
             continue;
-        if (symbol->common_block == NULL || symbol->common_block[0] == '\0') {
+        if (block == NULL || block[0] == '\0') {
             const F2cSourceSpan *span = symbol->declaration_span.begin.line != 0U
                                             ? &symbol->declaration_span
                                             : &unit->header_span;
@@ -70,8 +78,9 @@ static void validate_module_specification_unit(Context *context, Unit *unit) {
 static void validate_common_initialization_owner(Context *context, size_t unit_index,
                                                  size_t symbol_index, Unit *unit,
                                                  const Symbol *symbol) {
+    const char *block = symbol_common_storage_block(symbol);
     size_t previous_unit;
-    if (!symbol_has_storage_initializer(symbol))
+    if (!symbol_has_storage_initializer(symbol) || block == NULL)
         return;
     if (unit->kind != UNIT_BLOCK_DATA) {
         f2c_diagnostic_span_code(
@@ -81,9 +90,11 @@ static void validate_common_initialization_owner(Context *context, size_t unit_i
             1, "COMMON entity '%s' may be initialized only in BLOCK DATA", symbol->name);
         return;
     }
-    if (symbol->common_block[0] == '\0') {
-        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
-                                 "blank COMMON entity '%s' cannot be initialized", symbol->name);
+    if (block[0] == '\0') {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC,
+                                 symbol->common_block != NULL ? &symbol->common_span
+                                                              : &symbol->declaration_span,
+                                 1, "blank COMMON entity '%s' cannot be initialized", symbol->name);
         return;
     }
     for (previous_unit = 0U; previous_unit < unit_index; ++previous_unit) {
@@ -94,17 +105,34 @@ static void validate_common_initialization_owner(Context *context, size_t unit_i
         for (candidate_index = 0U; candidate_index < candidate_unit->symbol_count;
              ++candidate_index) {
             const Symbol *candidate = &candidate_unit->symbols[candidate_index];
-            if (candidate->common_block != NULL && symbol_has_storage_initializer(candidate) &&
-                strcmp(candidate->common_block, symbol->common_block) == 0) {
+            const char *candidate_block = symbol_common_storage_block(candidate);
+            if (candidate_block != NULL && symbol_has_storage_initializer(candidate) &&
+                strcmp(candidate_block, block) == 0) {
                 f2c_diagnostic_span_code(
-                    context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
-                    "COMMON block '%s' is initialized by more than one BLOCK DATA program unit",
-                    display_block_name(symbol->common_block));
+                    context, F2C_DIAGNOSTIC_SEMANTIC,
+                    symbol->common_block != NULL ? &symbol->common_span : &symbol->declaration_span,
+                    1, "COMMON block '%s' is initialized by more than one BLOCK DATA program unit",
+                    display_block_name(block));
                 return;
             }
         }
     }
-    (void)symbol_index;
+    if (symbol->common_block == NULL && symbol->equivalence_common_block != NULL) {
+        size_t candidate_index;
+        for (candidate_index = 0U; candidate_index < unit->symbol_count; ++candidate_index) {
+            const Symbol *candidate = &unit->symbols[candidate_index];
+            const char *candidate_block = symbol_common_storage_block(candidate);
+            if (candidate_index == symbol_index || candidate_block == NULL ||
+                strcmp(candidate_block, block) != 0 || !symbol_has_storage_initializer(candidate))
+                continue;
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_UNSUPPORTED, &symbol->declaration_span, 1,
+                "COMMON block '%s' DATA initializers require more than one overlapping C17 "
+                "storage view",
+                display_block_name(block));
+            return;
+        }
+    }
 }
 
 static int checked_multiply(uint64_t left, uint64_t right, uint64_t *result) {
@@ -830,9 +858,9 @@ void f2c_validate_project_storage(Context *context) {
             uint64_t extent;
             uint64_t canonical_extent;
             Unit *canonical_unit;
+            validate_common_initialization_owner(context, u, s, unit, symbol);
             if (symbol->common_block == NULL)
                 continue;
-            validate_common_initialization_owner(context, u, s, unit, symbol);
             if (block_seen_earlier_in_unit(unit, s, symbol->common_block))
                 continue;
             if (!common_block_layout(context, unit, symbol->common_block, &extent))

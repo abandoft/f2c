@@ -331,6 +331,13 @@ static int common_symbol_has_initializer(const Symbol *symbol) {
             symbol->data_initializer);
 }
 
+static const char *common_symbol_storage_block(const Symbol *symbol) {
+    if (symbol == NULL)
+        return NULL;
+    return symbol->equivalence_common_block != NULL ? symbol->equivalence_common_block
+                                                    : symbol->common_block;
+}
+
 static int unit_has_common_block(const Unit *unit, const char *block) {
     size_t symbol_index;
     for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index)
@@ -348,11 +355,29 @@ static Unit *find_common_initializer_owner(Context *context, const char *block,
         size_t symbol_index;
         for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
             Symbol *candidate = &unit->symbols[symbol_index];
-            if (candidate->common_block != NULL && strcmp(candidate->common_block, block) == 0 &&
+            const char *candidate_block = common_symbol_storage_block(candidate);
+            if (candidate_block != NULL && strcmp(candidate_block, block) == 0 &&
                 common_symbol_has_initializer(candidate)) {
                 *owner_index = unit_index;
                 return unit;
             }
+        }
+    }
+    return NULL;
+}
+
+static Symbol *find_common_equivalence_initializer(Unit *unit, const char *block,
+                                                   size_t *symbol_index) {
+    size_t index;
+    if (unit == NULL)
+        return NULL;
+    for (index = 0U; index < unit->symbol_count; ++index) {
+        Symbol *candidate = &unit->symbols[index];
+        if (candidate->common_block == NULL && candidate->equivalence_common_block != NULL &&
+            strcmp(candidate->equivalence_common_block, block) == 0 &&
+            common_symbol_has_initializer(candidate)) {
+            *symbol_index = index;
+            return candidate;
         }
     }
     return NULL;
@@ -606,9 +631,32 @@ void f2c_emit_common_blocks(Context *context) {
             f2c_buffer_append(&context->output, "} ");
             append_common_storage_name(&context->output, first->common_block);
             if (initializer_owner != NULL) {
+                size_t equivalence_initializer_index = 0U;
+                Symbol *equivalence_initializer = find_common_equivalence_initializer(
+                    initializer_owner, first->common_block, &equivalence_initializer_index);
                 size_t member_index = 0U;
                 int emitted_initializer = 0;
                 Symbol *initializer_symbol;
+                if (equivalence_initializer != NULL) {
+                    char *initializer = f2c_unit_static_storage_initializer(
+                        initializer_owner, equivalence_initializer);
+                    if (initializer == NULL) {
+                        f2c_diagnostic_span_code(
+                            context, F2C_DIAGNOSTIC_UNSUPPORTED,
+                            &equivalence_initializer->declaration_span, 1,
+                            "COMMON EQUIVALENCE initializer for '%s' cannot be emitted as static "
+                            "C17 data",
+                            equivalence_initializer->name);
+                    } else {
+                        f2c_buffer_printf(
+                            &context->output, " = { .equivalence_%zu_%zu_%zu = { .value = %s } }",
+                            initializer_owner_index, equivalence_initializer->equivalence_group,
+                            equivalence_initializer_index, initializer);
+                    }
+                    free(initializer);
+                    f2c_buffer_append(&context->output, ";\n");
+                    continue;
+                }
                 f2c_buffer_printf(&context->output, " = { .view_%zu = {\n",
                                   initializer_owner_index);
                 while ((initializer_symbol = find_common_member(
