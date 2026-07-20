@@ -218,6 +218,13 @@ static F2cExpr *parse_postfix(AstParser *parser, const F2cToken *name_token) {
                                ? f2c_resolve_intrinsic_type(expression->text, argument_types,
                                                             expression->child_count)
                                : TYPE_UNKNOWN;
+        if (signature != NULL && f2c_intrinsic_is_real_representation(signature->id)) {
+            const F2cExpr *model =
+                f2c_intrinsic_argument(expression->children, expression->child_count, "x", 0U);
+            if (model != NULL)
+                expression->type =
+                    signature->id == F2C_INTRINSIC_EXPONENT ? TYPE_INTEGER : model->type;
+        }
         if (strcmp(expression->text, "real") == 0 && expression->child_count >= 2U) {
             Type kind_type = f2c_ast_kind_type_from_argument(expression->children[1]);
             if (kind_type == TYPE_REAL || kind_type == TYPE_DOUBLE)
@@ -313,8 +320,8 @@ static F2cExpr *parse_postfix(AstParser *parser, const F2cToken *name_token) {
             expression->type_kind = f2c_resolve_intrinsic_kind(
                 expression->text, expression->children, expression->child_count);
         if (signature != NULL && signature->kind_rule == F2C_INTRINSIC_KIND_OPTIONAL) {
-            const F2cExpr *kind_argument = f2c_ast_intrinsic_argument(
-                expression, "kind", signature->maximum_arguments - 1U);
+            const F2cExpr *kind_argument =
+                f2c_ast_intrinsic_argument(expression, "kind", signature->maximum_arguments - 1U);
             const int selected_kind = f2c_ast_kind_value_from_argument(kind_argument);
             if (selected_kind != 0)
                 expression->type_kind = selected_kind;
