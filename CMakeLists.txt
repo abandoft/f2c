@@ -97,6 +97,7 @@ set(
     src/codegen/expression/inquiry.c
     src/codegen/expression/model.c
     src/codegen/expression/private.h
+    src/codegen/expression/representation.c
     src/codegen/expression/reduction.c
     src/codegen/expression/statement_function.c
     src/codegen/io.c

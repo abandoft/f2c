@@ -595,6 +595,8 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         return f2c_expression_character_intrinsic(unit, expression, supported);
     if (f2c_intrinsic_is_numeric_model(expression->intrinsic))
         return f2c_expression_numeric_model_intrinsic(unit, expression, supported);
+    if (f2c_intrinsic_is_real_representation(expression->intrinsic))
+        return f2c_expression_real_representation_intrinsic(unit, expression, supported);
     if (expression->text != NULL && strcmp(expression->text, "present") == 0 &&
         expression->child_count == 1U && expression->children[0] != NULL &&
         expression->children[0]->kind == F2C_EXPR_NAME && expression->children[0]->symbol != NULL) {

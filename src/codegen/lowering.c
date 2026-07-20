@@ -330,9 +330,6 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
         else
             f2c_buffer_printf(&result, "copysign(fabs((double)(%s)), (double)(%s))",
                               count >= 1U ? args[0] : "0", count >= 2U ? args[1] : "0");
-    } else if (strcmp(name, "exponent") == 0) {
-        f2c_buffer_printf(&result, "((int32_t)(ilogb(fabs((double)(%s))) + 1))",
-                          count != 0U ? args[0] : "0");
     } else if (strcmp(name, "ceiling") == 0) {
         f2c_buffer_printf(&result, "((int32_t)ceil((double)(%s)))", count != 0U ? args[0] : "0");
     } else if (strcmp(name, "floor") == 0) {
