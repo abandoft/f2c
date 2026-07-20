@@ -323,7 +323,7 @@ static void test_intrinsic_type_registry(void) {
     F2cExpr scalar_argument;
     F2cExpr *rank_arguments[3];
     Unit unit;
-    F2cExpr *character_call;
+    F2cExpr *intrinsic_call;
     const char *error_at = NULL;
     const F2cIntrinsicSignature *mod_signature;
     expect(f2c_resolve_intrinsic_type("sqrt", real_argument, 1U) == TYPE_REAL,
@@ -346,8 +346,7 @@ static void test_intrinsic_type_registry(void) {
                f2c_find_intrinsic("verify")->id == F2C_INTRINSIC_VERIFY,
            "character intrinsics have stable typed-IR identities");
     expect(f2c_find_intrinsic("selected_real_kind") != NULL &&
-               f2c_find_intrinsic("selected_real_kind")->id ==
-                   F2C_INTRINSIC_SELECTED_REAL_KIND,
+               f2c_find_intrinsic("selected_real_kind")->id == F2C_INTRINSIC_SELECTED_REAL_KIND,
            "numeric model intrinsics have stable typed-IR identities");
     expect(f2c_resolve_intrinsic_rank("bit_size", kind_arguments, 1U) == 0U,
            "BIT_SIZE is scalar even when its model argument is not elemental");
@@ -380,14 +379,49 @@ static void test_intrinsic_type_registry(void) {
     expect(f2c_resolve_intrinsic_rank("transfer", rank_arguments, 3U) == 1U,
            "TRANSFER with SIZE has a rank-one result");
     memset(&unit, 0, sizeof(unit));
-    character_call = f2c_parse_expression_ast(
+    intrinsic_call = f2c_parse_expression_ast(
         &unit, "index(substring='R', string='FORTRAN', kind=8)", &error_at);
-    expect(character_call != NULL && error_at == NULL &&
-               character_call->intrinsic == F2C_INTRINSIC_INDEX &&
-               character_call->type == TYPE_INTEGER && character_call->type_kind == 8 &&
-               character_call->rank == 0U,
+    expect(intrinsic_call != NULL && error_at == NULL &&
+               intrinsic_call->intrinsic == F2C_INTRINSIC_INDEX &&
+               intrinsic_call->type == TYPE_INTEGER && intrinsic_call->type_kind == 8 &&
+               intrinsic_call->rank == 0U,
            "character search keyword association determines typed integer result kind");
-    f2c_expr_free(character_call);
+    f2c_expr_free(intrinsic_call);
+
+    intrinsic_call = f2c_parse_expression_ast(&unit, "aint(a=1.5_8)", &error_at);
+    expect(intrinsic_call != NULL && error_at == NULL &&
+               intrinsic_call->intrinsic == F2C_INTRINSIC_AINT &&
+               intrinsic_call->type == TYPE_DOUBLE && intrinsic_call->type_kind == 8,
+           "AINT inherits the REAL kind of A when KIND is absent");
+    f2c_expr_free(intrinsic_call);
+
+    intrinsic_call = f2c_parse_expression_ast(&unit, "anint(kind=4, a=1.5_8)", &error_at);
+    expect(intrinsic_call != NULL && error_at == NULL &&
+               intrinsic_call->intrinsic == F2C_INTRINSIC_ANINT &&
+               intrinsic_call->type == TYPE_REAL && intrinsic_call->type_kind == 4,
+           "ANINT selected KIND controls the typed REAL result independent of keyword order");
+    f2c_expr_free(intrinsic_call);
+
+    intrinsic_call = f2c_parse_expression_ast(&unit, "ceiling(kind=8, a=1.25)", &error_at);
+    expect(intrinsic_call != NULL && error_at == NULL &&
+               intrinsic_call->intrinsic == F2C_INTRINSIC_CEILING &&
+               intrinsic_call->type == TYPE_INTEGER && intrinsic_call->type_kind == 8,
+           "CEILING selected KIND is represented in typed IR");
+    f2c_expr_free(intrinsic_call);
+
+    intrinsic_call =
+        f2c_parse_expression_ast(&unit, "merge(mask=.true., fsource=2_8, tsource=1_8)", &error_at);
+    expect(intrinsic_call != NULL && error_at == NULL &&
+               intrinsic_call->intrinsic == F2C_INTRINSIC_MERGE &&
+               intrinsic_call->type == TYPE_INTEGER && intrinsic_call->type_kind == 8,
+           "MERGE derives its result from TSOURCE rather than source argument order");
+    f2c_expr_free(intrinsic_call);
+
+    intrinsic_call = f2c_parse_expression_ast(&unit, "modulo(p=3, a=-1)", &error_at);
+    expect(intrinsic_call != NULL && error_at == NULL &&
+               intrinsic_call->intrinsic == F2C_INTRINSIC_MODULO,
+           "MODULO has a stable typed-IR identity and keyword association");
+    f2c_expr_free(intrinsic_call);
 }
 
 static void test_fixed_form_spaced_operator_emission(void) {

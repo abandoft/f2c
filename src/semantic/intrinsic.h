@@ -27,7 +27,8 @@ typedef enum F2cIntrinsicRankRule {
 typedef enum F2cIntrinsicKindRule {
     F2C_INTRINSIC_KIND_DEFAULT,
     F2C_INTRINSIC_KIND_FIRST,
-    F2C_INTRINSIC_KIND_OPTIONAL
+    F2C_INTRINSIC_KIND_OPTIONAL,
+    F2C_INTRINSIC_KIND_FIRST_OPTIONAL
 } F2cIntrinsicKindRule;
 
 typedef struct F2cIntrinsicSignature {
@@ -46,6 +47,7 @@ int f2c_is_intrinsic_subroutine(const char *name);
 int f2c_intrinsic_is_bit(F2cIntrinsicId intrinsic);
 int f2c_intrinsic_is_character(F2cIntrinsicId intrinsic);
 int f2c_intrinsic_is_numeric_model(F2cIntrinsicId intrinsic);
+int f2c_intrinsic_is_numeric_operation(F2cIntrinsicId intrinsic);
 int f2c_intrinsic_is_real_representation(F2cIntrinsicId intrinsic);
 const F2cExpr *f2c_intrinsic_argument(F2cExpr *const *arguments, size_t count, const char *keyword,
                                       size_t position);

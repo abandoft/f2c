@@ -47,6 +47,23 @@ static void resolve_intrinsic_type(F2cExpr *expression, const F2cIntrinsicSignat
         if (model != NULL)
             expression->type = signature->id == F2C_INTRINSIC_EXPONENT ? TYPE_INTEGER : model->type;
     }
+    if (signature != NULL &&
+        (signature->id == F2C_INTRINSIC_AINT || signature->id == F2C_INTRINSIC_ANINT)) {
+        const F2cExpr *model =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "a", 0U);
+        const F2cExpr *kind =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 1U);
+        const Type selected = f2c_ast_kind_type_from_argument(kind);
+        if (model != NULL)
+            expression->type = model->type;
+        if (selected == TYPE_REAL || selected == TYPE_DOUBLE)
+            expression->type = selected;
+    } else if (signature != NULL && signature->id == F2C_INTRINSIC_MERGE) {
+        const F2cExpr *source =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "tsource", 0U);
+        if (source != NULL)
+            expression->type = source->type;
+    }
     if (strcmp(expression->text, "real") == 0 && expression->child_count >= 2U) {
         const Type kind_type = f2c_ast_kind_type_from_argument(expression->children[1]);
         if (kind_type == TYPE_REAL || kind_type == TYPE_DOUBLE)
@@ -124,6 +141,14 @@ static void resolve_intrinsic_kind(F2cExpr *expression, const F2cIntrinsicSignat
     }
     if (strcmp(expression->text, "matmul") == 0)
         expression->type_kind = matmul_result_kind(expression);
+    if (signature != NULL && signature->id == F2C_INTRINSIC_MERGE) {
+        const F2cExpr *source =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "tsource", 0U);
+        if (source != NULL) {
+            expression->type_kind = source->type_kind;
+            expression->derived_type = source->derived_type;
+        }
+    }
     if (strcmp(expression->text, "real") == 0 && expression->child_count >= 2U) {
         const int selected_kind = f2c_ast_kind_value_from_argument(expression->children[1]);
         if (selected_kind != 0)
@@ -143,7 +168,8 @@ static void resolve_intrinsic_kind(F2cExpr *expression, const F2cIntrinsicSignat
     if (signature != NULL && signature->kind_rule != F2C_INTRINSIC_KIND_DEFAULT)
         expression->type_kind = f2c_resolve_intrinsic_kind(expression->text, expression->children,
                                                            expression->child_count);
-    if (signature != NULL && signature->kind_rule == F2C_INTRINSIC_KIND_OPTIONAL) {
+    if (signature != NULL && (signature->kind_rule == F2C_INTRINSIC_KIND_OPTIONAL ||
+                              signature->kind_rule == F2C_INTRINSIC_KIND_FIRST_OPTIONAL)) {
         const F2cExpr *kind_argument =
             f2c_ast_intrinsic_argument(expression, "kind", signature->maximum_arguments - 1U);
         const int selected_kind = f2c_ast_kind_value_from_argument(kind_argument);
