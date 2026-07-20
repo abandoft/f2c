@@ -35,9 +35,13 @@ static void test_section_lowering(void) {
                                  "  integer, target :: storage(-2:9)\n"
                                  "  integer, pointer :: values(:)\n"
                                  "  integer, pointer :: nested(:)\n"
+                                 "  integer, pointer :: remapped(:, :)\n"
                                  "  integer, pointer :: element\n"
-                                 "  values => storage(0:8:2)\n"
+                                 "  values(0:) => storage(0:8:2)\n"
+                                 "  if (.not. associated(pointer=values, "
+                                 "target=storage(0:8:2))) stop 1\n"
                                  "  nested => values(2:5:2)\n"
+                                 "  remapped(0:2, -1:2) => storage\n"
                                  "  element => storage(3)\n"
                                  "  nested(1) = element\n"
                                  "end program pointer_section\n";
@@ -48,6 +52,16 @@ static void test_section_lowering(void) {
                     "array pointer storage retains a dynamic stride");
     expect_contains(result.code, "f2c_section_extent(f2c_pointer_first_1",
                     "section extent is computed from single-evaluation temporaries");
+    expect_contains(result.code, "const int64_t f2c_pointer_bound_lower_1",
+                    "pointer lower bounds are captured in single-evaluation temporaries");
+    expect_contains(result.code, "size_t f2c_pointer_remap_count = 1U;",
+                    "rank remapping validates the requested pointer element count");
+    expect_contains(result.code, "f2c_pointer_target_count < f2c_pointer_remap_count",
+                    "rank remapping rejects targets that are too small");
+    expect_contains(result.code, "ptrdiff_t f2c_pointer_remap_stride",
+                    "rank remapping creates a column-major descriptor stride chain");
+    expect_contains(result.code, "f2c_associated_array_target((const void *)(values)",
+                    "ASSOCIATED lowers target sections through descriptor identity checks");
     expect_contains(result.code, "f2c_descriptor_stride_step((ptrdiff_t)(values_stride_1)",
                     "pointer-to-pointer sections compose their source and section strides");
     expect_contains(result.code, "element = &(storage[",
@@ -100,9 +114,53 @@ static void test_invalid_targets(void) {
                                                     "  character(len=3), pointer :: pointer_value\n"
                                                     "  pointer_value => value\n"
                                                     "end program character_length_mismatch\n";
+    static const char missing_lower_bound[] = "program missing_lower_bound\n"
+                                              "  integer, target :: value(4)\n"
+                                              "  integer, pointer :: pointer_value(:)\n"
+                                              "  pointer_value(:) => value\n"
+                                              "end program missing_lower_bound\n";
+    static const char mixed_bounds[] = "program mixed_bounds\n"
+                                       "  integer, target :: value(4)\n"
+                                       "  integer, pointer :: pointer_value(:, :)\n"
+                                       "  pointer_value(1:, 1:2) => value\n"
+                                       "end program mixed_bounds\n";
+    static const char pointer_stride[] = "program pointer_stride\n"
+                                         "  integer, target :: value(4)\n"
+                                         "  integer, pointer :: pointer_value(:)\n"
+                                         "  pointer_value(1:4:2) => value\n"
+                                         "end program pointer_stride\n";
+    static const char null_with_bounds[] = "program null_with_bounds\n"
+                                           "  integer, pointer :: pointer_value(:)\n"
+                                           "  pointer_value(1:) => null()\n"
+                                           "end program null_with_bounds\n";
+    static const char scalar_remap_target[] = "program scalar_remap_target\n"
+                                              "  integer, target :: value\n"
+                                              "  integer, pointer :: pointer_value(:)\n"
+                                              "  pointer_value(1:1) => value\n"
+                                              "end program scalar_remap_target\n";
+    static const char allocatable_without_target[] = "program allocatable_without_target\n"
+                                                     "  integer, allocatable :: value(:)\n"
+                                                     "  integer, pointer :: pointer_value(:)\n"
+                                                     "  allocate(value(4))\n"
+                                                     "  pointer_value => value\n"
+                                                     "end program allocatable_without_target\n";
+    static const char associated_vector_target[] = "program associated_vector_target\n"
+                                                   "  integer, target :: value(4)\n"
+                                                   "  integer, pointer :: pointer_value(:)\n"
+                                                   "  integer :: indices(2)\n"
+                                                   "  pointer_value => value(1:2)\n"
+                                                   "  if (associated(pointer_value, "
+                                                   "value(indices))) stop 1\n"
+                                                   "end program associated_vector_target\n";
+    static const char associated_rank_mismatch[] =
+        "program associated_rank_mismatch\n"
+        "  integer, target :: value(2, 2)\n"
+        "  integer, pointer :: pointer_value(:)\n"
+        "  if (associated(pointer_value, value)) stop 1\n"
+        "end program associated_rank_mismatch\n";
     expect_failure(vector_subscript, "pointer-assignment target cannot have a vector subscript",
                    "vector-subscribed objects cannot become pointer targets");
-    expect_failure(missing_target, "must designate a TARGET, POINTER, ALLOCATABLE object",
+    expect_failure(missing_target, "must designate a TARGET or POINTER object",
                    "an ordinary object cannot become a pointer target");
     expect_failure(rank_mismatch, "incompatible declared type, kind, or rank",
                    "pointer association enforces target rank");
@@ -110,6 +168,23 @@ static void test_invalid_targets(void) {
                    "pointer association enforces target kind");
     expect_failure(character_length_mismatch, "CHARACTER lengths 3 and 4 are incompatible",
                    "a fixed-length CHARACTER pointer enforces target length");
+    expect_failure(missing_lower_bound, "pointer lower bound must be a scalar INTEGER",
+                   "a pointer bounds specification requires every lower bound");
+    expect_failure(mixed_bounds, "cannot mix lower-bound specifications with bounds remapping",
+                   "a pointer assignment cannot mix its two bounds forms");
+    expect_failure(pointer_stride, "pointer bounds cannot specify a stride",
+                   "pointer bounds do not accept array-section strides");
+    expect_failure(null_with_bounds, "pointer bounds cannot be used when assigning NULL()",
+                   "NULL pointer assignment rejects bounds syntax");
+    expect_failure(scalar_remap_target, "rank-remapped pointer target must be an array",
+                   "rank remapping requires an array target");
+    expect_failure(allocatable_without_target, "must designate a TARGET or POINTER object",
+                   "ALLOCATABLE alone does not satisfy pointer-target requirements");
+    expect_failure(associated_vector_target, "ASSOCIATED target cannot have a vector subscript",
+                   "ASSOCIATED rejects vector-subscribed target designators");
+    expect_failure(associated_rank_mismatch,
+                   "ASSOCIATED target must be a compatible TARGET or POINTER object",
+                   "ASSOCIATED enforces target rank compatibility");
 }
 
 int main(void) {

@@ -133,11 +133,73 @@ static void test_selected_kind_type_selectors(void) {
     f2c_result_free(&result);
 }
 
+static void test_contiguous_attribute(void) {
+    static const char source[] = "subroutine contiguous_contract(values, pointer_values)\n"
+                                 "  implicit none\n"
+                                 "  integer, contiguous, intent(inout) :: values(:)\n"
+                                 "  integer, pointer, intent(inout) :: pointer_values(:)\n"
+                                 "  contiguous :: pointer_values\n"
+                                 "end subroutine contiguous_contract\n";
+    static const char scalar_source[] = "subroutine scalar_contiguous(value)\n"
+                                        "  integer, contiguous :: value\n"
+                                        "end subroutine scalar_contiguous\n";
+    static const char local_source[] = "program local_contiguous\n"
+                                       "  integer, contiguous :: values(4)\n"
+                                       "end program local_contiguous\n";
+    static const char interface_source[] = "program contiguous_interface_caller\n"
+                                           "  interface\n"
+                                           "    subroutine consume(values)\n"
+                                           "      integer, contiguous :: values(:)\n"
+                                           "    end subroutine consume\n"
+                                           "  end interface\n"
+                                           "  integer :: values(2)\n"
+                                           "  call consume(values)\n"
+                                           "end program contiguous_interface_caller\n";
+    static const char definition_source[] = "subroutine consume(values)\n"
+                                            "  integer :: values(:)\n"
+                                            "end subroutine consume\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code != NULL && result.error_count == 0U,
+           "CONTIGUOUS accepts assumed-shape dummies and array pointers");
+    expect(result.code != NULL && strstr(result.code, "f2c_descriptor_is_contiguous") != NULL,
+           "CONTIGUOUS dummy descriptors enforce their ABI contract at procedure entry");
+    expect(!capture.captured, "valid CONTIGUOUS declarations have no diagnostics");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile(scalar_source, &capture);
+    expect(result.code == NULL && result.error_count != 0U, "CONTIGUOUS rejects scalar entities");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile(local_source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "CONTIGUOUS rejects ordinary explicit-shape local arrays");
+    f2c_result_free(&result);
+
+    {
+        F2cInput inputs[2] = {{interface_source,
+                               sizeof(interface_source) - 1U,
+                               {"contiguous_interface_caller.f90", F2C_SOURCE_FREE, 0}},
+                              {definition_source,
+                               sizeof(definition_source) - 1U,
+                               {"consume.f90", F2C_SOURCE_FREE, 0}}};
+        result = f2c_transpile_project(inputs, 2U);
+        expect(result.code == NULL && result.error_count != 0U,
+               "project interfaces reject mismatched CONTIGUOUS attributes");
+        expect(result.diagnostics != NULL && strstr(result.diagnostics, "incompatible") != NULL,
+               "CONTIGUOUS interface mismatch has an actionable diagnostic");
+        f2c_result_free(&result);
+    }
+}
+
 int main(void) {
     test_duplicate_attribute();
     test_duplicate_shape();
     test_continued_initializer_location();
     test_attribute_keywords_as_identifiers();
     test_selected_kind_type_selectors();
+    test_contiguous_attribute();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
