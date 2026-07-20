@@ -739,10 +739,10 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
         f2c_array_emit_whole_character_assignment(context, unit, left_symbol, right, right_symbol,
                                                   element_count, depth))
         goto cleanup;
-    f2c_array_indent(&context->output, depth);
     if (right_symbol != NULL && right_symbol->rank != 0U &&
         right_symbol->type == left_symbol->type) {
         char *right_count = f2c_symbol_element_count(unit, right_symbol);
+        f2c_array_indent(&context->output, depth);
         if (left_symbol->type == TYPE_DERIVED && left_symbol->derived_type != NULL &&
             left_symbol->derived_type == right_symbol->derived_type) {
             f2c_buffer_printf(
@@ -775,12 +775,17 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
         }
         free(right_count);
     } else {
-        char *value = f2c_array_emit_expression(unit, right);
+        char *value;
+        if (f2c_array_emit_derived_scalar_broadcast(context, unit, left_symbol, right,
+                                                    element_count, depth))
+            goto cleanup;
+        value = f2c_array_emit_expression(unit, right);
         if (value == NULL) {
             f2c_diagnostic(context, line, 1,
                            "whole-array assignment has an unsupported right-hand expression");
             goto cleanup;
         }
+        f2c_array_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
                           "{ const %s f2c_whole_scalar = (%s)(%s); "
                           "size_t f2c_fill_index; for (f2c_fill_index = 0; ",

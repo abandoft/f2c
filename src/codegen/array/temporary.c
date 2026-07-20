@@ -27,8 +27,9 @@ int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_
         Buffer name = {0};
         char *code;
         int supported = 0;
-        if (expression->type == TYPE_CHARACTER || expression->type == TYPE_DERIVED ||
-            expression->type == TYPE_UNKNOWN)
+        if (expression->type == TYPE_DERIVED)
+            return 1;
+        if (expression->type == TYPE_CHARACTER || expression->type == TYPE_UNKNOWN)
             return 0;
         code = f2c_emit_expression_ast(unit, expression, &supported);
         if (!supported || code == NULL) {

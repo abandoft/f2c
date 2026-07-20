@@ -1,5 +1,7 @@
 #include "codegen/array/private.h"
 
+#include "codegen/value/private.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -14,6 +16,50 @@ static int elemental_assignment_type_matches(const Symbol *target, const F2cExpr
         return 0;
     return target->type != TYPE_DERIVED ||
            (target->derived_type != NULL && target->derived_type == right->derived_type);
+}
+
+int f2c_array_emit_derived_scalar_broadcast(Context *context, Unit *unit, Symbol *target,
+                                            const F2cExpr *right, const char *element_count,
+                                            int depth) {
+    const size_t output_start = context != NULL ? context->output.length : 0U;
+    const char *type_name;
+    const char *target_name;
+    if (context == NULL || unit == NULL || target == NULL || right == NULL ||
+        element_count == NULL || target->type != TYPE_DERIVED || target->derived_type == NULL ||
+        target->rank == 0U || right->type != TYPE_DERIVED || right->derived_type == NULL ||
+        right->rank != 0U || target->derived_type != right->derived_type)
+        return 0;
+    type_name = target->derived_type->c_name;
+    target_name = f2c_symbol_c_name(unit, target);
+    f2c_array_indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "{\n");
+    f2c_array_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "const size_t f2c_whole_count = (size_t)(%s);\n",
+                      element_count);
+    f2c_array_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "%s f2c_whole_source;\n", type_name);
+    if (!f2c_emit_derived_clone_expression(&context->output, unit, right, "f2c_whole_source",
+                                           "array_broadcast", 0U, depth + 1)) {
+        if (context->output.data != NULL && output_start <= context->output.length) {
+            context->output.length = output_start;
+            context->output.data[output_start] = '\0';
+        }
+        return 0;
+    }
+    f2c_array_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "f2c_destroy_array_%s(%s, f2c_whole_count, %zuU);\n",
+                      type_name, target_name, target->rank);
+    f2c_array_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "for (size_t f2c_whole_index = 0U; f2c_whole_index < "
+                                        "f2c_whole_count; ++f2c_whole_index)\n");
+    f2c_array_indent(&context->output, depth + 2);
+    f2c_buffer_printf(&context->output, "f2c_clone_%s(&%s[f2c_whole_index], &f2c_whole_source);\n",
+                      type_name, target_name);
+    f2c_array_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "f2c_destroy_%s(&f2c_whole_source);\n", type_name);
+    f2c_array_indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+    return 1;
 }
 
 int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *target,
@@ -63,8 +109,10 @@ int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *ta
             goto unsupported;
     }
     element = f2c_array_element_expression(unit, right, right->rank, ordinals);
-    value = element != NULL ? f2c_array_emit_expression(unit, element) : NULL;
-    if (value == NULL)
+    value = element != NULL && target->type != TYPE_DERIVED
+                ? f2c_array_emit_expression(unit, element)
+                : NULL;
+    if (element == NULL || (target->type != TYPE_DERIVED && value == NULL))
         goto unsupported;
     if (target->type == TYPE_CHARACTER) {
         character_length = target->allocatable && target->deferred_character
@@ -167,31 +215,12 @@ int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *ta
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "++f2c_element_linear;\n");
     } else if (target->type == TYPE_DERIVED) {
-        const char *name = target->derived_type->c_name;
-        if (element->kind == F2C_EXPR_CALL || element->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR) {
-            f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_printf(&context->output, "%s f2c_element_result = %s;\n", name, value);
-            if (element->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR) {
-                f2c_array_indent(&context->output, emitted_depth);
-                f2c_buffer_printf(&context->output, "f2c_initialize_%s(&f2c_element_result);\n",
-                                  name);
-            }
-            f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_printf(&context->output,
-                              "f2c_clone_%s(&f2c_element_values[f2c_element_linear], "
-                              "&f2c_element_result);\n",
-                              name);
-            f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_printf(&context->output, "f2c_destroy_%s(&f2c_element_result);\n", name);
-            f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_append(&context->output, "++f2c_element_linear;\n");
-        } else {
-            f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_printf(&context->output,
-                              "f2c_clone_%s(&f2c_element_values[f2c_element_linear++], "
-                              "&(%s));\n",
-                              name, value);
-        }
+        if (!f2c_emit_derived_clone_expression(&context->output, unit, element,
+                                               "f2c_element_values[f2c_element_linear]",
+                                               "array_element", line, emitted_depth))
+            goto emission_failed;
+        f2c_array_indent(&context->output, emitted_depth);
+        f2c_buffer_append(&context->output, "++f2c_element_linear;\n");
     } else {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output, "f2c_element_values[f2c_element_linear++] = %s;\n",
