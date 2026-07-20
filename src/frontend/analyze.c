@@ -104,6 +104,9 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
     if (unit->elemental && unit->recursive)
         header_diagnostic(context, &unit->recursive_span, header_line,
                           "an ELEMENTAL procedure cannot also be RECURSIVE");
+    if (unit->elemental && unit->alternate_return_count != 0U)
+        header_diagnostic(context, &unit->header_span, header_line,
+                          "an ELEMENTAL subroutine cannot have alternate-return dummy arguments");
     if (unit->elemental && !unit->impure)
         unit->pure = 1;
     if (!unit->interface_body)
