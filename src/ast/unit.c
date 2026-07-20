@@ -50,6 +50,33 @@ static int unit_kind(const F2cToken *token, F2cUnitSyntaxKind *kind) {
     return 1;
 }
 
+static F2cUnitHeaderParseStatus parse_block_data_header(const Line *line,
+                                                        F2cUnitHeaderSyntax *syntax) {
+    size_t index;
+    if (line == NULL || line->token_count == 0U || line->tokens[0].kind != F2C_TOKEN_IDENTIFIER)
+        return F2C_UNIT_HEADER_NOT_MATCHED;
+    if (f2c_token_equals(&line->tokens[0], "blockdata")) {
+        index = 1U;
+    } else if (line->token_count >= 2U && f2c_token_equals(&line->tokens[0], "block") &&
+               line->tokens[1].kind == F2C_TOKEN_IDENTIFIER &&
+               f2c_token_equals(&line->tokens[1], "data")) {
+        index = 2U;
+    } else {
+        return F2C_UNIT_HEADER_NOT_MATCHED;
+    }
+    syntax->kind = F2C_UNIT_SYNTAX_BLOCK_DATA;
+    syntax->span =
+        f2c_source_span_cover(&line->tokens[0].span, &line->tokens[line->token_count - 1U].span);
+    if (index < line->token_count && line->tokens[index].kind == F2C_TOKEN_IDENTIFIER)
+        syntax->name = &line->tokens[index++];
+    if (index != line->token_count) {
+        syntax->error = F2C_UNIT_HEADER_ERROR_TRAILING_TOKENS;
+        syntax->error_token = &line->tokens[index];
+        return F2C_UNIT_HEADER_INVALID;
+    }
+    return F2C_UNIT_HEADER_PARSED;
+}
+
 static size_t find_unit_keyword(const Line *line) {
     size_t index = 0U;
     while (index < line->token_count) {
@@ -238,6 +265,11 @@ F2cUnitHeaderParseStatus f2c_parse_unit_header_syntax(const Line *line,
         return F2C_UNIT_HEADER_NOT_MATCHED;
     if (f2c_line_token_equals(line, 0U, "end"))
         return F2C_UNIT_HEADER_NOT_MATCHED;
+    {
+        const F2cUnitHeaderParseStatus block_data = parse_block_data_header(line, syntax);
+        if (block_data != F2C_UNIT_HEADER_NOT_MATCHED)
+            return block_data;
+    }
     keyword = find_unit_keyword(line);
     if (keyword == SIZE_MAX)
         return F2C_UNIT_HEADER_NOT_MATCHED;
@@ -290,7 +322,8 @@ void f2c_unit_header_syntax_discard(F2cUnitHeaderSyntax *syntax) {
 static int separated_end_kind(const F2cToken *token, F2cUnitSyntaxKind *kind) {
     return unit_kind(token, kind) ||
            (token != NULL && token->kind == F2C_TOKEN_IDENTIFIER &&
-            f2c_token_equals(token, "module") && (*kind = F2C_UNIT_SYNTAX_MODULE, 1));
+            ((f2c_token_equals(token, "module") && (*kind = F2C_UNIT_SYNTAX_MODULE, 1)) ||
+             (f2c_token_equals(token, "blockdata") && (*kind = F2C_UNIT_SYNTAX_BLOCK_DATA, 1))));
 }
 
 static int joined_end_kind(const F2cToken *token, F2cUnitSyntaxKind *kind) {
@@ -304,6 +337,8 @@ static int joined_end_kind(const F2cToken *token, F2cUnitSyntaxKind *kind) {
         *kind = F2C_UNIT_SYNTAX_FUNCTION;
     else if (f2c_token_equals(token, "endmodule"))
         *kind = F2C_UNIT_SYNTAX_MODULE;
+    else if (f2c_token_equals(token, "endblockdata"))
+        *kind = F2C_UNIT_SYNTAX_BLOCK_DATA;
     else
         return 0;
     return 1;
@@ -327,10 +362,18 @@ F2cUnitEndParseStatus f2c_parse_unit_end_syntax(const Line *line, F2cUnitEndSynt
         ++index;
         if (index == line->token_count)
             return F2C_UNIT_END_PARSED;
-        if (!separated_end_kind(&line->tokens[index], &syntax->kind))
+        if (f2c_line_token_equals(line, index, "block") &&
+            f2c_line_token_equals(line, index + 1U, "data")) {
+            syntax->kind = F2C_UNIT_SYNTAX_BLOCK_DATA;
+            syntax->has_kind = 1;
+            syntax->kind_token = &line->tokens[index];
+            index += 2U;
+        } else if (!separated_end_kind(&line->tokens[index], &syntax->kind)) {
             return F2C_UNIT_END_NOT_MATCHED;
-        syntax->has_kind = 1;
-        syntax->kind_token = &line->tokens[index++];
+        } else {
+            syntax->has_kind = 1;
+            syntax->kind_token = &line->tokens[index++];
+        }
     } else if (joined_end_kind(&line->tokens[index], &syntax->kind)) {
         syntax->has_kind = 1;
         syntax->kind_token = &line->tokens[index++];

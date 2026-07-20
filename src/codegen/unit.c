@@ -856,6 +856,8 @@ void f2c_emit_unit(Context *context, Unit *unit) {
                        "internal compiler error: code generation received an untyped unit");
         return;
     }
+    if (unit->kind == UNIT_BLOCK_DATA)
+        return;
     f2c_unit_prepare_expression_temporaries(unit);
     prepare_statement_function_temporaries(unit);
     if (unit->kind == UNIT_PROGRAM) {

@@ -112,7 +112,13 @@ struct Symbol {
     F2cDerivedType *derived_owner;
 };
 
-typedef enum UnitKind { UNIT_PROGRAM, UNIT_SUBROUTINE, UNIT_FUNCTION, UNIT_MODULE } UnitKind;
+typedef enum UnitKind {
+    UNIT_PROGRAM,
+    UNIT_SUBROUTINE,
+    UNIT_FUNCTION,
+    UNIT_MODULE,
+    UNIT_BLOCK_DATA
+} UnitKind;
 
 typedef enum F2cUnitPhase {
     F2C_UNIT_DISCOVERED,

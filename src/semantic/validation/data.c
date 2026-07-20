@@ -192,12 +192,54 @@ static int expression_has_static_c_form(const F2cExpr *expression, size_t depth)
     return expression->child_count != 0U;
 }
 
-static int symbol_supports_static_data(const Symbol *symbol) {
-    return symbol != NULL && !symbol->module_entity && symbol->common_block == NULL &&
-           symbol->alias_to == NULL && !symbol->allocatable && !symbol->pointer &&
-           !symbol->procedure_pointer && symbol->type != TYPE_CHARACTER &&
-           symbol->type != TYPE_COMPLEX && symbol->type != TYPE_DOUBLE_COMPLEX &&
-           symbol->type != TYPE_DERIVED;
+static int symbol_supports_static_data(const Unit *unit, const Symbol *symbol) {
+    if (symbol == NULL || symbol->module_entity || symbol->alias_to != NULL ||
+        symbol->allocatable || symbol->pointer || symbol->procedure_pointer ||
+        symbol->type == TYPE_DERIVED)
+        return 0;
+    if (symbol->common_block != NULL)
+        return unit != NULL && unit->kind == UNIT_BLOCK_DATA && symbol->common_block[0] != '\0';
+    return symbol->type != TYPE_CHARACTER && symbol->type != TYPE_COMPLEX &&
+           symbol->type != TYPE_DOUBLE_COMPLEX;
+}
+
+static int common_value_has_static_form(Unit *unit, const Symbol *symbol, const F2cExpr *value) {
+    int64_t integer_value;
+    double real_value;
+    char *character_value = NULL;
+    size_t character_length = 0U;
+    int supported = 0;
+    if (symbol == NULL || value == NULL)
+        return 0;
+    switch (symbol->type) {
+    case TYPE_INTEGER:
+    case TYPE_LOGICAL:
+        return f2c_evaluate_integer_constant(unit, value, &integer_value);
+    case TYPE_REAL:
+    case TYPE_DOUBLE:
+        return f2c_evaluate_real_constant(unit, value, &real_value);
+    case TYPE_COMPLEX:
+    case TYPE_DOUBLE_COMPLEX:
+        if (value->kind == F2C_EXPR_COMPLEX_LITERAL && value->child_count == 2U)
+            return f2c_evaluate_real_constant(unit, value->children[0], &real_value) &&
+                   f2c_evaluate_real_constant(unit, value->children[1], &real_value);
+        return f2c_evaluate_real_constant(unit, value, &real_value);
+    case TYPE_CHARACTER:
+        supported =
+            f2c_evaluate_character_constant(unit, value, &character_value, &character_length);
+        free(character_value);
+        return supported;
+    case TYPE_DERIVED:
+    case TYPE_UNKNOWN:
+    default:
+        return 0;
+    }
+}
+
+static int data_value_has_static_form(Unit *unit, const Symbol *symbol, const F2cExpr *value) {
+    return symbol != NULL && symbol->common_block != NULL
+               ? common_value_has_static_form(unit, symbol, value)
+               : expression_has_static_c_form(value, 0U);
 }
 
 static void mark_data_storage_saved(Unit *unit, Symbol *symbol) {
@@ -287,7 +329,8 @@ static int attach_array_element_initializer(DataValidation *validation, F2cIoIte
         return mapped;
     if (!expansion_within_budget(validation, (uint64_t)count))
         return -1;
-    if (!symbol_supports_static_data(symbol) || !expression_has_static_c_form(value, 0U)) {
+    if (!symbol_supports_static_data(validation->unit, symbol) ||
+        !data_value_has_static_form(validation->unit, symbol, value)) {
         item->data_static_initializer = -1;
         return 0;
     }
@@ -332,7 +375,8 @@ static int attach_scalar_initializer(DataValidation *validation, F2cIoItem *item
     char *initializer;
     F2cExpr *expression;
     if (symbol == NULL || target->kind != F2C_EXPR_NAME || target->rank != 0U ||
-        !symbol_supports_static_data(symbol) || !expression_has_static_c_form(value, 0U))
+        !symbol_supports_static_data(validation->unit, symbol) ||
+        !data_value_has_static_form(validation->unit, symbol, value))
         return 0;
     source = value->source != NULL ? value->source : value->text;
     initializer = source != NULL ? f2c_strdup(source) : NULL;
@@ -356,7 +400,7 @@ static int prepare_array_initializers(DataValidation *validation, F2cIoItem *ite
                                       F2cExpr ***initializers, size_t extent) {
     Symbol *symbol = target != NULL ? target->symbol : NULL;
     if (initializers == NULL || extent == 0U || target == NULL || target->kind != F2C_EXPR_NAME ||
-        target->rank == 0U || !symbol_supports_static_data(symbol))
+        target->rank == 0U || !symbol_supports_static_data(validation->unit, symbol))
         return 0;
     *initializers = (F2cExpr **)calloc(extent, sizeof(**initializers));
     if (*initializers == NULL) {
@@ -385,6 +429,18 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
                                      target != NULL ? &target->span : &validation->group->span, 1,
                                      "DATA target must be a definable non-dummy, non-dynamic "
                                      "variable");
+            return 0;
+        }
+        if (symbol->common_block != NULL && validation->unit->kind != UNIT_BLOCK_DATA) {
+            f2c_diagnostic_span_code(
+                validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
+                "a COMMON object may be initialized only in a BLOCK DATA program unit");
+            return 0;
+        }
+        if (validation->unit->kind == UNIT_BLOCK_DATA &&
+            (symbol->common_block == NULL || symbol->common_block[0] == '\0')) {
+            f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
+                                     "a BLOCK DATA target must belong to a named COMMON block");
             return 0;
         }
         if (!expression_extent(target, &extent)) {
@@ -418,7 +474,7 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
             const F2cExpr *value = next_value(&validation->values);
             if (value != NULL) {
                 validate_value_type(validation, target, value);
-                if (static_array && expression_has_static_c_form(value, 0U)) {
+                if (static_array && data_value_has_static_form(validation->unit, symbol, value)) {
                     array_initializers[element] =
                         f2c_expr_clone_substitute_integers(value, NULL, 0U);
                     if (array_initializers[element] == NULL) {
@@ -534,6 +590,18 @@ static int validate_values(DataValidation *validation) {
     return valid;
 }
 
+static int data_item_has_static_initializer(const F2cIoItem *item) {
+    size_t child;
+    if (item == NULL)
+        return 0;
+    if (!item->implied_do)
+        return item->data_static_initializer == 1;
+    for (child = 0U; child < item->child_count; ++child)
+        if (!data_item_has_static_initializer(&item->children[child]))
+            return 0;
+    return 1;
+}
+
 static void validate_group(Context *context, Unit *unit, F2cStatement *statement,
                            F2cDataGroup *group) {
     DataValidation validation = {0};
@@ -558,6 +626,17 @@ static void validate_group(Context *context, Unit *unit, F2cStatement *statement
                                  "DATA value count %zu does not match target element count %zu",
                                  group->expanded_value_count, group->expanded_target_count);
         valid = 0;
+    }
+    if (unit->kind == UNIT_BLOCK_DATA && valid) {
+        for (index = 0U; index < group->target_count; ++index) {
+            if (!data_item_has_static_initializer(&group->targets[index])) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_UNSUPPORTED, &group->span, 1,
+                    "BLOCK DATA initializer cannot be represented as portable static C17 data");
+                valid = 0;
+                break;
+            }
+        }
     }
     group->counts_valid = valid;
     free(validation.bindings.items);

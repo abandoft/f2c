@@ -7,6 +7,89 @@ static const char *display_block_name(const char *block) {
     return block != NULL && block[0] != '\0' ? block : "<blank>";
 }
 
+static const F2cStatement *statement_body(const F2cStatement *statement) {
+    return statement != NULL && statement->kind == F2C_STMT_LABEL ? statement->nested : statement;
+}
+
+static int symbol_has_storage_initializer(const Symbol *symbol) {
+    return symbol != NULL &&
+           (symbol->initializer_expression != NULL || symbol->data_element_initializers != NULL ||
+            symbol->data_initializer);
+}
+
+static void validate_block_data_unit(Context *context, Unit *unit) {
+    size_t index;
+    if (unit == NULL || unit->kind != UNIT_BLOCK_DATA)
+        return;
+    if (unit->internal) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &unit->header_span, 1,
+                                 "BLOCK DATA must be an external program unit");
+    }
+    for (index = 0U; index < unit->statement_count; ++index) {
+        const F2cStatement *statement = statement_body(&unit->statements[index]);
+        if (statement == NULL || statement->kind == F2C_STMT_EMPTY ||
+            statement->kind == F2C_STMT_DECLARATION || statement->kind == F2C_STMT_DATA)
+            continue;
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &statement->span, 1,
+                                 "BLOCK DATA may contain specification statements and DATA "
+                                 "initialization only");
+    }
+    for (index = 0U; index < unit->symbol_count; ++index) {
+        const Symbol *symbol = &unit->symbols[index];
+        if (!symbol_has_storage_initializer(symbol) || symbol->parameter)
+            continue;
+        if (symbol->common_block == NULL || symbol->common_block[0] == '\0') {
+            const F2cSourceSpan *span = symbol->declaration_span.begin.line != 0U
+                                            ? &symbol->declaration_span
+                                            : &unit->header_span;
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, span, 1,
+                "initialized BLOCK DATA entity '%s' must belong to a named COMMON block",
+                symbol->name);
+        }
+    }
+}
+
+static void validate_common_initialization_owner(Context *context, size_t unit_index,
+                                                 size_t symbol_index, Unit *unit,
+                                                 const Symbol *symbol) {
+    size_t previous_unit;
+    if (!symbol_has_storage_initializer(symbol))
+        return;
+    if (unit->kind != UNIT_BLOCK_DATA) {
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_SEMANTIC,
+            symbol->declaration_span.begin.line != 0U ? &symbol->declaration_span
+                                                      : &symbol->common_span,
+            1, "COMMON entity '%s' may be initialized only in BLOCK DATA", symbol->name);
+        return;
+    }
+    if (symbol->common_block[0] == '\0') {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
+                                 "blank COMMON entity '%s' cannot be initialized", symbol->name);
+        return;
+    }
+    for (previous_unit = 0U; previous_unit < unit_index; ++previous_unit) {
+        Unit *candidate_unit = &context->units.items[previous_unit];
+        size_t candidate_index;
+        if (candidate_unit->kind != UNIT_BLOCK_DATA)
+            continue;
+        for (candidate_index = 0U; candidate_index < candidate_unit->symbol_count;
+             ++candidate_index) {
+            const Symbol *candidate = &candidate_unit->symbols[candidate_index];
+            if (candidate->common_block != NULL && symbol_has_storage_initializer(candidate) &&
+                strcmp(candidate->common_block, symbol->common_block) == 0) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
+                    "COMMON block '%s' is initialized by more than one BLOCK DATA program unit",
+                    display_block_name(symbol->common_block));
+                return;
+            }
+        }
+    }
+    (void)symbol_index;
+}
+
 static int checked_multiply(uint64_t left, uint64_t right, uint64_t *result) {
     if (left != 0U && right > UINT64_MAX / left)
         return 0;
@@ -135,6 +218,8 @@ void f2c_validate_common_storage(Context *context) {
     size_t u;
     if (context == NULL)
         return;
+    for (u = 0U; u < context->units.count; ++u)
+        validate_block_data_unit(context, &context->units.items[u]);
     for (u = 0U; u < context->units.count; ++u) {
         Unit *unit = &context->units.items[u];
         size_t s;
@@ -144,6 +229,7 @@ void f2c_validate_common_storage(Context *context) {
             Unit *canonical_unit = NULL;
             if (symbol->common_block == NULL)
                 continue;
+            validate_common_initialization_owner(context, u, s, unit, symbol);
             validate_member_contract(context, unit, symbol);
             canonical = find_previous_member(context, u, s, symbol->common_block,
                                              symbol->common_index, &canonical_unit);

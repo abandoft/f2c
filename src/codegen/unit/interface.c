@@ -133,7 +133,7 @@ void f2c_unit_emit_signature(Buffer *output, Unit *unit) {
 }
 
 void f2c_emit_procedure_prototype(Buffer *output, Unit *unit) {
-    if (unit == NULL || unit->kind == UNIT_PROGRAM)
+    if (unit == NULL || unit->kind == UNIT_PROGRAM || unit->kind == UNIT_BLOCK_DATA)
         return;
     f2c_unit_emit_signature(output, unit);
     f2c_buffer_append(output, ";\n");
@@ -142,7 +142,9 @@ void f2c_emit_procedure_prototype(Buffer *output, Unit *unit) {
 static int is_defined_unit(Context *context, const char *name) {
     size_t i;
     for (i = 0U; i < context->units.count; ++i) {
-        if (strcmp(context->units.items[i].name, name) == 0)
+        const Unit *unit = &context->units.items[i];
+        if ((unit->kind == UNIT_SUBROUTINE || unit->kind == UNIT_FUNCTION) &&
+            strcmp(unit->name, name) == 0)
             return 1;
     }
     return 0;
@@ -221,7 +223,8 @@ static void emit_external_prototypes(Context *context) {
 void f2c_emit_prototypes(Context *context) {
     size_t i;
     for (i = 0U; i < context->units.count; ++i) {
-        if (context->units.items[i].kind != UNIT_PROGRAM) {
+        if (context->units.items[i].kind == UNIT_SUBROUTINE ||
+            context->units.items[i].kind == UNIT_FUNCTION) {
             f2c_emit_procedure_prototype(&context->output, &context->units.items[i]);
         }
     }
@@ -278,7 +281,8 @@ void f2c_emit_interface_header(Context *context) {
                               "} f2c_descriptor;\n\n"
                               "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
     for (i = 0U; i < context->units.count; ++i) {
-        if (context->units.items[i].kind != UNIT_PROGRAM) {
+        if (context->units.items[i].kind == UNIT_SUBROUTINE ||
+            context->units.items[i].kind == UNIT_FUNCTION) {
             f2c_unit_emit_signature(output, &context->units.items[i]);
             f2c_buffer_append(output, ";\n");
         }
@@ -344,6 +348,46 @@ static Symbol *find_common_member(Context *context, const char *block, size_t me
     return NULL;
 }
 
+static int common_symbol_has_initializer(const Symbol *symbol) {
+    return symbol != NULL &&
+           (symbol->initializer_expression != NULL || symbol->data_element_initializers != NULL ||
+            symbol->data_initializer);
+}
+
+static Symbol *find_common_initializer(Context *context, const char *block, size_t member_index,
+                                       Unit **owner) {
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < context->units.count; ++unit_index) {
+        Unit *unit = &context->units.items[unit_index];
+        size_t symbol_index;
+        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+            Symbol *candidate = &unit->symbols[symbol_index];
+            if (candidate->common_block != NULL && candidate->common_index == member_index &&
+                strcmp(candidate->common_block, block) == 0 &&
+                common_symbol_has_initializer(candidate)) {
+                *owner = unit;
+                return candidate;
+            }
+        }
+    }
+    return NULL;
+}
+
+static int common_block_has_initializer(Context *context, const char *block) {
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < context->units.count; ++unit_index) {
+        const Unit *unit = &context->units.items[unit_index];
+        size_t symbol_index;
+        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+            const Symbol *symbol = &unit->symbols[symbol_index];
+            if (symbol->common_block != NULL && strcmp(symbol->common_block, block) == 0 &&
+                common_symbol_has_initializer(symbol))
+                return 1;
+        }
+    }
+    return 0;
+}
+
 void f2c_emit_common_blocks(Context *context) {
     size_t u;
     int emitted_macro = 0;
@@ -354,6 +398,7 @@ void f2c_emit_common_blocks(Context *context) {
             Symbol *first = &unit->symbols[s];
             size_t member_count;
             size_t member_index;
+            int initialized;
             if (first->common_block == NULL ||
                 common_block_emitted_before(context, u, s, first->common_block))
                 continue;
@@ -364,10 +409,14 @@ void f2c_emit_common_blocks(Context *context) {
                     "#elif defined(__GNUC__) || defined(__clang__)\n"
                     "#define F2C_COMMON_STORAGE __attribute__((weak))\n"
                     "#else\n#define F2C_COMMON_STORAGE\n#endif\n");
+                f2c_buffer_append(&context->output, "#define F2C_COMMON_INITIALIZED_STORAGE\n");
                 emitted_macro = 1;
             }
             member_count = common_member_count(context, first->common_block);
-            f2c_buffer_append(&context->output, "F2C_COMMON_STORAGE struct ");
+            initialized = common_block_has_initializer(context, first->common_block);
+            f2c_buffer_append(&context->output, initialized
+                                                    ? "F2C_COMMON_INITIALIZED_STORAGE struct "
+                                                    : "F2C_COMMON_STORAGE struct ");
             append_common_storage_name(&context->output, first->common_block);
             f2c_buffer_append(&context->output, " {\n");
             for (member_index = 0U; member_index < member_count; ++member_index) {
@@ -411,6 +460,36 @@ void f2c_emit_common_blocks(Context *context) {
             }
             f2c_buffer_append(&context->output, "} ");
             append_common_storage_name(&context->output, first->common_block);
+            if (initialized) {
+                int emitted_initializer = 0;
+                f2c_buffer_append(&context->output, " = {\n");
+                for (member_index = 0U; member_index < member_count; ++member_index) {
+                    Unit *initializer_unit = NULL;
+                    Symbol *initializer_symbol = find_common_initializer(
+                        context, first->common_block, member_index, &initializer_unit);
+                    char *initializer;
+                    if (initializer_symbol == NULL)
+                        continue;
+                    initializer = f2c_unit_common_initializer(initializer_unit, initializer_symbol);
+                    if (initializer == NULL) {
+                        f2c_diagnostic_span_code(
+                            context, F2C_DIAGNOSTIC_UNSUPPORTED,
+                            initializer_symbol->declaration_span.begin.line != 0U
+                                ? &initializer_symbol->declaration_span
+                                : &initializer_symbol->common_span,
+                            1, "COMMON initializer for '%s' cannot be emitted as static C17 data",
+                            initializer_symbol->name);
+                        continue;
+                    }
+                    f2c_buffer_printf(&context->output, "    .field_%zu = %s,\n", member_index,
+                                      initializer);
+                    free(initializer);
+                    emitted_initializer = 1;
+                }
+                if (!emitted_initializer)
+                    f2c_buffer_append(&context->output, "    0\n");
+                f2c_buffer_append(&context->output, "}");
+            }
             f2c_buffer_append(&context->output, ";\n");
         }
     }

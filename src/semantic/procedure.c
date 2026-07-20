@@ -351,12 +351,13 @@ int f2c_build_procedure_registry(Context *context) {
             } else {
                 program = unit;
             }
-        } else if (!register_procedure(context, unit)) {
+        } else if (unit->kind != UNIT_BLOCK_DATA && !register_procedure(context, unit)) {
             return 0;
         }
     }
     for (u = 0U; u < context->units.count; ++u) {
-        if (!bind_internal(context, &context->units.items[u]))
+        if (context->units.items[u].kind != UNIT_BLOCK_DATA &&
+            !bind_internal(context, &context->units.items[u]))
             return 0;
     }
     for (u = 0U; u < context->units.count; ++u) {

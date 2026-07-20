@@ -191,14 +191,24 @@ static int lower_header(Context *context, const Line *line, const F2cUnitHeaderS
         unit->kind = UNIT_PROGRAM;
     else if (syntax->kind == F2C_UNIT_SYNTAX_SUBROUTINE)
         unit->kind = UNIT_SUBROUTINE;
+    else if (syntax->kind == F2C_UNIT_SYNTAX_BLOCK_DATA)
+        unit->kind = UNIT_BLOCK_DATA;
     else
         unit->kind = UNIT_FUNCTION;
     unit->header_span = syntax->span;
-    unit->name_span = syntax->name->span;
+    if (syntax->name != NULL)
+        unit->name_span = syntax->name->span;
     unit->return_type = TYPE_REAL;
     unit->return_kind = f2c_default_kind(TYPE_REAL);
     copy_prefixes(syntax, unit);
-    unit->name = f2c_token_text(syntax->name);
+    if (syntax->name != NULL) {
+        unit->name = f2c_token_text(syntax->name);
+    } else if (unit->kind == UNIT_BLOCK_DATA) {
+        Buffer generated = {0};
+        f2c_buffer_printf(&generated, "f2c_block_data_%zu", syntax->span.begin.line);
+        unit->name = f2c_buffer_take(&generated);
+        unit->fortran_name = f2c_strdup("");
+    }
     if (unit->name == NULL)
         goto no_memory;
     if (!lower_result_type(context, line, syntax, unit) ||
@@ -259,6 +269,8 @@ static F2cUnitSyntaxKind syntax_kind(UnitKind kind) {
         return F2C_UNIT_SYNTAX_FUNCTION;
     case UNIT_MODULE:
         return F2C_UNIT_SYNTAX_MODULE;
+    case UNIT_BLOCK_DATA:
+        return F2C_UNIT_SYNTAX_BLOCK_DATA;
     }
     return F2C_UNIT_SYNTAX_PROGRAM;
 }

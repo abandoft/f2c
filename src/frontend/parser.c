@@ -133,6 +133,10 @@ int f2c_discover_units(Context *context) {
                 if (containing_module != NULL) {
                     Buffer mangled = {0};
                     char *source_name = unit.name;
+                    if (unit.kind == UNIT_BLOCK_DATA)
+                        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC,
+                                                 &unit.header_span, 1,
+                                                 "BLOCK DATA must be an external program unit");
                     f2c_buffer_printf(&mangled, "f2c_module_%s_%s", containing_module->name,
                                       source_name);
                     unit.name = f2c_buffer_take(&mangled);
@@ -175,7 +179,7 @@ int f2c_discover_units(Context *context) {
     if (context->units.count == 0U && !f2c_has_supported_module(context) &&
         context->result.error_count == 0U) {
         f2c_diagnostic(context, context->lines.count == 0U ? 1U : context->lines.items[0].number, 1,
-                       "no PROGRAM, SUBROUTINE, or FUNCTION unit found");
+                       "no PROGRAM, SUBROUTINE, FUNCTION, or BLOCK DATA unit found");
     }
     return 1;
 }

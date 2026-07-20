@@ -7,7 +7,8 @@ typedef enum F2cUnitSyntaxKind {
     F2C_UNIT_SYNTAX_PROGRAM,
     F2C_UNIT_SYNTAX_SUBROUTINE,
     F2C_UNIT_SYNTAX_FUNCTION,
-    F2C_UNIT_SYNTAX_MODULE
+    F2C_UNIT_SYNTAX_MODULE,
+    F2C_UNIT_SYNTAX_BLOCK_DATA
 } F2cUnitSyntaxKind;
 
 typedef enum F2cUnitHeaderParseStatus {

@@ -578,9 +578,10 @@ void f2c_parse_explicit_interfaces(Context *context, Unit *host) {
                 ++j;
                 continue;
             }
-            if (procedure.kind == UNIT_PROGRAM) {
+            if (procedure.kind == UNIT_PROGRAM || procedure.kind == UNIT_BLOCK_DATA) {
                 f2c_diagnostic(context, context->lines.items[j].number, 1,
-                               "PROGRAM is not valid inside an INTERFACE block");
+                               "%s is not valid inside an INTERFACE block",
+                               procedure.kind == UNIT_PROGRAM ? "PROGRAM" : "BLOCK DATA");
                 f2c_free_unit(&procedure);
                 ++j;
                 continue;
