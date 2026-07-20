@@ -25,12 +25,24 @@ void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *sta
 const char *f2c_validation_type_name(Type type);
 Unit *f2c_validation_find_procedure(Context *context, Unit *caller, const char *name);
 const F2cExpr *f2c_validation_actual_value(const F2cExpr *actual);
+size_t f2c_procedure_dummy_count(const Unit *unit);
+size_t f2c_procedure_dummy_argument_index(const Unit *unit, size_t slot);
+size_t f2c_procedure_dummy_slot(const Unit *unit, size_t argument);
+size_t f2c_procedure_alternate_return_index(const Unit *unit, size_t target_slot);
+size_t f2c_procedure_select_explicit_interface(Context *context, Unit *caller, const char *name,
+                                               F2cExpr *const *arguments, size_t argument_count,
+                                               int subroutine_call, Unit **selection,
+                                               size_t *matching_count);
 int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const Symbol *actual,
                                                    unsigned int depth);
 Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
                                     const char *statement_text, const char *name,
                                     const F2cSourceSpan *call_span, F2cExpr ***arguments,
                                     char ***argument_texts, size_t *argument_count, int subroutine);
+Unit *f2c_validation_call_statement(Context *context, Unit *caller, F2cStatement *statement);
+int f2c_validation_bind_unresolved_alternate_call(Context *context, Unit *caller, const char *name,
+                                                  const F2cSourceSpan *call_span,
+                                                  F2cStatement *statement);
 Unit *f2c_validation_generic_specific(Context *context, Unit *caller, size_t line,
                                       const char *generic_name, const F2cSourceSpan *span,
                                       F2cExpr *const *arguments, size_t argument_count,

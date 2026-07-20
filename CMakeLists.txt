@@ -265,6 +265,8 @@ set(
     src/semantic/validation/lifetime.c
     src/semantic/validation/private.h
     src/semantic/validation/procedure.c
+    src/semantic/validation/procedure/alternate.c
+    src/semantic/validation/procedure/select.c
     src/semantic/validation/statement.c
     src/semantic/validation/where.c
 )

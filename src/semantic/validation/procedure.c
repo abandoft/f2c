@@ -11,185 +11,32 @@ static int array_storage_sequence_actual(const F2cExpr *actual) {
            actual->symbol != NULL && actual->symbol->rank != 0U;
 }
 
-static int interface_candidate_matches(Unit *candidate, F2cExpr *const *arguments,
-                                       size_t argument_count, int subroutine_call) {
-    unsigned char *assigned;
-    size_t next_positional = 0U;
-    size_t i;
-    int saw_keyword = 0;
-    int matches = 0;
-    if (argument_count > candidate->argument_count ||
-        (subroutine_call && candidate->kind != UNIT_SUBROUTINE) ||
-        (!subroutine_call && candidate->kind != UNIT_FUNCTION))
-        return 0;
-    assigned = candidate->argument_count != 0U
-                   ? (unsigned char *)calloc(candidate->argument_count, sizeof(*assigned))
-                   : NULL;
-    if (candidate->argument_count != 0U && assigned == NULL)
-        return 0;
-    for (i = 0U; i < argument_count; ++i) {
-        const F2cExpr *actual = arguments != NULL ? arguments[i] : NULL;
-        const F2cExpr *value = f2c_validation_actual_value(actual);
-        size_t target = SIZE_MAX;
-        Symbol *dummy;
-        if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT) {
-            size_t d;
-            saw_keyword = 1;
-            for (d = 0U; d < candidate->argument_count; ++d) {
-                if (actual->text != NULL && strcmp(actual->text, candidate->arguments[d]) == 0) {
-                    target = d;
-                    break;
-                }
-            }
-            if (target == SIZE_MAX)
-                goto done;
-        } else {
-            if (saw_keyword)
-                goto done;
-            target = next_positional++;
-        }
-        if (target >= candidate->argument_count || assigned[target])
-            goto done;
-        assigned[target] = 1U;
-        dummy = f2c_find_symbol(candidate, candidate->arguments[target]);
-        if (dummy == NULL || value == NULL)
-            continue;
-        if (value->kind == F2C_EXPR_ABSENT_ARGUMENT) {
-            if (!dummy->optional)
-                goto done;
-            continue;
-        }
-        if (dummy->external) {
-            if (value->kind != F2C_EXPR_NAME || value->symbol == NULL || !value->symbol->external ||
-                value->symbol->external_subroutine != dummy->external_subroutine)
-                goto done;
-        } else if ((dummy->type != TYPE_UNKNOWN && value->type != TYPE_UNKNOWN &&
-                    (dummy->type != value->type || (dummy->kind != 0 && value->type_kind != 0 &&
-                                                    dummy->kind != value->type_kind))) ||
-                   (dummy->rank != value->rank && !(candidate->elemental && dummy->rank == 0U) &&
-                    !(dummy->rank != 0U && array_storage_sequence_actual(value))) ||
-                   (dummy->allocatable && (value->kind != F2C_EXPR_NAME || value->symbol == NULL ||
-                                           !value->symbol->allocatable))) {
-            goto done;
-        }
-    }
-    for (i = 0U; i < candidate->argument_count; ++i) {
-        Symbol *dummy;
-        if (assigned[i])
-            continue;
-        dummy = f2c_find_symbol(candidate, candidate->arguments[i]);
-        if (dummy == NULL || !dummy->optional)
-            goto done;
-    }
-    matches = 1;
-done:
-    free(assigned);
-    return matches;
+size_t f2c_procedure_dummy_count(const Unit *unit) {
+    return unit != NULL && unit->dummy_argument_indices != NULL ? unit->dummy_count
+                                                                : unit->argument_count;
 }
 
-static size_t select_scope_interface(Unit *scope, const char *name, const char *resolved_name,
-                                     F2cExpr *const *arguments, size_t argument_count,
-                                     int subroutine_call, Unit **selection,
-                                     size_t *matching_count) {
-    size_t candidate_count = 0U;
-    size_t i;
-    int has_visible_name = 0;
-    *selection = NULL;
-    *matching_count = 0U;
-    for (i = 0U; i < scope->interface_count; ++i) {
-        Unit *candidate = &scope->interfaces[i];
-        if (candidate->interface_abstract)
-            continue;
-        const char *visible_name = candidate->interface_generic_name != NULL
-                                       ? candidate->interface_generic_name
-                                       : candidate->name;
-        if (strcmp(visible_name, name) == 0) {
-            has_visible_name = 1;
-            break;
-        }
-    }
-    for (i = 0U; i < scope->interface_count; ++i) {
-        Unit *candidate = &scope->interfaces[i];
-        if (candidate->interface_abstract)
-            continue;
-        const char *visible_name = candidate->interface_generic_name != NULL
-                                       ? candidate->interface_generic_name
-                                       : candidate->name;
-        const int named = has_visible_name ? strcmp(visible_name, name) == 0
-                                           : strcmp(candidate->name, resolved_name) == 0;
-        if (!named)
-            continue;
-        ++candidate_count;
-        if (interface_candidate_matches(candidate, arguments, argument_count, subroutine_call)) {
-            *selection = candidate;
-            ++*matching_count;
-        }
-    }
-    if (candidate_count == 1U && *matching_count == 0U) {
-        for (i = 0U; i < scope->interface_count; ++i) {
-            Unit *candidate = &scope->interfaces[i];
-            if (candidate->interface_abstract)
-                continue;
-            const char *visible_name = candidate->interface_generic_name != NULL
-                                           ? candidate->interface_generic_name
-                                           : candidate->name;
-            const int named = has_visible_name ? strcmp(visible_name, name) == 0
-                                               : strcmp(candidate->name, resolved_name) == 0;
-            if (named) {
-                *selection = candidate;
-                break;
-            }
-        }
-    }
-    return candidate_count;
+size_t f2c_procedure_dummy_argument_index(const Unit *unit, size_t slot) {
+    if (unit == NULL || slot >= f2c_procedure_dummy_count(unit))
+        return SIZE_MAX;
+    return unit->dummy_argument_indices != NULL ? unit->dummy_argument_indices[slot] : slot;
 }
 
-static size_t select_generic_symbol(Symbol *generic, F2cExpr *const *arguments,
-                                    size_t argument_count, int subroutine_call, Unit **selection,
-                                    size_t *matching_count) {
-    size_t index;
-    *selection = NULL;
-    *matching_count = 0U;
-    for (index = 0U; index < generic->generic_candidate_count; ++index) {
-        Unit *candidate = generic->generic_candidates[index];
-        if (candidate != NULL &&
-            interface_candidate_matches(candidate, arguments, argument_count, subroutine_call)) {
-            *selection = candidate;
-            ++*matching_count;
-        }
-    }
-    if (generic->generic_candidate_count == 1U && *matching_count == 0U)
-        *selection = generic->generic_candidates[0];
-    return generic->generic_candidate_count;
+size_t f2c_procedure_dummy_slot(const Unit *unit, size_t argument) {
+    size_t slot;
+    for (slot = 0U; slot < f2c_procedure_dummy_count(unit); ++slot)
+        if (f2c_procedure_dummy_argument_index(unit, slot) == argument)
+            return slot;
+    return SIZE_MAX;
 }
 
-static size_t select_explicit_interface(Context *context, Unit *caller, const char *name,
-                                        F2cExpr *const *arguments, size_t argument_count,
-                                        int subroutine_call, Unit **selection,
-                                        size_t *matching_count) {
-    Symbol *symbol = f2c_find_symbol(caller, name);
-    const char *resolved_name =
-        symbol != NULL && symbol->external && symbol->c_name != NULL ? symbol->c_name : name;
-    size_t count;
-    if (symbol != NULL && symbol->procedure_interface != NULL) {
-        *selection = symbol->procedure_interface;
-        *matching_count =
-            interface_candidate_matches(*selection, arguments, argument_count, subroutine_call)
-                ? 1U
-                : 0U;
-        return 1U;
-    }
-    if (symbol != NULL && symbol->generic_candidate_count != 0U)
-        return select_generic_symbol(symbol, arguments, argument_count, subroutine_call, selection,
-                                     matching_count);
-    count = select_scope_interface(caller, name, resolved_name, arguments, argument_count,
-                                   subroutine_call, selection, matching_count);
-    if (count == 0U && caller->internal && caller->host_index < context->units.count) {
-        count = select_scope_interface(&context->units.items[caller->host_index], name,
-                                       resolved_name, arguments, argument_count, subroutine_call,
-                                       selection, matching_count);
-    }
-    return count;
+size_t f2c_procedure_alternate_return_index(const Unit *unit, size_t target_slot) {
+    size_t slot;
+    size_t alternate = 0U;
+    for (slot = 0U; slot < target_slot && slot < f2c_procedure_dummy_count(unit); ++slot)
+        if (f2c_procedure_dummy_argument_index(unit, slot) == SIZE_MAX)
+            ++alternate;
+    return alternate;
 }
 
 static F2cSourceSpan diagnostic_span(const F2cSourceSpan *span, size_t line) {
@@ -200,44 +47,6 @@ static F2cSourceSpan diagnostic_span(const F2cSourceSpan *span, size_t line) {
     result.begin.column = 1U;
     result.end = result.begin;
     return result;
-}
-
-Unit *f2c_validation_generic_specific(Context *context, Unit *caller, size_t line,
-                                      const char *generic_name, const F2cSourceSpan *span,
-                                      F2cExpr *const *arguments, size_t argument_count,
-                                      int subroutine_call, int required, int *handled) {
-    Unit *definition = NULL;
-    size_t matching_interfaces = 0U;
-    const size_t interface_count =
-        select_explicit_interface(context, caller, generic_name, arguments, argument_count,
-                                  subroutine_call, &definition, &matching_interfaces);
-    const F2cSourceSpan operation_span = diagnostic_span(span, line);
-    if (handled != NULL)
-        *handled = 0;
-    if (matching_interfaces == 1U) {
-        if (handled != NULL)
-            *handled = 1;
-        return definition;
-    }
-    if (matching_interfaces > 1U) {
-        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &operation_span, 1,
-                                 "generic interface '%s' is ambiguous for this operand list",
-                                 generic_name);
-        if (handled != NULL)
-            *handled = 1;
-        return NULL;
-    }
-    if (required) {
-        f2c_diagnostic_span_code(
-            context, F2C_DIAGNOSTIC_SEMANTIC, &operation_span, 1,
-            interface_count == 0U
-                ? "generic interface '%s' is not visible for this operation"
-                : "generic interface '%s' has no specific procedure matching this operand list",
-            generic_name);
-        if (handled != NULL)
-            *handled = 1;
-    }
-    return NULL;
 }
 
 static int has_explicit_argument_association(F2cExpr *const *arguments, size_t argument_count) {
@@ -254,14 +63,17 @@ static int has_explicit_argument_association(F2cExpr *const *arguments, size_t a
 static int bind_procedure_arguments(Context *context, Unit *definition, size_t line,
                                     const char *statement_text, const char *name,
                                     const F2cSourceSpan *call_span, F2cExpr ***arguments_io,
-                                    char ***items_io, size_t *argument_count_io) {
+                                    char ***items_io, size_t *argument_count_io,
+                                    F2cStatement *call_statement) {
     F2cExpr **ordered_arguments = NULL;
     char **ordered_items = NULL;
     unsigned char *assigned = NULL;
     unsigned char *created = NULL;
+    size_t *alternate_actuals = NULL;
     F2cExpr **arguments = arguments_io != NULL ? *arguments_io : NULL;
     char **items = items_io != NULL ? *items_io : NULL;
     const size_t argument_count = argument_count_io != NULL ? *argument_count_io : 0U;
+    const size_t dummy_count = f2c_procedure_dummy_count(definition);
     size_t next_positional = 0U;
     size_t i;
     int saw_keyword = 0;
@@ -270,15 +82,26 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
     if (definition->argument_count != 0U) {
         ordered_arguments =
             (F2cExpr **)calloc(definition->argument_count, sizeof(*ordered_arguments));
-        ordered_items = (char **)calloc(definition->argument_count, sizeof(*ordered_items));
-        assigned = (unsigned char *)calloc(definition->argument_count, sizeof(*assigned));
         created = (unsigned char *)calloc(definition->argument_count, sizeof(*created));
+        if (items_io != NULL)
+            ordered_items = (char **)calloc(definition->argument_count, sizeof(*ordered_items));
     }
-    if (definition->argument_count != 0U && (ordered_arguments == NULL || ordered_items == NULL ||
-                                             assigned == NULL || created == NULL)) {
+    if (dummy_count != 0U)
+        assigned = (unsigned char *)calloc(dummy_count, sizeof(*assigned));
+    if (definition->alternate_return_count != 0U) {
+        alternate_actuals =
+            (size_t *)malloc(definition->alternate_return_count * sizeof(*alternate_actuals));
+        if (alternate_actuals != NULL)
+            for (i = 0U; i < definition->alternate_return_count; ++i)
+                alternate_actuals[i] = SIZE_MAX;
+    }
+    if ((definition->argument_count != 0U && (ordered_arguments == NULL || created == NULL ||
+                                              (items_io != NULL && ordered_items == NULL))) ||
+        (dummy_count != 0U && assigned == NULL) ||
+        (definition->alternate_return_count != 0U && alternate_actuals == NULL)) {
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &call_diagnostic_span, 1,
-                                 "out of memory binding %zu arguments to procedure '%s'",
-                                 definition->argument_count, name);
+                                 "out of memory binding %zu dummy arguments to procedure '%s'",
+                                 dummy_count, name);
         goto failed;
     }
     for (i = 0U; i < argument_count; ++i) {
@@ -286,13 +109,14 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
         const F2cSourceSpan actual_diagnostic_span =
             diagnostic_span(actual != NULL ? &actual->span : NULL, line);
         size_t target = SIZE_MAX;
+        size_t argument_index;
         if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT) {
             size_t dummy_index;
             saw_keyword = 1;
             for (dummy_index = 0U; dummy_index < definition->argument_count; ++dummy_index) {
                 if (actual->text != NULL &&
                     strcmp(actual->text, definition->arguments[dummy_index]) == 0) {
-                    target = dummy_index;
+                    target = f2c_procedure_dummy_slot(definition, dummy_index);
                     break;
                 }
             }
@@ -313,31 +137,71 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
                 valid = 0;
                 continue;
             }
-            while (next_positional < definition->argument_count && assigned[next_positional])
+            while (next_positional < dummy_count && assigned[next_positional])
                 ++next_positional;
             target = next_positional++;
         }
-        if (target >= definition->argument_count) {
-            f2c_diagnostic_at(context, line,
-                              f2c_validation_expression_start_column(statement_text, actual), 1,
-                              "procedure '%s' has more actual than dummy arguments", name);
+        if (target >= dummy_count) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &actual_diagnostic_span, 1,
+                                     "procedure '%s' has more actual than dummy arguments", name);
             valid = 0;
             continue;
         }
+        argument_index = f2c_procedure_dummy_argument_index(definition, target);
         if (assigned[target]) {
-            f2c_diagnostic_span_code(
-                context, F2C_DIAGNOSTIC_SEMANTIC, &actual_diagnostic_span, 1,
-                "dummy argument '%s' is associated more than once in call to procedure '%s'",
-                definition->arguments[target], name);
+            if (argument_index == SIZE_MAX)
+                f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &actual_diagnostic_span,
+                                         1,
+                                         "alternate-return dummy argument %zu is associated more "
+                                         "than once in call to procedure '%s'",
+                                         target + 1U, name);
+            else
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, &actual_diagnostic_span, 1,
+                    "dummy argument '%s' is associated more than once in call to procedure '%s'",
+                    definition->arguments[argument_index], name);
             valid = 0;
             continue;
         }
         assigned[target] = 1U;
-        ordered_arguments[target] = actual;
+        if (argument_index == SIZE_MAX) {
+            const size_t alternate = f2c_procedure_alternate_return_index(definition, target);
+            if (actual == NULL || actual->kind != F2C_EXPR_ALTERNATE_RETURN) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, &actual_diagnostic_span, 1,
+                    "alternate-return dummy argument %zu of procedure '%s' requires a *label "
+                    "actual specifier",
+                    target + 1U, name);
+                valid = 0;
+            } else if (actual->text == NULL) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SYNTAX, &actual_diagnostic_span, 1,
+                    "alternate return target must be a statement label of one to five digits");
+                valid = 0;
+            } else if (alternate >= definition->alternate_return_count) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_INTERNAL, &actual_diagnostic_span, 1,
+                    "invalid alternate-return dummy layout for procedure '%s'", name);
+                valid = 0;
+            } else {
+                alternate_actuals[alternate] = i;
+            }
+            continue;
+        }
+        if (actual != NULL && actual->kind == F2C_EXPR_ALTERNATE_RETURN) {
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &actual_diagnostic_span, 1,
+                "ordinary dummy argument '%s' of procedure '%s' cannot be associated with an "
+                "alternate-return specifier",
+                definition->arguments[argument_index], name);
+            valid = 0;
+            continue;
+        }
+        ordered_arguments[argument_index] = actual;
         if (items != NULL)
-            ordered_items[target] = items[i];
+            ordered_items[argument_index] = items[i];
         if (actual != NULL && actual->kind == F2C_EXPR_ABSENT_ARGUMENT) {
-            Symbol *dummy = f2c_find_symbol(definition, definition->arguments[target]);
+            Symbol *dummy = f2c_find_symbol(definition, definition->arguments[argument_index]);
             if (actual->source != NULL) {
                 f2c_diagnostic_span_code(
                     context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
@@ -349,7 +213,7 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
                 f2c_diagnostic_span_code(
                     context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
                     "dummy argument '%s' of procedure '%s' is not OPTIONAL and cannot be omitted",
-                    definition->arguments[target], name);
+                    definition->arguments[argument_index], name);
                 valid = 0;
             } else {
                 actual->type = dummy->type;
@@ -357,30 +221,40 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
             }
         }
     }
-    for (i = 0U; i < definition->argument_count; ++i) {
+    for (i = 0U; i < dummy_count; ++i) {
+        const size_t argument_index = f2c_procedure_dummy_argument_index(definition, i);
         Symbol *dummy;
         if (assigned[i])
             continue;
-        dummy = f2c_find_symbol(definition, definition->arguments[i]);
+        if (argument_index == SIZE_MAX) {
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
+                "alternate-return dummy argument %zu of procedure '%s' has no *label actual "
+                "specifier",
+                i + 1U, name);
+            valid = 0;
+            continue;
+        }
+        dummy = f2c_find_symbol(definition, definition->arguments[argument_index]);
         if (dummy == NULL || !dummy->optional) {
             f2c_diagnostic_span_code(
                 context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
                 "required dummy argument '%s' of procedure '%s' has no actual argument",
-                definition->arguments[i], name);
+                definition->arguments[argument_index], name);
             valid = 0;
             continue;
         }
-        ordered_arguments[i] = f2c_expr_new_absent(dummy->type, dummy->rank);
-        if (ordered_arguments[i] == NULL) {
+        ordered_arguments[argument_index] = f2c_expr_new_absent(dummy->type, dummy->rank);
+        if (ordered_arguments[argument_index] == NULL) {
             f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &call_diagnostic_span,
                                      1, "out of memory while binding call to procedure '%s'", name);
             valid = 0;
             continue;
         }
-        created[i] = 1U;
+        created[argument_index] = 1U;
         if (items != NULL) {
-            ordered_items[i] = f2c_strdup("");
-            if (ordered_items[i] == NULL) {
+            ordered_items[argument_index] = f2c_strdup("");
+            if (ordered_items[argument_index] == NULL) {
                 f2c_diagnostic_span_code(
                     context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &call_diagnostic_span, 1,
                     "out of memory while binding call to procedure '%s'", name);
@@ -391,44 +265,74 @@ static int bind_procedure_arguments(Context *context, Unit *definition, size_t l
     if (!valid) {
         goto failed;
     }
-    if (definition->argument_count != argument_count) {
-        F2cExpr **replacement =
-            definition->argument_count != 0U
-                ? (F2cExpr **)realloc(arguments, definition->argument_count * sizeof(*arguments))
-                : NULL;
-        if (definition->argument_count != 0U && replacement == NULL) {
+    if (definition->alternate_return_count == 0U && argument_count == definition->argument_count) {
+        int identity_order = 1;
+        for (i = 0U; i < definition->argument_count; ++i) {
+            if (ordered_arguments[i] != arguments[i] ||
+                (items_io != NULL && ordered_items[i] != items[i]) || created[i]) {
+                identity_order = 0;
+                break;
+            }
+        }
+        if (identity_order) {
+            free(ordered_arguments);
+            free(ordered_items);
+            free(assigned);
+            free(created);
+            free(alternate_actuals);
+            return 1;
+        }
+    }
+    if (definition->alternate_return_count != 0U) {
+        if (call_statement == NULL || call_statement->labels != NULL ||
+            call_statement->label_count != 0U) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_INTERNAL, &call_diagnostic_span, 1,
+                                     "alternate-return binding requires an unbound CALL statement");
+            goto failed;
+        }
+        call_statement->labels =
+            (char **)calloc(definition->alternate_return_count, sizeof(*call_statement->labels));
+        call_statement->label_spans = (F2cSourceSpan *)calloc(definition->alternate_return_count,
+                                                              sizeof(*call_statement->label_spans));
+        if (call_statement->labels == NULL || call_statement->label_spans == NULL) {
             f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &call_diagnostic_span,
-                                     1, "out of memory while expanding call to procedure '%s'",
+                                     1, "out of memory binding alternate-return targets for '%s'",
                                      name);
             goto failed;
         }
-        arguments = replacement;
-        *arguments_io = arguments;
-        if (items_io != NULL) {
-            char **item_replacement =
-                definition->argument_count != 0U
-                    ? (char **)realloc(items, definition->argument_count * sizeof(*items))
-                    : NULL;
-            if (definition->argument_count != 0U && item_replacement == NULL) {
+        for (i = 0U; i < definition->alternate_return_count; ++i) {
+            F2cExpr *actual =
+                alternate_actuals[i] != SIZE_MAX ? arguments[alternate_actuals[i]] : NULL;
+            call_statement->labels[i] =
+                actual != NULL && actual->text != NULL ? f2c_strdup(actual->text) : NULL;
+            if (call_statement->labels[i] == NULL) {
                 f2c_diagnostic_span_code(
                     context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &call_diagnostic_span, 1,
-                    "out of memory while expanding call to procedure '%s'", name);
+                    "out of memory copying alternate-return target for '%s'", name);
                 goto failed;
             }
-            items = item_replacement;
-            *items_io = items;
+            call_statement->label_spans[i] = actual->span;
+            ++call_statement->label_count;
         }
     }
-    for (i = 0U; i < definition->argument_count; ++i) {
-        arguments[i] = ordered_arguments[i];
+    for (i = 0U; i < argument_count; ++i) {
+        if (arguments[i] == NULL || arguments[i]->kind != F2C_EXPR_ALTERNATE_RETURN)
+            continue;
+        f2c_expr_free(arguments[i]);
         if (items != NULL)
-            items[i] = ordered_items[i];
+            free(items[i]);
     }
+    free(arguments);
+    free(items);
+    *arguments_io = ordered_arguments;
+    if (items_io != NULL)
+        *items_io = ordered_items;
     *argument_count_io = definition->argument_count;
-    free(ordered_arguments);
-    free(ordered_items);
+    ordered_arguments = NULL;
+    ordered_items = NULL;
     free(assigned);
     free(created);
+    free(alternate_actuals);
     return 1;
 
 failed:
@@ -444,6 +348,7 @@ failed:
     free(ordered_items);
     free(assigned);
     free(created);
+    free(alternate_actuals);
     return 0;
 }
 
@@ -452,6 +357,7 @@ int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const
     size_t i;
     if (expected == NULL || actual == NULL || depth > 16U ||
         expected->external_subroutine != actual->external_subroutine ||
+        expected->external_alternate_return_count != actual->external_alternate_return_count ||
         (!expected->external_subroutine && expected->type != TYPE_UNKNOWN &&
          actual->type != TYPE_UNKNOWN && expected->type != actual->type) ||
         expected->external_parameter_count != actual->external_parameter_count)
@@ -920,16 +826,17 @@ static void validate_elemental_conformance(Context *context, const Unit *definit
     }
 }
 
-Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
-                                    const char *statement_text, const char *name,
-                                    const F2cSourceSpan *call_span, F2cExpr ***arguments,
-                                    char ***items, size_t *argument_count, int subroutine_call) {
+static Unit *validate_procedure_call(Context *context, Unit *caller, size_t line,
+                                     const char *statement_text, const char *name,
+                                     const F2cSourceSpan *call_span, F2cExpr ***arguments,
+                                     char ***items, size_t *argument_count, int subroutine_call,
+                                     F2cStatement *call_statement) {
     Unit *definition = NULL;
     size_t matching_interfaces = 0U;
-    const size_t interface_count =
-        select_explicit_interface(context, caller, name, arguments != NULL ? *arguments : NULL,
-                                  argument_count != NULL ? *argument_count : 0U, subroutine_call,
-                                  &definition, &matching_interfaces);
+    const size_t interface_count = f2c_procedure_select_explicit_interface(
+        context, caller, name, arguments != NULL ? *arguments : NULL,
+        argument_count != NULL ? *argument_count : 0U, subroutine_call, &definition,
+        &matching_interfaces);
     const F2cSourceSpan call_diagnostic_span = diagnostic_span(call_span, line);
     size_t i;
     if (interface_count > 1U && matching_interfaces != 1U) {
@@ -953,6 +860,9 @@ Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
                 "keyword arguments in call to procedure '%s' require a visible explicit interface",
                 name);
         }
+        if (subroutine_call && call_statement != NULL)
+            (void)f2c_validation_bind_unresolved_alternate_call(
+                context, caller, name, &call_diagnostic_span, call_statement);
         return NULL;
     }
     if ((subroutine_call && definition->kind != UNIT_SUBROUTINE) ||
@@ -963,15 +873,15 @@ Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
                                  definition->kind == UNIT_SUBROUTINE ? "SUBROUTINE" : "FUNCTION");
         return NULL;
     }
-    if (argument_count != NULL && *argument_count > definition->argument_count) {
+    if (argument_count != NULL && *argument_count > f2c_procedure_dummy_count(definition)) {
         f2c_diagnostic_span_code(
             context, F2C_DIAGNOSTIC_SEMANTIC, &call_diagnostic_span, 1,
             "procedure '%s' is called with %zu arguments but is defined with %zu", name,
-            *argument_count, definition->argument_count);
+            *argument_count, f2c_procedure_dummy_count(definition));
         return NULL;
     }
     if (!bind_procedure_arguments(context, definition, line, statement_text, name, call_span,
-                                  arguments, items, argument_count))
+                                  arguments, items, argument_count, call_statement))
         return NULL;
     for (i = 0U; i < *argument_count; ++i) {
         Symbol *dummy = f2c_find_symbol(definition, definition->arguments[i]);
@@ -982,4 +892,20 @@ Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
     validate_elemental_conformance(context, definition, line, statement_text,
                                    arguments != NULL ? *arguments : NULL, *argument_count);
     return definition;
+}
+
+Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
+                                    const char *statement_text, const char *name,
+                                    const F2cSourceSpan *call_span, F2cExpr ***arguments,
+                                    char ***items, size_t *argument_count, int subroutine_call) {
+    return validate_procedure_call(context, caller, line, statement_text, name, call_span,
+                                   arguments, items, argument_count, subroutine_call, NULL);
+}
+
+Unit *f2c_validation_call_statement(Context *context, Unit *caller, F2cStatement *statement) {
+    if (statement == NULL || statement->kind != F2C_STMT_CALL || statement->name == NULL)
+        return NULL;
+    return validate_procedure_call(context, caller, statement->line, statement->text,
+                                   statement->name, &statement->name_span, &statement->arguments,
+                                   &statement->items, &statement->item_count, 1, statement);
 }
