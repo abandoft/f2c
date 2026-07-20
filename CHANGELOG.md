@@ -1,3 +1,12 @@
+## 1.20.0
+
+- Added complete support for the `EXPONENT`, `FRACTION`, `NEAREST`, `RRSPACING`, `SCALE`, `SET_EXPONENT`, and `SPACING` real-representation intrinsics.
+- Completed binary32 and binary64 argument association, result typing, kind propagation, elemental rank and shape, and shuffled-keyword semantics.
+- Covered zero, signed zero, subnormal and nonfinite values, and extreme integer exponents, while rejecting a zero `NEAREST` direction before C generation.
+- Integrated real-representation intrinsics into the overflow-safe constant evaluator with exact hexadecimal C17 constants for static initialization.
+- Added on-demand portable C17 lowering that depends only on libc/libm and introduces no external runtime.
+- Corrected resolution of explicitly `EXTERNAL` procedures whose names match intrinsics so user procedures always take precedence.
+
 ## 1.19.0
 
 - Added a centralized portable numeric model for `INTEGER(KIND=1/2/4/8)`, IEEE binary32, and IEEE binary64, including radix, digits, precision, range, exponent bounds, extrema, and generated target-contract checks.

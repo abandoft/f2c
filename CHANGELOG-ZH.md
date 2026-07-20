@@ -1,3 +1,12 @@
+## 1.20.0
+
+- 完整支持 `EXPONENT`、`FRACTION`、`NEAREST`、`RRSPACING`、`SCALE`、`SET_EXPONENT` 和 `SPACING` 实数表示 intrinsic。
+- 完善 binary32 与 binary64 的参数关联、结果类型、kind、elemental rank/shape 和乱序关键字语义。
+- 覆盖零、signed zero、subnormal、非有限值、极端整数指数等边界，并在生成代码前拒绝零方向的 `NEAREST`。
+- 将实数表示 intrinsic 纳入溢出安全的常量求值器，为静态初始化生成精确十六进制 C17 常量。
+- 使用按需内联且仅依赖 libc/libm 的可移植 C17 辅助函数完成动态降级，不引入外部运行时。
+- 修正与 intrinsic 同名的显式 `EXTERNAL` 过程解析，使用户过程始终优先于内建函数。
+
 ## 1.19.0
 
 - 建立集中的可移植数值模型，明确 `INTEGER(KIND=1/2/4/8)`、IEEE binary32 与 binary64 的 radix、digits、precision、range、指数边界和极值，并在生成代码中验证目标平台契约。
