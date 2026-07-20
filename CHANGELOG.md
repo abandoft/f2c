@@ -5,6 +5,10 @@
 - Added finite-width bit-operation constant folding across sign-bit, full-width, zero-length, circular-shift, and boundary-shift cases while preserving the target integer kind.
 - Emitted portable C17 through fixed-width unsigned operations and `memcpy` bit copies, avoiding signed shifts, width-sized shifts, and strict-aliasing undefined behavior while generating support code only when used.
 - Implemented write-before-snapshot semantics for scalar aliases, scalar broadcasting, and overlapping array sections in `MVBITS`, with strict C17, UBSan, native-Fortran differential, and CI regressions.
+- Added typed-IR signatures, keyword association, result kind and length propagation, and semantic diagnostics for `ACHAR`, `ADJUSTL`, `ADJUSTR`, `CHAR`, `IACHAR`, `ICHAR`, `INDEX`, `LEN`, `LEN_TRIM`, `REPEAT`, `SCAN`, `TRIM`, and `VERIFY`.
+- Added byte-preserving character constant folding for nested transformations, concatenation, empty strings, reverse searches, and embedded zero bytes.
+- Added portable C17 lowering for scalar and elemental character intrinsics with checked lengths, bounded positions, reusable owned temporaries, and support code emitted only when required.
+- Added strict C17 execution, ASan/UBSan coverage, and byte-exact native Fortran differential validation for character intrinsic combinations.
 
 ## 1.17.0
 
