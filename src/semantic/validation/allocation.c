@@ -57,18 +57,24 @@ static F2cExpr *allocation_keyword_value(F2cStatement *statement, const char *na
 static int allocation_type_compatible(const Symbol *target, const F2cExpr *value) {
     if (target == NULL || value == NULL)
         return 0;
+    if (target->type == TYPE_DERIVED || value->type == TYPE_DERIVED)
+        return target->type == TYPE_DERIVED && value->type == TYPE_DERIVED &&
+               target->derived_type == value->derived_type;
     if (target->type == TYPE_CHARACTER || value->type == TYPE_CHARACTER)
         return target->type == TYPE_CHARACTER && value->type == TYPE_CHARACTER;
-    return target->type == value->type;
+    return target->type == value->type &&
+           (target->kind == 0 || value->type_kind == 0 || target->kind == value->type_kind);
 }
 
 void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *statement) {
     const int allocating = statement->kind == F2C_STMT_ALLOCATE;
     F2cExpr *source = allocating ? allocation_keyword_value(statement, "source") : NULL;
     F2cExpr *mold = allocating ? allocation_keyword_value(statement, "mold") : NULL;
+    F2cExpr *errmsg = allocation_keyword_value(statement, "errmsg");
     F2cExpr *model = source != NULL ? source : mold;
     size_t target_count = 0U;
     size_t stat_count = 0U;
+    size_t errmsg_count = 0U;
     size_t source_count = 0U;
     size_t mold_count = 0U;
     size_t i;
@@ -127,6 +133,22 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
                         "STAT= in %s must be a definable scalar INTEGER",
                         allocating ? "ALLOCATE" : "DEALLOCATE");
                 }
+            } else if (strcmp(keyword, "errmsg") == 0) {
+                ++errmsg_count;
+                if (errmsg_count > 1U) {
+                    f2c_diagnostic_at(
+                        context, statement->line,
+                        f2c_validation_expression_start_column(statement->text, argument), 1,
+                        "duplicate ERRMSG= in %s", allocating ? "ALLOCATE" : "DEALLOCATE");
+                }
+                if (value == NULL || value->type != TYPE_CHARACTER || value->rank != 0U ||
+                    !value->definable) {
+                    f2c_diagnostic_at(
+                        context, statement->line,
+                        f2c_validation_expression_start_column(statement->text, argument), 1,
+                        "ERRMSG= in %s must be a definable scalar CHARACTER",
+                        allocating ? "ALLOCATE" : "DEALLOCATE");
+                }
             } else if (allocating &&
                        (strcmp(keyword, "source") == 0 || strcmp(keyword, "mold") == 0)) {
                 size_t *keyword_count =
@@ -164,21 +186,22 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
              target->kind != F2C_EXPR_COMPONENT)) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, target), 1,
-                              "%s target must be an allocatable object",
+                              "%s target must be an allocatable or pointer object",
                               allocating ? "ALLOCATE" : "DEALLOCATE");
             continue;
         }
         if (!allocating && target->kind != F2C_EXPR_NAME && target->kind != F2C_EXPR_COMPONENT) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, target), 1,
-                              "DEALLOCATE target '%s' must be a whole allocatable object",
+                              "DEALLOCATE target '%s' must be a whole allocatable or pointer "
+                              "object",
                               symbol->name);
             continue;
         }
-        if (!symbol->allocatable) {
+        if (!symbol->allocatable && !symbol->pointer) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, target), 1,
-                              "%s target '%s' is not ALLOCATABLE",
+                              "%s target '%s' is neither ALLOCATABLE nor POINTER",
                               allocating ? "ALLOCATE" : "DEALLOCATE", symbol->name);
             continue;
         }
@@ -269,6 +292,11 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
     if (model != NULL && target_count != 1U) {
         f2c_diagnostic_at(context, statement->line, 1U, 1,
                           "ALLOCATE with SOURCE=/MOLD= currently requires exactly one target");
+    }
+    if (errmsg != NULL && stat_count == 0U) {
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, errmsg), 1,
+                          "ERRMSG= in %s requires STAT=", allocating ? "ALLOCATE" : "DEALLOCATE");
     }
 }
 
