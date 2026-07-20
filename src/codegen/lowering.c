@@ -427,41 +427,11 @@ char *f2c_symbol_dimension_extent(Unit *unit, const Symbol *symbol, size_t dimen
     return f2c_buffer_take(&result);
 }
 
-char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count) {
+static char *emit_contiguous_array_offset(Unit *unit, Symbol *symbol, char **indices,
+                                          size_t count) {
     Buffer result = {0};
-    char *character_length = NULL;
     const int checked_array = !symbol->argument && !symbol->allocatable && !symbol->pointer;
     size_t i;
-    f2c_buffer_printf(&result, "%s[", f2c_symbol_c_name(unit, symbol));
-    if (symbol->type == TYPE_CHARACTER) {
-        character_length = f2c_symbol_character_length(unit, symbol);
-        if (character_length == NULL)
-            character_length = f2c_strdup("1U");
-        f2c_buffer_printf(&result, "(size_t)(%s) * (size_t)(", character_length);
-    }
-    if (symbol->argument && f2c_symbol_uses_descriptor(symbol)) {
-        f2c_buffer_printf(&result, "f2c_array_descriptor_offset(%zuU, (const int64_t[]){", count);
-        for (i = 0U; i < count; ++i)
-            f2c_buffer_printf(&result, "%s(int64_t)(%s)", i == 0U ? "" : ", ", indices[i]);
-        f2c_buffer_append(&result, "}, (const int64_t[]){");
-        for (i = 0U; i < count; ++i)
-            f2c_buffer_printf(&result, "%s(int64_t)%s_lower_%zu", i == 0U ? "" : ", ",
-                              f2c_symbol_c_name(unit, symbol), i + 1U);
-        f2c_buffer_append(&result, "}, (const size_t[]){");
-        for (i = 0U; i < count; ++i)
-            f2c_buffer_printf(&result, "%s(size_t)%s_extent_%zu", i == 0U ? "" : ", ",
-                              f2c_symbol_c_name(unit, symbol), i + 1U);
-        f2c_buffer_append(&result, "}, (const ptrdiff_t[]){");
-        for (i = 0U; i < count; ++i)
-            f2c_buffer_printf(&result, "%s%s_stride_%zu", i == 0U ? "" : ", ",
-                              f2c_symbol_c_name(unit, symbol), i + 1U);
-        f2c_buffer_append(&result, "})");
-        if (character_length != NULL)
-            f2c_buffer_append(&result, ")");
-        f2c_buffer_append(&result, "]");
-        free(character_length);
-        return f2c_buffer_take(&result);
-    }
     for (i = 0U; i < count; ++i) {
         char *lower =
             i < symbol->rank ? f2c_symbol_dimension_lower(unit, symbol, i) : f2c_strdup("1");
@@ -513,9 +483,155 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
         free(extent);
         free(lower);
     }
+    return f2c_buffer_take(&result);
+}
+
+const char *f2c_unaligned_access_suffix(const Symbol *symbol) {
+    const int kind = symbol != NULL && symbol->kind > 0
+                         ? symbol->kind
+                         : f2c_default_kind(symbol != NULL ? symbol->type : TYPE_UNKNOWN);
+    if (symbol == NULL)
+        return NULL;
+    switch (symbol->type) {
+    case TYPE_LOGICAL:
+        /* Non-default LOGICAL storage has the corresponding integer representation. */
+        /* fall through */
+    case TYPE_INTEGER:
+        if (kind == 1)
+            return "i8";
+        if (kind == 2)
+            return "i16";
+        if (kind == 4)
+            return "i32";
+        if (kind == 8)
+            return "i64";
+        return NULL;
+    case TYPE_REAL:
+    case TYPE_DOUBLE:
+        if (kind == 4)
+            return "r4";
+        if (kind == 8)
+            return "r8";
+        if (kind == 16)
+            return "r16";
+        return NULL;
+    case TYPE_COMPLEX:
+    case TYPE_DOUBLE_COMPLEX:
+        if (kind == 4)
+            return "c4";
+        if (kind == 8)
+            return "c8";
+        if (kind == 16)
+            return "c16";
+        return NULL;
+    case TYPE_CHARACTER:
+    case TYPE_DERIVED:
+    case TYPE_UNKNOWN:
+    default:
+        return NULL;
+    }
+}
+
+char *f2c_emit_unaligned_linear_address(Unit *unit, Symbol *symbol, const char *offset) {
+    Buffer result = {0};
+    if (unit == NULL || symbol == NULL || !symbol->equivalence_unaligned ||
+        f2c_unaligned_access_suffix(symbol) == NULL)
+        return NULL;
+    f2c_buffer_printf(&result, "((unsigned char *)(%s)", f2c_symbol_c_name(unit, symbol));
+    if (offset != NULL)
+        f2c_buffer_printf(&result, " + sizeof(%s) * (size_t)(%s)", f2c_symbol_c_type(symbol),
+                          offset);
+    f2c_buffer_append(&result, ")");
+    return f2c_buffer_take(&result);
+}
+
+char *f2c_emit_unaligned_linear_load(Unit *unit, Symbol *symbol, const char *offset) {
+    Buffer result = {0};
+    const char *suffix = f2c_unaligned_access_suffix(symbol);
+    char *address = f2c_emit_unaligned_linear_address(unit, symbol, offset);
+    if (suffix == NULL || address == NULL) {
+        free(address);
+        return NULL;
+    }
+    f2c_buffer_printf(&result, "f2c_unaligned_load_%s(%s)", suffix, address);
+    free(address);
+    return f2c_buffer_take(&result);
+}
+
+char *f2c_emit_unaligned_address(Unit *unit, Symbol *symbol, char **indices, size_t count) {
+    char *offset = NULL;
+    char *result;
+    if (count != 0U) {
+        offset = emit_contiguous_array_offset(unit, symbol, indices, count);
+        if (offset == NULL)
+            return NULL;
+    }
+    result = f2c_emit_unaligned_linear_address(unit, symbol, offset);
+    free(offset);
+    return result;
+}
+
+char *f2c_emit_unaligned_load(Unit *unit, Symbol *symbol, char **indices, size_t count) {
+    Buffer result = {0};
+    const char *suffix = f2c_unaligned_access_suffix(symbol);
+    char *address = f2c_emit_unaligned_address(unit, symbol, indices, count);
+    if (suffix == NULL || address == NULL) {
+        free(address);
+        return NULL;
+    }
+    f2c_buffer_printf(&result, "f2c_unaligned_load_%s(%s)", suffix, address);
+    free(address);
+    return f2c_buffer_take(&result);
+}
+
+char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count) {
+    Buffer result = {0};
+    char *character_length = NULL;
+    char *offset;
+    size_t i;
+    if (symbol->equivalence_unaligned)
+        return f2c_emit_unaligned_load(unit, symbol, indices, count);
+    f2c_buffer_printf(&result, "%s[", f2c_symbol_c_name(unit, symbol));
+    if (symbol->type == TYPE_CHARACTER) {
+        character_length = f2c_symbol_character_length(unit, symbol);
+        if (character_length == NULL)
+            character_length = f2c_strdup("1U");
+        f2c_buffer_printf(&result, "(size_t)(%s) * (size_t)(", character_length);
+    }
+    if (symbol->argument && f2c_symbol_uses_descriptor(symbol)) {
+        f2c_buffer_printf(&result, "f2c_array_descriptor_offset(%zuU, (const int64_t[]){", count);
+        for (i = 0U; i < count; ++i)
+            f2c_buffer_printf(&result, "%s(int64_t)(%s)", i == 0U ? "" : ", ", indices[i]);
+        f2c_buffer_append(&result, "}, (const int64_t[]){");
+        for (i = 0U; i < count; ++i)
+            f2c_buffer_printf(&result, "%s(int64_t)%s_lower_%zu", i == 0U ? "" : ", ",
+                              f2c_symbol_c_name(unit, symbol), i + 1U);
+        f2c_buffer_append(&result, "}, (const size_t[]){");
+        for (i = 0U; i < count; ++i)
+            f2c_buffer_printf(&result, "%s(size_t)%s_extent_%zu", i == 0U ? "" : ", ",
+                              f2c_symbol_c_name(unit, symbol), i + 1U);
+        f2c_buffer_append(&result, "}, (const ptrdiff_t[]){");
+        for (i = 0U; i < count; ++i)
+            f2c_buffer_printf(&result, "%s%s_stride_%zu", i == 0U ? "" : ", ",
+                              f2c_symbol_c_name(unit, symbol), i + 1U);
+        f2c_buffer_append(&result, "})");
+        if (character_length != NULL)
+            f2c_buffer_append(&result, ")");
+        f2c_buffer_append(&result, "]");
+        free(character_length);
+        return f2c_buffer_take(&result);
+    }
+    offset = emit_contiguous_array_offset(unit, symbol, indices, count);
+    if (offset == NULL) {
+        free(character_length);
+        free(result.data);
+        return NULL;
+    }
+    f2c_buffer_append(&result, offset);
     if (character_length != NULL)
         f2c_buffer_append(&result, ")");
     f2c_buffer_append(&result, "]");
+    free(offset);
     free(character_length);
     return f2c_buffer_take(&result);
 }

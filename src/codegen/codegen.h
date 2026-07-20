@@ -14,6 +14,12 @@ char *f2c_emit_scalar_temporary_address(const char *c_type, Type type, const cha
 char *f2c_emit_binary(Unit *unit, const char *left, Type left_type, const char *operator_text,
                       const char *right, Type right_type, Type *result_type);
 char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count);
+const char *f2c_unaligned_access_suffix(const Symbol *symbol);
+char *f2c_emit_unaligned_address(Unit *unit, Symbol *symbol, char **indices, size_t count);
+char *f2c_emit_unaligned_load(Unit *unit, Symbol *symbol, char **indices, size_t count);
+char *f2c_emit_unaligned_linear_address(Unit *unit, Symbol *symbol, const char *offset);
+char *f2c_emit_unaligned_linear_load(Unit *unit, Symbol *symbol, const char *offset);
+char *f2c_emit_unaligned_designator_address(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_symbol_dimension_lower(Unit *unit, const Symbol *symbol, size_t dimension);
 char *f2c_symbol_dimension_upper(Unit *unit, const Symbol *symbol, size_t dimension);
 char *f2c_symbol_dimension_extent(Unit *unit, const Symbol *symbol, size_t dimension);

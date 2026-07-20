@@ -4,21 +4,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-char *f2c_expression_emit_array_reference(Unit *unit, const F2cExpr *expression, int *supported) {
+static int emit_array_indices(Unit *unit, const F2cExpr *expression, char ***indices_out,
+                              Type **types_out, int *supported) {
     char **indices = expression->child_count != 0U
                          ? (char **)calloc(expression->child_count, sizeof(*indices))
                          : NULL;
     Type *types = expression->child_count != 0U
                       ? (Type *)malloc(expression->child_count * sizeof(*types))
                       : NULL;
-    char *result;
     size_t i;
     if (expression->symbol == NULL ||
         (expression->child_count != 0U && (indices == NULL || types == NULL))) {
         free(indices);
         free(types);
         *supported = 0;
-        return NULL;
+        return 0;
     }
     for (i = 0U; i < expression->child_count; ++i) {
         if (expression->children[i]->kind == F2C_EXPR_ARRAY_SECTION) {
@@ -26,7 +26,7 @@ char *f2c_expression_emit_array_reference(Unit *unit, const F2cExpr *expression,
             if (section->child_count != 3U) {
                 f2c_expression_free_arguments(indices, types, expression->child_count);
                 *supported = 0;
-                return NULL;
+                return 0;
             }
             if (section->children[0]->kind == F2C_EXPR_INVALID)
                 indices[i] = i < expression->symbol->rank
@@ -42,11 +42,48 @@ char *f2c_expression_emit_array_reference(Unit *unit, const F2cExpr *expression,
         if (!*supported || indices[i] == NULL) {
             f2c_expression_free_arguments(indices, types, expression->child_count);
             *supported = 0;
-            return NULL;
+            return 0;
         }
     }
+    *indices_out = indices;
+    *types_out = types;
+    return 1;
+}
+
+char *f2c_expression_emit_array_reference(Unit *unit, const F2cExpr *expression, int *supported) {
+    char **indices = NULL;
+    Type *types = NULL;
+    char *result;
+    if (!emit_array_indices(unit, expression, &indices, &types, supported))
+        return NULL;
     result = f2c_emit_array_reference(unit, expression->symbol, indices, expression->child_count);
     f2c_expression_free_arguments(indices, types, expression->child_count);
+    if (result == NULL)
+        *supported = 0;
+    return result;
+}
+
+char *f2c_emit_unaligned_designator_address(Unit *unit, const F2cExpr *expression, int *supported) {
+    char **indices = NULL;
+    Type *types = NULL;
+    char *result;
+    if (supported == NULL)
+        return NULL;
+    *supported = 1;
+    if (expression == NULL || expression->symbol == NULL ||
+        !expression->symbol->equivalence_unaligned ||
+        (expression->kind != F2C_EXPR_NAME && expression->kind != F2C_EXPR_ARRAY_REFERENCE)) {
+        *supported = 0;
+        return NULL;
+    }
+    if (expression->kind == F2C_EXPR_NAME)
+        return f2c_emit_unaligned_address(unit, expression->symbol, NULL, 0U);
+    if (!emit_array_indices(unit, expression, &indices, &types, supported))
+        return NULL;
+    result = f2c_emit_unaligned_address(unit, expression->symbol, indices, expression->child_count);
+    f2c_expression_free_arguments(indices, types, expression->child_count);
+    if (result == NULL)
+        *supported = 0;
     return result;
 }
 
