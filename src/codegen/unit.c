@@ -832,8 +832,10 @@ static void emit_wrapper_arguments(Buffer *output, Unit *unit) {
 }
 
 static void emit_restricted_wrapper(Buffer *output, Unit *unit, const char *body_name) {
-    const int returns_value = f2c_unit_has_allocatable_result(unit) ||
-                              (unit->kind == UNIT_FUNCTION && unit->return_type != TYPE_CHARACTER);
+    const int returns_value =
+        f2c_unit_has_allocatable_result(unit) ||
+        (unit->kind == UNIT_FUNCTION && unit->return_type != TYPE_CHARACTER) ||
+        (unit->kind == UNIT_SUBROUTINE && unit->alternate_return_count != 0U);
     f2c_buffer_append(output, "static ");
     f2c_unit_emit_named_signature(output, unit, body_name, 1);
     f2c_buffer_append(output, ";\n");
@@ -896,6 +898,8 @@ void f2c_emit_unit(Context *context, Unit *unit) {
     }
     f2c_emit_unit_cleanup(&context->output, unit, 1);
     if (unit->kind == UNIT_PROGRAM) {
+        f2c_buffer_append(&context->output, "    return 0;\n");
+    } else if (unit->kind == UNIT_SUBROUTINE && unit->alternate_return_count != 0U) {
         f2c_buffer_append(&context->output, "    return 0;\n");
     } else if (f2c_unit_has_allocatable_result(unit)) {
         f2c_buffer_append(&context->output, "    return f2c_result_descriptor;\n");
