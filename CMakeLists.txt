@@ -541,6 +541,10 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_pointer_association_tests)
     add_test(NAME pointer_association_semantics COMMAND f2c_pointer_association_tests)
 
+    add_executable(f2c_pointer_allocation_tests test/test_pointer_allocation.c)
+    f2c_configure_test_target(f2c_pointer_allocation_tests)
+    add_test(NAME pointer_allocation_semantics COMMAND f2c_pointer_allocation_tests)
+
     add_executable(
         f2c_real_representation_intrinsic_tests
         test/test_real_representation_intrinsic.c
