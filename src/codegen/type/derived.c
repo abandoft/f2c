@@ -62,6 +62,9 @@ static void emit_component(Context *context, Unit *unit, Symbol *component) {
                       f2c_symbol_c_name(unit, component));
     if (component->allocatable || component->pointer) {
         f2c_buffer_append(output, ";\n");
+        if (component->pointer)
+            f2c_buffer_printf(output, "    bool %s_deallocatable;\n",
+                              f2c_symbol_c_name(unit, component));
         if (component->deferred_character)
             f2c_buffer_printf(output, "    size_t %s_character_length;\n",
                               f2c_symbol_c_name(unit, component));
@@ -70,6 +73,9 @@ static void emit_component(Context *context, Unit *unit, Symbol *component) {
                               f2c_symbol_c_name(unit, component), dimension + 1U);
             f2c_buffer_printf(output, "    int32_t %s_extent_%zu;\n",
                               f2c_symbol_c_name(unit, component), dimension + 1U);
+            if (component->pointer)
+                f2c_buffer_printf(output, "    ptrdiff_t %s_stride_%zu;\n",
+                                  f2c_symbol_c_name(unit, component), dimension + 1U);
         }
         return;
     }
@@ -578,11 +584,17 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                 } else if (component->pointer) {
                     f2c_buffer_printf(&context->output, "    temporary.%s = source->%s;\n", name,
                                       name);
+                    f2c_buffer_printf(&context->output,
+                                      "    temporary.%s_deallocatable = "
+                                      "source->%s_deallocatable;\n",
+                                      name, name);
                     for (size_t dimension = 0U; dimension < component->rank; ++dimension)
                         f2c_buffer_printf(&context->output,
                                           "    temporary.%s_lower_%zu = source->%s_lower_%zu; "
-                                          "temporary.%s_extent_%zu = source->%s_extent_%zu;\n",
+                                          "temporary.%s_extent_%zu = source->%s_extent_%zu; "
+                                          "temporary.%s_stride_%zu = source->%s_stride_%zu;\n",
                                           name, dimension + 1U, name, dimension + 1U, name,
+                                          dimension + 1U, name, dimension + 1U, name,
                                           dimension + 1U, name, dimension + 1U);
                 } else if (component->type == TYPE_DERIVED && component->derived_type != NULL &&
                            component->rank == 0U) {

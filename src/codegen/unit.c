@@ -30,6 +30,13 @@ static void emit_declarations(Context *context, Unit *unit) {
                           "%s *%s = f2c_descriptor_%s != NULL ? (%s *)"
                           "f2c_descriptor_%s->data : NULL;\n",
                           f2c_symbol_c_type(symbol), name, name, f2c_symbol_c_type(symbol), name);
+        if (symbol->pointer) {
+            f2c_unit_indent(output, 1);
+            f2c_buffer_printf(output,
+                              "bool %s_deallocatable = f2c_descriptor_%s != NULL && "
+                              "f2c_descriptor_%s->deallocatable;\n",
+                              name, name, name);
+        }
         if (symbol->deferred_character) {
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output,
@@ -131,6 +138,13 @@ static void emit_declarations(Context *context, Unit *unit) {
             size_t d;
             f2c_buffer_printf(output, "%s *%s = NULL;\n", f2c_symbol_c_type(symbol),
                               f2c_symbol_c_name(unit, symbol));
+            if (symbol->pointer) {
+                f2c_unit_indent(output, 1);
+                if (persistent)
+                    f2c_buffer_append(output, "static ");
+                f2c_buffer_printf(output, "bool %s_deallocatable = false;\n",
+                                  f2c_symbol_c_name(unit, symbol));
+            }
             if (symbol->deferred_character) {
                 f2c_unit_indent(output, 1);
                 if (persistent)
@@ -305,6 +319,8 @@ static void emit_declarations(Context *context, Unit *unit) {
         if (symbol->pointer) {
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output, "%s = NULL;\n", name);
+            f2c_unit_indent(output, 1);
+            f2c_buffer_printf(output, "%s_deallocatable = false;\n", name);
             if (symbol->deferred_character) {
                 f2c_unit_indent(output, 1);
                 f2c_buffer_printf(output, "f2c_char_len_%s = 0U;\n", name);
@@ -656,6 +672,13 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
             f2c_buffer_printf(output, "if (f2c_descriptor_%s != NULL) {\n", name);
             f2c_unit_indent(output, depth + 1);
             f2c_buffer_printf(output, "f2c_descriptor_%s->data = %s;\n", name, name);
+            if (symbol->pointer) {
+                f2c_unit_indent(output, depth + 1);
+                f2c_buffer_printf(output,
+                                  "f2c_descriptor_%s->deallocatable = "
+                                  "%s_deallocatable;\n",
+                                  name, name);
+            }
             f2c_unit_indent(output, depth + 1);
             f2c_buffer_printf(output, "f2c_descriptor_%s->element_size = sizeof(%s);\n", name,
                               f2c_symbol_c_type(symbol));
@@ -756,6 +779,11 @@ static void emit_unused_suppression(Buffer *output, Unit *unit) {
                           symbol != NULL ? f2c_symbol_c_name(unit, symbol) : unit->arguments[i]);
         if (symbol != NULL && f2c_symbol_uses_descriptor(symbol)) {
             size_t dimension;
+            if (symbol->pointer) {
+                f2c_unit_indent(output, 1);
+                f2c_buffer_printf(output, "(void)%s_deallocatable;\n",
+                                  f2c_symbol_c_name(unit, symbol));
+            }
             for (dimension = 0U; dimension < symbol->rank; ++dimension) {
                 f2c_unit_indent(output, 1);
                 f2c_buffer_printf(output, "(void)%s_lower_%zu;\n", f2c_symbol_c_name(unit, symbol),
@@ -783,6 +811,10 @@ static void emit_unused_suppression(Buffer *output, Unit *unit) {
         f2c_buffer_printf(output, "(void)%s;\n", f2c_symbol_c_name(unit, symbol));
         if (!symbol->allocatable && !symbol->pointer)
             continue;
+        if (symbol->pointer) {
+            f2c_unit_indent(output, 1);
+            f2c_buffer_printf(output, "(void)%s_deallocatable;\n", f2c_symbol_c_name(unit, symbol));
+        }
         if (symbol->deferred_character) {
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output, "(void)f2c_char_len_%s;\n", f2c_symbol_c_name(unit, symbol));

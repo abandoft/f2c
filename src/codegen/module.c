@@ -128,6 +128,9 @@ void f2c_emit_project_modules(Context *context) {
             if (symbol->allocatable || symbol->pointer) {
                 f2c_buffer_printf(&context->output, "%s *%s = NULL;\n", f2c_symbol_c_type(symbol),
                                   name);
+                if (symbol->pointer)
+                    f2c_buffer_printf(&context->output,
+                                      "static F2C_UNUSED bool %s_deallocatable = false;\n", name);
                 if (symbol->deferred_character)
                     f2c_buffer_printf(&context->output,
                                       "static F2C_UNUSED size_t f2c_char_len_%s = 0U;\n", name);
