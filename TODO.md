@@ -162,8 +162,11 @@
   一次性物化；普通 `CALL` 语句现也会为向量下标、数组构造器、嵌套 `TRANSPOSE`、用户
   `ELEMENTAL` 结果和其他可元素化数组表达式生成连续临时量及描述符，覆盖数值、CHARACTER 和
   含可分配组件的派生类型，并按 `INTENT` 管理复制和所有权。假定长度 CHARACTER 数组从描述符
-  绑定元素长度；向量下标用于 `INTENT(OUT/INOUT)` 会在语义阶段硬失败。函数表达式中的同类过程
-  实参仍需统一。局部、模块及哑实参数组指针现保存动态 lower/extent/stride，支持与完整目标、标量
+  绑定元素长度；向量下标用于 `INTENT(OUT/INOUT)` 会在语义阶段硬失败。函数表达式现会在普通及
+  类型绑定函数调用中，为传给非指针 `CONTIGUOUS` 假定形状哑实参的非连续仿射数值和 CHARACTER
+  数组段建立连续临时量，并按 `INTENT` 回写；边界表达式只求值一次。函数表达式中的向量下标、数组
+  构造器、嵌套数组表达式、含动态组件的派生类型临时量及数组/可分配函数结果仍需统一。局部、模块及
+  哑实参数组指针现保存动态 lower/extent/stride，支持与完整目标、标量
   数组元素以及由标量下标和 triplet 组成的任意 rank 仿射数组段关联；正负非单位步长、降秩、
   指针再次切片和跨过程关联回写均使用同一描述符路径。切片边界与步长各只求值一次，数组引用、
   inquiry 和归约会消费真实动态 stride；`INTENT(OUT)` 在过程入口清除地址及全部 shape 元数据。
@@ -173,9 +176,14 @@
   再次分配已关联指针会按标准创建新目标，完整目标别名继承释放能力，而普通 `TARGET`、可分配实体、
   数组元素和数组段不会被错误交给 `free`。`STAT/ERRMSG`、重复释放、跨过程回写、rank-specific FINAL、
   派生类型 `SOURCE=` 深复制和 deferred CHARACTER 定长赋值均有严格 C17、sanitizer 与 gfortran
-  差分。尚未完成左侧 bounds remapping、`CONTIGUOUS` 契约、带目标设计子的 `ASSOCIATED` 全组合、
-  数组指针派生组件的完整数组表达式/关联、假定大小最后一维及 FINAL 的完整逐维 shape，故本任务
-  保持未关闭。
+  差分。数组指针左侧现支持逐维 bounds specification 和跨 rank bounds remapping；下界与上界只
+  求值一次，目标元素数、连续性、整数范围及 stride 溢出均受保护。`CONTIGUOUS` 已进入声明、模块
+  导入、显式接口兼容、描述符入口、指针关联和过程调用契约；普通 `CALL` 覆盖现有可物化类型，函数
+  表达式覆盖数值及 CHARACTER 数组段。`ASSOCIATED(pointer,target)` 已支持关键字参数、标量元素、
+  substring、完整数组及任意 rank 仿射数组段，并比较字符长度、数据地址、extent 和 stride。尚未
+  完成函数表达式中含动态组件的派生类型连续临时量、数组/可分配函数结果、目标派生组件与向量下标
+  的 `ASSOCIATED` 组合、数组指针派生组件的完整数组表达式/关联、假定大小最后一维及 FINAL 的完整
+  逐维 shape，故本任务保持未关闭。
 - [ ] 把字符长度、逐维 shape、`VALUE`、`OPTIONAL`、`INTENT`、别名限制和嵌套过程签名纳入
   项目级接口兼容检查。
 - [x] 过程接口参数类型、kind、rank、intent、可选性、动态属性及嵌套过程元数据均使用原子扩容的
