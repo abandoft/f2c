@@ -33,6 +33,24 @@ static void expect_diagnostic(const char *body, const char *message, const char 
     f2c_result_free(&result);
 }
 
+static void test_unit_length_substrings(void) {
+    static const char source[] =
+        "subroutine character_intrinsic_substrings(text, i, code)\n"
+        "  implicit none\n"
+        "  character(len=6) :: text\n"
+        "  integer :: i, code\n"
+        "  code = ichar(text(1:1))\n"
+        "  code = ichar(text(i:i))\n"
+        "  code = iachar(text(:1))\n"
+        "  code = iachar(text(6:))\n"
+        "end subroutine character_intrinsic_substrings\n";
+    F2cOptions options = {"character_intrinsic_substrings.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "ICHAR and IACHAR accept statically unit-length substrings");
+    f2c_result_free(&result);
+}
+
 static void test_type_and_length_diagnostics(void) {
     expect_diagnostic("  result = adjustl(1)", "ADJUSTL argument STRING must be CHARACTER",
                       "noncharacter adjustment arguments suppress generated code");
@@ -75,6 +93,7 @@ static void test_keyword_diagnostics(void) {
 }
 
 int main(void) {
+    test_unit_length_substrings();
     test_type_and_length_diagnostics();
     test_kind_and_value_diagnostics();
     test_keyword_diagnostics();
