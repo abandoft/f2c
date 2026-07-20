@@ -82,6 +82,8 @@ int f2c_build_typed_program(Context *context) {
             f2c_build_statement_ir(context, &context->units.items[index]);
         }
     }
+    if (context->result.error_count == 0U)
+        f2c_validate_common_storage(context);
     if (context->result.error_count != 0U)
         return 0;
     context->phase = F2C_COMPILATION_TYPED_IR;
