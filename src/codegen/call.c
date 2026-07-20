@@ -438,6 +438,7 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
         const char *name = NULL;
         const char *c_type;
         char *character_length = NULL;
+        Buffer deallocatable = {0};
         F2cDescriptorView view = {0};
         int has_view;
         size_t dimension;
@@ -476,12 +477,20 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
             character_length = view.character_length != NULL
                                    ? f2c_strdup(view.character_length)
                                    : f2c_character_length_expression(unit, expression);
+        if (actual != NULL && actual->pointer)
+            f2c_buffer_printf(&deallocatable, "%s_deallocatable", name);
+        else if (actual != NULL && actual->allocatable)
+            f2c_buffer_printf(&deallocatable, "(%s != NULL)", name);
+        else
+            f2c_buffer_append(&deallocatable, "false");
         emit_indent(&call->prelude, depth);
         f2c_buffer_printf(&call->prelude,
-                          "f2c_descriptor f2c_call_descriptor_%zu = {.data = %s, .element_size = "
-                          "sizeof(%s), .rank = %zuU, .character_length = (size_t)(%s)};\n",
-                          i, view.data, c_type, view.rank,
-                          character_length != NULL ? character_length : "0U");
+                          "f2c_descriptor f2c_call_descriptor_%zu = {.data = %s, "
+                          ".deallocatable = %s, .element_size = sizeof(%s), .rank = %zuU, "
+                          ".character_length = (size_t)(%s)};\n",
+                          i, view.data, deallocatable.data != NULL ? deallocatable.data : "false",
+                          c_type, view.rank, character_length != NULL ? character_length : "0U");
+        free(deallocatable.data);
         for (dimension = 0U; dimension < view.rank; ++dimension) {
             emit_indent(&call->prelude, depth);
             f2c_buffer_printf(&call->prelude,
@@ -510,6 +519,13 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
             emit_indent(&call->postlude, depth);
             f2c_buffer_printf(&call->postlude, "%s = (%s *)f2c_call_descriptor_%zu.data;\n", name,
                               c_type, i);
+            if (actual->pointer) {
+                emit_indent(&call->postlude, depth);
+                f2c_buffer_printf(&call->postlude,
+                                  "%s_deallocatable = "
+                                  "f2c_call_descriptor_%zu.deallocatable;\n",
+                                  name, i);
+            }
             if (actual->deferred_character) {
                 emit_indent(&call->postlude, depth);
                 f2c_buffer_printf(&call->postlude,
