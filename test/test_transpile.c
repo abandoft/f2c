@@ -2361,8 +2361,9 @@ static void test_action_statement_semantics(void) {
     expect_contains(invalid.diagnostics,
                     "STOP code must be a scalar INTEGER or CHARACTER expression",
                     "STOP validates the typed code expression");
-    expect_contains(invalid.diagnostics, "alternate RETURN requires an alternate-return",
-                    "alternate RETURN remains explicit until its unsupported ABI is diagnosed");
+    expect_contains(invalid.diagnostics,
+                    "alternate RETURN is valid only in a subroutine with alternate-return",
+                    "alternate RETURN requires a matching procedure contract");
     expect_contains(invalid.diagnostics,
                     "STOP and ERROR STOP are not permitted in a PURE procedure",
                     "PURE procedures reject image termination statements");

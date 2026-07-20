@@ -37,9 +37,16 @@ static void validate_action_statement(Context *context, const Unit *unit,
                                  "STOP and ERROR STOP are not permitted in a PURE procedure");
     }
     if (statement->kind == F2C_STMT_RETURN && value != NULL) {
-        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &value->span, 1,
-                                 "alternate RETURN requires an alternate-return procedure "
-                                 "interface, which is not yet supported");
+        if (unit->kind != UNIT_SUBROUTINE || unit->alternate_return_count == 0U) {
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &value->span, 1,
+                "alternate RETURN is valid only in a subroutine with alternate-return dummy "
+                "arguments");
+        } else if (value->type != TYPE_INTEGER || value->rank != 0U) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &value->span, 1,
+                                     "alternate RETURN selector must be a scalar INTEGER "
+                                     "expression");
+        }
     }
 }
 
@@ -337,10 +344,7 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
             else
                 f2c_validation_time_intrinsic(context, statement);
         } else {
-            definition = f2c_validation_procedure_call(
-                context, unit, statement->line, statement->text, statement->name,
-                &statement->name_span, &statement->arguments, &statement->items,
-                &statement->item_count, 1);
+            definition = f2c_validation_call_statement(context, unit, statement);
         }
         statement->resolved_procedure = definition;
         if (definition != NULL && definition->name != NULL && !definition->interface_abstract &&
@@ -552,9 +556,9 @@ void f2c_validate_unit_expressions(Context *context, Unit *unit) {
             validate_symbol_expressions(context, unit, &derived->components[i]);
     }
     f2c_validation_bind_constructs(context, unit);
-    f2c_validation_branches(context, unit);
-    f2c_validation_lifetimes(context, unit);
     for (i = 0U; i < unit->statement_count; ++i)
         validate_statement(context, unit, &unit->statements[i]);
     f2c_validation_select_case_constructs(context, unit);
+    f2c_validation_branches(context, unit);
+    f2c_validation_lifetimes(context, unit);
 }
