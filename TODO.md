@@ -28,7 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建基线已经建立；当前默认严格 CTest 为 45/45，架构边界检查作为独立测试运行。
+  构建基线已经建立；当前默认严格 CTest 为 46/46，架构边界检查作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -280,6 +280,11 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   验证。`RANDOM_NUMBER` 与 `RANDOM_SEED` 已按 intrinsic subroutine 建模，覆盖 REAL 标量、任意 rank
   数组及非连续段、`SIZE/PUT/GET`、无参重置、种子状态往返和线程局部状态；数组实参使用统一
   描述符临时量及写回路径，严格 C17、ASan/UBSan 与原生 Fortran 属性差分已进入数值验证 CI。
+  `DATE_AND_TIME`、`SYSTEM_CLOCK` 和 `CPU_TIME` 现也使用结构化 intrinsic subroutine IR：字符结果
+  支持短目标截断和子串，日期值数组支持 kind 2/4/8、仿射数组段及第 9 项以后保持，系统时钟按
+  目标 kind 给出可表示的速率和回绕上限，显式同名 `EXTERNAL` 仍可覆盖内建过程。生成端仅使用
+  C17/POSIX 或平台 libc 时间接口，并已通过 AppleClang/GCC 严格编译、ASan/UBSan 和原生 Fortran
+  属性差分。
   显式 `EXTERNAL` 的同名过程优先于内建函数。其他 F90 intrinsic 尚未全部完成，因此本项保持未关闭。
 - [ ] 让 `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/TRANSPOSE/MATMUL` 等支持任意合法数组
   表达式、所有已支持 kind/rank、零大小数组和非默认下界，而不是只接受具名整数组。上述 intrinsic
