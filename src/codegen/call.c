@@ -3,6 +3,7 @@
 #include "codegen/descriptor/private.h"
 #include "codegen/value/private.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -70,8 +71,8 @@ char *f2c_bridge_implicit_mutable_actual(const Symbol *callee, size_t parameter,
     return f2c_buffer_take(&result);
 }
 
-static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const F2cExpr *ast, size_t index,
-                                 int depth) {
+static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *callee,
+                                 const F2cExpr *ast, size_t index, int depth) {
     char *result = NULL;
     if (ast != NULL && ast->kind == F2C_EXPR_KEYWORD_ARGUMENT && ast->child_count == 1U)
         ast = ast->children[0];
@@ -79,6 +80,117 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const F2cExpr *a
         return NULL;
     if (ast->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
+    if (ast->symbol != NULL && ast->symbol->equivalence_unaligned && ast->rank != 0U &&
+        ast->kind == F2C_EXPR_NAME) {
+        const F2cIntent intent = callee != NULL && index < callee->external_parameter_count
+                                     ? callee->external_parameter_intents[index]
+                                     : F2C_INTENT_UNSPECIFIED;
+        const char *suffix = f2c_unaligned_access_suffix(ast->symbol);
+        char ordinal[80];
+        char *count = f2c_symbol_element_count(unit, ast->symbol);
+        char *load;
+        char *address;
+        Buffer result_name = {0};
+        (void)snprintf(ordinal, sizeof(ordinal), "f2c_unaligned_actual_index_%zu", index);
+        load = suffix != NULL ? f2c_emit_unaligned_linear_load(unit, ast->symbol, ordinal) : NULL;
+        address =
+            suffix != NULL ? f2c_emit_unaligned_linear_address(unit, ast->symbol, ordinal) : NULL;
+        if (count == NULL || load == NULL || address == NULL) {
+            free(count);
+            free(load);
+            free(address);
+            return NULL;
+        }
+        emit_indent(&call->prelude, depth);
+        f2c_buffer_printf(&call->prelude,
+                          "const size_t f2c_unaligned_actual_count_%zu = (size_t)(%s);\n", index,
+                          count);
+        emit_indent(&call->prelude, depth);
+        f2c_buffer_printf(&call->prelude,
+                          "if (f2c_unaligned_actual_count_%zu > SIZE_MAX / sizeof(%s)) abort();\n",
+                          index, f2c_symbol_c_type(ast->symbol));
+        emit_indent(&call->prelude, depth);
+        if (intent == F2C_INTENT_OUT)
+            f2c_buffer_printf(&call->prelude,
+                              "%s *f2c_unaligned_actual_%zu = (%s *)calloc("
+                              "F2C_MAX((size_t)1U, f2c_unaligned_actual_count_%zu), "
+                              "sizeof(%s));\n",
+                              f2c_symbol_c_type(ast->symbol), index, f2c_symbol_c_type(ast->symbol),
+                              index, f2c_symbol_c_type(ast->symbol));
+        else
+            f2c_buffer_printf(&call->prelude,
+                              "%s *f2c_unaligned_actual_%zu = (%s *)malloc("
+                              "F2C_MAX((size_t)1U, f2c_unaligned_actual_count_%zu) * "
+                              "sizeof(%s));\n",
+                              f2c_symbol_c_type(ast->symbol), index, f2c_symbol_c_type(ast->symbol),
+                              index, f2c_symbol_c_type(ast->symbol));
+        emit_indent(&call->prelude, depth);
+        f2c_buffer_printf(&call->prelude, "if (f2c_unaligned_actual_%zu == NULL) abort();\n",
+                          index);
+        if (intent != F2C_INTENT_OUT) {
+            emit_indent(&call->prelude, depth);
+            f2c_buffer_printf(&call->prelude,
+                              "for (size_t %s = 0U; %s < f2c_unaligned_actual_count_%zu; "
+                              "++%s) f2c_unaligned_actual_%zu[%s] = %s;\n",
+                              ordinal, ordinal, index, ordinal, index, ordinal, load);
+        }
+        if (intent != F2C_INTENT_IN) {
+            emit_indent(&call->postlude, depth);
+            f2c_buffer_printf(&call->postlude,
+                              "for (size_t %s = 0U; %s < f2c_unaligned_actual_count_%zu; "
+                              "++%s) f2c_unaligned_store_%s(%s, "
+                              "f2c_unaligned_actual_%zu[%s]);\n",
+                              ordinal, ordinal, index, ordinal, suffix, address, index, ordinal);
+        }
+        emit_indent(&call->postlude, depth);
+        f2c_buffer_printf(&call->postlude, "free(f2c_unaligned_actual_%zu);\n", index);
+        f2c_buffer_printf(&result_name, "f2c_unaligned_actual_%zu", index);
+        free(count);
+        free(load);
+        free(address);
+        call->has_temporaries = 1;
+        return f2c_buffer_take(&result_name);
+    }
+    if (ast->symbol != NULL && ast->symbol->equivalence_unaligned && ast->rank == 0U &&
+        (ast->kind == F2C_EXPR_NAME || ast->kind == F2C_EXPR_ARRAY_REFERENCE)) {
+        const F2cIntent intent = callee != NULL && index < callee->external_parameter_count
+                                     ? callee->external_parameter_intents[index]
+                                     : F2C_INTENT_UNSPECIFIED;
+        const char *suffix = f2c_unaligned_access_suffix(ast->symbol);
+        char *address;
+        Buffer reference = {0};
+        int supported = 1;
+        if (suffix == NULL)
+            return NULL;
+        address = f2c_emit_unaligned_designator_address(unit, ast, &supported);
+        if (!supported || address == NULL) {
+            free(address);
+            return NULL;
+        }
+        emit_indent(&call->prelude, depth);
+        f2c_buffer_printf(&call->prelude, "unsigned char *f2c_unaligned_actual_address_%zu = %s;\n",
+                          index, address);
+        emit_indent(&call->prelude, depth);
+        if (intent == F2C_INTENT_OUT)
+            f2c_buffer_printf(&call->prelude, "%s f2c_unaligned_actual_%zu = {0};\n",
+                              f2c_symbol_c_type(ast->symbol), index);
+        else
+            f2c_buffer_printf(&call->prelude,
+                              "%s f2c_unaligned_actual_%zu = f2c_unaligned_load_%s("
+                              "f2c_unaligned_actual_address_%zu);\n",
+                              f2c_symbol_c_type(ast->symbol), index, suffix, index);
+        if (intent != F2C_INTENT_IN) {
+            emit_indent(&call->postlude, depth);
+            f2c_buffer_printf(&call->postlude,
+                              "f2c_unaligned_store_%s(f2c_unaligned_actual_address_%zu, "
+                              "f2c_unaligned_actual_%zu);\n",
+                              suffix, index, index);
+        }
+        f2c_buffer_printf(&reference, "&f2c_unaligned_actual_%zu", index);
+        free(address);
+        call->has_temporaries = 1;
+        return f2c_buffer_take(&reference);
+    }
     if (ast->type == TYPE_DERIVED && ast->derived_type != NULL && !ast->definable) {
         Buffer name = {0};
         Buffer reference = {0};
@@ -240,7 +352,8 @@ static int lower_call(LoweredCall *lowered, Unit *unit, const Symbol *callee,
         lowered->owned_transfers[i] = lowered->arguments[i] != NULL;
         lowered->has_transfers |= lowered->owned_transfers[i];
         if (lowered->arguments[i] == NULL)
-            lowered->arguments[i] = lower_scalar_actual(lowered, unit, expression, i, depth + 1);
+            lowered->arguments[i] =
+                lower_scalar_actual(lowered, unit, callee, expression, i, depth + 1);
         if (lowered->arguments[i] == NULL)
             return 0;
     }
@@ -347,7 +460,9 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
             (callee->external_parameter_pointer[i] &&
              (expression->kind != F2C_EXPR_NAME || actual == NULL || !actual->pointer)))
             return 0;
-        has_view = f2c_descriptor_view(unit, expression, &view);
+        has_view = actual != NULL && actual->equivalence_unaligned
+                       ? 0
+                       : f2c_descriptor_view(unit, expression, &view);
         if (!has_view &&
             (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i] ||
              !f2c_descriptor_materialize_view(&call->prelude, &call->postlude, unit, expression,

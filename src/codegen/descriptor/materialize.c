@@ -132,9 +132,11 @@ static int append_copy_in(Buffer *prelude, Unit *unit, const F2cExpr *expression
     return 1;
 }
 
-static void append_copy_out(Buffer *cleanup, const F2cExpr *expression, const char *element_code,
-                            const char *storage, const char *count, const char *character_length,
-                            size_t identifier, int depth, const F2cDescriptorView *view) {
+static int append_copy_out(Buffer *cleanup, Unit *unit, const F2cExpr *expression,
+                           const F2cExpr *element, const char *element_code, const char *storage,
+                           const char *count, const char *character_length, size_t identifier,
+                           int depth, const F2cDescriptorView *view) {
+    char *unaligned_address = NULL;
     indent(cleanup, depth);
     f2c_buffer_printf(cleanup,
                       "for (size_t f2c_call_actual_%zu_index = 0U; "
@@ -153,10 +155,23 @@ static void append_copy_out(Buffer *cleanup, const F2cExpr *expression, const ch
                           "&%s[f2c_call_actual_%zu_index]); }\n",
                           expression->derived_type->c_name, element_code,
                           expression->derived_type->c_name, element_code, storage, identifier);
+    } else if (element != NULL && element->symbol != NULL &&
+               element->symbol->equivalence_unaligned) {
+        const char *suffix = f2c_unaligned_access_suffix(element->symbol);
+        int supported = 1;
+        unaligned_address = f2c_emit_unaligned_designator_address(unit, element, &supported);
+        if (!supported || suffix == NULL || unaligned_address == NULL) {
+            free(unaligned_address);
+            return 0;
+        }
+        f2c_buffer_printf(cleanup, "f2c_unaligned_store_%s(%s, %s[f2c_call_actual_%zu_index]); }\n",
+                          suffix, unaligned_address, storage, identifier);
     } else {
         f2c_buffer_printf(cleanup, "(%s) = %s[f2c_call_actual_%zu_index]; }\n", element_code,
                           storage, identifier);
     }
+    free(unaligned_address);
+    return 1;
 }
 
 int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit,
@@ -227,6 +242,12 @@ int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit
         indent(prelude, depth);
         f2c_buffer_printf(prelude, "%s *%s = (%s *)calloc(%s == 0U ? 1U : %s, sizeof(%s));\n",
                           c_type, view->data, c_type, count, count, c_type);
+    } else if (!copy_in) {
+        indent(prelude, depth);
+        f2c_buffer_printf(prelude, "if (%s > SIZE_MAX / sizeof(%s)) abort();\n", count, c_type);
+        indent(prelude, depth);
+        f2c_buffer_printf(prelude, "%s *%s = (%s *)calloc(%s == 0U ? 1U : %s, sizeof(%s));\n",
+                          c_type, view->data, c_type, count, count, c_type);
     } else {
         indent(prelude, depth);
         f2c_buffer_printf(prelude, "if (%s > SIZE_MAX / sizeof(%s)) abort();\n", count, c_type);
@@ -241,9 +262,9 @@ int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit
     if (copy_in && !append_copy_in(prelude, unit, expression, element, element_code, view->data,
                                    count, character_length, identifier, depth, view))
         goto failed;
-    if (copy_out)
-        append_copy_out(cleanup, expression, element_code, view->data, count, character_length,
-                        identifier, depth, view);
+    if (copy_out && !append_copy_out(cleanup, unit, expression, element, element_code, view->data,
+                                     count, character_length, identifier, depth, view))
+        goto failed;
     if (expression->type == TYPE_DERIVED) {
         indent(cleanup, depth);
         f2c_buffer_printf(cleanup, "f2c_destroy_array_%s(%s, %s, %zuU);\n",
