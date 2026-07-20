@@ -185,6 +185,17 @@ static void emit_lifecycle_prototypes(Context *context, Units *units) {
                               derived->c_name, derived->c_name, derived->c_name, derived->c_name,
                               derived->c_name, derived->c_name, derived->c_name, derived->c_name,
                               derived->c_name, derived->c_name, derived->c_name, derived->c_name);
+            f2c_buffer_printf(
+                &context->output,
+                "static F2C_UNUSED %s *f2c_materialize_copy_%s(%s *target, bool *live, "
+                "const %s *source);\n"
+                "static F2C_UNUSED %s *f2c_materialize_move_%s(%s *target, bool *live, "
+                "%s source);\n"
+                "static F2C_UNUSED %s f2c_take_%s(%s *source, bool *live);\n"
+                "static F2C_UNUSED void f2c_release_%s(%s *target, bool *live);\n",
+                derived->c_name, derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                derived->c_name, derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                derived->c_name, derived->c_name, derived->c_name);
             for (size_t finalizer = 0U; finalizer < derived->finalizer_count; ++finalizer) {
                 Unit *procedure = find_finalizer(context, derived->finalizers[finalizer]);
                 if (procedure != NULL)
@@ -595,9 +606,41 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                               "{\n    %s temporary;\n"
                               "    f2c_clone_%s(&temporary, source);\n"
                               "    f2c_destroy_%s(target);\n"
-                              "    *target = temporary;\n}\n\n",
+                              "    *target = temporary;\n}\n",
                               derived->c_name, derived->c_name, derived->c_name, derived->c_name,
                               derived->c_name, derived->c_name, derived->c_name);
+            f2c_buffer_printf(
+                &context->output,
+                "static F2C_UNUSED %s *f2c_materialize_copy_%s(%s *target, bool *live, "
+                "const %s *source) {\n"
+                "    if (*live) f2c_destroy_%s(target);\n"
+                "    f2c_clone_%s(target, source);\n"
+                "    *live = true;\n"
+                "    return target;\n"
+                "}\n"
+                "static F2C_UNUSED %s *f2c_materialize_move_%s(%s *target, bool *live, "
+                "%s source) {\n"
+                "    if (*live) f2c_destroy_%s(target);\n"
+                "    *target = source;\n"
+                "    f2c_initialize_%s(target);\n"
+                "    *live = true;\n"
+                "    return target;\n"
+                "}\n"
+                "static F2C_UNUSED %s f2c_take_%s(%s *source, bool *live) {\n"
+                "    %s result = *source;\n"
+                "    memset(source, 0, sizeof(*source));\n"
+                "    *live = false;\n"
+                "    return result;\n"
+                "}\n"
+                "static F2C_UNUSED void f2c_release_%s(%s *target, bool *live) {\n"
+                "    if (!*live) return;\n"
+                "    f2c_destroy_%s(target);\n"
+                "    *live = false;\n"
+                "}\n\n",
+                derived->c_name, derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                derived->c_name, derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                derived->c_name, derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                derived->c_name, derived->c_name, derived->c_name, derived->c_name);
         }
     }
 }
