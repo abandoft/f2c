@@ -395,7 +395,8 @@ static void test_program_and_control_flow(void) {
                     "canonical DO restores its final control value without signed overflow");
     expect_contains(result.code, "F2C_LOOP_UNROLL\n    for (;",
                     "isolated counted loops receive the portable optimization hint");
-    expect_contains(result.code, "F2C_MOD(i, 2)", "MOD intrinsic is preserved without a runtime");
+    expect_contains(result.code, "f2c_mod_i32((int32_t)(i), (int32_t)(2))",
+                    "MOD intrinsic uses the typed overflow-safe C17 helper");
     expect_contains(result.code, "return EXIT_FAILURE", "ERROR STOP maps to a failure exit");
     f2c_result_free(&result);
 }
