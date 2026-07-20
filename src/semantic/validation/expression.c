@@ -664,6 +664,11 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                               "type-bound function '%s' expects %zu explicit arguments but has "
                               "%zu",
                               expression->text, expected_count, explicit_count);
+    } else if (expression->kind == F2C_EXPR_CALL && f2c_is_intrinsic_subroutine(expression->text) &&
+               (expression->symbol == NULL || !expression->symbol->external_declared)) {
+        f2c_diagnostic_at(
+            context, line, f2c_validation_expression_start_column(statement_text, expression), 1,
+            "intrinsic subroutine '%s' must be invoked by a CALL statement", expression->text);
     } else if (expression->kind == F2C_EXPR_CALL && !f2c_is_intrinsic_name(expression->text)) {
         Unit *definition = f2c_validation_procedure_call(
             context, unit, line, statement_text, expression->text, &expression->span,

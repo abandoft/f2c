@@ -152,14 +152,14 @@ static Symbol *bind_known_internal(Context *context, Unit *host, Unit *definitio
 static int intrinsic_call_reference(const Line *line, size_t start, size_t name_index,
                                     const char *name) {
     size_t close;
-    if (line == NULL || name == NULL || !f2c_is_intrinsic_name(name) ||
+    if (line == NULL || name == NULL ||
+        (!f2c_is_intrinsic_name(name) && !f2c_is_intrinsic_subroutine(name)) ||
         name_index + 1U >= line->token_count ||
         line->tokens[name_index + 1U].kind != F2C_TOKEN_LEFT_PAREN)
         return 0;
     if (name_index == start &&
         f2c_token_matching_delimiter(line->tokens, line->token_count, name_index + 1U, &close) &&
-        close + 1U < line->token_count &&
-        token_is_operator(line, close + 1U, "="))
+        close + 1U < line->token_count && token_is_operator(line, close + 1U, "="))
         return 0;
     return 1;
 }
@@ -198,6 +198,7 @@ void f2c_discover_implicit_line_symbols(Context *context, Unit *unit, const Line
         }
         if (name[0] == '_' || is_fortran_keyword(name) ||
             intrinsic_call_reference(line, start, index, name) ||
+            (f2c_is_intrinsic_subroutine(name) && preceded_by_call(line, index)) ||
             f2c_find_derived_type(unit, name) != NULL ||
             (index != 0U && line->tokens[index - 1U].kind == F2C_TOKEN_PERCENT) ||
             is_namelist_group_reference(unit, line, index, name) ||

@@ -71,7 +71,7 @@ void f2c_mark_call_targets(Unit *unit, const Line *line) {
         name = f2c_token_text(&line->tokens[name_index]);
         if (name == NULL)
             return;
-        if (!f2c_is_intrinsic_name(name)) {
+        if (!f2c_is_intrinsic_name(name) && !f2c_is_intrinsic_subroutine(name)) {
             symbol = f2c_ensure_symbol_impl(unit, name);
             if (symbol != NULL) {
                 symbol->external = 1;
@@ -99,7 +99,8 @@ void f2c_mark_function_references(Unit *unit, const Line *line) {
         symbol = symbol_for_token(unit, &line->tokens[index]);
         if (symbol == NULL || symbol->argument || symbol->parameter || symbol->rank != 0U ||
             symbol->type == TYPE_CHARACTER || symbol->statement_function ||
-            f2c_token_equals(&line->tokens[index], "if") || f2c_is_intrinsic_name(symbol->name))
+            f2c_token_equals(&line->tokens[index], "if") || f2c_is_intrinsic_name(symbol->name) ||
+            f2c_is_intrinsic_subroutine(symbol->name))
             continue;
         symbol->external = 1;
         symbol->external_subroutine = 0;

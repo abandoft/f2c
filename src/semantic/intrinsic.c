@@ -186,7 +186,6 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
     SCALAR("pack", 2U, 3U, F2C_INTRINSIC_TYPE_FIRST),
     TYPED_SCALAR("radix", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_RADIX,
                  F2C_INTRINSIC_KIND_DEFAULT),
-    SCALAR("random_number", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
     TYPED_SCALAR("range", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_RANGE,
                  F2C_INTRINSIC_KIND_DEFAULT),
     ELEMENTAL("real", 1U, 2U, F2C_INTRINSIC_TYPE_REAL),
@@ -273,7 +272,8 @@ const F2cIntrinsicSignature *f2c_find_intrinsic(const char *name) {
 int f2c_is_intrinsic_name(const char *name) { return f2c_find_intrinsic(name) != NULL; }
 
 int f2c_is_intrinsic_subroutine(const char *name) {
-    return name != NULL && strcmp(name, "mvbits") == 0;
+    return name != NULL && (strcmp(name, "mvbits") == 0 || strcmp(name, "random_number") == 0 ||
+                            strcmp(name, "random_seed") == 0);
 }
 
 int f2c_intrinsic_is_bit(F2cIntrinsicId intrinsic) {

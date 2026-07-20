@@ -3,6 +3,7 @@
 #include "semantic/validation/intrinsic/arguments.h"
 
 #include <stdint.h>
+#include <string.h>
 
 static const char *intrinsic_display_name(F2cIntrinsicId intrinsic) {
     switch (intrinsic) {
@@ -139,9 +140,8 @@ void f2c_validation_bit_intrinsic(Context *context, Unit *unit, size_t line,
     }
     display_name = intrinsic_display_name(expression->intrinsic);
     bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, display_name, expression->children,
-        expression->child_count, names, name_count,
-        expression->intrinsic == F2C_INTRINSIC_ISHFTC ? 2U : name_count);
+        context, line, statement_text, display_name, expression->children, expression->child_count,
+        names, name_count, expression->intrinsic == F2C_INTRINSIC_ISHFTC ? 2U : name_count);
     for (index = 0U; index < name_count; ++index)
         require_integer(context, line, statement_text, display_name, names[index],
                         bound.values[index]);
@@ -215,15 +215,15 @@ void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement
     int length_known;
     int to_position_known;
     if (statement == NULL || statement->kind != F2C_STMT_CALL || statement->name == NULL ||
-        !f2c_is_intrinsic_subroutine(statement->name))
+        strcmp(statement->name, "mvbits") != 0)
         return;
     statement->intrinsic = F2C_INTRINSIC_MVBITS;
     if (statement->item_count != 5U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "MVBITS requires exactly 5 arguments");
-    bound = f2c_validation_bind_intrinsic_arguments(
-        context, statement->line, statement->text, "MVBITS", statement->arguments,
-        statement->item_count, names, 5U, 5U);
+    bound = f2c_validation_bind_intrinsic_arguments(context, statement->line, statement->text,
+                                                    "MVBITS", statement->arguments,
+                                                    statement->item_count, names, 5U, 5U);
     for (argument = 0U; argument < 5U; ++argument)
         require_integer(context, statement->line, statement->text, "MVBITS", names[argument],
                         bound.values[argument]);
