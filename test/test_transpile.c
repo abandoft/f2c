@@ -1115,7 +1115,7 @@ static void test_deferred_character_allocation(void) {
                     "deferred CHARACTER allocation without a type specification is diagnosed");
     expect_contains(result.diagnostics, "length must be a scalar INTEGER",
                     "non-integer deferred CHARACTER length is diagnosed");
-    expect_contains(result.diagnostics, "target 'n' is not ALLOCATABLE",
+    expect_contains(result.diagnostics, "target 'n' is neither ALLOCATABLE nor POINTER",
                     "allocation of a non-allocatable object is diagnosed");
     expect_contains(result.diagnostics, "cannot have a stride",
                     "strided allocation bounds are diagnosed");
@@ -1123,7 +1123,7 @@ static void test_deferred_character_allocation(void) {
                     "invalid allocation status variables are diagnosed");
     expect_contains(result.diagnostics, "SOURCE= type is incompatible",
                     "type-incompatible allocation initialization is rejected explicitly");
-    expect_contains(result.diagnostics, "must be a whole allocatable object",
+    expect_contains(result.diagnostics, "must be a whole allocatable or pointer object",
                     "element deallocation is diagnosed");
     expect_contains(result.diagnostics, "ALLOCATE requires at least one target",
                     "empty allocation statements are diagnosed");
