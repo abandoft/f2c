@@ -63,9 +63,9 @@ static void test_equivalence_rank_diagnostic(void) {
 
 static void test_conflicting_equivalence_groups(void) {
     static const char source[] = "program conflicting_equivalence\n"
-                                 "  real :: storage(2), alias(2), other(2)\n"
+                                 "  real :: storage(2), alias(2)\n"
                                  "  equivalence (storage(1), alias(1))\n"
-                                 "  equivalence (other(1), alias(1))\n"
+                                 "  equivalence (storage(2), alias(1))\n"
                                  "end program conflicting_equivalence\n";
     DiagnosticCapture capture = {0};
     F2cResult result = transpile_with_diagnostics(source, &capture);
@@ -73,6 +73,49 @@ static void test_conflicting_equivalence_groups(void) {
            "conflicting storage groups suppress generated C");
     expect(capture.captured && capture.code == F2C_DIAGNOSTIC_SEMANTIC && capture.line == 4U,
            "conflicting storage groups have a stable semantic diagnostic");
+    f2c_result_free(&result);
+}
+
+static void test_equivalence_storage_views(void) {
+    static const char valid[] = "program equivalence_views\n"
+                                "  integer :: bits\n"
+                                "  real :: value, storage(3), window(2)\n"
+                                "  equivalence (bits, value)\n"
+                                "  equivalence (storage(2), window(1))\n"
+                                "end program equivalence_views\n";
+    static const char unaligned[] = "program unaligned_equivalence\n"
+                                    "  real :: words(2)\n"
+                                    "  double precision :: value\n"
+                                    "  equivalence (words(2), value)\n"
+                                    "end program unaligned_equivalence\n";
+    static const char common_association[] = "program common_equivalence\n"
+                                             "  integer :: shared, local\n"
+                                             "  common /state/ shared\n"
+                                             "  equivalence (shared, local)\n"
+                                             "end program common_equivalence\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile_with_diagnostics(valid, &capture);
+    expect(result.error_count == 0U && result.code != NULL,
+           "heterogeneous and shifted EQUIVALENCE groups reach code generation");
+    expect(result.code != NULL && strstr(result.code, "union {") != NULL &&
+               strstr(result.code, "f2c_equivalence_0") != NULL &&
+               strstr(result.code, "unsigned char prefix[4]") != NULL &&
+               strstr(result.code, "EQUIVALENCE value offset") != NULL,
+           "EQUIVALENCE emits offset-checked typed storage views");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile_with_diagnostics(unaligned, &capture);
+    expect(result.error_count != 0U && result.code == NULL && result.diagnostics != NULL &&
+               strstr(result.diagnostics, "alignment not representable by portable C17") != NULL,
+           "unaligned EQUIVALENCE storage fails before unsafe C is emitted");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile_with_diagnostics(common_association, &capture);
+    expect(result.error_count != 0U && result.code == NULL && result.diagnostics != NULL &&
+               strstr(result.diagnostics, "association with COMMON entity") != NULL,
+           "unsupported COMMON/EQUIVALENCE composition has an explicit diagnostic");
     f2c_result_free(&result);
 }
 
@@ -334,6 +377,7 @@ static void test_module_data_initialization(void) {
 int main(void) {
     test_equivalence_rank_diagnostic();
     test_conflicting_equivalence_groups();
+    test_equivalence_storage_views();
     test_blank_common_and_mixed_blocks();
     test_common_storage_mismatch_diagnostic();
     test_common_storage_views();

@@ -81,7 +81,8 @@ static void test_equivalence_storage_lifetime(void) {
     F2cResult result = transpile("equivalence_data.f90", source);
     expect(result.error_count == 0U && result.code != NULL,
            "DATA accepts a supported EQUIVALENCE storage designator");
-    expect(result.code != NULL && strstr(result.code, "static int32_t storage[") != NULL &&
+    expect(result.code != NULL && strstr(result.code, "static union {") != NULL &&
+               strstr(result.code, "f2c_equivalence_0") != NULL &&
                strstr(result.code, "static bool f2c_data_initialized_") != NULL,
            "DATA SAVE semantics propagate from an EQUIVALENCE alias to its storage root");
     f2c_result_free(&result);
