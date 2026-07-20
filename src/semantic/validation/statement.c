@@ -18,6 +18,51 @@ static int null_pointer_value(const F2cExpr *expression) {
            strcmp(expression->text, "null") == 0;
 }
 
+static int pointer_target_designator(const F2cExpr *expression) {
+    return expression != NULL &&
+           (expression->kind == F2C_EXPR_NAME || expression->kind == F2C_EXPR_ARRAY_REFERENCE) &&
+           expression->symbol != NULL;
+}
+
+static int pointer_target_has_vector_subscript(const F2cExpr *expression) {
+    size_t selector;
+    if (expression == NULL || expression->kind != F2C_EXPR_ARRAY_REFERENCE)
+        return 0;
+    for (selector = 0U; selector < expression->child_count; ++selector) {
+        const F2cExpr *subscript = expression->children[selector];
+        if (subscript != NULL && subscript->kind != F2C_EXPR_ARRAY_SECTION && subscript->rank != 0U)
+            return 1;
+    }
+    return 0;
+}
+
+static int pointer_derived_type_compatible(const Symbol *pointer, const F2cExpr *target) {
+    const F2cDerivedType *candidate;
+    if (pointer == NULL || target == NULL || pointer->type != TYPE_DERIVED)
+        return 1;
+    candidate = target->derived_type;
+    if (!pointer->polymorphic)
+        return pointer->derived_type == candidate;
+    while (candidate != NULL) {
+        if (candidate == pointer->derived_type)
+            return 1;
+        candidate = candidate->parent;
+    }
+    return 0;
+}
+
+static int character_length_constant(Unit *unit, const Symbol *symbol, int64_t *length) {
+    if (unit == NULL || symbol == NULL || length == NULL || symbol->type != TYPE_CHARACTER ||
+        symbol->deferred_character)
+        return 0;
+    if (symbol->character_length_expression != NULL)
+        return f2c_evaluate_integer_constant(unit, symbol->character_length_expression, length);
+    if (symbol->character_length_syntax.count != 0U)
+        return f2c_evaluate_integer_syntax(unit, symbol->character_length_syntax, length);
+    *length = 1;
+    return 1;
+}
+
 static void validate_action_statement(Context *context, const Unit *unit,
                                       const F2cStatement *statement) {
     const F2cExpr *value = statement->expression;
@@ -133,7 +178,8 @@ static void validate_control_flow_statement(Context *context, Unit *unit,
     }
 }
 
-static void validate_pointer_statement(Context *context, const F2cStatement *statement) {
+static void validate_pointer_statement(Context *context, Unit *unit,
+                                       const F2cStatement *statement) {
     size_t i;
     if (statement->kind == F2C_STMT_NULLIFY) {
         if (statement->item_count == 0U) {
@@ -167,7 +213,7 @@ static void validate_pointer_statement(Context *context, const F2cStatement *sta
             left != NULL && (left->kind == F2C_EXPR_NAME || left->kind == F2C_EXPR_COMPONENT)
                 ? left->symbol
                 : NULL;
-        Symbol *target = right != NULL && right->kind == F2C_EXPR_NAME ? right->symbol : NULL;
+        Symbol *target = pointer_target_designator(right) ? right->symbol : NULL;
         const int null_target = null_pointer_value(right);
         if (pointer == NULL || (!pointer->pointer && !pointer->procedure_pointer)) {
             f2c_diagnostic_at(context, statement->line,
@@ -201,14 +247,33 @@ static void validate_pointer_statement(Context *context, const F2cStatement *sta
             (target == NULL || (!target->target && !target->pointer && !target->allocatable))) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, right), 1,
-                              "pointer-assignment value must be a whole TARGET, POINTER, "
+                              "pointer-assignment value must designate a TARGET, POINTER, "
                               "ALLOCATABLE object, or NULL()");
-        } else if (!null_target && target != NULL &&
-                   (target->type != pointer->type || target->kind != pointer->kind ||
-                    target->rank != pointer->rank)) {
+        } else if (!null_target && pointer_target_has_vector_subscript(right)) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, right), 1,
-                              "pointer-assignment objects have incompatible type, kind, or rank");
+                              "pointer-assignment target cannot have a vector subscript");
+        } else if (!null_target && target != NULL &&
+                   (right->type != pointer->type || right->type_kind != pointer->kind ||
+                    right->rank != pointer->rank ||
+                    !pointer_derived_type_compatible(pointer, right))) {
+            f2c_diagnostic_at(context, statement->line,
+                              f2c_validation_expression_start_column(statement->text, right), 1,
+                              "pointer-assignment objects have incompatible declared type, kind, "
+                              "or rank");
+        } else if (!null_target && target != NULL && pointer->type == TYPE_CHARACTER &&
+                   !pointer->deferred_character) {
+            int64_t pointer_length;
+            int64_t target_length;
+            if (character_length_constant(unit, pointer, &pointer_length) &&
+                character_length_constant(unit, target, &target_length) &&
+                pointer_length != target_length) {
+                f2c_diagnostic_at(
+                    context, statement->line,
+                    f2c_validation_expression_start_column(statement->text, right), 1,
+                    "pointer-assignment CHARACTER lengths %lld and %lld are incompatible",
+                    (long long)pointer_length, (long long)target_length);
+            }
         }
     }
 }
@@ -304,7 +369,7 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
     f2c_validation_case_statement(context, unit, statement);
     f2c_validation_data_statement(context, unit, statement);
     f2c_validation_where_statement(context, statement);
-    validate_pointer_statement(context, statement);
+    validate_pointer_statement(context, unit, statement);
     defined_assignment = validate_defined_assignment(context, unit, statement);
     if (!defined_assignment) {
         f2c_validation_intrinsic_assignment(context, statement);
