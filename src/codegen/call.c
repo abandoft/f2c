@@ -544,9 +544,10 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
     return 1;
 }
 
-void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
-                                  const Symbol *explicit_callee,
-                                  F2cExpr *const *argument_expressions, size_t count, int depth) {
+static void emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
+                                     const Symbol *explicit_callee,
+                                     F2cExpr *const *argument_expressions, size_t count,
+                                     const F2cStatement *alternate_call, int depth) {
     size_t i;
     LoweredCall call;
     const Symbol *callee;
@@ -610,13 +611,16 @@ void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
         lowered_call_free(&call);
         return;
     }
-    has_scope = call.has_transfers || call.has_descriptors || call.has_temporaries;
+    has_scope = call.has_transfers || call.has_descriptors || call.has_temporaries ||
+                (alternate_call != NULL && alternate_call->label_count != 0U);
     if (has_scope) {
         emit_indent(output, depth);
         f2c_buffer_append(output, "{\n");
         f2c_buffer_append(output, call.prelude.data != NULL ? call.prelude.data : "");
     }
     emit_indent(output, depth + (has_scope ? 1 : 0));
+    if (alternate_call != NULL && alternate_call->label_count != 0U)
+        f2c_buffer_append(output, "const int32_t f2c_alternate_return = (int32_t)");
     f2c_buffer_printf(output, "%s(", name);
     for (i = 0U; i < count; ++i)
         f2c_buffer_printf(output, "%s%s", i == 0U ? "" : ", ", call.arguments[i]);
@@ -651,10 +655,41 @@ void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
             emit_indent(output, depth + 1);
             f2c_buffer_printf(output, "free(f2c_array_conversion_%zu);\n", i);
         }
+        if (alternate_call != NULL && alternate_call->label_count != 0U) {
+            emit_indent(output, depth + 1);
+            f2c_buffer_append(output, "switch (f2c_alternate_return) {\n");
+            for (i = 0U; i < alternate_call->label_count; ++i) {
+                emit_indent(output, depth + 2);
+                f2c_buffer_printf(output, "case %zu: {\n", i + 1U);
+                f2c_emit_scope_cleanup_plan(output, unit, &alternate_call->label_cleanups[i],
+                                            depth + 3);
+                emit_indent(output, depth + 3);
+                f2c_buffer_printf(output, "goto f2c_label_%s; }\n", alternate_call->labels[i]);
+            }
+            emit_indent(output, depth + 2);
+            f2c_buffer_append(output, "default: break;\n");
+            emit_indent(output, depth + 1);
+            f2c_buffer_append(output, "}\n");
+        }
         emit_indent(output, depth);
         f2c_buffer_append(output, "}\n");
     }
     lowered_call_free(&call);
+}
+
+void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
+                                  const Symbol *explicit_callee,
+                                  F2cExpr *const *argument_expressions, size_t count, int depth) {
+    emit_call_with_signature(output, unit, name, explicit_callee, argument_expressions, count, NULL,
+                             depth);
+}
+
+void f2c_emit_alternate_return_call(Buffer *output, Unit *unit, const char *name,
+                                    const Symbol *explicit_callee,
+                                    F2cExpr *const *argument_expressions, size_t count,
+                                    const F2cStatement *statement, int depth) {
+    emit_call_with_signature(output, unit, name, explicit_callee, argument_expressions, count,
+                             statement, depth);
 }
 
 void f2c_emit_call(Buffer *output, Unit *unit, const char *name,
