@@ -65,6 +65,8 @@ foreach(
        namelist_internal
        pointer_semantics
        pointer_section
+       pointer_allocation
+       pointer_deallocation_errors
        pointer_dummy
        procedure_pointer
        procedure_pointer_component
