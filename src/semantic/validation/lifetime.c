@@ -163,7 +163,8 @@ static int prepare_statement_plans(Context *context, Unit *unit, F2cStatement *s
     if (statement == NULL)
         return 1;
     if ((statement->kind == F2C_STMT_ARITHMETIC_IF || statement->kind == F2C_STMT_GOTO ||
-         (statement->kind == F2C_STMT_ASSIGNED_GOTO && statement->label_count != 0U)) &&
+         (statement->kind == F2C_STMT_ASSIGNED_GOTO && statement->label_count != 0U) ||
+         (statement->kind == F2C_STMT_CALL && statement->label_count != 0U)) &&
         !prepare_label_plans(context, unit, statement))
         return 0;
     if (statement->kind == F2C_STMT_GOTO && statement->name != NULL &&
