@@ -56,9 +56,18 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
     if (array == NULL || array->rank == 0U)
         return 0;
     if (array->kind == F2C_EXPR_NAME && array->symbol != NULL) {
+        Buffer dynamic_stride = {0};
         *pointer = f2c_strdup(f2c_symbol_c_name(unit, array->symbol));
         *count = f2c_symbol_element_count(unit, array->symbol);
-        *stride = f2c_strdup("1");
+        if (array->symbol->rank == 1U &&
+            (array->symbol->pointer ||
+             (array->symbol->argument && f2c_symbol_uses_descriptor(array->symbol)))) {
+            f2c_buffer_printf(&dynamic_stride, "%s_stride_1",
+                              f2c_symbol_c_name(unit, array->symbol));
+            *stride = f2c_buffer_take(&dynamic_stride);
+        } else {
+            *stride = f2c_strdup("1");
+        }
         return *pointer != NULL && *count != NULL && *stride != NULL;
     }
     if (array->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {

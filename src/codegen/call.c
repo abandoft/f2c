@@ -525,7 +525,7 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
                 f2c_buffer_printf(&call->postlude,
                                   "%s_extent_%zu = (int32_t)f2c_call_descriptor_%zu.extent[%zu];\n",
                                   name, dimension + 1U, i, dimension);
-                if (actual->argument && f2c_symbol_uses_descriptor(actual)) {
+                if (actual->pointer) {
                     emit_indent(&call->postlude, depth);
                     f2c_buffer_printf(&call->postlude,
                                       "%s_stride_%zu = f2c_call_descriptor_%zu.stride[%zu];\n",
