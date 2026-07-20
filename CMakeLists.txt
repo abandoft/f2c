@@ -88,6 +88,7 @@ set(
     src/codegen/call.c
     src/codegen/codegen.h
     src/codegen/data.c
+    src/codegen/descriptor/association.c
     src/codegen/descriptor/materialize.c
     src/codegen/descriptor/private.h
     src/codegen/descriptor/view.c
@@ -535,6 +536,10 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_alternate_return_tests test/test_alternate_return.c)
     f2c_configure_test_target(f2c_alternate_return_tests)
     add_test(NAME alternate_return_semantics COMMAND f2c_alternate_return_tests)
+
+    add_executable(f2c_pointer_association_tests test/test_pointer_association.c)
+    f2c_configure_test_target(f2c_pointer_association_tests)
+    add_test(NAME pointer_association_semantics COMMAND f2c_pointer_association_tests)
 
     add_executable(
         f2c_real_representation_intrinsic_tests

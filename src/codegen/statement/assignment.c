@@ -1,6 +1,7 @@
 #include "codegen/statement/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/descriptor/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,145 @@ static int numeric_type(Type type) {
 static int null_pointer_value(const F2cExpr *expression) {
     return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
            strcmp(expression->text, "null") == 0;
+}
+
+static int emit_character_length_check(Context *context, Unit *unit, const Symbol *pointer,
+                                       const F2cExpr *target, int depth) {
+    char *pointer_length;
+    char *target_length;
+    if (pointer == NULL || target == NULL || pointer->type != TYPE_CHARACTER ||
+        pointer->deferred_character)
+        return 1;
+    pointer_length = f2c_symbol_character_length(unit, pointer);
+    target_length = f2c_character_length_expression(unit, target);
+    if (pointer_length == NULL || target_length == NULL) {
+        free(pointer_length);
+        free(target_length);
+        return 0;
+    }
+    indent(&context->output, depth);
+    f2c_buffer_printf(&context->output, "if ((size_t)(%s) != (size_t)(%s)) abort();\n",
+                      pointer_length, target_length);
+    free(pointer_length);
+    free(target_length);
+    return 1;
+}
+
+static int emit_array_pointer_assignment(Context *context, Unit *unit,
+                                         const F2cStatement *statement, const char *pointer_name,
+                                         int depth) {
+    const F2cExpr *target = statement->right;
+    const int null_target = null_pointer_value(target);
+    F2cDescriptorView view = {0};
+    char *character_length = NULL;
+    size_t dimension;
+    int success = 0;
+    indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "{\n");
+    if (!null_target &&
+        !f2c_descriptor_association_view(&context->output, unit, target, depth + 1, &view))
+        goto cleanup;
+    if (!null_target &&
+        !emit_character_length_check(context, unit, statement->left->symbol, target, depth + 1))
+        goto cleanup;
+    if (!null_target && statement->left->symbol->deferred_character) {
+        character_length = f2c_character_length_expression(unit, target);
+        if (character_length == NULL)
+            goto cleanup;
+    }
+    indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "%s = %s;\n", pointer_name,
+                      null_target ? "NULL" : view.data);
+    if (character_length != NULL) {
+        indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output, "f2c_char_len_%s = (size_t)(%s);\n", pointer_name,
+                          character_length);
+    } else if (null_target && statement->left->symbol->deferred_character) {
+        indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output, "f2c_char_len_%s = 0U;\n", pointer_name);
+    }
+    for (dimension = 0U; dimension < statement->left->symbol->rank; ++dimension) {
+        if (!null_target) {
+            indent(&context->output, depth + 1);
+            f2c_buffer_printf(&context->output,
+                              "if ((int64_t)(%s) < INT32_MIN || (int64_t)(%s) > INT32_MAX || "
+                              "(size_t)(%s) > (size_t)INT32_MAX) abort();\n",
+                              view.lower[dimension], view.lower[dimension], view.extent[dimension]);
+        }
+        indent(&context->output, depth + 1);
+        if (null_target) {
+            f2c_buffer_printf(&context->output,
+                              "%s_lower_%zu = 1; %s_extent_%zu = 0; %s_stride_%zu = 0;\n",
+                              pointer_name, dimension + 1U, pointer_name, dimension + 1U,
+                              pointer_name, dimension + 1U);
+        } else {
+            f2c_buffer_printf(&context->output,
+                              "%s_lower_%zu = (int32_t)(%s); %s_extent_%zu = "
+                              "(int32_t)(%s); %s_stride_%zu = (ptrdiff_t)(%s);\n",
+                              pointer_name, dimension + 1U, view.lower[dimension], pointer_name,
+                              dimension + 1U, view.extent[dimension], pointer_name, dimension + 1U,
+                              view.stride[dimension]);
+        }
+    }
+    success = 1;
+
+cleanup:
+    free(character_length);
+    f2c_descriptor_view_free(&view);
+    indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+    return success;
+}
+
+static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
+                                          const F2cStatement *statement, const char *pointer_name,
+                                          size_t line, int depth) {
+    const F2cExpr *target_expression = statement->right;
+    Symbol *target = target_expression != NULL ? target_expression->symbol : NULL;
+    const int null_target = null_pointer_value(target_expression);
+    char *target_code = NULL;
+    char *character_length = NULL;
+    if (!null_target && target_expression != NULL &&
+        target_expression->kind == F2C_EXPR_ARRAY_REFERENCE) {
+        target_code = f2c_emit_statement_expression(context, unit, target_expression, line);
+    }
+    if (!null_target && !emit_character_length_check(context, unit, statement->left->symbol,
+                                                     target_expression, depth)) {
+        free(target_code);
+        return 0;
+    }
+    indent(&context->output, depth);
+    if (null_target) {
+        f2c_buffer_printf(&context->output, "%s = NULL;\n", pointer_name);
+    } else if (target_code != NULL) {
+        f2c_buffer_printf(&context->output, "%s = &(%s);\n", pointer_name, target_code);
+    } else if (target != NULL) {
+        f2c_buffer_printf(&context->output, "%s = %s%s;\n", pointer_name,
+                          target->pointer || target->allocatable || target->argument ||
+                                  target->type == TYPE_CHARACTER
+                              ? ""
+                              : "&",
+                          f2c_symbol_c_name(unit, target));
+    } else {
+        free(target_code);
+        return 0;
+    }
+    if (!null_target && statement->left->symbol->deferred_character) {
+        character_length = f2c_character_length_expression(unit, target_expression);
+        if (character_length == NULL) {
+            free(target_code);
+            return 0;
+        }
+        indent(&context->output, depth);
+        f2c_buffer_printf(&context->output, "f2c_char_len_%s = (size_t)(%s);\n", pointer_name,
+                          character_length);
+    } else if (null_target && statement->left->symbol->deferred_character) {
+        indent(&context->output, depth);
+        f2c_buffer_printf(&context->output, "f2c_char_len_%s = 0U;\n", pointer_name);
+    }
+    free(character_length);
+    free(target_code);
+    return 1;
 }
 
 int f2c_emit_nullify_statement(Context *context, Unit *unit, const F2cStatement *statement,
@@ -43,12 +183,20 @@ int f2c_emit_nullify_statement(Context *context, Unit *unit, const F2cStatement 
         }
         indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "%s = NULL;\n", pointer_name);
+        if (!symbol->procedure_pointer && symbol->deferred_character &&
+            expression->kind == F2C_EXPR_NAME) {
+            indent(&context->output, depth);
+            f2c_buffer_printf(&context->output, "f2c_char_len_%s = 0U;\n",
+                              f2c_symbol_c_name(unit, symbol));
+        }
         for (dimension = 0U; !symbol->procedure_pointer && expression->kind == F2C_EXPR_NAME &&
                              dimension < symbol->rank;
              ++dimension) {
             indent(&context->output, depth);
-            f2c_buffer_printf(&context->output, "%s_extent_%zu = 0;\n",
-                              f2c_symbol_c_name(unit, symbol), dimension + 1U);
+            f2c_buffer_printf(
+                &context->output, "%s_lower_%zu = 1; %s_extent_%zu = 0; %s_stride_%zu = 0;\n",
+                f2c_symbol_c_name(unit, symbol), dimension + 1U, f2c_symbol_c_name(unit, symbol),
+                dimension + 1U, f2c_symbol_c_name(unit, symbol), dimension + 1U);
         }
         free(pointer_name);
     }
@@ -73,57 +221,16 @@ int f2c_emit_pointer_assignment_statement(Context *context, Unit *unit,
     if (pointer != NULL && pointer->pointer) {
         int supported = 0;
         char *pointer_name = f2c_emit_pointer_designator(unit, statement->left, &supported);
-        size_t dimension;
         if (!supported || pointer_name == NULL) {
             free(pointer_name);
             return 0;
         }
-        indent(&context->output, depth);
-        if (null_target) {
-            f2c_buffer_printf(&context->output, "%s = NULL;\n", pointer_name);
-        } else if (target != NULL) {
-            f2c_buffer_printf(&context->output, "%s = %s%s;\n", pointer_name,
-                              target->pointer || target->allocatable || target->argument ||
-                                      target->rank != 0U || target->type == TYPE_CHARACTER
-                                  ? ""
-                                  : "&",
-                              f2c_symbol_c_name(unit, target));
-            if (pointer->deferred_character && statement->left->kind == F2C_EXPR_NAME) {
-                char *length = f2c_symbol_character_length(unit, target);
-                indent(&context->output, depth);
-                f2c_buffer_printf(&context->output, "f2c_char_len_%s = (size_t)(%s);\n",
-                                  pointer_name, length != NULL ? length : "1U");
-                free(length);
-            }
-        }
-        for (dimension = 0U; statement->left->kind == F2C_EXPR_NAME && dimension < pointer->rank;
-             ++dimension) {
-            indent(&context->output, depth);
-            if (null_target || target == NULL) {
-                f2c_buffer_printf(&context->output, "%s_lower_%zu = 1; %s_extent_%zu = 0;\n",
-                                  pointer_name, dimension + 1U, pointer_name, dimension + 1U);
-            } else if (target->pointer || target->allocatable) {
-                f2c_buffer_printf(&context->output,
-                                  "%s_lower_%zu = %s_lower_%zu; %s_extent_%zu = "
-                                  "%s_extent_%zu;\n",
-                                  pointer_name, dimension + 1U, f2c_symbol_c_name(unit, target),
-                                  dimension + 1U, pointer_name, dimension + 1U,
-                                  f2c_symbol_c_name(unit, target), dimension + 1U);
-            } else {
-                char *lower = f2c_symbol_dimension_lower(unit, target, dimension);
-                char *upper = f2c_symbol_dimension_upper(unit, target, dimension);
-                f2c_buffer_printf(&context->output,
-                                  "%s_lower_%zu = (int32_t)(%s); %s_extent_%zu = "
-                                  "(int32_t)((%s) - (%s) + 1);\n",
-                                  pointer_name, dimension + 1U, lower != NULL ? lower : "1",
-                                  pointer_name, dimension + 1U, upper != NULL ? upper : "0",
-                                  lower != NULL ? lower : "1");
-                free(lower);
-                free(upper);
-            }
-        }
+        supported = pointer->rank != 0U ? emit_array_pointer_assignment(context, unit, statement,
+                                                                        pointer_name, depth)
+                                        : emit_scalar_pointer_assignment(context, unit, statement,
+                                                                         pointer_name, line, depth);
         free(pointer_name);
-        return 1;
+        return supported;
     }
     return 0;
 }

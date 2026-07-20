@@ -13,6 +13,9 @@ typedef struct F2cDescriptorView {
 } F2cDescriptorView;
 
 int f2c_descriptor_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView *view);
+char *f2c_descriptor_source_stride(Unit *unit, const Symbol *symbol, size_t dimension);
+int f2c_descriptor_association_view(Buffer *prelude, Unit *unit, const F2cExpr *expression,
+                                    int depth, F2cDescriptorView *view);
 int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit,
                                     const F2cExpr *expression, F2cIntent intent, size_t identifier,
                                     int depth, F2cDescriptorView *view);
