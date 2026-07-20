@@ -51,6 +51,73 @@ static int pointer_derived_type_compatible(const Symbol *pointer, const F2cExpr 
     return 0;
 }
 
+static int scalar_integer_expression(const F2cExpr *expression) {
+    return expression != NULL && expression->kind != F2C_EXPR_INVALID &&
+           expression->type == TYPE_INTEGER && expression->rank == 0U;
+}
+
+static F2cPointerBoundsKind validate_pointer_bounds(Context *context, const F2cStatement *statement,
+                                                    const Symbol *pointer) {
+    const F2cExpr *left = statement != NULL ? statement->left : NULL;
+    size_t dimension;
+    size_t upper_count = 0U;
+    if (left == NULL || left->kind != F2C_EXPR_ARRAY_REFERENCE)
+        return F2C_POINTER_BOUNDS_NONE;
+    if (pointer == NULL || pointer->rank == 0U || left->child_count != pointer->rank) {
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, left), 1,
+                          "pointer bounds must specify exactly one dimension for each pointer "
+                          "rank");
+        return F2C_POINTER_BOUNDS_INVALID;
+    }
+    for (dimension = 0U; dimension < left->child_count; ++dimension) {
+        const F2cExpr *selector = left->children[dimension];
+        const F2cExpr *lower;
+        const F2cExpr *upper;
+        const F2cExpr *stride;
+        if (selector == NULL || selector->kind != F2C_EXPR_ARRAY_SECTION ||
+            selector->child_count != 3U) {
+            f2c_diagnostic_at(
+                context, statement->line,
+                f2c_validation_expression_start_column(statement->text, selector), 1,
+                "pointer bounds must be lower-bound: or lower-bound:upper-bound specifications");
+            return F2C_POINTER_BOUNDS_INVALID;
+        }
+        lower = selector->children[0];
+        upper = selector->children[1];
+        stride = selector->children[2];
+        if (!scalar_integer_expression(lower)) {
+            f2c_diagnostic_at(context, statement->line,
+                              f2c_validation_expression_start_column(statement->text, lower), 1,
+                              "pointer lower bound must be a scalar INTEGER expression");
+            return F2C_POINTER_BOUNDS_INVALID;
+        }
+        if (stride != NULL && stride->kind != F2C_EXPR_INVALID) {
+            f2c_diagnostic_at(context, statement->line,
+                              f2c_validation_expression_start_column(statement->text, stride), 1,
+                              "pointer bounds cannot specify a stride");
+            return F2C_POINTER_BOUNDS_INVALID;
+        }
+        if (upper != NULL && upper->kind != F2C_EXPR_INVALID) {
+            if (!scalar_integer_expression(upper)) {
+                f2c_diagnostic_at(context, statement->line,
+                                  f2c_validation_expression_start_column(statement->text, upper), 1,
+                                  "pointer upper bound must be a scalar INTEGER expression");
+                return F2C_POINTER_BOUNDS_INVALID;
+            }
+            ++upper_count;
+        }
+    }
+    if (upper_count != 0U && upper_count != left->child_count) {
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_start_column(statement->text, left), 1,
+                          "pointer assignment cannot mix lower-bound specifications with bounds "
+                          "remapping");
+        return F2C_POINTER_BOUNDS_INVALID;
+    }
+    return upper_count == 0U ? F2C_POINTER_BOUNDS_SPECIFICATION : F2C_POINTER_BOUNDS_REMAPPING;
+}
+
 static int character_length_constant(Unit *unit, const Symbol *symbol, int64_t *length) {
     if (unit == NULL || symbol == NULL || length == NULL || symbol->type != TYPE_CHARACTER ||
         symbol->deferred_character)
@@ -178,8 +245,7 @@ static void validate_control_flow_statement(Context *context, Unit *unit,
     }
 }
 
-static void validate_pointer_statement(Context *context, Unit *unit,
-                                       const F2cStatement *statement) {
+static void validate_pointer_statement(Context *context, Unit *unit, F2cStatement *statement) {
     size_t i;
     if (statement->kind == F2C_STMT_NULLIFY) {
         if (statement->item_count == 0U) {
@@ -210,11 +276,13 @@ static void validate_pointer_statement(Context *context, Unit *unit,
         const F2cExpr *left = statement->left;
         const F2cExpr *right = statement->right;
         Symbol *pointer =
-            left != NULL && (left->kind == F2C_EXPR_NAME || left->kind == F2C_EXPR_COMPONENT)
+            left != NULL && (left->kind == F2C_EXPR_NAME || left->kind == F2C_EXPR_COMPONENT ||
+                             left->kind == F2C_EXPR_ARRAY_REFERENCE)
                 ? left->symbol
                 : NULL;
         Symbol *target = pointer_target_designator(right) ? right->symbol : NULL;
         const int null_target = null_pointer_value(right);
+        statement->pointer_bounds = F2C_POINTER_BOUNDS_NONE;
         if (pointer == NULL || (!pointer->pointer && !pointer->procedure_pointer)) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, left), 1,
@@ -236,6 +304,9 @@ static void validate_pointer_statement(Context *context, Unit *unit,
             }
             return;
         }
+        statement->pointer_bounds = validate_pointer_bounds(context, statement, pointer);
+        if (statement->pointer_bounds == F2C_POINTER_BOUNDS_INVALID)
+            return;
         if (left->kind == F2C_EXPR_COMPONENT && pointer->rank != 0U) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, left), 1,
@@ -243,24 +314,35 @@ static void validate_pointer_statement(Context *context, Unit *unit,
                               "not yet supported");
             return;
         }
-        if (!null_target &&
-            (target == NULL || (!target->target && !target->pointer && !target->allocatable))) {
+        if (null_target && statement->pointer_bounds != F2C_POINTER_BOUNDS_NONE) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, right), 1,
-                              "pointer-assignment value must designate a TARGET, POINTER, "
-                              "ALLOCATABLE object, or NULL()");
+                              "pointer bounds cannot be used when assigning NULL()");
+            return;
+        }
+        if (!null_target && (target == NULL || (!target->target && !target->pointer))) {
+            f2c_diagnostic_at(context, statement->line,
+                              f2c_validation_expression_start_column(statement->text, right), 1,
+                              "pointer-assignment value must designate a TARGET or POINTER "
+                              "object, or NULL()");
         } else if (!null_target && pointer_target_has_vector_subscript(right)) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, right), 1,
                               "pointer-assignment target cannot have a vector subscript");
         } else if (!null_target && target != NULL &&
                    (right->type != pointer->type || right->type_kind != pointer->kind ||
-                    right->rank != pointer->rank ||
-                    !pointer_derived_type_compatible(pointer, right))) {
+                    !pointer_derived_type_compatible(pointer, right) ||
+                    (statement->pointer_bounds != F2C_POINTER_BOUNDS_REMAPPING &&
+                     right->rank != pointer->rank))) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, right), 1,
                               "pointer-assignment objects have incompatible declared type, kind, "
                               "or rank");
+        } else if (!null_target && target != NULL &&
+                   statement->pointer_bounds == F2C_POINTER_BOUNDS_REMAPPING && right->rank == 0U) {
+            f2c_diagnostic_at(context, statement->line,
+                              f2c_validation_expression_start_column(statement->text, right), 1,
+                              "rank-remapped pointer target must be an array");
         } else if (!null_target && target != NULL && pointer->type == TYPE_CHARACTER &&
                    !pointer->deferred_character) {
             int64_t pointer_length;
@@ -608,6 +690,19 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
             unit, symbol->character_length_expression, &constant_length);
     }
     f2c_shape_from_symbol(unit, &symbol->shape, symbol);
+    if (symbol->contiguous) {
+        const int assumed_shape_dummy =
+            symbol->argument && symbol->rank != 0U && symbol->shape.kind == F2C_SHAPE_ASSUMED_SHAPE;
+        if (symbol->rank == 0U) {
+            f2c_diagnostic_at(context, line, 1U, 1, "CONTIGUOUS entity '%s' must be an array",
+                              symbol->name);
+        } else if (!symbol->pointer && !assumed_shape_dummy) {
+            f2c_diagnostic_at(context, line, 1U, 1,
+                              "CONTIGUOUS entity '%s' must be an array POINTER or an "
+                              "assumed-shape dummy argument",
+                              symbol->name);
+        }
+    }
 }
 
 void f2c_validate_unit_expressions(Context *context, Unit *unit) {
