@@ -1,6 +1,27 @@
 #include "codegen/expression/private.h"
 
+#include <math.h>
 #include <stdlib.h>
+
+static char *integer_constant(int64_t value) {
+    Buffer result = {0};
+    if (value < 0)
+        f2c_buffer_printf(&result, "-INT32_C(%lld)", (long long)-value);
+    else
+        f2c_buffer_printf(&result, "INT32_C(%lld)", (long long)value);
+    return f2c_buffer_take(&result);
+}
+
+static char *real_constant(double value, int kind) {
+    Buffer result = {0};
+    if (!isfinite(value))
+        return NULL;
+    if (kind == 4)
+        f2c_buffer_printf(&result, "%af", (double)(float)value);
+    else if (kind == 8)
+        f2c_buffer_printf(&result, "%a", value);
+    return f2c_buffer_take(&result);
+}
 
 static const char *operation_name(F2cIntrinsicId intrinsic) {
     switch (intrinsic) {
@@ -32,6 +53,8 @@ char *f2c_expression_real_representation_intrinsic(Unit *unit, const F2cExpr *ex
     char *primary_code;
     char *secondary_code = NULL;
     Buffer result = {0};
+    int64_t integer_value;
+    double real_value;
     int kind;
     if (expression == NULL || !f2c_intrinsic_is_real_representation(expression->intrinsic)) {
         *supported = 0;
@@ -48,6 +71,17 @@ char *f2c_expression_real_representation_intrinsic(Unit *unit, const F2cExpr *ex
     if (kind != 4 && kind != 8) {
         *supported = 0;
         return NULL;
+    }
+    if (expression->rank == 0U) {
+        if (expression->intrinsic == F2C_INTRINSIC_EXPONENT &&
+            f2c_evaluate_integer_constant(unit, expression, &integer_value))
+            return integer_constant(integer_value);
+        if (expression->intrinsic != F2C_INTRINSIC_EXPONENT &&
+            f2c_evaluate_real_constant(unit, expression, &real_value)) {
+            char *constant = real_constant(real_value, kind);
+            if (constant != NULL)
+                return constant;
+        }
     }
     if (expression->intrinsic == F2C_INTRINSIC_NEAREST)
         secondary = f2c_intrinsic_argument(expression->children, expression->child_count, "s", 1U);
