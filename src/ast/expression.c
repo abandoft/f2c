@@ -29,6 +29,7 @@ F2cExpr *f2c_expr_new(F2cExprKind kind, Type type, const char *text, size_t leng
         break;
     case F2C_EXPR_INVALID:
     case F2C_EXPR_ABSENT_ARGUMENT:
+    case F2C_EXPR_ALTERNATE_RETURN:
         expression->value_category = F2C_VALUE_INVALID;
         break;
     default:
@@ -69,9 +70,9 @@ F2cExpr *f2c_expr_new_integer_constant(int64_t value) {
     return f2c_expr_new(F2C_EXPR_INTEGER_LITERAL, TYPE_INTEGER, literal, (size_t)length);
 }
 
-static const F2cIntegerSubstitution *find_substitution(
-    const F2cExpr *expression, const F2cIntegerSubstitution *substitutions,
-    size_t substitution_count) {
+static const F2cIntegerSubstitution *find_substitution(const F2cExpr *expression,
+                                                       const F2cIntegerSubstitution *substitutions,
+                                                       size_t substitution_count) {
     size_t index;
     if (expression == NULL || expression->kind != F2C_EXPR_NAME)
         return NULL;
@@ -103,8 +104,7 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
     substitution = find_substitution(expression, substitutions, substitution_count);
     if (substitution != NULL) {
         char literal[32];
-        const int length =
-            snprintf(literal, sizeof(literal), "%" PRId64, substitution->value);
+        const int length = snprintf(literal, sizeof(literal), "%" PRId64, substitution->value);
         if (length <= 0 || (size_t)length >= sizeof(literal))
             return NULL;
         clone = f2c_expr_new(F2C_EXPR_INTEGER_LITERAL, TYPE_INTEGER, literal, (size_t)length);
@@ -144,8 +144,7 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
     if (expression->child_count != 0U) {
         if (expression->child_count > SIZE_MAX / sizeof(*clone->children))
             goto failed;
-        clone->children =
-            (F2cExpr **)calloc(expression->child_count, sizeof(*clone->children));
+        clone->children = (F2cExpr **)calloc(expression->child_count, sizeof(*clone->children));
         if (clone->children == NULL)
             goto failed;
         clone->child_capacity = expression->child_count;

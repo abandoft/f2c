@@ -77,6 +77,7 @@ void f2c_free_unit(Unit *unit) {
         free(unit->arguments[index]);
     free(unit->arguments);
     free(unit->argument_spans);
+    free(unit->dummy_argument_indices);
     for (index = 0U; index < 26U; ++index)
         free(unit->implicit_character_lengths[index]);
     for (index = 0U; index < unit->statement_count; ++index)

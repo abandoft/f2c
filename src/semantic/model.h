@@ -37,6 +37,7 @@ struct Symbol {
     int external;
     int external_declared;
     int external_subroutine;
+    size_t external_alternate_return_count;
     int external_result_allocatable;
     size_t external_result_rank;
     int external_signature_observed;
@@ -226,6 +227,9 @@ struct Unit {
     char **arguments;
     F2cSourceSpan *argument_spans;
     size_t argument_count;
+    size_t *dummy_argument_indices;
+    size_t dummy_count;
+    size_t alternate_return_count;
     size_t begin;
     size_t end;
     size_t container_end;
