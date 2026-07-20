@@ -89,10 +89,26 @@ static void test_equivalence_storage_views(void) {
                                     "  equivalence (words(2), value)\n"
                                     "end program unaligned_equivalence\n";
     static const char common_association[] = "program common_equivalence\n"
-                                             "  integer :: shared, local\n"
+                                             "  integer :: shared(2), local(2)\n"
                                              "  common /state/ shared\n"
-                                             "  equivalence (shared, local)\n"
+                                             "  equivalence (shared(2), local(1))\n"
                                              "end program common_equivalence\n";
+    static const char different_blocks[] = "program invalid_common_equivalence\n"
+                                           "  integer :: left, right\n"
+                                           "  common /left_block/ left\n"
+                                           "  common /right_block/ right\n"
+                                           "  equivalence (left, right)\n"
+                                           "end program invalid_common_equivalence\n";
+    static const char backward_extension[] = "program invalid_common_extension\n"
+                                             "  integer :: local(2), shared\n"
+                                             "  common /state/ shared\n"
+                                             "  equivalence (local(2), shared)\n"
+                                             "end program invalid_common_extension\n";
+    static const char conflicting_anchors[] = "program invalid_common_anchors\n"
+                                              "  integer :: left, right\n"
+                                              "  common /state/ left, right\n"
+                                              "  equivalence (left, right)\n"
+                                              "end program invalid_common_anchors\n";
     DiagnosticCapture capture = {0};
     F2cResult result = transpile_with_diagnostics(valid, &capture);
     expect(result.error_count == 0U && result.code != NULL,
@@ -113,9 +129,33 @@ static void test_equivalence_storage_views(void) {
 
     memset(&capture, 0, sizeof(capture));
     result = transpile_with_diagnostics(common_association, &capture);
+    expect(result.error_count == 0U && result.code != NULL,
+           "COMMON/EQUIVALENCE composition reaches code generation");
+    expect(result.code != NULL && strstr(result.code, "f2c_common_state_equivalence_") != NULL &&
+               strstr(result.code, "COMMON EQUIVALENCE value offset") != NULL &&
+               strstr(result.code, "COMMON EQUIVALENCE view size") != NULL,
+           "COMMON/EQUIVALENCE emits checked global typed views");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile_with_diagnostics(different_blocks, &capture);
     expect(result.error_count != 0U && result.code == NULL && result.diagnostics != NULL &&
-               strstr(result.diagnostics, "association with COMMON entity") != NULL,
-           "unsupported COMMON/EQUIVALENCE composition has an explicit diagnostic");
+               strstr(result.diagnostics, "cannot associate different COMMON blocks") != NULL,
+           "EQUIVALENCE cannot join two COMMON blocks");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile_with_diagnostics(backward_extension, &capture);
+    expect(result.error_count != 0U && result.code == NULL && result.diagnostics != NULL &&
+               strstr(result.diagnostics, "before its first storage unit") != NULL,
+           "EQUIVALENCE cannot extend before the start of COMMON storage");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile_with_diagnostics(conflicting_anchors, &capture);
+    expect(result.error_count != 0U && result.code == NULL && result.diagnostics != NULL &&
+               strstr(result.diagnostics, "constraints disagree with COMMON") != NULL,
+           "EQUIVALENCE constraints must preserve existing COMMON member offsets");
     f2c_result_free(&result);
 }
 
