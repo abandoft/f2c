@@ -245,7 +245,11 @@ static void validate_merge(Context *context, Unit *unit, size_t line, const char
 
 void f2c_validation_numeric_operation_intrinsic(Context *context, Unit *unit, size_t line,
                                                 const char *statement_text, F2cExpr *expression) {
+    const F2cIntrinsicSignature *signature;
     if (expression == NULL || !f2c_intrinsic_is_numeric_operation(expression->intrinsic))
+        return;
+    signature = f2c_find_intrinsic(expression->text);
+    if (signature == NULL || expression->child_count < signature->minimum_arguments)
         return;
     if (expression->intrinsic == F2C_INTRINSIC_AINT ||
         expression->intrinsic == F2C_INTRINSIC_ANINT ||
