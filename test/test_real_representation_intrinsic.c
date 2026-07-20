@@ -60,6 +60,8 @@ static void test_keyword_and_direction_contracts(void) {
                       "NEAREST argument S must not be zero");
     expect_diagnostic("  real :: value\n", "nearest(x=value, s=-0.0)",
                       "NEAREST argument S must not be zero");
+    expect_diagnostic("  real, parameter :: zero = 0.0\n  real :: value\n",
+                      "nearest(x=value, s=zero)", "NEAREST argument S must not be zero");
     expect_diagnostic("  real :: value\n", "fraction(mystery=value)",
                       "FRACTION has no argument named 'mystery'");
     expect_diagnostic("  real :: value\n", "spacing(x=value, x=value)",
@@ -119,10 +121,46 @@ static void test_support_is_on_demand(void) {
     f2c_result_free(&result);
 }
 
+static void test_constant_lowering(void) {
+    static const char source[] = "module representation_constants\n"
+                                 "  implicit none\n"
+                                 "  integer, parameter :: e0 = exponent(0.0)\n"
+                                 "  integer, parameter :: es = exponent(nearest(0.0, 1.0))\n"
+                                 "  real, parameter :: f = fraction(6.0)\n"
+                                 "  real, parameter :: n = nearest(1.0, 1.0)\n"
+                                 "  real, parameter :: r = rrspacing(1.5)\n"
+                                 "  real, parameter :: s = scale(0.75, 2)\n"
+                                 "  real, parameter :: se = set_exponent(6.0, 2)\n"
+                                 "  real, parameter :: sp = spacing(1.0)\n"
+                                 "end module representation_constants\n";
+    F2cOptions options = {"representation_constants.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "representation intrinsics are valid module initialization expressions");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_e0 = INT32_C(0)") != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_es = -INT32_C(148)") !=
+                   NULL,
+           "EXPONENT constants include zero and subnormal boundaries");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_f = 0x1.8p-1f") != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_n = 0x1.000002p+0f") !=
+                   NULL,
+           "FRACTION and NEAREST constants use exact hexadecimal C17 literals");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_r = 0x1.8p+23f") != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_s = 0x1.8p+1f") != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_se = 0x1.8p+1f") != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_sp = 0x1p-23f") != NULL,
+           "remaining representation constants are valid static C17 initializers");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_argument_contracts();
     test_keyword_and_direction_contracts();
     test_typed_lowering();
     test_support_is_on_demand();
+    test_constant_lowering();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
