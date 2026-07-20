@@ -337,42 +337,6 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
         f2c_buffer_printf(&result, "((int32_t)ceil((double)(%s)))", count != 0U ? args[0] : "0");
     } else if (strcmp(name, "floor") == 0) {
         f2c_buffer_printf(&result, "((int32_t)floor((double)(%s)))", count != 0U ? args[0] : "0");
-    } else if (strcmp(name, "huge") == 0) {
-        f2c_buffer_printf(&result,
-                          "_Generic((%s), float: FLT_MAX, double: DBL_MAX, int32_t: "
-                          "INT32_MAX, default: DBL_MAX)",
-                          count != 0U ? args[0] : "0.0f");
-    } else if (strcmp(name, "tiny") == 0) {
-        f2c_buffer_printf(&result,
-                          "_Generic((%s), float: FLT_MIN, double: DBL_MIN, default: DBL_MIN)",
-                          count != 0U ? args[0] : "0.0f");
-    } else if (strcmp(name, "epsilon") == 0) {
-        f2c_buffer_printf(
-            &result,
-            "_Generic((%s), float: FLT_EPSILON, double: DBL_EPSILON, default: DBL_EPSILON)",
-            count != 0U ? args[0] : "0.0f");
-    } else if (strcmp(name, "radix") == 0) {
-        f2c_buffer_append(&result, "FLT_RADIX");
-    } else if (strcmp(name, "digits") == 0) {
-        f2c_buffer_printf(&result,
-                          "_Generic((%s), float: FLT_MANT_DIG, double: DBL_MANT_DIG, "
-                          "default: DBL_MANT_DIG)",
-                          count != 0U ? args[0] : "0.0f");
-    } else if (strcmp(name, "minexponent") == 0) {
-        f2c_buffer_printf(&result,
-                          "_Generic((%s), float: FLT_MIN_EXP, double: DBL_MIN_EXP, "
-                          "default: DBL_MIN_EXP)",
-                          count != 0U ? args[0] : "0.0f");
-    } else if (strcmp(name, "maxexponent") == 0) {
-        f2c_buffer_printf(&result,
-                          "_Generic((%s), float: FLT_MAX_EXP, double: DBL_MAX_EXP, "
-                          "default: DBL_MAX_EXP)",
-                          count != 0U ? args[0] : "0.0f");
-    } else if (strcmp(name, "kind") == 0) {
-        f2c_buffer_printf(&result,
-                          "_Generic((%s), float: 4, double: 8, f2c_complex_float: 4, "
-                          "f2c_complex_double: 8, default: 4)",
-                          count != 0U ? args[0] : "0.0f");
     } else if (strcmp(name, "alog") == 0) {
         f2c_buffer_printf(&result, "logf(%s)", count != 0U ? args[0] : "0");
     } else if (strcmp(name, "log10") == 0) {
