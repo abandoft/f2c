@@ -124,6 +124,8 @@ set(
     src/codegen/io/unformatted.c
     src/codegen/io/unformatted/array.c
     src/codegen/io/unformatted/private.h
+    src/codegen/literal/real.c
+    src/codegen/literal/real.h
     src/codegen/lowering.c
     src/codegen/module.c
     src/codegen/ownership.c

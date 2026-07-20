@@ -1,6 +1,7 @@
 #include "codegen/expression/private.h"
 
-#include <math.h>
+#include "codegen/literal/real.h"
+
 #include <stdlib.h>
 
 static char *integer_constant(int64_t value) {
@@ -9,17 +10,6 @@ static char *integer_constant(int64_t value) {
         f2c_buffer_printf(&result, "-INT32_C(%lld)", (long long)-value);
     else
         f2c_buffer_printf(&result, "INT32_C(%lld)", (long long)value);
-    return f2c_buffer_take(&result);
-}
-
-static char *real_constant(double value, int kind) {
-    Buffer result = {0};
-    if (!isfinite(value))
-        return NULL;
-    if (kind == 4)
-        f2c_buffer_printf(&result, "%af", (double)(float)value);
-    else if (kind == 8)
-        f2c_buffer_printf(&result, "%a", value);
     return f2c_buffer_take(&result);
 }
 
@@ -78,7 +68,7 @@ char *f2c_expression_real_representation_intrinsic(Unit *unit, const F2cExpr *ex
             return integer_constant(integer_value);
         if (expression->intrinsic != F2C_INTRINSIC_EXPONENT &&
             f2c_evaluate_real_constant(unit, expression, &real_value)) {
-            char *constant = real_constant(real_value, kind);
+            char *constant = f2c_real_constant_literal(real_value, kind);
             if (constant != NULL)
                 return constant;
         }
