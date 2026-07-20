@@ -115,6 +115,32 @@ static void test_legacy_alternate_return_ast(void) {
     parsed_line_discard(&parsed);
 }
 
+static void test_block_data_header_ast(void) {
+    ParsedLine parsed;
+    F2cUnitHeaderSyntax syntax;
+    Unit unit;
+    expect(parsed_line_init(&parsed, "block data initialize_state"),
+           "named BLOCK DATA header tokenizes");
+    expect(f2c_parse_unit_header_syntax(&parsed.line, &syntax) == F2C_UNIT_HEADER_PARSED &&
+               syntax.kind == F2C_UNIT_SYNTAX_BLOCK_DATA && syntax.name != NULL &&
+               f2c_token_equals(syntax.name, "initialize_state"),
+           "BLOCK DATA has a distinct syntax kind and optional canonical name");
+    f2c_unit_header_syntax_discard(&syntax);
+    expect(f2c_parse_unit_header(NULL, &parsed.line, &unit) == F2C_UNIT_HEADER_PARSED &&
+               unit.kind == UNIT_BLOCK_DATA && strcmp(unit.name, "initialize_state") == 0,
+           "named BLOCK DATA lowers without becoming a procedure");
+    f2c_free_unit(&unit);
+    parsed_line_discard(&parsed);
+
+    expect(parsed_line_init(&parsed, "blockdata"), "unnamed joined BLOCKDATA header tokenizes");
+    expect(f2c_parse_unit_header(NULL, &parsed.line, &unit) == F2C_UNIT_HEADER_PARSED &&
+               unit.kind == UNIT_BLOCK_DATA && unit.name != NULL &&
+               strcmp(unit.fortran_name, "") == 0,
+           "unnamed BLOCK DATA receives an internal-only deterministic identity");
+    f2c_free_unit(&unit);
+    parsed_line_discard(&parsed);
+}
+
 static void test_invalid_headers(void) {
     ParsedLine parsed;
     F2cUnitHeaderSyntax syntax;
@@ -176,6 +202,21 @@ static void test_unit_end_ast(void) {
            "joined legacy unit END spelling uses the same syntax AST");
     parsed_line_discard(&parsed);
 
+    expect(parsed_line_init(&parsed, "end block data initialize_state"),
+           "separated END BLOCK DATA tokenizes");
+    expect(f2c_parse_unit_end_syntax(&parsed.line, &syntax) == F2C_UNIT_END_PARSED &&
+               syntax.has_kind && syntax.kind == F2C_UNIT_SYNTAX_BLOCK_DATA &&
+               syntax.name != NULL && f2c_token_equals(syntax.name, "initialize_state"),
+           "END BLOCK DATA retains its optional closing name");
+    parsed_line_discard(&parsed);
+
+    expect(parsed_line_init(&parsed, "endblockdata initialize_state"),
+           "joined ENDBLOCKDATA tokenizes");
+    expect(f2c_parse_unit_end_syntax(&parsed.line, &syntax) == F2C_UNIT_END_PARSED &&
+               syntax.kind == F2C_UNIT_SYNTAX_BLOCK_DATA,
+           "joined ENDBLOCKDATA uses the same syntax kind");
+    parsed_line_discard(&parsed);
+
     expect(parsed_line_init(&parsed, "end if"), "construct END tokenizes");
     expect(f2c_parse_unit_end_syntax(&parsed.line, &syntax) == F2C_UNIT_END_NOT_MATCHED,
            "construct terminators are not mistaken for program-unit END statements");
@@ -215,6 +256,7 @@ int main(void) {
     test_function_header_ast();
     test_header_lowering();
     test_legacy_alternate_return_ast();
+    test_block_data_header_ast();
     test_invalid_headers();
     test_unit_end_ast();
     test_module_header_ast();
