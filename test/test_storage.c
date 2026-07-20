@@ -76,8 +76,63 @@ static void test_conflicting_equivalence_groups(void) {
     f2c_result_free(&result);
 }
 
+static void test_blank_common_and_mixed_blocks(void) {
+    static const char source[] = "subroutine write_storage(value)\n"
+                                 "  integer :: values(2), total, control, value\n"
+                                 "  character(len=4) :: label\n"
+                                 "  common values, total /named/ control\n"
+                                 "  common // label\n"
+                                 "  values = (/ value, value + 1 /)\n"
+                                 "  total = values(1) + values(2)\n"
+                                 "  control = total + 1\n"
+                                 "  label = 'done'\n"
+                                 "end subroutine write_storage\n"
+                                 "subroutine clear_storage()\n"
+                                 "  integer :: entries(2), sum, mode\n"
+                                 "  character(len=4) :: text\n"
+                                 "  common entries, sum /named/ mode\n"
+                                 "  common // text\n"
+                                 "  entries = 0\n"
+                                 "  sum = 0\n"
+                                 "  mode = 0\n"
+                                 "  text = '    '\n"
+                                 "end subroutine clear_storage\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile_with_diagnostics(source, &capture);
+    expect(result.error_count == 0U,
+           "blank and named COMMON blocks may coexist in one declaration sequence");
+    expect(result.code != NULL && strstr(result.code, "struct f2c_blank_common") != NULL,
+           "blank COMMON has stable shared generated storage");
+    expect(result.code != NULL && strstr(result.code, "struct f2c_common_named") != NULL,
+           "a following named COMMON block retains independent storage");
+    f2c_result_free(&result);
+}
+
+static void test_common_storage_mismatch_diagnostic(void) {
+    static const char source[] = "subroutine integer_view()\n"
+                                 "  integer :: value\n"
+                                 "  common /shared/ value\n"
+                                 "end subroutine integer_view\n"
+                                 "subroutine real_view()\n"
+                                 "  real :: value\n"
+                                 "  common /shared/ value\n"
+                                 "end subroutine real_view\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile_with_diagnostics(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "incompatible cross-unit COMMON layouts suppress generated C");
+    expect(capture.captured && capture.code == F2C_DIAGNOSTIC_SEMANTIC && capture.line == 7U &&
+               capture.column == 19U,
+           "COMMON layout mismatch reports the incompatible member span");
+    expect(result.diagnostics != NULL && strstr(result.diagnostics, "storage-incompatible") != NULL,
+           "COMMON layout mismatch explains the storage contract");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_equivalence_rank_diagnostic();
     test_conflicting_equivalence_groups();
+    test_blank_common_and_mixed_blocks();
+    test_common_storage_mismatch_diagnostic();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
