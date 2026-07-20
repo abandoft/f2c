@@ -13,6 +13,9 @@ int f2c_evaluate_integer_syntax(Unit *unit, F2cTokenRange syntax, int64_t *value
 int f2c_expression_is_initialization_constant(const F2cExpr *expression);
 int f2c_integer_iteration_count(int64_t first, int64_t last, int64_t step, uint64_t *count);
 size_t f2c_character_literal_length(const char *text);
+char *f2c_character_literal_bytes(const char *text, size_t *length);
+int f2c_evaluate_character_constant(Unit *unit, const F2cExpr *expression, char **value,
+                                    size_t *length);
 char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression);
 char *f2c_symbol_character_length(Unit *unit, const Symbol *symbol);
 char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, int *supported);

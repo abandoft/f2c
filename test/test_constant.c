@@ -69,6 +69,53 @@ static int evaluate_source(Unit *unit, const char *source, int64_t *value) {
     return result;
 }
 
+static int evaluate_character_source(Unit *unit, const char *source, char **value, size_t *length) {
+    F2cExpr *expression = parse_canonical_expression(unit, source);
+    const int result = f2c_evaluate_character_constant(unit, expression, value, length);
+    f2c_expr_free(expression);
+    return result;
+}
+
+static void test_character_intrinsics(Unit *unit) {
+    char *characters = NULL;
+    size_t length = 0U;
+    int64_t value = 0;
+    expect(evaluate_source(unit, "ichar('X',kind=8)", &value) && value == 88,
+           "ICHAR folds with a keyword result kind");
+    expect(evaluate_source(unit, "iachar(achar(65))", &value) && value == 65,
+           "ACHAR and IACHAR fold when nested");
+    expect(evaluate_source(unit, "len_trim(adjustl(' A '))", &value) && value == 1,
+           "ADJUSTL preserves length and composes with LEN_TRIM");
+    expect(evaluate_source(unit, "index('FORTRAN','R',back=.TrUe.)", &value) && value == 5,
+           "INDEX honors a case-insensitive logical BACK constant");
+    expect(evaluate_source(unit, "index('ABC','')", &value) && value == 1,
+           "forward INDEX locates an empty substring at one");
+    expect(evaluate_source(unit, "index('ABC','',back=.true.)", &value) && value == 4,
+           "backward INDEX locates an empty substring after the string");
+    expect(evaluate_source(unit, "scan('FORTRAN','TR')", &value) && value == 3,
+           "SCAN folds the first set member");
+    expect(evaluate_source(unit, "scan('FORTRAN','TR',back=.true.)", &value) && value == 5,
+           "backward SCAN folds the last set member");
+    expect(evaluate_source(unit, "verify('ABBA','A')", &value) && value == 2,
+           "VERIFY folds the first nonmember");
+    expect(evaluate_source(unit, "verify('ABBA','A',back=.true.)", &value) && value == 3,
+           "backward VERIFY folds the last nonmember");
+    expect(evaluate_source(unit, "len(repeat('xy',3),kind=2)", &value) && value == 6,
+           "REPEAT length folds through LEN with an explicit result kind");
+    expect(evaluate_character_source(unit, "trim(adjustl('  AB  '))//repeat('x',2)", &characters,
+                                     &length) &&
+               length == 4U && memcmp(characters, "ABxx", 4U) == 0,
+           "character transformations and concatenation fold as bytes");
+    free(characters);
+    characters = NULL;
+    expect(evaluate_character_source(unit, "char(0)//'A'", &characters, &length) && length == 2U &&
+               characters[0] == '\0' && characters[1] == 'A',
+           "character constants preserve embedded zero bytes");
+    free(characters);
+    expect(!evaluate_character_source(unit, "repeat('x',-1)", &characters, &length),
+           "negative REPEAT counts are not folded");
+}
+
 int main(void) {
     Symbol symbols[3];
     Unit unit;
@@ -130,6 +177,7 @@ int main(void) {
     expect(!evaluate_source(&unit, "1/0", &value), "constant division by zero is rejected");
     expect(!evaluate_source(&unit, "cycle_a", &value),
            "cyclic parameter references terminate with failure");
+    test_character_intrinsics(&unit);
 
     f2c_expr_free(symbols[0].initializer_expression);
     f2c_expr_free(symbols[1].initializer_expression);

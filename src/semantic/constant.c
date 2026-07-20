@@ -1,6 +1,7 @@
 #include "internal/f2c.h"
 #include "semantic/constant/private.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdint.h>
@@ -36,6 +37,34 @@ static int checked_multiply(int64_t left, int64_t right, int64_t *result) {
     }
     *result = left * right;
     return 1;
+}
+
+static int logical_literal_value(const char *text, int64_t *value) {
+    const char *cursor = text;
+    const char *word;
+    size_t length;
+    size_t index;
+    while (cursor != NULL && isspace((unsigned char)*cursor))
+        ++cursor;
+    if (cursor == NULL || *cursor != '.')
+        return 0;
+    ++cursor;
+    if (tolower((unsigned char)*cursor) == 't') {
+        word = "true";
+        length = 4U;
+        *value = 1;
+    } else {
+        word = "false";
+        length = 5U;
+        *value = 0;
+    }
+    for (index = 0U; index < length; ++index)
+        if (cursor[index] == '\0' || tolower((unsigned char)cursor[index]) != word[index])
+            return 0;
+    cursor += length;
+    if (*cursor++ != '.')
+        return 0;
+    return *cursor == '\0' || *cursor == '_' || isspace((unsigned char)*cursor);
 }
 
 static int64_t literal_character_length(const char *text) {
@@ -187,6 +216,130 @@ static int evaluate_bit_intrinsic(F2cConstantEvaluation *evaluation, const F2cEx
                                            value);
 }
 
+static int character_integer_result(const F2cExpr *expression, uint64_t result, int64_t *value) {
+    const int kind =
+        expression->type_kind != 0 ? expression->type_kind : f2c_default_kind(TYPE_INTEGER);
+    const uint64_t maximum = kind == 1   ? UINT64_C(127)
+                             : kind == 2 ? UINT64_C(32767)
+                             : kind == 4 ? UINT64_C(2147483647)
+                             : kind == 8 ? (uint64_t)INT64_MAX
+                                         : UINT64_C(0);
+    if (maximum == 0U || result > maximum)
+        return 0;
+    *value = (int64_t)result;
+    return 1;
+}
+
+static int evaluate_character_intrinsic(F2cConstantEvaluation *evaluation,
+                                        const F2cExpr *expression, int64_t *value, size_t depth) {
+    const F2cExpr *first;
+    const F2cExpr *second;
+    const F2cExpr *back;
+    char *left = NULL;
+    char *right = NULL;
+    size_t left_length = 0U;
+    size_t right_length = 0U;
+    size_t position;
+    int64_t backwards = 0;
+    int found = 0;
+    if (expression == NULL || expression->rank != 0U ||
+        !f2c_intrinsic_is_character(expression->intrinsic))
+        return 0;
+    if (expression->intrinsic == F2C_INTRINSIC_IACHAR ||
+        expression->intrinsic == F2C_INTRINSIC_ICHAR) {
+        first = f2c_intrinsic_argument(expression->children, expression->child_count, "c", 0U);
+        if (!f2c_evaluate_character_constant(evaluation->unit, first, &left, &left_length) ||
+            left_length != 1U) {
+            free(left);
+            return 0;
+        }
+        position = (unsigned char)left[0];
+        free(left);
+        return character_integer_result(expression, position, value);
+    }
+    if (expression->intrinsic == F2C_INTRINSIC_LEN ||
+        expression->intrinsic == F2C_INTRINSIC_LEN_TRIM) {
+        first = f2c_intrinsic_argument(expression->children, expression->child_count, "string", 0U);
+        if (!f2c_evaluate_character_constant(evaluation->unit, first, &left, &left_length))
+            return 0;
+        if (expression->intrinsic == F2C_INTRINSIC_LEN_TRIM)
+            while (left_length != 0U && left[left_length - 1U] == ' ')
+                --left_length;
+        free(left);
+        return character_integer_result(expression, left_length, value);
+    }
+    if (expression->intrinsic != F2C_INTRINSIC_INDEX &&
+        expression->intrinsic != F2C_INTRINSIC_SCAN &&
+        expression->intrinsic != F2C_INTRINSIC_VERIFY)
+        return 0;
+    first = f2c_intrinsic_argument(expression->children, expression->child_count, "string", 0U);
+    second = f2c_intrinsic_argument(
+        expression->children, expression->child_count,
+        expression->intrinsic == F2C_INTRINSIC_INDEX ? "substring" : "set", 1U);
+    back = f2c_intrinsic_argument(expression->children, expression->child_count, "back", 2U);
+    if (!f2c_evaluate_character_constant(evaluation->unit, first, &left, &left_length) ||
+        !f2c_evaluate_character_constant(evaluation->unit, second, &right, &right_length) ||
+        (back != NULL && !evaluate(evaluation, back, &backwards, depth + 1U)))
+        goto cleanup;
+    if (expression->intrinsic == F2C_INTRINSIC_INDEX) {
+        if (right_length == 0U) {
+            position = backwards != 0 ? left_length + 1U : 1U;
+            found = 1;
+        } else if (right_length <= left_length) {
+            if (backwards != 0) {
+                position = left_length - right_length;
+                for (;;) {
+                    if (memcmp(left + position, right, right_length) == 0) {
+                        ++position;
+                        found = 1;
+                        break;
+                    }
+                    if (position == 0U)
+                        break;
+                    --position;
+                }
+            } else {
+                for (position = 0U; position <= left_length - right_length; ++position)
+                    if (memcmp(left + position, right, right_length) == 0) {
+                        ++position;
+                        found = 1;
+                        break;
+                    }
+            }
+        }
+    } else if (backwards != 0) {
+        position = left_length;
+        while (position != 0U) {
+            const int member =
+                memchr(right, (unsigned char)left[position - 1U], right_length) != NULL;
+            if ((expression->intrinsic == F2C_INTRINSIC_SCAN && member) ||
+                (expression->intrinsic == F2C_INTRINSIC_VERIFY && !member)) {
+                found = 1;
+                break;
+            }
+            --position;
+        }
+    } else {
+        for (position = 0U; position < left_length; ++position) {
+            const int member = memchr(right, (unsigned char)left[position], right_length) != NULL;
+            if ((expression->intrinsic == F2C_INTRINSIC_SCAN && member) ||
+                (expression->intrinsic == F2C_INTRINSIC_VERIFY && !member)) {
+                ++position;
+                found = 1;
+                break;
+            }
+        }
+    }
+    free(left);
+    free(right);
+    return character_integer_result(expression, found ? position : 0U, value);
+
+cleanup:
+    free(left);
+    free(right);
+    return 0;
+}
+
 static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression, int64_t *value,
                     size_t depth) {
     int64_t left;
@@ -203,6 +356,9 @@ static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression
             return 0;
         *value = (int64_t)parsed;
         return 1;
+    }
+    if (expression->kind == F2C_EXPR_LOGICAL_LITERAL && expression->text != NULL) {
+        return logical_literal_value(expression->text, value);
     }
     if (expression->kind == F2C_EXPR_NAME && expression->symbol != NULL &&
         expression->symbol->parameter && expression->symbol->initializer != NULL) {
@@ -236,6 +392,8 @@ static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression
         size_t i;
         if (expression->intrinsic != F2C_INTRINSIC_NONE &&
             evaluate_bit_intrinsic(evaluation, expression, value, depth))
+            return 1;
+        if (evaluate_character_intrinsic(evaluation, expression, value, depth))
             return 1;
         if (strcmp(expression->text, "len") == 0 && expression->child_count == 1U) {
             const F2cExpr *argument = expression->children[0];

@@ -68,7 +68,7 @@ static int character_element_count(Unit *unit, const Symbol *symbol, size_t *cou
     return 1;
 }
 
-static char *character_literal_bytes(const char *text, size_t *length) {
+char *f2c_character_literal_bytes(const char *text, size_t *length) {
     const char *cursor = text;
     const char *quote_begin;
     const char *payload;
@@ -187,11 +187,10 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
         const size_t value_index = value_count == 1U ? 0U : element;
         size_t literal_length = 0U;
         const F2cExpr *value = values != NULL ? values[value_index] : initializer;
-        char *literal = value != NULL && value->kind == F2C_EXPR_STRING_LITERAL
-                            ? character_literal_bytes(value->text, &literal_length)
-                            : NULL;
+        char *literal = NULL;
         size_t offset;
-        if (literal == NULL)
+        if (value == NULL ||
+            !f2c_evaluate_character_constant(unit, value, &literal, &literal_length))
             goto cleanup;
         for (offset = 0U; offset < element_length; ++offset) {
             const unsigned char byte =
