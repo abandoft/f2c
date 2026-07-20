@@ -158,6 +158,11 @@ static void test_constant_lowering(void) {
                                  "  real, parameter :: s = scale(0.75, 2)\n"
                                  "  real, parameter :: se = set_exponent(6.0, 2)\n"
                                  "  real, parameter :: sp = spacing(1.0)\n"
+                                 "  real, parameter :: nz = fraction(-0.0)\n"
+                                 "  real, parameter :: sub = nearest(0.0, 1.0)\n"
+                                 "  real(kind=8), parameter :: df = "
+                                 "fraction(1.0000000000000002d0)\n"
+                                 "  real(kind=8), parameter :: dsub = nearest(0.0d0, 1.0d0)\n"
                                  "end module representation_constants\n";
     F2cOptions options = {"representation_constants.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
@@ -179,6 +184,15 @@ static void test_constant_lowering(void) {
                strstr(result.code, "f2c_module_representation_constants_se = 0x1.8p+1f") != NULL &&
                strstr(result.code, "f2c_module_representation_constants_sp = 0x1p-23f") != NULL,
            "remaining representation constants are valid static C17 initializers");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_nz = -0x0p+0f") != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_sub = 0x1p-149f") != NULL,
+           "binary32 signed zero and subnormal constants have canonical literals");
+    expect(result.code != NULL &&
+               strstr(result.code,
+                      "f2c_module_representation_constants_df = 0x1.0000000000001p-1") != NULL &&
+               strstr(result.code, "f2c_module_representation_constants_dsub = 0x1p-1074") != NULL,
+           "binary64 precision and subnormal constants have canonical literals");
     f2c_result_free(&result);
 }
 

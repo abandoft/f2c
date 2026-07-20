@@ -17,8 +17,14 @@ program real_representation_intrinsics
   integer :: exponents8(8)
   integer(kind=8) :: powers8(4)
   integer(kind=8) :: huge_power
+  real, parameter :: static_sub4 = nearest(0.0, 1.0)
+  real, parameter :: static_negative_zero4 = fraction(-0.0)
+  double precision, parameter :: static_sub8 = nearest(0.0d0, 1.0d0)
+  double precision, parameter :: static_fraction8 = fraction(1.0000000000000002d0)
 
   sub4 = nearest(0.0, 1.0)
+  if (static_sub4 /= sub4) error stop 19
+  if (nearest(static_negative_zero4, -1.0) >= 0.0) error stop 20
   values4 = [0.0, -0.0, 0.5, 1.0, 2.0, tiny(0.0), sub4, huge(0.0)]
   exponents4 = exponent(x=values4)
   if (any(exponents4 /= [0, 0, 0, 1, 2, -125, -148, 128])) error stop 1
@@ -54,6 +60,8 @@ program real_representation_intrinsics
   if (any(set_results4 /= [3.0, -0.1875, 0.0, -0.0])) error stop 7
 
   sub8 = nearest(0.0d0, 1.0d0)
+  if (static_sub8 /= sub8) error stop 21
+  if (static_fraction8 /= fraction(1.0000000000000002d0)) error stop 22
   values8 = [0.0d0, -0.0d0, 0.5d0, 1.0d0, 2.0d0, tiny(0.0d0), sub8, huge(0.0d0)]
   exponents8 = exponent(x=values8)
   if (any(exponents8 /= [0, 0, 0, 1, 2, -1021, -1073, 1024])) error stop 8
