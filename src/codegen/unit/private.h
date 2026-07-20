@@ -10,5 +10,9 @@ void f2c_unit_emit_named_signature(Buffer *output, Unit *unit, const char *name,
                                    int restricted_arguments);
 void f2c_unit_emit_signature(Buffer *output, Unit *unit);
 char *f2c_unit_data_array_initializer(Unit *unit, const Symbol *symbol);
+int f2c_unit_expression_is_character_temporary(const F2cExpr *expression);
+int f2c_unit_statement_is_function_definition(const Unit *unit, size_t statement);
+void f2c_unit_prepare_expression_temporaries(Unit *unit);
+void f2c_unit_emit_expression_temporaries(Buffer *output, Unit *unit);
 
 #endif
