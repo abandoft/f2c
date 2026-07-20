@@ -423,8 +423,9 @@ static int unit_common_extent(Unit *unit, const char *block, uint64_t *extent) {
         candidate = offset + size;
         if (candidate > end)
             end = candidate;
-        if (size != 0U && (associated ? symbol->equivalence_alignment : symbol->common_alignment) >
-                              maximum_alignment)
+        if (size != 0U && (!associated || !symbol->equivalence_unaligned) &&
+            (associated ? symbol->equivalence_alignment : symbol->common_alignment) >
+                maximum_alignment)
             maximum_alignment =
                 associated ? symbol->equivalence_alignment : symbol->common_alignment;
     }
@@ -479,7 +480,13 @@ static int equivalence_common_group_seen(const Unit *unit, size_t symbol_index, 
 static void assign_equivalence_common_c_name(Context *context, size_t unit_index,
                                              size_t symbol_index, Symbol *symbol) {
     Buffer name = {0};
-    if (symbol->equivalence_common_block[0] == '\0')
+    if (symbol->equivalence_unaligned && symbol->equivalence_common_block[0] == '\0')
+        f2c_buffer_printf(&name, "f2c_blank_common.bytes + %lluU",
+                          (unsigned long long)symbol->equivalence_common_offset);
+    else if (symbol->equivalence_unaligned)
+        f2c_buffer_printf(&name, "f2c_common_%s.bytes + %lluU", symbol->equivalence_common_block,
+                          (unsigned long long)symbol->equivalence_common_offset);
+    else if (symbol->equivalence_common_block[0] == '\0')
         f2c_buffer_printf(&name, "f2c_blank_common.equivalence_%zu_%zu_%zu.value", unit_index,
                           symbol->equivalence_group, symbol_index);
     else
@@ -573,12 +580,12 @@ static int extend_common_with_equivalence(Context *context, Unit *unit, size_t u
                 }
                 offset = candidate->equivalence_offset + shift;
             }
-            if (candidate->equivalence_alignment == 0U ||
-                offset % candidate->equivalence_alignment != 0U) {
+            candidate->equivalence_unaligned = candidate->equivalence_alignment == 0U ||
+                                               offset % candidate->equivalence_alignment != 0U;
+            if (candidate->equivalence_unaligned && candidate->type == TYPE_CHARACTER) {
                 f2c_diagnostic_span_code(
                     context, F2C_DIAGNOSTIC_UNSUPPORTED, &candidate->declaration_span, 1,
-                    "COMMON-associated EQUIVALENCE places '%s' at an unrepresentable alignment",
-                    candidate->name);
+                    "unaligned CHARACTER EQUIVALENCE storage is not yet supported");
                 valid = 0;
                 continue;
             }
@@ -594,7 +601,8 @@ static int extend_common_with_equivalence(Context *context, Unit *unit, size_t u
             end = offset + candidate->equivalence_size;
             if (end > *extent)
                 *extent = end;
-            if (candidate->equivalence_alignment > maximum_alignment)
+            if (!candidate->equivalence_unaligned &&
+                candidate->equivalence_alignment > maximum_alignment)
                 maximum_alignment = candidate->equivalence_alignment;
             assign_equivalence_common_c_name(context, unit_index, candidate_index, candidate);
         }
@@ -682,7 +690,11 @@ static void assign_equivalence_c_name(Context *context, Unit *unit, size_t group
                                       size_t symbol_index) {
     Symbol *symbol = &unit->symbols[symbol_index];
     Buffer name = {0};
-    f2c_buffer_printf(&name, "f2c_equivalence_%zu.view_%zu.value", group_index, symbol_index);
+    if (symbol->equivalence_unaligned)
+        f2c_buffer_printf(&name, "f2c_equivalence_%zu.bytes + %lluU", group_index,
+                          (unsigned long long)symbol->equivalence_offset);
+    else
+        f2c_buffer_printf(&name, "f2c_equivalence_%zu.view_%zu.value", group_index, symbol_index);
     free(symbol->c_name);
     symbol->c_name = f2c_buffer_take(&name);
     if (symbol->c_name == NULL)
@@ -815,12 +827,12 @@ void f2c_resolve_equivalence_storage(Context *context, Unit *unit) {
             if (!known[symbol_index] || assigned[symbol_index])
                 continue;
             normalized = (uint64_t)offsets[symbol_index] - (uint64_t)minimum_offset;
-            if (symbol->equivalence_alignment == 0U ||
-                normalized % symbol->equivalence_alignment != 0U) {
+            symbol->equivalence_unaligned = symbol->equivalence_alignment == 0U ||
+                                            normalized % symbol->equivalence_alignment != 0U;
+            if (symbol->equivalence_unaligned && symbol->type == TYPE_CHARACTER) {
                 f2c_diagnostic_span_code(
                     context, F2C_DIAGNOSTIC_UNSUPPORTED, &symbol->declaration_span, 1,
-                    "EQUIVALENCE places '%s' at an alignment not representable by portable C17",
-                    symbol->name);
+                    "unaligned CHARACTER EQUIVALENCE storage is not yet supported");
                 continue;
             }
             if (symbol->equivalence_size > UINT64_MAX - normalized) {
@@ -845,7 +857,7 @@ void f2c_resolve_equivalence_storage(Context *context, Unit *unit) {
                 root_index = symbol_index;
             if (end > extent)
                 extent = end;
-            if (symbol->equivalence_alignment > maximum_alignment)
+            if (!symbol->equivalence_unaligned && symbol->equivalence_alignment > maximum_alignment)
                 maximum_alignment = symbol->equivalence_alignment;
         }
         if (!checked_align(extent, maximum_alignment, &extent)) {

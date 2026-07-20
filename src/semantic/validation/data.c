@@ -200,7 +200,8 @@ static int symbol_supports_static_data(const Unit *unit, const Symbol *symbol) {
     common_block = symbol->equivalence_common_block != NULL ? symbol->equivalence_common_block
                                                             : symbol->common_block;
     if (common_block != NULL)
-        return unit != NULL && unit->kind == UNIT_BLOCK_DATA && common_block[0] != '\0';
+        return unit != NULL && unit->kind == UNIT_BLOCK_DATA && common_block[0] != '\0' &&
+               !symbol->equivalence_unaligned;
     if (symbol->alias_to != NULL)
         return 0;
     if (symbol->module_entity)

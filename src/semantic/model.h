@@ -103,6 +103,7 @@ struct Symbol {
     uint64_t equivalence_offset;
     uint64_t equivalence_size;
     uint64_t equivalence_alignment;
+    int equivalence_unaligned;
     char *equivalence_common_block;
     uint64_t equivalence_common_offset;
     char *common_block;
