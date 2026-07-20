@@ -69,6 +69,7 @@ static int copy_signature_to_symbol(Context *context, Unit *host, Unit *procedur
     external->external = 1;
     external->external_declared = 1;
     external->external_subroutine = procedure->kind == UNIT_SUBROUTINE;
+    external->external_alternate_return_count = procedure->alternate_return_count;
     external->external_signature_observed = 1;
     external->external_signature_explicit = 1;
     if (!f2c_copy_function_result_metadata(external, procedure))
@@ -215,6 +216,8 @@ static Unit *find_signature_in_scope(Unit *scope, const char *name, int include_
 
 Unit *f2c_find_interface_signature(Context *context, Unit *scope, const char *name,
                                    int include_abstract) {
+    Unit *association_scope = scope;
+    size_t module_index;
     Unit *result = find_signature_in_scope(scope, name, include_abstract);
     if (result != NULL)
         return result;
@@ -223,9 +226,20 @@ Unit *f2c_find_interface_signature(Context *context, Unit *scope, const char *na
         if (result != NULL)
             return result;
     }
-    if (scope != NULL && scope->internal && scope->host_index < context->units.count)
-        return find_signature_in_scope(&context->units.items[scope->host_index], name,
-                                       include_abstract);
+    if (scope != NULL && scope->internal && scope->host_index < context->units.count) {
+        association_scope = &context->units.items[scope->host_index];
+        result = find_signature_in_scope(association_scope, name, include_abstract);
+        if (result != NULL)
+            return result;
+    }
+    if (association_scope != NULL) {
+        for (module_index = 0U; module_index < context->modules.count; ++module_index) {
+            Unit *module = &context->modules.items[module_index];
+            if (association_scope->begin > module->end &&
+                association_scope->begin < module->container_end)
+                return find_signature_in_scope(module, name, include_abstract);
+        }
+    }
     return NULL;
 }
 

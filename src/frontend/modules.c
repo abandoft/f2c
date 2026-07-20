@@ -330,6 +330,7 @@ static int clone_module_symbol(Unit *unit, const Symbol *source, const char *loc
     target->external = source->external;
     target->external_declared = source->external_declared;
     target->external_subroutine = source->external_subroutine;
+    target->external_alternate_return_count = source->external_alternate_return_count;
     target->external_result_allocatable = source->external_result_allocatable;
     target->external_result_rank = source->external_result_rank;
     target->external_signature_observed = source->external_signature_observed;
@@ -471,6 +472,8 @@ static int import_module_procedure(Unit *unit, Unit *procedure, const char *loca
     symbol->access = F2C_ACCESS_UNSPECIFIED;
     memset(&symbol->access_span, 0, sizeof(symbol->access_span));
     symbol->external_subroutine = procedure->kind == UNIT_SUBROUTINE;
+    symbol->external_alternate_return_count = procedure->alternate_return_count;
+    symbol->procedure_interface = procedure;
     if (!f2c_copy_function_result_metadata(symbol, procedure))
         return 0;
     if (symbol->type == TYPE_CHARACTER && result != NULL && result->character_length != NULL) {
@@ -479,6 +482,7 @@ static int import_module_procedure(Unit *unit, Unit *procedure, const char *loca
             return 0;
         free(symbol->character_length);
         symbol->character_length = length;
+        symbol->character_length_syntax = result->character_length_syntax;
     }
     if (!f2c_symbol_resize_external_parameters(symbol, procedure->argument_count))
         return 0;
