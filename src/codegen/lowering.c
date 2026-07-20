@@ -598,7 +598,7 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
             character_length = f2c_strdup("1U");
         f2c_buffer_printf(&result, "(size_t)(%s) * (size_t)(", character_length);
     }
-    if (symbol->argument && f2c_symbol_uses_descriptor(symbol)) {
+    if (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol))) {
         f2c_buffer_printf(&result, "f2c_array_descriptor_offset(%zuU, (const int64_t[]){", count);
         for (i = 0U; i < count; ++i)
             f2c_buffer_printf(&result, "%s(int64_t)(%s)", i == 0U ? "" : ", ", indices[i]);

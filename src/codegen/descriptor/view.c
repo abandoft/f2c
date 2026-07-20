@@ -38,9 +38,9 @@ static char *contiguous_stride(Unit *unit, const Symbol *symbol, size_t dimensio
     return stride;
 }
 
-static char *source_stride(Unit *unit, const Symbol *symbol, size_t dimension) {
+char *f2c_descriptor_source_stride(Unit *unit, const Symbol *symbol, size_t dimension) {
     Buffer result = {0};
-    if (symbol->argument && f2c_symbol_uses_descriptor(symbol)) {
+    if (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol))) {
         f2c_buffer_printf(&result, "%s_stride_%zu", f2c_symbol_c_name(unit, symbol),
                           dimension + 1U);
         return f2c_buffer_take(&result);
@@ -73,7 +73,7 @@ static int whole_array_view(Unit *unit, const F2cExpr *expression, F2cDescriptor
     for (dimension = 0U; dimension < view->rank; ++dimension) {
         view->lower[dimension] = f2c_symbol_dimension_lower(unit, symbol, dimension);
         view->extent[dimension] = f2c_symbol_dimension_extent(unit, symbol, dimension);
-        view->stride[dimension] = source_stride(unit, symbol, dimension);
+        view->stride[dimension] = f2c_descriptor_source_stride(unit, symbol, dimension);
         if (view->lower[dimension] == NULL || view->extent[dimension] == NULL ||
             view->stride[dimension] == NULL)
             return 0;
@@ -93,7 +93,7 @@ static int section_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView
         const F2cExpr *selector = expression->children[source_dimension];
         if (selector->kind == F2C_EXPR_ARRAY_SECTION) {
             char *step = section_step(unit, selector);
-            char *base_stride = source_stride(unit, symbol, source_dimension);
+            char *base_stride = f2c_descriptor_source_stride(unit, symbol, source_dimension);
             Buffer stride = {0};
             indices[source_dimension] = section_first(unit, selector, symbol, source_dimension);
             view->lower[result_dimension] = f2c_strdup("1");
