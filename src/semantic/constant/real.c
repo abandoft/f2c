@@ -109,7 +109,7 @@ static int evaluate_representation(F2cConstantEvaluation *evaluation, const F2cE
     const F2cExpr *x;
     const F2cExpr *second = NULL;
     double x_value;
-    double second_value;
+    double second_value = 0.0;
     int64_t power = 0;
     int exponent = 0;
     int kind;
