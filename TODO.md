@@ -28,7 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建基线已经建立；本轮普通、Release 与 ASan/UBSan 严格 CTest 均为 42/42，架构边界检查作为
+  构建基线已经建立；本轮普通、Release 与 ASan/UBSan 严格 CTest 均为 43/43，架构边界检查作为
   独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
@@ -126,7 +126,10 @@
   rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级。数值模型 inquiry
   `DIGITS/EPSILON/HUGE/KIND/MAXEXPONENT/MINEXPONENT/PRECISION/RADIX/RANGE/TINY` 以及
   `SELECTED_INT_KIND/SELECTED_REAL_KIND` 已进入 typed IR 和同一常量求值器，可用于参数和类型
-  kind 选择器；查询实参不会被求值。仍需补齐其余规格 intrinsic 和所有允许出现位置。字符常量
+  kind 选择器；查询实参不会被求值。实数表示 intrinsic
+  `EXPONENT/FRACTION/NEAREST/RRSPACING/SCALE/SET_EXPONENT/SPACING` 已进入 typed IR 和常量
+  求值器，覆盖 binary32/binary64、零、signed zero、subnormal、非有限值、关键字关联和支持的整数
+  指数 kind，并生成精确十六进制静态常量。仍需补齐其余规格 intrinsic 和所有允许出现位置。字符常量
   求值现已覆盖 `ACHAR/ADJUSTL/ADJUSTR/CHAR/IACHAR`、
   `ICHAR/INDEX/LEN/LEN_TRIM/REPEAT/SCAN/TRIM/VERIFY`、连接、参数引用、嵌入 NUL、空串、反向搜索
   和结果 kind 范围，并可直接生成 CHARACTER 声明初始化器。
@@ -243,7 +246,12 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   `DIGITS/EPSILON/HUGE/KIND/MAXEXPONENT/MINEXPONENT/PRECISION/RADIX/RANGE/TINY` 和
   `SELECTED_INT_KIND/SELECTED_REAL_KIND` 已覆盖类型与 kind 契约、关键字关联、失败码、常量折叠、
   声明选择器和动态实参一次求值；生成端仅依赖固定宽度整数及 `float.h` 常量，查询实参不求值，
-  严格 C17、UBSan 与 gfortran 差分已进入 CI。其他 F90 intrinsic 尚未全部完成，因此本项保持未关闭。
+  严格 C17、UBSan 与 gfortran 差分已进入 CI。实数表示 intrinsic
+  `EXPONENT/FRACTION/NEAREST/RRSPACING/SCALE/SET_EXPONENT/SPACING` 已覆盖类型化参数关联、
+  elemental rank/shape、binary32/binary64 结果 kind、常量折叠和边界语义；运行时降级仅使用 libc/libm，
+  对超出 C `int` 范围的整数指数执行显式保护，并由严格 C17、ASan/UBSan 与原生 Fortran 逐值差分
+  验证。显式 `EXTERNAL` 的同名过程优先于内建函数。其他 F90 intrinsic 尚未全部完成，因此本项保持
+  未关闭。
 - [ ] 让 `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/TRANSPOSE/MATMUL` 等支持任意合法数组
   表达式、所有已支持 kind/rank、零大小数组和非默认下界，而不是只接受具名整数组。上述 intrinsic
   的数值、LOGICAL、COMPLEX 和 CHARACTER 输入现共用列主序数组视图与一次性临时量引擎；
@@ -426,7 +434,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   未完成语义阶段的对象。
 - [x] 将误放在 `frontend/modules.c` 中的模块 emitter 拆到 `codegen/module.c`；生产 C/H 文件
   必须少于或等于 1,000 行，且 CMake、生产源码和公共头文件不得引用 `netlib-f2c`，这些约束均
-  由跨平台 CMake 测试持续检查。
+  由跨平台 CMake 测试持续检查。表达式内建调用的 type/kind/rank/shape 绑定已从通用
+  `ast/parser.c` 拆入 `ast/intrinsic.c`，解析器继续满足文件规模门禁。
 - [ ] 统一动态数组、字符串、arena/对象所有权和错误传播工具；区分内存耗尽、输入错误、内部错误
   和未支持特性，审计所有 `size_t` 加乘法及 `realloc` 提交顺序。
 - [ ] 将超过 2,700 行的 `test/test_transpile.c` 和超过 870 行的 `test/compile_generated.cmake` 按模块与
