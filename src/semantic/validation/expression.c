@@ -41,15 +41,48 @@ static void validate_allocated_intrinsic(Context *context, size_t line, const ch
     }
 }
 
+static int associated_target_has_vector_subscript(const F2cExpr *target) {
+    size_t selector;
+    if (target == NULL || target->kind != F2C_EXPR_ARRAY_REFERENCE)
+        return 0;
+    for (selector = 0U; selector < target->child_count; ++selector) {
+        const F2cExpr *subscript = target->children[selector];
+        if (subscript != NULL && subscript->kind != F2C_EXPR_ARRAY_SECTION && subscript->rank != 0U)
+            return 1;
+    }
+    return 0;
+}
+
+static int associated_derived_type_compatible(const Symbol *pointer, const F2cExpr *target) {
+    const F2cDerivedType *candidate;
+    if (pointer == NULL || target == NULL || pointer->type != TYPE_DERIVED)
+        return 1;
+    candidate = target->derived_type;
+    if (!pointer->polymorphic)
+        return pointer->derived_type == candidate;
+    while (candidate != NULL) {
+        if (candidate == pointer->derived_type)
+            return 1;
+        candidate = candidate->parent;
+    }
+    return 0;
+}
+
 static void validate_associated_intrinsic(Context *context, size_t line, const char *statement_text,
                                           F2cExpr *expression) {
-    F2cExpr *pointer = expression->child_count >= 1U ? expression->children[0] : NULL;
-    F2cExpr *target = expression->child_count >= 2U ? expression->children[1] : NULL;
+    F2cExpr *pointer = (F2cExpr *)f2c_intrinsic_argument(expression->children,
+                                                         expression->child_count, "pointer", 0U);
+    F2cExpr *target = (F2cExpr *)f2c_intrinsic_argument(expression->children,
+                                                        expression->child_count, "target", 1U);
     Symbol *pointer_symbol =
         pointer != NULL && (pointer->kind == F2C_EXPR_NAME || pointer->kind == F2C_EXPR_COMPONENT)
             ? pointer->symbol
             : NULL;
-    Symbol *target_symbol = target != NULL && target->kind == F2C_EXPR_NAME ? target->symbol : NULL;
+    Symbol *target_symbol = target != NULL && (target->kind == F2C_EXPR_NAME ||
+                                               target->kind == F2C_EXPR_ARRAY_REFERENCE ||
+                                               target->kind == F2C_EXPR_SUBSTRING)
+                                ? target->symbol
+                                : NULL;
     if (pointer_symbol == NULL ||
         (!pointer_symbol->pointer && !pointer_symbol->procedure_pointer)) {
         f2c_diagnostic_at(context, line,
@@ -75,12 +108,16 @@ static void validate_associated_intrinsic(Context *context, size_t line, const c
     }
     if (target != NULL &&
         (target_symbol == NULL || (!target_symbol->target && !target_symbol->pointer) ||
-         target_symbol->type != pointer_symbol->type ||
-         target_symbol->kind != pointer_symbol->kind ||
-         target_symbol->rank != pointer_symbol->rank)) {
+         target->type != pointer_symbol->type || target->type_kind != pointer_symbol->kind ||
+         target->rank != pointer_symbol->rank ||
+         !associated_derived_type_compatible(pointer_symbol, target))) {
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, target), 1,
                           "ASSOCIATED target must be a compatible TARGET or POINTER object");
+    } else if (associated_target_has_vector_subscript(target)) {
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, target), 1,
+                          "ASSOCIATED target cannot have a vector subscript");
     }
 }
 
