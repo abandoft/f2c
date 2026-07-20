@@ -52,6 +52,8 @@ jobs:
         run: sh test/common_storage_differential.sh build/numerical/f2c
       - name: Differential-test BLOCK DATA initialization semantics
         run: sh test/block_data_differential.sh build/numerical/f2c
+      - name: Differential-test module DATA initialization semantics
+        run: sh test/module_data_differential.sh build/numerical/f2c
       - name: Differential-test WHERE array semantics
         run: sh test/where_differential.sh build/numerical/f2c
       - name: Differential-test user ELEMENTAL procedures
