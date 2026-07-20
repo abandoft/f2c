@@ -1,6 +1,7 @@
 #include "codegen/statement/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/value/private.h"
 
 #include <stdlib.h>
 
@@ -485,8 +486,8 @@ static int emit_character_assignment(Context *context, Unit *unit, const F2cStat
     return 1;
 }
 
-static int emit_derived_assignment(Context *context, const F2cStatement *statement,
-                                   const F2cExpr *left_element, const char *left, const char *right,
+static int emit_derived_assignment(Context *context, Unit *unit, const F2cExpr *left_element,
+                                   const F2cExpr *right_element, const char *left,
                                    size_t identifier, size_t rank, int depth) {
     const char *name =
         left_element->derived_type != NULL ? left_element->derived_type->c_name : NULL;
@@ -504,36 +505,23 @@ static int emit_derived_assignment(Context *context, const F2cStatement *stateme
     indent(&context->output, depth);
     f2c_buffer_printf(&context->output, "if (f2c_where_values_%zu == NULL) abort();\n", identifier);
     emit_loop_begin(&context->output, identifier, rank, depth);
-    if (statement->right->rank == 0U && (statement->right->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR ||
-                                         statement->right->kind == F2C_EXPR_CALL)) {
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "if (f2c_where_active_%zu[f2c_where_linear_%zu]) {\n",
-                          identifier, identifier);
-        indent(&context->output, depth + 2);
-        f2c_buffer_printf(&context->output, "%s f2c_where_element_%zu = %s;\n", name, identifier,
-                          right);
-        if (statement->right->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR) {
-            indent(&context->output, depth + 2);
-            f2c_buffer_printf(&context->output, "f2c_initialize_%s(&f2c_where_element_%zu);\n",
-                              name, identifier);
-        }
-        indent(&context->output, depth + 2);
-        f2c_buffer_printf(&context->output,
-                          "f2c_clone_%s(&f2c_where_values_%zu[f2c_where_linear_%zu], "
-                          "&f2c_where_element_%zu);\n",
-                          name, identifier, identifier, identifier);
-        indent(&context->output, depth + 2);
-        f2c_buffer_printf(&context->output, "f2c_destroy_%s(&f2c_where_element_%zu);\n", name,
+    indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "if (f2c_where_active_%zu[f2c_where_linear_%zu]) {\n",
+                      identifier, identifier);
+    {
+        Buffer destination = {0};
+        f2c_buffer_printf(&destination, "f2c_where_values_%zu[f2c_where_linear_%zu]", identifier,
                           identifier);
-        indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output, "}\n");
-    } else {
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output,
-                          "if (f2c_where_active_%zu[f2c_where_linear_%zu]) "
-                          "f2c_clone_%s(&f2c_where_values_%zu[f2c_where_linear_%zu], &(%s));\n",
-                          identifier, identifier, name, identifier, identifier, right);
+        if (destination.data == NULL ||
+            !f2c_emit_derived_clone_expression(&context->output, unit, right_element,
+                                               destination.data, "where", identifier, depth + 2)) {
+            free(destination.data);
+            return 0;
+        }
+        free(destination.data);
     }
+    indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output, "}\n");
     emit_loop_end(&context->output, depth);
     emit_loop_begin(&context->output, identifier, rank, depth);
     indent(&context->output, depth + 1);
@@ -613,8 +601,8 @@ int f2c_emit_where_assignment(Context *context, Unit *unit, const F2cStatement *
                                             left, right, identifier, rank, depth);
     } else if (left_element->type == TYPE_DERIVED && right_element->type == TYPE_DERIVED &&
                left_element->derived_type == right_element->derived_type) {
-        emitted = emit_derived_assignment(context, statement, left_element, left, right, identifier,
-                                          rank, depth);
+        emitted = emit_derived_assignment(context, unit, left_element, right_element, left,
+                                          identifier, rank, depth);
     } else if (left_element->type != TYPE_CHARACTER && left_element->type != TYPE_DERIVED) {
         emitted = emit_numeric_assignment(context, unit, statement, left_element, right_element,
                                           left, right, identifier, rank, depth);
