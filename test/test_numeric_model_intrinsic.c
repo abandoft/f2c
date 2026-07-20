@@ -62,8 +62,7 @@ static void test_kind_selection_arguments(void) {
                       "SELECTED_INT_KIND argument R must be a scalar INTEGER");
     expect_diagnostic("  integer :: values(2)\n", "selected_int_kind(values)",
                       "SELECTED_INT_KIND argument R must be a scalar INTEGER");
-    expect_diagnostic("", "selected_real_kind(radix=2)",
-                      "SELECTED_REAL_KIND requires P or R");
+    expect_diagnostic("", "selected_real_kind(radix=2)", "SELECTED_REAL_KIND requires P or R");
     expect_diagnostic("  real :: value\n", "selected_real_kind(p=value)",
                       "SELECTED_REAL_KIND argument P must be a scalar INTEGER");
     expect_diagnostic("  integer :: values(2)\n", "selected_real_kind(r=values)",
@@ -92,6 +91,60 @@ static void test_valid_contracts(void) {
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
     expect(result.code != NULL && result.error_count == 0U,
            "valid numeric model intrinsic contracts produce typed C17 IR");
+    expect(result.code != NULL &&
+               strstr(result.code, "F2C_WRITE(f2c_unit_stream(6, false), (INT8_MAX))") != NULL,
+           "INTEGER(1) HUGE lowers to its exact-width C17 model constant");
+    expect(result.code != NULL &&
+               strstr(result.code, "F2C_WRITE(f2c_unit_stream(6, false), (FLT_EPSILON))") != NULL,
+           "REAL(4) EPSILON lowers to the binary32 C17 model constant");
+    expect(result.code != NULL && strstr(result.code, "_Generic((i1)") == NULL &&
+               strstr(result.code, "_Generic((r4)") == NULL,
+           "numeric inquiries do not use value-evaluating generic selections");
+    f2c_result_free(&result);
+}
+
+static void test_inquiry_arguments_are_not_evaluated(void) {
+    static const char source[] = "program numeric_model_inquiry_evaluation\n"
+                                 "  implicit none\n"
+                                 "  integer, external :: touch_integer\n"
+                                 "  print *, digits(touch_integer()), huge(touch_integer())\n"
+                                 "end program numeric_model_inquiry_evaluation\n";
+    F2cOptions options = {"numeric_model_inquiry_evaluation.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "numeric inquiry calls with procedure expressions transpile");
+    expect(result.code != NULL &&
+               strstr(result.code, "extern int32_t touch_integer(void);") != NULL,
+           "the inquiry fixture retains the external procedure declaration");
+    expect(result.code != NULL && strstr(result.code, "touch_integer()") == NULL,
+           "numeric inquiry codegen does not evaluate its model expression");
+    expect(result.code != NULL &&
+               strstr(result.code, "F2C_WRITE(f2c_unit_stream(6, false), (INT32_MAX))") != NULL,
+           "INTEGER(4) HUGE remains an integer model constant");
+    f2c_result_free(&result);
+}
+
+static void test_dynamic_kind_selection(void) {
+    static const char source[] = "program dynamic_kind_selection\n"
+                                 "  implicit none\n"
+                                 "  integer :: p, r, base\n"
+                                 "  p = 6\n"
+                                 "  r = 37\n"
+                                 "  base = 2\n"
+                                 "  print *, selected_int_kind(r)\n"
+                                 "  print *, selected_real_kind(radix=base, r=r, p=p)\n"
+                                 "end program dynamic_kind_selection\n";
+    F2cOptions options = {"dynamic_kind_selection.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "runtime selected-kind arguments produce portable C17");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_selected_int_kind((int64_t)(r))") != NULL,
+           "dynamic SELECTED_INT_KIND uses its fixed-model helper");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_selected_real_kind((int64_t)(p), true, (int64_t)(r), true, "
+                                   "(int64_t)(base), true)") != NULL,
+           "dynamic SELECTED_REAL_KIND binds shuffled keywords exactly once");
     f2c_result_free(&result);
 }
 
@@ -100,5 +153,7 @@ int main(void) {
     test_model_kind_support();
     test_kind_selection_arguments();
     test_valid_contracts();
+    test_inquiry_arguments_are_not_evaluated();
+    test_dynamic_kind_selection();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
