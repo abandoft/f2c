@@ -117,20 +117,57 @@ static void validate_common_initialization_owner(Context *context, size_t unit_i
             }
         }
     }
-    if (symbol->common_block == NULL && symbol->equivalence_common_block != NULL) {
-        size_t candidate_index;
-        for (candidate_index = 0U; candidate_index < unit->symbol_count; ++candidate_index) {
-            const Symbol *candidate = &unit->symbols[candidate_index];
-            const char *candidate_block = symbol_common_storage_block(candidate);
-            if (candidate_index == symbol_index || candidate_block == NULL ||
-                strcmp(candidate_block, block) != 0 || !symbol_has_storage_initializer(candidate))
+    (void)symbol_index;
+}
+
+static uint64_t common_associated_offset(const Symbol *symbol) {
+    return symbol->equivalence_common_block != NULL ? symbol->equivalence_common_offset
+                                                    : symbol->common_offset;
+}
+
+static uint64_t common_associated_size(const Symbol *symbol) {
+    return symbol->equivalence_common_block != NULL ? symbol->equivalence_size
+                                                    : symbol->common_size;
+}
+
+static void validate_common_initializer_overlaps(Context *context, Unit *unit, const char *block) {
+    size_t symbol_index;
+    int has_equivalence_initializer = 0;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        const Symbol *symbol = &unit->symbols[symbol_index];
+        if (symbol->common_block == NULL && symbol->equivalence_common_block != NULL &&
+            strcmp(symbol->equivalence_common_block, block) == 0 &&
+            symbol_has_storage_initializer(symbol)) {
+            has_equivalence_initializer = 1;
+            break;
+        }
+    }
+    if (!has_equivalence_initializer)
+        return;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        const Symbol *symbol = &unit->symbols[symbol_index];
+        const char *symbol_block = symbol_common_storage_block(symbol);
+        const uint64_t symbol_offset = common_associated_offset(symbol);
+        const uint64_t symbol_size = common_associated_size(symbol);
+        size_t previous_index;
+        if (symbol_block == NULL || strcmp(symbol_block, block) != 0 ||
+            !symbol_has_storage_initializer(symbol))
+            continue;
+        for (previous_index = 0U; previous_index < symbol_index; ++previous_index) {
+            const Symbol *previous = &unit->symbols[previous_index];
+            const char *previous_block = symbol_common_storage_block(previous);
+            const uint64_t previous_offset = common_associated_offset(previous);
+            const uint64_t previous_size = common_associated_size(previous);
+            if (previous_block == NULL || strcmp(previous_block, block) != 0 ||
+                !symbol_has_storage_initializer(previous))
                 continue;
-            f2c_diagnostic_span_code(
-                context, F2C_DIAGNOSTIC_UNSUPPORTED, &symbol->declaration_span, 1,
-                "COMMON block '%s' DATA initializers require more than one overlapping C17 "
-                "storage view",
-                display_block_name(block));
-            return;
+            if (symbol_offset < previous_offset + previous_size &&
+                previous_offset < symbol_offset + symbol_size) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->declaration_span, 1,
+                    "COMMON block '%s' DATA initializers for '%s' and '%s' overlap in storage",
+                    display_block_name(block), previous->name, symbol->name);
+            }
         }
     }
 }
@@ -867,6 +904,7 @@ void f2c_validate_project_storage(Context *context) {
                 continue;
             if (!extend_common_with_equivalence(context, unit, u, symbol->common_block, &extent))
                 continue;
+            validate_common_initializer_overlaps(context, unit, symbol->common_block);
             canonical_unit =
                 previous_common_owner(context, u, symbol->common_block, &canonical_extent);
             if (symbol->common_block[0] != '\0' && canonical_unit != NULL &&
