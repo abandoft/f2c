@@ -124,6 +124,21 @@ static int evaluate_trim(F2cCharacterConstantEvaluation *evaluation, const F2cEx
     return 1;
 }
 
+static int evaluate_merge(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *expression,
+                          char **value, size_t *length, size_t depth) {
+    const F2cExpr *mask =
+        f2c_intrinsic_argument(expression->children, expression->child_count, "mask", 2U);
+    const F2cExpr *selected;
+    int64_t condition;
+    if (mask == NULL || mask->type != TYPE_LOGICAL || mask->rank != 0U ||
+        !f2c_evaluate_integer_constant(evaluation->unit, mask, &condition))
+        return 0;
+    selected =
+        f2c_intrinsic_argument(expression->children, expression->child_count,
+                               condition != 0 ? "tsource" : "fsource", condition != 0 ? 0U : 1U);
+    return evaluate(evaluation, selected, value, length, depth + 1U);
+}
+
 static int evaluate(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *expression,
                     char **value, size_t *length, size_t depth) {
     if (expression == NULL || value == NULL || length == NULL || !consume_step(evaluation, depth))
@@ -184,6 +199,8 @@ static int evaluate(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *e
         return evaluate_repeat(evaluation, expression, value, length, depth);
     if (expression->intrinsic == F2C_INTRINSIC_TRIM)
         return evaluate_trim(evaluation, expression, value, length, depth);
+    if (expression->intrinsic == F2C_INTRINSIC_MERGE && expression->type == TYPE_CHARACTER)
+        return evaluate_merge(evaluation, expression, value, length, depth);
     return 0;
 }
 

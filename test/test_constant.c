@@ -127,6 +127,14 @@ static void test_character_intrinsics(Unit *unit) {
                characters[0] == '\0' && characters[1] == 'A',
            "character constants preserve embedded zero bytes");
     free(characters);
+    characters = NULL;
+    expect(evaluate_character_source(unit,
+                                     "merge(mask=.false., fsource='NO ', tsource=trim('YES '))",
+                                     &characters, &length) &&
+               length == 3U && memcmp(characters, "NO ", 3U) == 0,
+           "character MERGE folds through canonical keyword association");
+    free(characters);
+    characters = NULL;
     expect(!evaluate_character_source(unit, "repeat('x',-1)", &characters, &length),
            "negative REPEAT counts are not folded");
 }

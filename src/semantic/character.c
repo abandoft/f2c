@@ -272,6 +272,11 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
     if (expression->kind == F2C_EXPR_COMPONENT)
         return f2c_symbol_character_length(unit, expression->symbol);
     if (expression->kind == F2C_EXPR_CALL) {
+        if (expression->intrinsic == F2C_INTRINSIC_MERGE) {
+            const F2cExpr *source = f2c_intrinsic_argument(expression->children,
+                                                           expression->child_count, "tsource", 0U);
+            return f2c_character_length_expression(unit, source);
+        }
         if (expression->intrinsic == F2C_INTRINSIC_CHAR ||
             expression->intrinsic == F2C_INTRINSIC_ACHAR)
             return f2c_strdup("1U");
