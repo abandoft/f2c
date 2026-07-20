@@ -74,6 +74,8 @@ jobs:
         run: sh test/numeric_operation_intrinsic_differential.sh build/numerical/f2c
       - name: Differential-test random intrinsics
         run: sh test/random_intrinsic_differential.sh build/numerical/f2c
+      - name: Differential-test time intrinsics
+        run: sh test/time_intrinsic_differential.sh build/numerical/f2c
       - name: Differential-test real representation intrinsics
         run: sh test/real_representation_intrinsic_differential.sh build/numerical/f2c
       - name: Differential-test character intrinsics
