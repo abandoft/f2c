@@ -64,6 +64,7 @@ foreach(
        formatted_record_input
        namelist_internal
        pointer_semantics
+       pointer_section
        pointer_dummy
        procedure_pointer
        procedure_pointer_component
