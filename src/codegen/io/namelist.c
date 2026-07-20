@@ -1,5 +1,6 @@
 #include "codegen/io/private.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -39,6 +40,39 @@ void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
                           input ? "(void)F2C_READ(%s, &%s);\n" : "F2C_WRITE(%s, (%s));\n", file,
                           value);
     }
+}
+
+static int emit_unaligned_namelist_value(Context *context, Unit *unit, const char *file,
+                                         const Symbol *symbol, const char *offset, int input,
+                                         int depth) {
+    const char *suffix = f2c_unaligned_access_suffix(symbol);
+    char *address = f2c_emit_unaligned_linear_address(unit, (Symbol *)symbol, offset);
+    if (suffix == NULL || address == NULL) {
+        free(address);
+        return 0;
+    }
+    f2c_io_indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "{\n");
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "unsigned char *f2c_unaligned_io_address = %s;\n", address);
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output,
+                      "%s f2c_unaligned_io_value = f2c_unaligned_load_%s("
+                      "f2c_unaligned_io_address);\n",
+                      f2c_symbol_c_type(symbol), suffix);
+    f2c_io_emit_namelist_value(context, unit, file, symbol, "f2c_unaligned_io_value", NULL, input,
+                               depth + 1);
+    if (input) {
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output,
+                          "f2c_unaligned_store_%s(f2c_unaligned_io_address, "
+                          "f2c_unaligned_io_value);\n",
+                          suffix);
+    }
+    f2c_io_indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+    free(address);
+    return 1;
 }
 
 static char *namelist_component_count(Unit *unit, const Symbol *symbol, const char *owner) {
@@ -461,12 +495,15 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
         Buffer scalar = {0};
         char *character_length =
             symbol->type == TYPE_CHARACTER ? namelist_character_length(unit, symbol, owner) : NULL;
-        if (indirect && symbol->type != TYPE_CHARACTER)
+        if (symbol->equivalence_unaligned && symbol->rank == 0U && !scalarized) {
+            (void)emit_unaligned_namelist_value(context, unit, file, symbol, NULL, input, depth);
+        } else if (indirect && symbol->type != TYPE_CHARACTER)
             f2c_buffer_printf(&scalar, "*(%s)", value);
         else
             f2c_buffer_append(&scalar, value);
-        f2c_io_emit_namelist_value(context, unit, file, symbol, scalar.data, character_length,
-                                   input, depth);
+        if (!(symbol->equivalence_unaligned && symbol->rank == 0U && !scalarized))
+            f2c_io_emit_namelist_value(context, unit, file, symbol, scalar.data, character_length,
+                                       input, depth);
         free(character_length);
         free(scalar.data);
     } else {
@@ -483,10 +520,16 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
             if (symbol->type == TYPE_CHARACTER)
                 f2c_buffer_printf(&element, "%s + f2c_namelist_value_%zu * (size_t)(%s)", value,
                                   path_id, character_length != NULL ? character_length : "1U");
-            else
+            else if (symbol->equivalence_unaligned) {
+                char offset[80];
+                (void)snprintf(offset, sizeof(offset), "f2c_namelist_value_%zu", path_id);
+                (void)emit_unaligned_namelist_value(context, unit, file, symbol, offset, input,
+                                                    depth + 1);
+            } else
                 f2c_buffer_printf(&element, "%s[f2c_namelist_value_%zu]", value, path_id);
-            f2c_io_emit_namelist_value(context, unit, file, symbol, element.data, character_length,
-                                       input, depth + 1);
+            if (!symbol->equivalence_unaligned)
+                f2c_io_emit_namelist_value(context, unit, file, symbol, element.data,
+                                           character_length, input, depth + 1);
             free(element.data);
         }
         f2c_io_indent(&context->output, depth);
