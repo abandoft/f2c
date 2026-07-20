@@ -217,6 +217,7 @@ set(
     src/semantic/constant/bit.c
     src/semantic/constant/character.c
     src/semantic/constant/model.c
+    src/semantic/constant/numeric.c
     src/semantic/constant/private.h
     src/semantic/constant/real.c
     src/semantic/implicit.c

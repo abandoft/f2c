@@ -446,6 +446,8 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
     if (expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
         expression->child_count != 0U) {
         size_t i;
+        if (f2c_constant_evaluate_numeric_integer(evaluation, expression, value, depth))
+            return 1;
         if (evaluate_exponent_intrinsic(evaluation, expression, value, depth))
             return 1;
         if (evaluate_numeric_model_intrinsic(evaluation, expression, value, depth))
