@@ -1,7 +1,6 @@
 #include "codegen/expression/private.h"
 
 #include "codegen/array/private.h"
-#include "codegen/descriptor/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -243,47 +242,6 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
         actual->type != TYPE_UNKNOWN ? actual->type : TYPE_REAL, code);
 }
 
-static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supported) {
-    Buffer result = {0};
-    char *character_length = NULL;
-    F2cDescriptorView view = {0};
-    Symbol *symbol;
-    size_t dimension;
-    if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT && actual->child_count == 1U)
-        actual = actual->children[0];
-    if (actual != NULL && actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
-        return f2c_strdup("NULL");
-    if (actual == NULL || actual->symbol == NULL || !f2c_descriptor_view(unit, actual, &view)) {
-        *supported = 0;
-        return NULL;
-    }
-    symbol = actual->symbol;
-    if (actual->type == TYPE_CHARACTER)
-        character_length = f2c_character_length_expression(unit, actual);
-    f2c_buffer_printf(&result,
-                      "(&(f2c_descriptor){.data = f2c_implicit_mutable_actual(%s), "
-                      ".element_size = sizeof(%s), .rank = %zuU, .lower = {",
-                      view.data, f2c_symbol_c_type(symbol), view.rank);
-    for (dimension = 0U; dimension < view.rank; ++dimension) {
-        f2c_buffer_printf(&result, "%s(int64_t)(%s)", dimension == 0U ? "" : ", ",
-                          view.lower[dimension]);
-    }
-    f2c_buffer_append(&result, "}, .extent = {");
-    for (dimension = 0U; dimension < view.rank; ++dimension) {
-        f2c_buffer_printf(&result, "%sf2c_descriptor_extent((size_t)(%s))",
-                          dimension == 0U ? "" : ", ", view.extent[dimension]);
-    }
-    f2c_buffer_append(&result, "}, .stride = {");
-    for (dimension = 0U; dimension < view.rank; ++dimension)
-        f2c_buffer_printf(&result, "%s(ptrdiff_t)(%s)", dimension == 0U ? "" : ", ",
-                          view.stride[dimension]);
-    f2c_buffer_printf(&result, "}, .character_length = (size_t)(%s)})",
-                      character_length != NULL ? character_length : "0U");
-    free(character_length);
-    f2c_descriptor_view_free(&view);
-    return f2c_buffer_take(&result);
-}
-
 static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *supported) {
     const Symbol *procedure = expression->symbol;
     const F2cExpr *callee_expression =
@@ -299,6 +257,8 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
                                  !procedure->external_subroutine &&
                                  procedure->type == TYPE_CHARACTER;
     Buffer result = {0};
+    Buffer contiguous_setup = {0};
+    Buffer contiguous_cleanup = {0};
     char *callee;
     size_t parameter;
     size_t explicit_argument = 1U;
@@ -368,6 +328,8 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
             if (explicit_argument >= expression->child_count) {
                 free(callee);
                 free(result.data);
+                free(contiguous_setup.data);
+                free(contiguous_cleanup.data);
                 *supported = 0;
                 return NULL;
             }
@@ -380,18 +342,24 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
             free(code);
             free(callee);
             free(result.data);
+            free(contiguous_setup.data);
+            free(contiguous_cleanup.data);
             *supported = 0;
             return NULL;
         }
         lowered = *supported && code != NULL
                       ? (procedure->external_parameter_descriptor[parameter]
-                             ? emit_descriptor_actual(unit, actual, supported)
+                             ? f2c_expression_descriptor_actual(
+                                   &contiguous_setup, &contiguous_cleanup, unit, actual,
+                                   procedure->external_parameter_intents[parameter], supported)
                              : emit_external_actual(unit, actual, code, supported))
                       : NULL;
         free(code);
         if (lowered == NULL) {
             free(callee);
             free(result.data);
+            free(contiguous_setup.data);
+            free(contiguous_cleanup.data);
             *supported = 0;
             return NULL;
         }
@@ -445,14 +413,21 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
         else
             f2c_buffer_printf(&result, ", f2c_expression_result_%zu)", expression->temporary_index);
     }
-    free(callee);
-    return f2c_buffer_take(&result);
+    {
+        char *call = f2c_buffer_take(&result);
+        free(callee);
+        return f2c_expression_wrap_contiguous_call(expression, allocatable_result,
+                                                   &contiguous_setup, &contiguous_cleanup, call,
+                                                   supported);
+    }
 }
 
 char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported) {
     char **arguments = NULL;
     Type *types = NULL;
     Buffer result = {0};
+    Buffer contiguous_setup = {0};
+    Buffer contiguous_cleanup = {0};
     const Unit *resolved = expression->resolved_procedure != NULL &&
                                    !expression->resolved_procedure->interface_abstract
                                ? expression->resolved_procedure
@@ -513,36 +488,91 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
     }
     if (expression->text != NULL && strcmp(expression->text, "associated") == 0 &&
         expression->child_count >= 1U && expression->child_count <= 2U &&
-        expression->children[0] != NULL && expression->children[0]->symbol != NULL &&
-        (expression->children[0]->symbol->pointer ||
-         expression->children[0]->symbol->procedure_pointer)) {
-        const Symbol *pointer = expression->children[0]->symbol;
+        f2c_intrinsic_argument(expression->children, expression->child_count, "pointer", 0U) !=
+            NULL) {
+        const F2cExpr *pointer_expression =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "pointer", 0U);
+        const F2cExpr *target_expression =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "target", 1U);
+        const Symbol *pointer = pointer_expression->symbol;
         char *pointer_storage =
-            pointer->procedure_pointer
-                ? f2c_expression_emit(unit, expression->children[0], supported)
-                : f2c_emit_pointer_designator(unit, expression->children[0], supported);
-        if (!*supported || pointer_storage == NULL)
-            return NULL;
-        if (expression->child_count == 1U) {
-            f2c_buffer_printf(&result, "(%s != NULL)", pointer_storage);
-        } else if (expression->children[1] != NULL &&
-                   expression->children[1]->kind == F2C_EXPR_NAME &&
-                   expression->children[1]->symbol != NULL) {
-            const Symbol *target = expression->children[1]->symbol;
-            f2c_buffer_printf(&result, "(%s == %s%s)", pointer_storage,
-                              pointer->procedure_pointer || target->pointer ||
-                                      target->allocatable || target->argument ||
-                                      target->rank != 0U || target->type == TYPE_CHARACTER
-                                  ? ""
-                                  : "&",
-                              f2c_symbol_c_name(unit, target));
-        } else {
+            pointer != NULL && pointer->procedure_pointer
+                ? f2c_expression_emit(unit, pointer_expression, supported)
+                : f2c_emit_pointer_designator(unit, pointer_expression, supported);
+        if (pointer == NULL || (!pointer->pointer && !pointer->procedure_pointer) || !*supported ||
+            pointer_storage == NULL) {
             free(pointer_storage);
             *supported = 0;
             return NULL;
         }
+        if (target_expression == NULL) {
+            f2c_buffer_printf(&result, "(%s != NULL)", pointer_storage);
+        } else if (pointer->procedure_pointer && target_expression->kind == F2C_EXPR_NAME &&
+                   target_expression->symbol != NULL) {
+            f2c_buffer_printf(&result, "(%s == %s)", pointer_storage,
+                              f2c_symbol_c_name(unit, target_expression->symbol));
+        } else if (pointer->rank == 0U) {
+            char *target_storage =
+                f2c_expression_associated_scalar_target(unit, target_expression, supported);
+            char *pointer_length = NULL;
+            char *target_length = NULL;
+            if (!*supported || target_storage == NULL) {
+                free(target_storage);
+                free(pointer_storage);
+                *supported = 0;
+                return NULL;
+            }
+            if (pointer->type == TYPE_CHARACTER) {
+                pointer_length = f2c_character_length_expression(unit, pointer_expression);
+                target_length = f2c_character_length_expression(unit, target_expression);
+                if (pointer_length == NULL || target_length == NULL) {
+                    free(pointer_length);
+                    free(target_length);
+                    free(target_storage);
+                    free(pointer_storage);
+                    *supported = 0;
+                    return NULL;
+                }
+                f2c_buffer_printf(&result, "((size_t)(%s) == (size_t)(%s) && %s == %s)",
+                                  pointer_length, target_length, pointer_storage, target_storage);
+            } else {
+                f2c_buffer_printf(&result, "(%s == %s)", pointer_storage, target_storage);
+            }
+            free(pointer_length);
+            free(target_length);
+            free(target_storage);
+        } else {
+            char *association = f2c_expression_associated_array_target(
+                unit, pointer_expression, target_expression, pointer_storage, supported);
+            char *pointer_length = NULL;
+            char *target_length = NULL;
+            if (!*supported || association == NULL) {
+                free(association);
+                free(pointer_storage);
+                *supported = 0;
+                return NULL;
+            }
+            if (pointer->type == TYPE_CHARACTER) {
+                pointer_length = f2c_character_length_expression(unit, pointer_expression);
+                target_length = f2c_character_length_expression(unit, target_expression);
+                if (pointer_length == NULL || target_length == NULL) {
+                    free(pointer_length);
+                    free(target_length);
+                    free(association);
+                    free(pointer_storage);
+                    *supported = 0;
+                    return NULL;
+                }
+                f2c_buffer_printf(&result, "((size_t)(%s) == (size_t)(%s) && %s)", pointer_length,
+                                  target_length, association);
+            } else {
+                f2c_buffer_append(&result, association);
+            }
+            free(pointer_length);
+            free(target_length);
+            free(association);
+        }
         free(pointer_storage);
-        (void)pointer;
         return f2c_buffer_take(&result);
     }
     if (expression->text != NULL &&
@@ -775,16 +805,22 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
             actual_expression->symbol->equivalence_unaligned && intent != F2C_INTENT_IN) {
             f2c_expression_free_arguments(arguments, types, expression->child_count);
             free(f2c_buffer_take(&result));
+            free(contiguous_setup.data);
+            free(contiguous_cleanup.data);
             *supported = 0;
             return NULL;
         }
-        char *actual = descriptor ? emit_descriptor_actual(unit, expression->children[i], supported)
-                                  : emit_external_actual(unit, expression->children[i],
-                                                         arguments[i], supported);
+        char *actual =
+            descriptor
+                ? f2c_expression_descriptor_actual(&contiguous_setup, &contiguous_cleanup, unit,
+                                                   expression->children[i], intent, supported)
+                : emit_external_actual(unit, expression->children[i], arguments[i], supported);
         char *bridged;
         if (actual == NULL) {
             f2c_expression_free_arguments(arguments, types, expression->child_count);
             free(f2c_buffer_take(&result));
+            free(contiguous_setup.data);
+            free(contiguous_cleanup.data);
             *supported = 0;
             return NULL;
         }
@@ -795,6 +831,8 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         if (actual == NULL) {
             f2c_expression_free_arguments(arguments, types, expression->child_count);
             free(f2c_buffer_take(&result));
+            free(contiguous_setup.data);
+            free(contiguous_cleanup.data);
             *supported = 0;
             return NULL;
         }
@@ -806,11 +844,20 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
     }
     for (i = 0U; i < expression->child_count; ++i) {
         const F2cExpr *actual = expression->children[i];
+        const Symbol *resolved_dummy =
+            resolved != NULL && i < resolved->argument_count
+                ? f2c_find_symbol((Unit *)resolved, resolved->arguments[i])
+                : NULL;
+        const int descriptor =
+            resolved_dummy != NULL
+                ? f2c_symbol_uses_descriptor(resolved_dummy)
+                : (expression->symbol != NULL && i < expression->symbol->external_parameter_count &&
+                   expression->symbol->external_parameter_descriptor[i]);
         char *length;
         if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
             actual->child_count == 1U)
             actual = actual->children[0];
-        if (actual == NULL || actual->type != TYPE_CHARACTER ||
+        if (actual == NULL || actual->type != TYPE_CHARACTER || descriptor ||
             (actual->kind == F2C_EXPR_NAME && actual->symbol != NULL && actual->symbol->external))
             continue;
         length = f2c_character_length_expression(unit, actual);
@@ -844,5 +891,7 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
             f2c_buffer_printf(&result, ", f2c_expression_result_%zu)", expression->temporary_index);
     }
     f2c_expression_free_arguments(arguments, types, expression->child_count);
-    return f2c_buffer_take(&result);
+    return f2c_expression_wrap_contiguous_call(expression, allocatable_result, &contiguous_setup,
+                                               &contiguous_cleanup, f2c_buffer_take(&result),
+                                               supported);
 }
