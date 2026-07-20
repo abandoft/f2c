@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -249,6 +250,27 @@ static int evaluate_numeric_model_intrinsic(F2cConstantEvaluation *evaluation,
                                            value);
 }
 
+static int evaluate_exponent_intrinsic(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
+                                       int64_t *value, size_t depth) {
+    const F2cExpr *argument;
+    double real_value;
+    int exponent = 0;
+    if (expression == NULL || expression->intrinsic != F2C_INTRINSIC_EXPONENT ||
+        expression->rank != 0U)
+        return 0;
+    argument = f2c_intrinsic_argument(expression->children, expression->child_count, "x", 0U);
+    if (argument == NULL ||
+        !f2c_constant_evaluate_real(evaluation, argument, &real_value, depth + 1U))
+        return 0;
+    if (!isfinite(real_value)) {
+        *value = INT32_MAX;
+        return 1;
+    }
+    (void)frexp(real_value, &exponent);
+    *value = exponent;
+    return 1;
+}
+
 static int character_integer_result(const F2cExpr *expression, uint64_t result, int64_t *value) {
     const int kind =
         expression->type_kind != 0 ? expression->type_kind : f2c_default_kind(TYPE_INTEGER);
@@ -424,6 +446,8 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
     if (expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
         expression->child_count != 0U) {
         size_t i;
+        if (evaluate_exponent_intrinsic(evaluation, expression, value, depth))
+            return 1;
         if (evaluate_numeric_model_intrinsic(evaluation, expression, value, depth))
             return 1;
         if (expression->intrinsic != F2C_INTRINSIC_NONE &&

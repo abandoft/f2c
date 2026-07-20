@@ -9,6 +9,7 @@ void f2c_resolve_derived_semantics(Context *context);
 int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count);
 int f2c_symbol_uses_descriptor(const Symbol *symbol);
 int f2c_evaluate_integer_constant(Unit *unit, const F2cExpr *expression, int64_t *value);
+int f2c_evaluate_real_constant(Unit *unit, const F2cExpr *expression, double *value);
 int f2c_evaluate_integer_syntax(Unit *unit, F2cTokenRange syntax, int64_t *value);
 int f2c_expression_is_initialization_constant(const F2cExpr *expression);
 int f2c_integer_iteration_count(int64_t first, int64_t last, int64_t step, uint64_t *count);

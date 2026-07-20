@@ -215,6 +215,7 @@ set(
     src/semantic/constant/character.c
     src/semantic/constant/model.c
     src/semantic/constant/private.h
+    src/semantic/constant/real.c
     src/semantic/implicit.c
     src/semantic/implicit/declaration.c
     src/semantic/implicit/private.h
