@@ -106,6 +106,10 @@ static void test_typed_lowering(void) {
         "  i2 = modulo(i2, j2)\n"
         "  i4 = dim(i4, j4)\n"
         "  i8 = sign(i8, j8)\n"
+        "  i1 = abs(i1)\n"
+        "  i2 = abs(i2)\n"
+        "  i4 = abs(i4)\n"
+        "  i8 = abs(i8)\n"
         "  i1 = ceiling(r4, kind=1)\n"
         "  i2 = floor(a=r8, kind=2)\n"
         "  i8 = nint(kind=8, a=r8)\n"
@@ -125,6 +129,11 @@ static void test_typed_lowering(void) {
                strstr(result.code, "f2c_dim_i32(") != NULL &&
                strstr(result.code, "f2c_sign_i64(") != NULL,
            "integer operations preserve every supported kind");
+    expect(result.code != NULL && strstr(result.code, "int8_t: f2c_abs_i8") != NULL &&
+               strstr(result.code, "int16_t: f2c_abs_i16") != NULL &&
+               strstr(result.code, "int32_t: f2c_abs_i32") != NULL &&
+               strstr(result.code, "int64_t: f2c_abs_i64") != NULL,
+           "ABS dispatches every supported INTEGER kind without narrowing");
     expect(result.code != NULL && strstr(result.code, "f2c_ceiling_integer(") != NULL &&
                strstr(result.code, "f2c_floor_integer(") != NULL &&
                strstr(result.code, "f2c_nint_integer(") != NULL,

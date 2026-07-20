@@ -810,8 +810,8 @@ static void test_typed_integer_and_nested_call_expressions(void) {
                     "adjacent dotted comparison is not consumed as a real literal");
     expect_contains(result.code, "((int32_t)pow((double)",
                     "integer exponentiation retains INTEGER result type");
-    expect_contains(result.code, "abs((-((*n))))",
-                    "integer ABS resolves to the integer C function");
+    expect_contains(result.code, "F2C_ABS((-((*n))))",
+                    "integer ABS resolves through the kind-preserving C generic");
     expect_contains(result.code, "&(double){dnrm2(",
                     "nested DOUBLE function result uses a DOUBLE temporary");
     f2c_result_free(&result);

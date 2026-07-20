@@ -198,7 +198,7 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
     const char *mapped = name;
     size_t i;
     if (strcmp(name, "abs") == 0 || strcmp(name, "dabs") == 0)
-        mapped = count != 0U && argument_types[0] == TYPE_INTEGER ? "abs" : "F2C_ABS";
+        mapped = "F2C_ABS";
     else if (strcmp(name, "dsqrt") == 0)
         mapped = "sqrt";
     else if (strcmp(name, "dexp") == 0)

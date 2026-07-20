@@ -40,6 +40,9 @@ program numeric_operation_intrinsics
   i8 = 5000000000_8
   p8 = -3000000001_8
   if (dim(i8, p8) /= 8000000001_8 .or. modulo(i8, p8) /= -1000000002_8) error stop 6
+  if (abs(-120_1) /= 120_1 .or. abs(-30000_2) /= 30000_2 .or. &
+      abs(-2000000000_4) /= 2000000000_4 .or. &
+      abs(-5000000000_8) /= 5000000000_8) error stop 35
 
   r4 = -3.75
   p4_real = 2.5

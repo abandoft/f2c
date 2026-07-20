@@ -502,11 +502,23 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
         }
         f2c_buffer_append(
             &context.output,
+            "static inline F2C_UNUSED int8_t f2c_abs_i8(int8_t value) { return value == "
+            "INT8_MIN ? INT8_MIN : (int8_t)(value < 0 ? -value : value); }\n"
+            "static inline F2C_UNUSED int16_t f2c_abs_i16(int16_t value) { return value == "
+            "INT16_MIN ? INT16_MIN : (int16_t)(value < 0 ? -value : value); }\n"
+            "static inline F2C_UNUSED int32_t f2c_abs_i32(int32_t value) { return value == "
+            "INT32_MIN ? INT32_MIN : (value < 0 ? -value : value); }\n"
+            "static inline F2C_UNUSED int64_t f2c_abs_i64(int64_t value) { return value == "
+            "INT64_MIN ? INT64_MIN : (value < 0 ? -value : value); }\n");
+        f2c_buffer_append(
+            &context.output,
             needs_complex
-                ? "#define F2C_ABS(x) _Generic((x), int32_t: abs, float: fabsf, double: fabs, "
+                ? "#define F2C_ABS(x) _Generic((x), int8_t: f2c_abs_i8, int16_t: f2c_abs_i16, "
+                  "int32_t: f2c_abs_i32, int64_t: f2c_abs_i64, float: fabsf, double: fabs, "
                   "long double: fabsl, f2c_complex_float: cabsf, f2c_complex_double: cabs, "
                   "default: fabs)((x))\n"
-                : "#define F2C_ABS(x) _Generic((x), int32_t: abs, float: fabsf, double: fabs, "
+                : "#define F2C_ABS(x) _Generic((x), int8_t: f2c_abs_i8, int16_t: f2c_abs_i16, "
+                  "int32_t: f2c_abs_i32, int64_t: f2c_abs_i64, float: fabsf, double: fabs, "
                   "long double: fabsl, default: fabs)((x))\n");
         f2c_buffer_append(&context.output, "#define F2C_MAX(a, b) ((a) > (b) ? (a) : (b))\n"
                                            "#define F2C_MIN(a, b) ((a) < (b) ? (a) : (b))\n");
