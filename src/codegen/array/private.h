@@ -47,6 +47,9 @@ int f2c_array_emit_constructor_values(Context *context, Unit *unit, Symbol *targ
                                       int infer_character_length, int depth);
 int f2c_array_emit_allocatable_numeric_constructor(Context *context, Unit *unit, Symbol *target,
                                                    const F2cExpr *constructor, int depth);
+int f2c_array_emit_allocatable_component_constructor(Context *context, Unit *unit,
+                                                     const F2cExpr *target,
+                                                     const F2cExpr *constructor, int depth);
 int f2c_array_emit_allocatable_character_constructor(Context *context, Unit *unit, Symbol *target,
                                                      const F2cExpr *constructor, int depth);
 int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symbol *left_symbol,
