@@ -324,8 +324,15 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         f2c_validation_move_alloc(context, unit, statement);
     } else if (statement->kind == F2C_STMT_CALL && statement->expression == NULL) {
         Unit *definition = NULL;
-        if (f2c_is_intrinsic_subroutine(statement->name)) {
-            f2c_validation_mvbits(context, unit, statement);
+        const Symbol *declared_callee = f2c_find_symbol(unit, statement->name);
+        const int intrinsic_subroutine =
+            f2c_is_intrinsic_subroutine(statement->name) &&
+            (declared_callee == NULL || !declared_callee->external_declared);
+        if (intrinsic_subroutine) {
+            if (strcmp(statement->name, "mvbits") == 0)
+                f2c_validation_mvbits(context, unit, statement);
+            else
+                f2c_validation_random_intrinsic(context, statement);
         } else {
             definition = f2c_validation_procedure_call(
                 context, unit, statement->line, statement->text, statement->name,
