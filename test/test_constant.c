@@ -122,6 +122,50 @@ static void test_character_intrinsics(Unit *unit) {
            "negative REPEAT counts are not folded");
 }
 
+static void test_numeric_model_intrinsics(Unit *unit) {
+    int64_t value = 0;
+    expect(evaluate_source(unit, "digits(0_1)", &value) && value == 7,
+           "DIGITS folds from the INTEGER(1) model");
+    expect(evaluate_source(unit, "digits(0_8)", &value) && value == 63,
+           "DIGITS folds from the INTEGER(8) model");
+    expect(evaluate_source(unit, "digits(0.0)", &value) && value == 24,
+           "DIGITS folds from the REAL(4) model");
+    expect(evaluate_source(unit, "huge(0_1)", &value) && value == INT8_MAX,
+           "integer HUGE folds without default-kind truncation");
+    expect(evaluate_source(unit, "huge(0_8)", &value) && value == INT64_MAX,
+           "INTEGER(8) HUGE folds at the signed boundary");
+    expect(evaluate_source(unit, "minexponent(0.0d0)", &value) && value == -1021,
+           "MINEXPONENT folds from the binary64 model");
+    expect(evaluate_source(unit, "maxexponent(0.0)", &value) && value == 128,
+           "MAXEXPONENT folds from the binary32 model");
+    expect(evaluate_source(unit, "precision((0.0d0,0.0d0))", &value) && value == 15,
+           "PRECISION folds from a complex component model");
+    expect(evaluate_source(unit, "radix(0_2)", &value) && value == 2,
+           "RADIX folds for nondefault INTEGER kinds");
+    expect(evaluate_source(unit, "range(0_2)", &value) && value == 4,
+           "RANGE folds from the INTEGER(2) model");
+    expect(evaluate_source(unit, "range((0.0,0.0))", &value) && value == 37,
+           "RANGE folds from a complex component model");
+    expect(evaluate_source(unit, "kind('x')", &value) && value == 1,
+           "KIND folds for CHARACTER values without evaluating them");
+    expect(evaluate_source(unit, "selected_int_kind(18)", &value) && value == 8,
+           "SELECTED_INT_KIND folds to the smallest matching INTEGER kind");
+    expect(evaluate_source(unit, "selected_int_kind(19)", &value) && value == -1,
+           "SELECTED_INT_KIND folds its unavailable-range result");
+    expect(evaluate_source(unit, "selected_real_kind(6)", &value) && value == 4,
+           "SELECTED_REAL_KIND folds a precision-only request");
+    expect(evaluate_source(unit, "selected_real_kind(r=307)", &value) && value == 8,
+           "SELECTED_REAL_KIND folds a keyword range-only request");
+    expect(evaluate_source(unit, "selected_real_kind(16,307)", &value) && value == -1,
+           "SELECTED_REAL_KIND distinguishes unavailable precision");
+    expect(evaluate_source(unit, "selected_real_kind(15,308)", &value) && value == -2,
+           "SELECTED_REAL_KIND distinguishes unavailable range");
+    expect(evaluate_source(unit, "selected_real_kind(16,308)", &value) && value == -3,
+           "SELECTED_REAL_KIND distinguishes jointly unavailable requirements");
+    expect(evaluate_source(unit, "selected_real_kind(6,37,10)", &value) && value == -5,
+           "SELECTED_REAL_KIND distinguishes an unavailable radix");
+}
+
 int main(void) {
     Symbol symbols[3];
     Unit unit;
@@ -184,6 +228,7 @@ int main(void) {
     expect(!evaluate_source(&unit, "cycle_a", &value),
            "cyclic parameter references terminate with failure");
     test_character_intrinsics(&unit);
+    test_numeric_model_intrinsics(&unit);
 
     f2c_expr_free(symbols[0].initializer_expression);
     f2c_expr_free(symbols[1].initializer_expression);

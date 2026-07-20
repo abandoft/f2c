@@ -216,6 +216,47 @@ static int evaluate_bit_intrinsic(F2cConstantEvaluation *evaluation, const F2cEx
                                            value);
 }
 
+static int evaluate_numeric_model_intrinsic(F2cConstantEvaluation *evaluation,
+                                            const F2cExpr *expression, int64_t *value,
+                                            size_t depth) {
+    static const char *const selected_real_arguments[] = {"p", "r", "radix"};
+    const F2cExpr *model;
+    int64_t arguments[3] = {0, 0, 0};
+    unsigned int present = 0U;
+    int model_kind;
+    size_t argument;
+    if (expression == NULL || expression->rank != 0U ||
+        !f2c_intrinsic_is_numeric_model(expression->intrinsic))
+        return 0;
+    if (expression->intrinsic == F2C_INTRINSIC_SELECTED_INT_KIND) {
+        model = f2c_intrinsic_argument(expression->children, expression->child_count, "r", 0U);
+        if (model == NULL || !evaluate(evaluation, model, &arguments[0], depth + 1U))
+            return 0;
+        present = 1U;
+        return f2c_constant_fold_numeric_model(expression->intrinsic, TYPE_UNKNOWN, 0, arguments,
+                                               present, value);
+    }
+    if (expression->intrinsic == F2C_INTRINSIC_SELECTED_REAL_KIND) {
+        for (argument = 0U; argument < 3U; ++argument) {
+            model = f2c_intrinsic_argument(expression->children, expression->child_count,
+                                           selected_real_arguments[argument], argument);
+            if (model == NULL)
+                continue;
+            if (!evaluate(evaluation, model, &arguments[argument], depth + 1U))
+                return 0;
+            present |= 1U << argument;
+        }
+        return f2c_constant_fold_numeric_model(expression->intrinsic, TYPE_UNKNOWN, 0, arguments,
+                                               present, value);
+    }
+    model = f2c_intrinsic_argument(expression->children, expression->child_count, "x", 0U);
+    if (model == NULL)
+        return 0;
+    model_kind = model->type_kind != 0 ? model->type_kind : f2c_default_kind(model->type);
+    return f2c_constant_fold_numeric_model(expression->intrinsic, model->type, model_kind, NULL, 0U,
+                                           value);
+}
+
 static int character_integer_result(const F2cExpr *expression, uint64_t result, int64_t *value) {
     const int kind =
         expression->type_kind != 0 ? expression->type_kind : f2c_default_kind(TYPE_INTEGER);
@@ -390,6 +431,8 @@ static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression
     if (expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
         expression->child_count != 0U) {
         size_t i;
+        if (evaluate_numeric_model_intrinsic(evaluation, expression, value, depth))
+            return 1;
         if (expression->intrinsic != F2C_INTRINSIC_NONE &&
             evaluate_bit_intrinsic(evaluation, expression, value, depth))
             return 1;
@@ -506,6 +549,10 @@ int f2c_expression_is_initialization_constant(const F2cExpr *expression) {
     case F2C_EXPR_CALL:
         if (expression->text == NULL || !f2c_is_intrinsic_name(expression->text))
             return 0;
+        if (f2c_intrinsic_is_numeric_model(expression->intrinsic) &&
+            expression->intrinsic != F2C_INTRINSIC_SELECTED_INT_KIND &&
+            expression->intrinsic != F2C_INTRINSIC_SELECTED_REAL_KIND)
+            return 1;
         if (expression->intrinsic == F2C_INTRINSIC_BIT_SIZE) {
             const F2cExpr *argument =
                 f2c_intrinsic_argument(expression->children, expression->child_count, "i", 0U);
