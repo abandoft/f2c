@@ -239,6 +239,7 @@ set(
     src/semantic/validation/intrinsic/bit.c
     src/semantic/validation/intrinsic/character.c
     src/semantic/validation/intrinsic/model.c
+    src/semantic/validation/intrinsic/representation.c
     src/semantic/validation/lifetime.c
     src/semantic/validation/private.h
     src/semantic/validation/procedure.c

@@ -43,6 +43,8 @@ void f2c_validation_character_intrinsic(Context *context, Unit *unit, size_t lin
                                         const char *statement_text, F2cExpr *expression);
 void f2c_validation_numeric_model_intrinsic(Context *context, size_t line,
                                             const char *statement_text, F2cExpr *expression);
+void f2c_validation_real_representation_intrinsic(Context *context, size_t line,
+                                                  const char *statement_text, F2cExpr *expression);
 void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement);
 void f2c_validation_io_item_calls(Context *context, Unit *unit, size_t line,
                                   const char *statement_text, F2cIoItem *item);
