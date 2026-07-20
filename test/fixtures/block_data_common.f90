@@ -6,10 +6,13 @@ program block_data_common
   complex :: point
   character(len=4) :: label
   character(len=3) :: names(2)
+  integer :: overlay(3)
   common /state/ counter, values, factor, ready, point, label, names
+  common /overlay/ overlay
 
   write (*, '(I0,1X,3(I0,1X),F6.2,1X,L1,1X,2(F6.2,1X),A,1X,A,1X,A)') &
       counter, values, factor, ready, point, label, names(1), names(2)
+  write (*, '(3(I0,1X))') overlay
 end program block_data_common
 
 block data initialize_state
@@ -26,3 +29,11 @@ block data initialize_state
   data label / 'ok' /
   data names / 'ab', 'xyz' /
 end block data initialize_state
+
+block data initialize_overlay
+  implicit none
+  integer :: shared(2), extension(2)
+  common /overlay/ shared
+  equivalence (shared(2), extension(1))
+  data extension / 31, 37 /
+end block data initialize_overlay
