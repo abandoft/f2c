@@ -107,11 +107,20 @@ static void test_legacy_alternate_return_ast(void) {
     static const char source[] = "subroutine legacy(value, *, status)";
     ParsedLine parsed;
     F2cUnitHeaderSyntax syntax;
+    Unit unit;
     expect(parsed_line_init(&parsed, source), "alternate-return header tokenizes");
     expect(f2c_parse_unit_header_syntax(&parsed.line, &syntax) == F2C_UNIT_HEADER_PARSED &&
                syntax.argument_count == 3U && syntax.arguments[1].alternate_return,
            "syntax AST distinguishes an alternate-return dummy from a named dummy");
     f2c_unit_header_syntax_discard(&syntax);
+    expect(f2c_parse_unit_header(NULL, &parsed.line, &unit) == F2C_UNIT_HEADER_PARSED,
+           "alternate-return header lowers into semantic procedure metadata");
+    expect(unit.argument_count == 2U && unit.dummy_count == 3U &&
+               unit.alternate_return_count == 1U && unit.dummy_argument_indices[0] == 0U &&
+               unit.dummy_argument_indices[1] == SIZE_MAX && unit.dummy_argument_indices[2] == 1U &&
+               strcmp(unit.arguments[0], "value") == 0 && strcmp(unit.arguments[1], "status") == 0,
+           "semantic dummy layout separates alternate-return slots from C ABI arguments");
+    f2c_free_unit(&unit);
     parsed_line_discard(&parsed);
 }
 

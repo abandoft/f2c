@@ -125,31 +125,35 @@ static int lower_result_type(Context *context, const Line *line, const F2cUnitHe
     return 1;
 }
 
-static int lower_arguments(Context *context, const Line *line, const F2cUnitHeaderSyntax *syntax,
-                           Unit *unit) {
+static int lower_arguments(Context *context, const F2cUnitHeaderSyntax *syntax, Unit *unit) {
     size_t index;
     if (syntax->argument_count == 0U)
         return 1;
     if (syntax->argument_count > SIZE_MAX / sizeof(*unit->arguments) ||
-        syntax->argument_count > SIZE_MAX / sizeof(*unit->argument_spans))
+        syntax->argument_count > SIZE_MAX / sizeof(*unit->argument_spans) ||
+        syntax->argument_count > SIZE_MAX / sizeof(*unit->dummy_argument_indices))
         goto no_memory;
     unit->arguments = (char **)calloc(syntax->argument_count, sizeof(*unit->arguments));
     unit->argument_spans =
         (F2cSourceSpan *)calloc(syntax->argument_count, sizeof(*unit->argument_spans));
-    if (unit->arguments == NULL || unit->argument_spans == NULL)
+    unit->dummy_argument_indices =
+        (size_t *)calloc(syntax->argument_count, sizeof(*unit->dummy_argument_indices));
+    if (unit->arguments == NULL || unit->argument_spans == NULL ||
+        unit->dummy_argument_indices == NULL)
         goto no_memory;
+    unit->dummy_count = syntax->argument_count;
     for (index = 0U; index < syntax->argument_count; ++index) {
         const F2cUnitDummySyntax *argument = &syntax->arguments[index];
         if (argument->alternate_return) {
-            f2c_diagnostic_token_code(
-                context, F2C_DIAGNOSTIC_UNSUPPORTED, line, argument->token, 1,
-                "alternate-return dummy arguments require procedure CFG support");
-            return 0;
+            unit->dummy_argument_indices[index] = SIZE_MAX;
+            ++unit->alternate_return_count;
+            continue;
         }
-        unit->arguments[index] = f2c_token_text(argument->token);
-        if (unit->arguments[index] == NULL)
+        unit->dummy_argument_indices[index] = unit->argument_count;
+        unit->arguments[unit->argument_count] = f2c_token_text(argument->token);
+        if (unit->arguments[unit->argument_count] == NULL)
             goto no_memory;
-        unit->argument_spans[index] = argument->token->span;
+        unit->argument_spans[unit->argument_count] = argument->token->span;
         ++unit->argument_count;
     }
     return 1;
@@ -211,8 +215,7 @@ static int lower_header(Context *context, const Line *line, const F2cUnitHeaderS
     }
     if (unit->name == NULL)
         goto no_memory;
-    if (!lower_result_type(context, line, syntax, unit) ||
-        !lower_arguments(context, line, syntax, unit))
+    if (!lower_result_type(context, line, syntax, unit) || !lower_arguments(context, syntax, unit))
         return 0;
     if (unit->kind != UNIT_FUNCTION)
         return 1;
