@@ -135,6 +135,7 @@ static Symbol *bind_known_internal(Context *context, Unit *host, Unit *definitio
     symbol->external = 1;
     symbol->external_declared = 1;
     symbol->external_subroutine = definition->kind == UNIT_SUBROUTINE;
+    symbol->external_alternate_return_count = definition->alternate_return_count;
     if (definition->kind == UNIT_FUNCTION) {
         if (!definition->return_type_explicit) {
             f2c_prepare_implicit_map(context, definition);

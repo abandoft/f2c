@@ -49,6 +49,7 @@ int f2c_copy_procedure_signature(Symbol *symbol, Unit *signature) {
     symbol->external_signature_observed = 1;
     symbol->external_signature_explicit = 1;
     symbol->external_subroutine = signature->kind == UNIT_SUBROUTINE;
+    symbol->external_alternate_return_count = signature->alternate_return_count;
     symbol->procedure_interface = signature;
     free(symbol->procedure_interface_name);
     symbol->procedure_interface_name = f2c_strdup(signature->name);
