@@ -239,7 +239,7 @@ static int evaluate_character_intrinsic(F2cConstantEvaluation *evaluation,
     char *right = NULL;
     size_t left_length = 0U;
     size_t right_length = 0U;
-    size_t position;
+    size_t position = 0U;
     int64_t backwards = 0;
     int found = 0;
     if (expression == NULL || expression->rank != 0U ||

@@ -92,14 +92,20 @@ static void test_character_intrinsics(Unit *unit) {
            "forward INDEX locates an empty substring at one");
     expect(evaluate_source(unit, "index('ABC','',back=.true.)", &value) && value == 4,
            "backward INDEX locates an empty substring after the string");
+    expect(evaluate_source(unit, "index('ABC','Z')", &value) && value == 0,
+           "INDEX folds a missing substring to zero");
     expect(evaluate_source(unit, "scan('FORTRAN','TR')", &value) && value == 3,
            "SCAN folds the first set member");
     expect(evaluate_source(unit, "scan('FORTRAN','TR',back=.true.)", &value) && value == 5,
            "backward SCAN folds the last set member");
+    expect(evaluate_source(unit, "scan('FORTRAN','Z')", &value) && value == 0,
+           "SCAN folds a missing set member to zero");
     expect(evaluate_source(unit, "verify('ABBA','A')", &value) && value == 2,
            "VERIFY folds the first nonmember");
     expect(evaluate_source(unit, "verify('ABBA','A',back=.true.)", &value) && value == 3,
            "backward VERIFY folds the last nonmember");
+    expect(evaluate_source(unit, "verify('AAAA','A')", &value) && value == 0,
+           "VERIFY folds an all-member string to zero");
     expect(evaluate_source(unit, "len(repeat('xy',3),kind=2)", &value) && value == 6,
            "REPEAT length folds through LEN with an explicit result kind");
     expect(evaluate_character_source(unit, "trim(adjustl('  AB  '))//repeat('x',2)", &characters,
