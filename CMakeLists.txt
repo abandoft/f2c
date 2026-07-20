@@ -153,6 +153,7 @@ set(
     src/core/generated/list.c
     src/core/generated/model.c
     src/core/generated/private.h
+    src/core/generated/representation.c
     src/core/generated/record.c
     src/core/generated/relation.c
     src/core/generated/stream.c
