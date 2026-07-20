@@ -158,9 +158,76 @@ jobs:
         shell: bash
         run: |
           version="$GITHUB_REF_NAME"
-          gh release create "$GITHUB_REF_NAME" \
-            build/release-assets/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --notes-file build/release/release-notes.md \
-            --title "$version"
+          release_state=""
+          for attempt in 1 2 3 4; do
+            if release_state=$(gh release view "$version" \
+              --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null); then
+              break
+            fi
+            gh release create "$version" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --draft \
+              --notes-file build/release/release-notes.md \
+              --title "$version" || true
+            sleep "$((attempt * 5))"
+          done
+          if [ -z "$release_state" ]; then
+            release_state=$(gh release view "$version" \
+              --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)
+          fi
+          if [ "$release_state" != true ]; then
+            echo "refusing to modify published release $version" >&2
+            exit 1
+          fi
+
+          updated=false
+          for attempt in 1 2 3 4; do
+            if gh release edit "$version" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --draft \
+              --notes-file build/release/release-notes.md \
+              --title "$version"; then
+              updated=true
+              break
+            fi
+            sleep "$((attempt * 5))"
+          done
+          if [ "$updated" != true ]; then
+            echo "failed to update draft release $version" >&2
+            exit 1
+          fi
+
+          uploaded=false
+          for attempt in 1 2 3 4; do
+            if gh release upload "$version" build/release-assets/* \
+              --repo "$GITHUB_REPOSITORY" --clobber; then
+              uploaded=true
+              break
+            fi
+            sleep "$((attempt * 5))"
+          done
+          if [ "$uploaded" != true ]; then
+            echo "failed to upload release assets for $version" >&2
+            exit 1
+          fi
+
+          published=false
+          for attempt in 1 2 3 4; do
+            if gh release edit "$version" \
+              --repo "$GITHUB_REPOSITORY" --draft=false --latest; then
+              published=true
+              break
+            fi
+            if [ "$(gh release view "$version" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft --jq .isDraft 2>/dev/null || true)" = false ]; then
+              published=true
+              break
+            fi
+            sleep "$((attempt * 5))"
+          done
+          if [ "$published" != true ]; then
+            echo "failed to publish release $version" >&2
+            exit 1
+          fi
