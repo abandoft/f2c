@@ -150,6 +150,7 @@ set(
     src/core/generated/character.c
     src/core/generated/io.c
     src/core/generated/list.c
+    src/core/generated/model.c
     src/core/generated/private.h
     src/core/generated/record.c
     src/core/generated/relation.c
