@@ -285,22 +285,43 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             }
             free(callee);
         } else {
-            f2c_emit_call(&context->output, unit, statement->name, statement->arguments,
-                          statement->item_count, *depth);
+            if (statement->label_count != 0U)
+                f2c_emit_alternate_return_call(&context->output, unit, statement->name, NULL,
+                                               statement->arguments, statement->item_count,
+                                               statement, *depth);
+            else
+                f2c_emit_call(&context->output, unit, statement->name, statement->arguments,
+                              statement->item_count, *depth);
         }
     } else if (statement->kind == F2C_STMT_MOVE_ALLOC) {
         if (!f2c_emit_move_alloc_statement(context, unit, statement, *depth))
             f2c_diagnostic(context, source_line->number, 1, "malformed MOVE_ALLOC statement");
     } else if (statement->kind == F2C_STMT_RETURN) {
-        f2c_emit_unit_cleanup(&context->output, unit, *depth);
-        indent(&context->output, *depth);
-        f2c_buffer_append(&context->output,
-                          f2c_unit_has_allocatable_result(unit) ? "return f2c_result_descriptor;\n"
-                          : unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER
-                              ? "return;\n"
-                          : unit->kind == UNIT_FUNCTION
-                              ? "return f2c_result;\n"
-                              : (unit->kind == UNIT_PROGRAM ? "return 0;\n" : "return;\n"));
+        if (statement->expression != NULL && unit->kind == UNIT_SUBROUTINE &&
+            unit->alternate_return_count != 0U) {
+            char *selector = f2c_emit_statement_expression(context, unit, statement->expression,
+                                                           source_line->number);
+            indent(&context->output, *depth);
+            f2c_buffer_printf(&context->output,
+                              "{ const int32_t f2c_alternate_return = (int32_t)(%s);\n", selector);
+            f2c_emit_unit_cleanup(&context->output, unit, *depth + 1);
+            indent(&context->output, *depth + 1);
+            f2c_buffer_append(&context->output, "return f2c_alternate_return;\n");
+            indent(&context->output, *depth);
+            f2c_buffer_append(&context->output, "}\n");
+            free(selector);
+        } else {
+            f2c_emit_unit_cleanup(&context->output, unit, *depth);
+            indent(&context->output, *depth);
+            f2c_buffer_append(
+                &context->output,
+                f2c_unit_has_allocatable_result(unit) ? "return f2c_result_descriptor;\n"
+                : unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER ? "return;\n"
+                : unit->kind == UNIT_FUNCTION ? "return f2c_result;\n"
+                : unit->kind == UNIT_SUBROUTINE && unit->alternate_return_count != 0U
+                    ? "return 0;\n"
+                    : (unit->kind == UNIT_PROGRAM ? "return 0;\n" : "return;\n"));
+        }
     } else if (statement->kind == F2C_STMT_STOP) {
         int supported = 1;
         char *code = statement->expression != NULL

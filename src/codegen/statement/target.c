@@ -21,7 +21,8 @@ size_t f2c_statement_unit_index(const Unit *unit, const F2cStatement *statement)
 static int statement_targets_label(const F2cStatement *statement, const char *label) {
     size_t index;
     if (statement->kind == F2C_STMT_GOTO || statement->kind == F2C_STMT_ASSIGNED_GOTO ||
-        statement->kind == F2C_STMT_ASSIGN_LABEL || statement->kind == F2C_STMT_ARITHMETIC_IF) {
+        statement->kind == F2C_STMT_ASSIGN_LABEL || statement->kind == F2C_STMT_ARITHMETIC_IF ||
+        (statement->kind == F2C_STMT_CALL && statement->label_count != 0U)) {
         if (statement->name != NULL && f2c_statement_labels_equal(statement->name, label))
             return 1;
         for (index = 0U; index < statement->label_count; ++index)
