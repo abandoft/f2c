@@ -55,6 +55,13 @@ typedef enum F2cStatementKind {
     F2C_STMT_ASSIGNMENT
 } F2cStatementKind;
 
+typedef enum F2cPointerBoundsKind {
+    F2C_POINTER_BOUNDS_NONE,
+    F2C_POINTER_BOUNDS_SPECIFICATION,
+    F2C_POINTER_BOUNDS_REMAPPING,
+    F2C_POINTER_BOUNDS_INVALID
+} F2cPointerBoundsKind;
+
 typedef enum F2cIrState { F2C_IR_SYNTAX, F2C_IR_TYPED } F2cIrState;
 
 typedef struct F2cIoItem {
@@ -205,6 +212,7 @@ struct F2cStatement {
     F2cSourceSpan format_span;
     F2cDerivedType *guard_type;
     Unit *resolved_procedure;
+    F2cPointerBoundsKind pointer_bounds;
     struct F2cStatement *construct_owner;
     struct F2cStatement *control_target;
     struct F2cStatement **terminal_loops;

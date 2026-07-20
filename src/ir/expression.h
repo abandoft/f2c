@@ -51,6 +51,8 @@ struct F2cExpr {
     Unit *resolved_procedure;
     F2cDerivedType *derived_type;
     size_t temporary_index;
+    size_t contiguous_temporary_index;
+    int has_contiguous_temporary;
     size_t statement_temporary_index;
     size_t statement_nested_temporary_begin;
     F2cExpr **children;

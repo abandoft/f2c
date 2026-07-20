@@ -37,6 +37,7 @@ F2cExpr *f2c_expr_new(F2cExprKind kind, Type type, const char *text, size_t leng
         break;
     }
     expression->temporary_index = SIZE_MAX;
+    expression->contiguous_temporary_index = SIZE_MAX;
     expression->statement_temporary_index = SIZE_MAX;
     expression->statement_nested_temporary_begin = SIZE_MAX;
     expression->source_offset = SIZE_MAX;
@@ -136,6 +137,8 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
     clone->resolved_procedure = expression->resolved_procedure;
     clone->derived_type = expression->derived_type;
     clone->temporary_index = expression->temporary_index;
+    clone->contiguous_temporary_index = expression->contiguous_temporary_index;
+    clone->has_contiguous_temporary = expression->has_contiguous_temporary;
     clone->statement_temporary_index = expression->statement_temporary_index;
     clone->statement_nested_temporary_begin = expression->statement_nested_temporary_begin;
     clone->tree_depth = expression->tree_depth;
