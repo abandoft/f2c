@@ -206,6 +206,57 @@ static void test_real_representation_intrinsics(Unit *unit) {
            "NEAREST with a zero direction is not folded");
 }
 
+static void test_numeric_operation_intrinsics(Unit *unit) {
+    int64_t integer = 0;
+    double real = 0.0;
+    expect(evaluate_source(unit, "ceiling(1.25,kind=1)", &integer) && integer == 2,
+           "CEILING folds into the selected narrow INTEGER kind");
+    expect(evaluate_source(unit, "floor(-1.25d0,kind=8)", &integer) && integer == -2,
+           "FLOOR folds a binary64 argument into INTEGER(8)");
+    expect(evaluate_source(unit, "nint(0.5)", &integer) && integer == 1 &&
+               evaluate_source(unit, "nint(-1.5)", &integer) && integer == -2,
+           "NINT folds half values away from zero independently of host rounding mode");
+    expect(evaluate_source(unit, "dim(7_1,-5_1)", &integer) && integer == 12,
+           "integer DIM folds within its finite target kind");
+    expect(!evaluate_source(unit, "dim(127_1,-1_1)", &integer),
+           "integer DIM refuses an unrepresentable target-kind result");
+    expect(evaluate_source(unit, "mod(-17,3)", &integer) && integer == -2,
+           "integer MOD keeps the sign of A");
+    expect(evaluate_source(unit, "modulo(-17,3)", &integer) && integer == 1 &&
+               evaluate_source(unit, "modulo(17,-3)", &integer) && integer == -1,
+           "integer MODULO keeps the sign of P");
+    expect(evaluate_source(unit, "mod(-128_1,-1_1)", &integer) && integer == 0,
+           "integer MOD folds the minimum-value divided by minus one without host UB");
+    expect(evaluate_source(unit, "sign(-12,0)", &integer) && integer == 12 &&
+               evaluate_source(unit, "sign(12,-1)", &integer) && integer == -12,
+           "integer SIGN copies the sign without a floating conversion");
+    expect(evaluate_source(unit, "sign(-128_1,-1_1)", &integer) && integer == -128 &&
+               !evaluate_source(unit, "sign(-128_1,1_1)", &integer),
+           "integer SIGN handles the asymmetric signed minimum explicitly");
+    expect(evaluate_source(unit, "merge(mask=.false.,fsource=9_8,tsource=4_8)", &integer) &&
+               integer == 9,
+           "integer MERGE folds through canonical keyword association");
+
+    expect(evaluate_real_source(unit, "aint(-1.75)", &real) && real == -1.0,
+           "AINT folds by truncating toward zero");
+    expect(evaluate_real_source(unit, "aint(1.99999999d0,kind=4)", &real) && real == 1.0,
+           "AINT performs the operation in A kind before converting the result kind");
+    expect(evaluate_real_source(unit, "anint(-1.5d0)", &real) && real == -2.0,
+           "ANINT folds half values away from zero");
+    expect(evaluate_real_source(unit, "dim(2.5,4.0)", &real) && real == 0.0,
+           "real DIM folds a nonpositive difference to positive zero");
+    expect(evaluate_real_source(unit, "mod(-17.5,5.5)", &real) && real == -1.0,
+           "real MOD preserves the sign of A");
+    expect(evaluate_real_source(unit, "modulo(-17.5,5.5)", &real) && real == 4.5,
+           "real MODULO applies floor-division sign semantics");
+    expect(evaluate_real_source(unit, "modulo(6.0,-3.0)", &real) && real == 0.0 && signbit(real),
+           "real MODULO gives an exact zero the sign of P");
+    expect(evaluate_real_source(unit, "sign(1.0,-0.0)", &real) && real == -1.0,
+           "real SIGN preserves a negative-zero sign source");
+    expect(evaluate_real_source(unit, "merge(1.25d0,2.5d0,.true.)", &real) && real == 1.25,
+           "real MERGE folds the selected source at its declared kind");
+}
+
 int main(void) {
     Symbol symbols[3];
     Unit unit;
@@ -270,6 +321,7 @@ int main(void) {
     test_character_intrinsics(&unit);
     test_numeric_model_intrinsics(&unit);
     test_real_representation_intrinsics(&unit);
+    test_numeric_operation_intrinsics(&unit);
 
     f2c_expr_free(symbols[0].initializer_expression);
     f2c_expr_free(symbols[1].initializer_expression);
