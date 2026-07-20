@@ -489,6 +489,16 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_numeric_model_intrinsic_tests)
     add_test(NAME numeric_model_intrinsic_semantics COMMAND f2c_numeric_model_intrinsic_tests)
 
+    add_executable(
+        f2c_real_representation_intrinsic_tests
+        test/test_real_representation_intrinsic.c
+    )
+    f2c_configure_test_target(f2c_real_representation_intrinsic_tests)
+    add_test(
+        NAME real_representation_intrinsic_semantics
+        COMMAND f2c_real_representation_intrinsic_tests
+    )
+
     add_executable(f2c_fuzz_tests test/test_fuzz.c)
     f2c_configure_test_target(f2c_fuzz_tests)
     add_test(NAME mutation_fuzz COMMAND f2c_fuzz_tests)
