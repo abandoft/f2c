@@ -1,5 +1,7 @@
 #include "internal/f2c.h"
 
+#include <float.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,6 +74,13 @@ static int evaluate_source(Unit *unit, const char *source, int64_t *value) {
 static int evaluate_character_source(Unit *unit, const char *source, char **value, size_t *length) {
     F2cExpr *expression = parse_canonical_expression(unit, source);
     const int result = f2c_evaluate_character_constant(unit, expression, value, length);
+    f2c_expr_free(expression);
+    return result;
+}
+
+static int evaluate_real_source(Unit *unit, const char *source, double *value) {
+    F2cExpr *expression = parse_canonical_expression(unit, source);
+    const int result = f2c_evaluate_real_constant(unit, expression, value);
     f2c_expr_free(expression);
     return result;
 }
@@ -166,6 +175,37 @@ static void test_numeric_model_intrinsics(Unit *unit) {
            "SELECTED_REAL_KIND distinguishes an unavailable radix");
 }
 
+static void test_real_representation_intrinsics(Unit *unit) {
+    int64_t exponent = 0;
+    double value = 0.0;
+    expect(evaluate_source(unit, "exponent(0.0)", &exponent) && exponent == 0,
+           "EXPONENT folds zero without an ILOGB sentinel");
+    expect(evaluate_source(unit, "exponent(1.0d0)", &exponent) && exponent == 1,
+           "EXPONENT folds a binary64 model value");
+    expect(evaluate_source(unit, "exponent(nearest(0.0,1.0))", &exponent) && exponent == -148,
+           "EXPONENT folds a binary32 subnormal value");
+    expect(evaluate_real_source(unit, "fraction(6.0)", &value) && value == 0.75,
+           "FRACTION folds with binary32 rounding");
+    expect(evaluate_real_source(unit, "nearest(1.0,1.0d0)", &value) &&
+               value == (double)nextafterf(1.0f, INFINITY),
+           "NEAREST folds X at its own kind with a different S kind");
+    expect(evaluate_real_source(unit, "rrspacing(1.5)", &value) && value == 12582912.0,
+           "RRSPACING folds the scaled binary fraction");
+    expect(evaluate_real_source(unit, "scale(-0.75,-2_8)", &value) && value == -0.1875,
+           "SCALE folds an INTEGER(8) exponent");
+    expect(evaluate_real_source(unit, "set_exponent(6.0,2)", &value) && value == 3.0,
+           "SET_EXPONENT folds from FRACTION and the requested exponent");
+    expect(evaluate_real_source(unit, "spacing(0.0)", &value) && value == (double)FLT_MIN,
+           "SPACING folds zero to the smallest normal binary32 value");
+    expect(evaluate_real_source(unit, "spacing(nearest(0.0,1.0))", &value) &&
+               value == (double)FLT_MIN,
+           "SPACING clamps subnormal values to the Fortran model minimum");
+    expect(evaluate_real_source(unit, "spacing(1.0d0)", &value) && value == DBL_EPSILON,
+           "SPACING preserves binary64 kind");
+    expect(!evaluate_real_source(unit, "nearest(1.0,0.0)", &value),
+           "NEAREST with a zero direction is not folded");
+}
+
 int main(void) {
     Symbol symbols[3];
     Unit unit;
@@ -229,6 +269,7 @@ int main(void) {
            "cyclic parameter references terminate with failure");
     test_character_intrinsics(&unit);
     test_numeric_model_intrinsics(&unit);
+    test_real_representation_intrinsics(&unit);
 
     f2c_expr_free(symbols[0].initializer_expression);
     f2c_expr_free(symbols[1].initializer_expression);
