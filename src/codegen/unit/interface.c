@@ -303,6 +303,47 @@ static int common_block_emitted_before(Context *context, size_t unit_index, size
     return 0;
 }
 
+static void append_common_storage_name(Buffer *output, const char *block) {
+    if (block[0] == '\0')
+        f2c_buffer_append(output, "f2c_blank_common");
+    else
+        f2c_buffer_printf(output, "f2c_common_%s", block);
+}
+
+static size_t common_member_count(const Context *context, const char *block) {
+    size_t count = 0U;
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < context->units.count; ++unit_index) {
+        const Unit *unit = &context->units.items[unit_index];
+        size_t symbol_index;
+        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+            const Symbol *candidate = &unit->symbols[symbol_index];
+            if (candidate->common_block != NULL && strcmp(candidate->common_block, block) == 0 &&
+                candidate->common_index + 1U > count)
+                count = candidate->common_index + 1U;
+        }
+    }
+    return count;
+}
+
+static Symbol *find_common_member(Context *context, const char *block, size_t member_index,
+                                  Unit **owner) {
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < context->units.count; ++unit_index) {
+        Unit *unit = &context->units.items[unit_index];
+        size_t symbol_index;
+        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+            Symbol *candidate = &unit->symbols[symbol_index];
+            if (candidate->common_block != NULL && strcmp(candidate->common_block, block) == 0 &&
+                candidate->common_index == member_index) {
+                *owner = unit;
+                return candidate;
+            }
+        }
+    }
+    return NULL;
+}
+
 void f2c_emit_common_blocks(Context *context) {
     size_t u;
     int emitted_macro = 0;
@@ -311,7 +352,7 @@ void f2c_emit_common_blocks(Context *context) {
         size_t s;
         for (s = 0U; s < unit->symbol_count; ++s) {
             Symbol *first = &unit->symbols[s];
-            size_t member_count = 0U;
+            size_t member_count;
             size_t member_index;
             if (first->common_block == NULL ||
                 common_block_emitted_before(context, u, s, first->common_block))
@@ -325,28 +366,14 @@ void f2c_emit_common_blocks(Context *context) {
                     "#else\n#define F2C_COMMON_STORAGE\n#endif\n");
                 emitted_macro = 1;
             }
-            for (member_index = 0U; member_index < unit->symbol_count; ++member_index) {
-                Symbol *candidate = &unit->symbols[member_index];
-                if (candidate->common_block != NULL &&
-                    strcmp(candidate->common_block, first->common_block) == 0 &&
-                    candidate->common_index + 1U > member_count)
-                    member_count = candidate->common_index + 1U;
-            }
-            f2c_buffer_printf(&context->output, "F2C_COMMON_STORAGE struct f2c_common_%s {\n",
-                              first->common_block);
+            member_count = common_member_count(context, first->common_block);
+            f2c_buffer_append(&context->output, "F2C_COMMON_STORAGE struct ");
+            append_common_storage_name(&context->output, first->common_block);
+            f2c_buffer_append(&context->output, " {\n");
             for (member_index = 0U; member_index < member_count; ++member_index) {
-                Symbol *member = NULL;
-                size_t candidate_index;
-                for (candidate_index = 0U; candidate_index < unit->symbol_count;
-                     ++candidate_index) {
-                    Symbol *candidate = &unit->symbols[candidate_index];
-                    if (candidate->common_block != NULL &&
-                        strcmp(candidate->common_block, first->common_block) == 0 &&
-                        candidate->common_index == member_index) {
-                        member = candidate;
-                        break;
-                    }
-                }
+                Unit *member_unit = NULL;
+                Symbol *member =
+                    find_common_member(context, first->common_block, member_index, &member_unit);
                 if (member == NULL)
                     continue;
                 f2c_buffer_printf(&context->output, "    %s field_%zu", f2c_symbol_c_type(member),
@@ -354,7 +381,7 @@ void f2c_emit_common_blocks(Context *context) {
                 if (member->type == TYPE_CHARACTER && member->rank == 0U &&
                     member->character_length != NULL) {
                     char *length =
-                        f2c_emit_typed_expression(unit, member->character_length_expression);
+                        f2c_emit_typed_expression(member_unit, member->character_length_expression);
                     f2c_buffer_printf(&context->output, "[(%s) + 1]", length);
                     free(length);
                 } else if (member->rank != 0U) {
@@ -363,16 +390,16 @@ void f2c_emit_common_blocks(Context *context) {
                     if (member->type == TYPE_CHARACTER) {
                         char *length = member->character_length != NULL
                                            ? f2c_emit_typed_expression(
-                                                 unit, member->character_length_expression)
+                                                 member_unit, member->character_length_expression)
                                            : f2c_strdup("1U");
                         f2c_buffer_printf(&context->output, "(size_t)(%s) * ", length);
                         free(length);
                     }
                     for (d = 0U; d < member->rank; ++d) {
-                        char *lower =
-                            f2c_emit_typed_expression(unit, member->dimensions[d].lower_expression);
-                        char *upper =
-                            f2c_emit_typed_expression(unit, member->dimensions[d].upper_expression);
+                        char *lower = f2c_emit_typed_expression(
+                            member_unit, member->dimensions[d].lower_expression);
+                        char *upper = f2c_emit_typed_expression(
+                            member_unit, member->dimensions[d].upper_expression);
                         f2c_buffer_printf(&context->output, "%s((%s) - (%s) + 1)",
                                           d == 0U ? "" : " * ", upper, lower);
                         free(lower);
@@ -382,7 +409,9 @@ void f2c_emit_common_blocks(Context *context) {
                 }
                 f2c_buffer_append(&context->output, ";\n");
             }
-            f2c_buffer_printf(&context->output, "} f2c_common_%s;\n", first->common_block);
+            f2c_buffer_append(&context->output, "} ");
+            append_common_storage_name(&context->output, first->common_block);
+            f2c_buffer_append(&context->output, ";\n");
         }
     }
     if (emitted_macro)
