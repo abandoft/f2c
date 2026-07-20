@@ -345,6 +345,10 @@ static void test_intrinsic_type_registry(void) {
     expect(f2c_find_intrinsic("verify") != NULL &&
                f2c_find_intrinsic("verify")->id == F2C_INTRINSIC_VERIFY,
            "character intrinsics have stable typed-IR identities");
+    expect(f2c_find_intrinsic("selected_real_kind") != NULL &&
+               f2c_find_intrinsic("selected_real_kind")->id ==
+                   F2C_INTRINSIC_SELECTED_REAL_KIND,
+           "numeric model intrinsics have stable typed-IR identities");
     expect(f2c_resolve_intrinsic_rank("bit_size", kind_arguments, 1U) == 0U,
            "BIT_SIZE is scalar even when its model argument is not elemental");
     mod_signature = f2c_find_intrinsic("mod");
@@ -367,6 +371,12 @@ static void test_intrinsic_type_registry(void) {
            "transformational TRIM requires and returns a scalar");
     expect(f2c_resolve_intrinsic_rank("kind", rank_arguments, 1U) == 0U,
            "inquiry KIND has a scalar result for an array model");
+    array_argument.type = TYPE_DOUBLE;
+    array_argument.type_kind = 8;
+    expect(f2c_resolve_intrinsic_kind("epsilon", rank_arguments, 1U) == 8,
+           "EPSILON preserves the model REAL kind");
+    expect(f2c_resolve_intrinsic_rank("precision", rank_arguments, 1U) == 0U,
+           "numeric model inquiries return scalars for array model arguments");
     expect(f2c_resolve_intrinsic_rank("transfer", rank_arguments, 3U) == 1U,
            "TRANSFER with SIZE has a rank-one result");
     memset(&unit, 0, sizeof(unit));

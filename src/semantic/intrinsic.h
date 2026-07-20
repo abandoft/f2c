@@ -45,6 +45,7 @@ int f2c_is_intrinsic_name(const char *name);
 int f2c_is_intrinsic_subroutine(const char *name);
 int f2c_intrinsic_is_bit(F2cIntrinsicId intrinsic);
 int f2c_intrinsic_is_character(F2cIntrinsicId intrinsic);
+int f2c_intrinsic_is_numeric_model(F2cIntrinsicId intrinsic);
 const F2cExpr *f2c_intrinsic_argument(F2cExpr *const *arguments, size_t count, const char *keyword,
                                       size_t position);
 Type f2c_resolve_intrinsic_type(const char *name, const Type *arguments, size_t count);
