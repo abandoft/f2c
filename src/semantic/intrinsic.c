@@ -572,8 +572,8 @@ int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size
         return f2c_default_kind(
             signature->type_rule == F2C_INTRINSIC_TYPE_CHARACTER ? TYPE_CHARACTER : TYPE_INTEGER);
     first = f2c_intrinsic_argument(arguments, count, kind_source_name(signature), 0U);
-    return first != NULL && first->type_kind != 0
-               ? first->type_kind
+    return first != NULL
+               ? (first->type_kind != 0 ? first->type_kind : f2c_default_kind(first->type))
                : f2c_default_kind(signature->type_rule == F2C_INTRINSIC_TYPE_CHARACTER
                                       ? TYPE_CHARACTER
                                       : TYPE_INTEGER);

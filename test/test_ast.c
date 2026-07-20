@@ -339,6 +339,12 @@ static void test_intrinsic_type_registry(void) {
     kind_arguments[0] = &integer_eight;
     expect(f2c_resolve_intrinsic_kind("iand", kind_arguments, 1U) == 8,
            "bit intrinsic result kind is inherited from I");
+    integer_eight.type = TYPE_DERIVED;
+    integer_eight.type_kind = 0;
+    expect(f2c_resolve_intrinsic_kind("merge", kind_arguments, 1U) == 0,
+           "MERGE preserves the absence of a kind parameter for derived values");
+    integer_eight.type = TYPE_INTEGER;
+    integer_eight.type_kind = 8;
     expect(f2c_find_intrinsic("ishftc") != NULL &&
                f2c_find_intrinsic("ishftc")->id == F2C_INTRINSIC_ISHFTC,
            "bit intrinsics have stable typed-IR identities");
