@@ -180,7 +180,7 @@ static F2cExpr *parse_postfix(AstParser *parser, const F2cToken *name_token) {
             symbol != NULL && !symbol->parameter && symbol->intent != F2C_INTENT_IN;
     } else if ((f2c_is_intrinsic_name(expression->text) ||
                 f2c_ast_is_generated_c_intrinsic(expression->text)) &&
-               (symbol == NULL || !symbol->statement_function)) {
+               (symbol == NULL || (!symbol->external && !symbol->statement_function))) {
         f2c_ast_resolve_intrinsic_call(parser, expression);
     } else if (symbol != NULL) {
         expression->type = symbol->type;

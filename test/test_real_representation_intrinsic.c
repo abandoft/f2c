@@ -121,6 +121,32 @@ static void test_support_is_on_demand(void) {
     f2c_result_free(&result);
 }
 
+static void test_external_name_precedence(void) {
+    static const char caller[] = "subroutine use_external_scale(value)\n"
+                                 "  implicit none\n"
+                                 "  real :: value, scale\n"
+                                 "  external scale\n"
+                                 "  value = scale(value, 2)\n"
+                                 "end subroutine use_external_scale\n";
+    static const char definition[] = "real function scale(value, power)\n"
+                                     "  implicit none\n"
+                                     "  real, intent(in) :: value\n"
+                                     "  integer, intent(in) :: power\n"
+                                     "  scale = value * real(power)\n"
+                                     "end function scale\n";
+    F2cInput inputs[2] = {
+        {caller, sizeof(caller) - 1U, {"external_scale_caller.f90", F2C_SOURCE_FREE, 0}},
+        {definition,
+         sizeof(definition) - 1U,
+         {"external_scale_definition.f90", F2C_SOURCE_FREE, 0}}};
+    F2cResult result = f2c_transpile_project(inputs, 2U);
+    expect(result.code != NULL && result.error_count == 0U,
+           "an explicitly external SCALE function overrides the intrinsic");
+    expect(result.code != NULL && strstr(result.code, "f2c_scale_r4(") == NULL,
+           "external SCALE calls do not lower to representation support");
+    f2c_result_free(&result);
+}
+
 static void test_constant_lowering(void) {
     static const char source[] = "module representation_constants\n"
                                  "  implicit none\n"
@@ -161,6 +187,7 @@ int main(void) {
     test_keyword_and_direction_contracts();
     test_typed_lowering();
     test_support_is_on_demand();
+    test_external_name_precedence();
     test_constant_lowering();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
