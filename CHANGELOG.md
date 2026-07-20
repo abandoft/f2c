@@ -6,7 +6,6 @@
 - Lowered numeric inquiries to exact C17 constants without evaluating inquiry arguments, correcting nondefault-integer-kind `HUGE`, `DIGITS`, and `RANGE` semantics.
 - Added on-demand inline lowering for dynamic `SELECTED_INT_KIND` and `SELECTED_REAL_KIND`, including shuffled keywords, optional arguments, and single evaluation without an external runtime.
 - Added positive, negative, boundary, strict-C17, ASan/UBSan, and native-Fortran differential tests, with numeric-model differential validation in the numerical CI workflow.
-- Revalidated all 155 Reference BLAS and 3,535 Reference LAPACK sources, the official correctness and per-result audits, and the complete 71-case performance matrix.
 
 ## 1.18.0
 
@@ -27,7 +26,7 @@
 - Added defined unary and binary operators and intrinsic-operator extensions with Fortran precedence, typed-IR binding, and concrete-function C17 emission.
 - Added scalar and `ELEMENTAL` array defined assignment, emitting calls from the concrete subroutine signature through the existing descriptor ABI.
 - Completed `PUBLIC`/`PRIVATE`, `USE ONLY`, module import, and re-export semantics for special generic designators.
-- Added strict C17, native Fortran differential, sanitizer, and architecture regressions, then revalidated the complete pinned Reference BLAS/LAPACK correctness audit and 71-case performance matrix.
+- Added strict C17, native Fortran differential, sanitizer, and architecture regressions.
 
 ## 1.16.0
 
@@ -36,14 +35,14 @@
 - Completed module-association lowering for variables, constants, complete external-procedure signatures, and local derived-type aliases while correctly hiding renamed remote names.
 - Added a project-module dependency graph, stable topological ordering, and cycle diagnostics so semantic analysis and C17 emission no longer depend on source module order.
 - Isolated module interface-body scopes to prevent imported symbols, implicit rules, and derived types from leaking into the host module, and completed full and renamed `LA_CONSTANTS` imports.
-- Added structured-syntax, module-order, interface-scope, generated-C17, and exact-diagnostic regressions, then revalidated 36 strict C17 and sanitizer tests together with the pinned Reference BLAS/LAPACK correctness gates.
+- Added structured-syntax, module-order, interface-scope, generated-C17, and exact-diagnostic regressions.
 
 ## 1.15.0
 
 - Added structured syntax ASTs for `PROGRAM`, `SUBROUTINE`, `FUNCTION`, and `MODULE` headers, preserving procedure prefixes, dummy arguments, function results, and exact source ranges.
 - Migrated `PROCEDURE(interface)` declarations to dedicated syntax-AST and semantic-lowering stages with precise diagnostics for interfaces, attributes, entity lists, and continued source lines.
 - Unified structured parsing and kind/name validation for program-unit terminators, and fixed module discovery so internal procedure endings cannot close their containing module.
-- Added architecture boundaries, malformed-syntax tests, and exact diagnostic regressions, then revalidated 35 strict C17 and sanitizer tests together with the pinned Reference BLAS/LAPACK correctness gates.
+- Added architecture boundaries, malformed-syntax tests, and exact diagnostic regressions.
 
 ## 1.14.0
 
@@ -51,7 +50,7 @@
 - Removed legacy identifier, argument-splitting, integer-text evaluation, and expression-query helpers from production frontend and semantic paths.
 - Added architecture gates that prevent production code from restoring source-text expression parsing or removed text-parser entry points.
 - Preserved exact procedure-designator and keyword-association spans through semantic validation, with stable structured diagnostic codes and complete source ranges.
-- Clarified CHARACTER initializer length evaluation for strict MSVC analysis, expanded diagnostic regressions, and revalidated strict C17, sanitizers, all pinned Reference BLAS/LAPACK correctness gates, and the 71-case performance matrix.
+- Clarified CHARACTER initializer length evaluation for strict MSVC analysis and expanded diagnostic regressions.
 
 ## 1.13.0
 
@@ -59,7 +58,7 @@
 - Split action-statement parsing and assignment code generation, removing source-text scanning and semantic rediscovery from the core statement path.
 - Added semantic per-edge scope-cleanup plans for labeled transfers, `CYCLE`, `EXIT`, and I/O `ERR`, `END`, and `EOR` branches.
 - Completed CHARACTER stop-code lowering, `NULL(MOLD=...)` handling, and diagnostics for malformed actions, STOP types, PURE restrictions, and alternate returns.
-- Added strict C17, ASan/UBSan, BLOCK finalization, and pointer-semantic regressions, and revalidated the primary pinned Reference BLAS/LAPACK correctness gates.
+- Added strict C17, ASan/UBSan, BLOCK finalization, and pointer-semantic regressions.
 
 ## 1.12.0
 
@@ -67,7 +66,7 @@
 - Removed labeled-DO source rewriting and added explicit single and shared terminal-label ownership, legal terminal-action execution, canonical statement labels, and exact source spans.
 - Added program-unit label-graph validation for duplicate, undefined, and nonexecutable targets, illegal construct entry, sibling branch transfers, assigned labels, and I/O `ERR`, `END`, and `EOR` edges.
 - Split loop code generation into a dedicated emitter with stable IDs for labeled statement wrappers, correct loop-variable final values, and structured `CYCLE` and `EXIT` targets.
-- Added malformed-syntax and semantic regressions, strict C17 execution, sanitizer coverage, a byte-exact native legacy-control differential, and full pinned Reference BLAS/LAPACK validation.
+- Added malformed-syntax and semantic regressions, strict C17 execution, sanitizer coverage, and a byte-exact native legacy-control differential.
 
 ## 1.11.0
 
@@ -106,7 +105,6 @@
 - Fixed temporary AST ownership cleanup after invalid FORMAT descriptors, eliminating a sanitizer-detected parser leak.
 - Fixed `(/` being misclassified as an array-constructor delimiter inside FORMAT, restoring official BLAS labeled formats.
 - Added byte-exact native FORMAT differentials, deep and long resource boundaries, strict C17, and sanitizer regression coverage.
-- Revalidated all 3,535 Reference LAPACK sources and all 52,512 RFP numerical differentials on the new format pipeline.
 
 ## 1.7.0
 
