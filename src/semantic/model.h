@@ -60,6 +60,7 @@ struct Symbol {
     int statement_function_expanding;
     int allocatable;
     int pointer;
+    int contiguous;
     int procedure_pointer;
     int type_bound;
     int type_bound_deferred;
@@ -81,6 +82,7 @@ struct Symbol {
     int *external_parameter_optional;
     int *external_parameter_allocatable;
     int *external_parameter_pointer;
+    int *external_parameter_contiguous;
     int *external_parameter_descriptor;
     F2cDerivedType **external_parameter_derived_types;
     int *external_parameter_polymorphic;
