@@ -88,6 +88,42 @@ static void test_equivalence_storage_lifetime(void) {
     f2c_result_free(&result);
 }
 
+static void test_common_equivalence_static_data(void) {
+    static const char source[] = "program read_common_equivalence\n"
+                                 "  integer :: values(3)\n"
+                                 "  common /state/ values\n"
+                                 "end program read_common_equivalence\n"
+                                 "block data initialize_common_equivalence\n"
+                                 "  integer :: shared(2), extension(2)\n"
+                                 "  common /state/ shared\n"
+                                 "  equivalence (shared(2), extension(1))\n"
+                                 "  data extension / 31, 37 /\n"
+                                 "end block data initialize_common_equivalence\n";
+    static const char multiple_views[] = "program read_multiple_views\n"
+                                         "  integer :: values(3)\n"
+                                         "  common /state/ values\n"
+                                         "end program read_multiple_views\n"
+                                         "block data initialize_multiple_views\n"
+                                         "  integer :: shared(2), extension(2)\n"
+                                         "  common /state/ shared\n"
+                                         "  equivalence (shared(2), extension(1))\n"
+                                         "  data shared(1) / 11 /, extension / 31, 37 /\n"
+                                         "end block data initialize_multiple_views\n";
+    F2cResult result = transpile("common_equivalence_data.f90", source);
+    expect(result.error_count == 0U && result.code != NULL,
+           "BLOCK DATA accepts one COMMON-associated EQUIVALENCE initializer view");
+    expect(result.code != NULL &&
+               strstr(result.code, "F2C_COMMON_INITIALIZED_STORAGE union") != NULL &&
+               strstr(result.code, " = { .equivalence_") != NULL &&
+               strstr(result.code, ".value = {INT64_C(31), INT64_C(37)}") != NULL,
+           "COMMON-associated EQUIVALENCE DATA becomes a static typed union initializer");
+    f2c_result_free(&result);
+
+    expect_failure("multiple_common_equivalence_views.f90", multiple_views,
+                   "initializers require more than one overlapping C17 storage view",
+                   "COMMON DATA rejects ambiguous initialization through multiple union views");
+}
+
 static void test_data_diagnostics(void) {
     expect_failure("missing_separator.f90",
                    "program missing_separator\n"
@@ -172,6 +208,7 @@ int main(void) {
     test_valid_data_semantics();
     test_non_c_constant_static_fallback();
     test_equivalence_storage_lifetime();
+    test_common_equivalence_static_data();
     test_data_diagnostics();
     if (failures != 0)
         fprintf(stderr, "%d DATA semantic test(s) failed\n", failures);
