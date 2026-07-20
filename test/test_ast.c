@@ -650,6 +650,43 @@ static void test_integer_iteration_counts(void) {
            "a zero implied-DO step is rejected before expansion");
 }
 
+static void test_type_bound_derived_result(void) {
+    F2cDerivedType derived = {0};
+    F2cTypeBinding binding = {0};
+    Symbol object = {0};
+    Unit unit = {0};
+    F2cExpr *expression;
+    const char *error_at = NULL;
+
+    derived.name = (char *)"record";
+    derived.c_name = (char *)"record";
+    derived.bindings = &binding;
+    derived.binding_count = 1U;
+    binding.name = (char *)"forward";
+    binding.procedure.name = (char *)"forward";
+    binding.procedure.c_name = (char *)"forward";
+    binding.procedure.type = TYPE_DERIVED;
+    binding.procedure.kind = f2c_default_kind(TYPE_DERIVED);
+    binding.procedure.derived_type = &derived;
+    binding.procedure.type_bound = 1;
+    binding.procedure.external_parameter_count = 2U;
+    object.name = (char *)"object";
+    object.c_name = (char *)"object";
+    object.type = TYPE_DERIVED;
+    object.kind = f2c_default_kind(TYPE_DERIVED);
+    object.derived_type = &derived;
+    unit.symbols = &object;
+    unit.symbol_count = 1U;
+    unit.derived_types = &derived;
+    unit.derived_type_count = 1U;
+
+    expression = f2c_parse_expression_ast(&unit, "object%forward(object)", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->kind == F2C_EXPR_CALL &&
+               expression->type == TYPE_DERIVED && expression->derived_type == &derived,
+           "type-bound calls retain the concrete derived result type in the AST");
+    f2c_expr_free(expression);
+}
+
 int main(void) {
     test_kind_shape_and_value_category();
     test_typed_numeric_tree();
@@ -665,6 +702,7 @@ int main(void) {
     test_nested_expression_source_ranges();
     test_integer_substitution_clone();
     test_integer_iteration_counts();
+    test_type_bound_derived_result();
     if (failures != 0) {
         fprintf(stderr, "%d AST test(s) failed\n", failures);
         return 1;

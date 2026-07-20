@@ -577,6 +577,7 @@ static F2cExpr *parse_primary(AstParser *parser) {
                 return NULL;
             }
             call->symbol = component;
+            call->derived_type = component->derived_type;
             call->type_kind = component->kind;
             call->rank = component->external_result_rank;
             call->value_category = F2C_VALUE_TEMPORARY;
