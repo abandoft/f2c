@@ -28,8 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建基线已经建立；本轮普通、Release 与 ASan/UBSan 严格 CTest 均为 43/43，架构边界检查作为
-  独立测试运行。
+  构建基线已经建立；当前默认严格 CTest 为 45/45，架构边界检查作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -72,9 +71,10 @@
   类型说明、停止码及赋值两端均保留精确物理 span。`f2c_identifier`、全部 `f2c_split_*`、
   `f2c_starts_word`、整数文本求值器和表达式文本查询包装器已经从生产代码删除；架构测试禁止在
   parser 之外重新调用原始文本表达式入口，也禁止恢复这些旧解析器。`PROGRAM`、`SUBROUTINE`、
-  `FUNCTION` 和 `MODULE` 头、前缀、哑实参、`RESULT`、`PROCEDURE(interface)` 声明及程序单元
-  终止语句现均先建立结构化语法 AST，再降级到语义模型；开闭类型与名称会在生成前校验，续行
-  token 和错误 token 的精确物理 span 已有回归，架构门禁禁止恢复旧式头部和终止谓词。`USE`
+  `FUNCTION`、`MODULE` 和 `BLOCK DATA` 头、前缀、哑实参、`RESULT`、
+  `PROCEDURE(interface)` 声明及程序单元终止语句现均先建立结构化语法 AST，再降级到语义模型；
+  开闭类型与名称会在生成前校验，续行 token 和错误 token 的精确物理 span 已有回归，架构门禁
+  禁止恢复旧式头部和终止谓词。`USE`
   语句现也由 canonical token 建立独立语法 AST，完整区分 nature、模块名、空 `ONLY`、重命名及
   泛型设计符，并保存每个关联项的精确范围；统一候选判定保证名为 `use` 的变量、数组和组件不会被
   当成声明，架构门禁禁止生产代码恢复关键字文本猜测。该任务仍因部分声明/属性和其他旧式规格
@@ -183,7 +183,9 @@
 - [ ] 补齐 `PROGRAM`、`MODULE`、`BLOCK DATA`、`SUBROUTINE`、`FUNCTION`、`ENTRY`、内部过程
   和任意层宿主关联；验证 `RECURSIVE`、`PURE`、`ELEMENTAL` 等过程属性。现有程序单元与模块的
   头部、名称、过程前缀、哑实参、函数结果及终止语句已保存精确范围，并验证开闭类型和名称；模块
-  扫描不会再把内部过程终止语句误当作模块终止。用户定义
+  扫描不会再把内部过程终止语句误当作模块终止。具名、匿名和旧式连写 `BLOCK DATA` 已作为独立
+  非过程程序单元进入统一发现、AST、语义和终止匹配流程，不会污染过程注册表或生成伪调用入口；
+  其可执行语句和非法嵌套会在生成前硬失败。用户定义
   `ELEMENTAL` 函数和子程序现已在 typed IR 上保存具体过程绑定，并检查标量哑实参、`INTENT`、
   禁止的 `ALLOCATABLE/POINTER` 属性、标量函数结果、显式接口属性一致性以及数组实参逐维合形；
   数组实际参数会把 rank、动态 extent 和 shape 传播到函数结果，标量实参按元素广播。代码生成
@@ -201,10 +203,13 @@
 - [ ] 完成命名及空白 `COMMON`、`EQUIVALENCE`、`DATA` 和 `SAVE` 的布局、初始化顺序、重叠与
   跨程序单元一致性。命名及空白 `COMMON` 已使用统一语法路径，支持同一语句混合块、跨语句延续
   和跨程序单元共享；项目级语义检查会验证成员 type/kind/rank、常量 extent 与 CHARACTER 长度，
-  不兼容布局会在具体成员处硬失败，生成端从完整项目构建稳定的统一结构。严格 C17、ASan/UBSan
-  和原生 Fortran 运行差分已进入数值验证 CI。仍需用存储单元模型支持标准允许的不同实体分组与
-  异类型序列关联，并完成模块 `DATA`、`BLOCK DATA`、异类型 `EQUIVALENCE` 及跨语句任意重叠区间，
-  因此本项不关闭。
+  不兼容布局会在具体成员处硬失败，生成端从完整项目构建稳定的统一结构。`BLOCK DATA` 现可将
+  命名 `COMMON` 中的数值、逻辑、复数、标量 CHARACTER 及 CHARACTER 数组直接写入 C17 静态
+  全局初始化，支持完整数组和部分元素；普通程序单元初始化 COMMON、空白 COMMON 初始化、局部
+  BLOCK DATA 目标、多个 BLOCK DATA 初始化同一块以及无法静态表示的值均为硬错误。严格 C17、
+  ASan/UBSan 和原生 Fortran 运行差分已进入数值验证 CI。仍需用存储单元模型支持标准允许的不同
+  实体分组与异类型序列关联，并完成模块 `DATA`、派生类型 COMMON 初始化、异类型
+  `EQUIVALENCE` 及跨语句任意重叠区间，因此本项不关闭。
 - [ ] 完成模块 `PUBLIC/PRIVATE`、`ONLY`、重命名、泛型接口、运算符/赋值泛型和模块过程。普通
   模块关联现从结构化 `USE` AST 降级，支持空 `ONLY`、实体重命名、远端名称隐藏，以及变量、常量、
   外部过程完整签名和派生类型的本地别名；别名冲突、重复本地名称和非法关联具有精确诊断。项目内
