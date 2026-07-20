@@ -10,6 +10,7 @@ void f2c_parse_namelist_declaration(Context *context, Unit *unit, Line *source_l
 void f2c_parse_common_declaration(Context *context, Unit *unit, Line *source_line);
 void f2c_parse_declaration(Context *context, Unit *unit, Line *source_line);
 void f2c_parse_optional_declaration(Context *context, Unit *unit, Line *source_line);
+void f2c_parse_contiguous_declaration(Context *context, Unit *unit, Line *source_line);
 void f2c_parse_derived_type_definitions(Context *context, Unit *unit);
 void f2c_parse_external_declaration(Context *context, Unit *unit, Line *source_line);
 void f2c_parse_dimension_declaration(Context *context, Unit *unit, Line *source_line);

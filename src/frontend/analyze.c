@@ -43,6 +43,7 @@ void f2c_analyze_module(Context *context, Unit *unit) {
         if (f2c_line_in_derived_type(unit, i))
             continue;
         f2c_parse_declaration(context, unit, &context->lines.items[i]);
+        f2c_parse_contiguous_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_dimension_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_parameter_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_save_declaration(context, unit, &context->lines.items[i]);
@@ -129,6 +130,7 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
         f2c_import_module(context, unit, &context->lines.items[i]);
         f2c_parse_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_optional_declaration(context, unit, &context->lines.items[i]);
+        f2c_parse_contiguous_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_dimension_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_external_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_procedure_declaration(context, unit, &context->lines.items[i]);

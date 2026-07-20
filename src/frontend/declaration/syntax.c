@@ -14,7 +14,7 @@ int f2c_declaration_tokens(const Line *line) {
     static const char *const starters[] = {
         "integer",   "real",     "double",   "logical",     "complex",  "character", "dimension",
         "parameter", "implicit", "external", "intrinsic",   "optional", "procedure", "import",
-        "interface", "abstract", "save",     "equivalence", "common",   "namelist",
+        "interface", "abstract", "save",     "equivalence", "common",   "namelist",  "contiguous",
     };
     size_t index;
     size_t start;

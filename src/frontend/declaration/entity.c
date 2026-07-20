@@ -14,7 +14,8 @@ enum F2cDeclarationAttributeFlag {
     F2C_DECL_INTENT = 1U << 7,
     F2C_DECL_DIMENSION = 1U << 8,
     F2C_DECL_PUBLIC = 1U << 9,
-    F2C_DECL_PRIVATE = 1U << 10
+    F2C_DECL_PRIVATE = 1U << 10,
+    F2C_DECL_CONTIGUOUS = 1U << 11
 };
 
 typedef struct F2cDeclarationAttributes {
@@ -87,6 +88,8 @@ static unsigned int simple_attribute_flag(const F2cToken *token) {
         return F2C_DECL_SAVE;
     if (f2c_token_equals(token, "target"))
         return F2C_DECL_TARGET;
+    if (f2c_token_equals(token, "contiguous"))
+        return F2C_DECL_CONTIGUOUS;
     if (f2c_token_equals(token, "public"))
         return F2C_DECL_PUBLIC;
     if (f2c_token_equals(token, "private"))
@@ -387,6 +390,7 @@ static int apply_entity(Context *context, Unit *unit, const Line *line,
     symbol->declaration_span = line->tokens[entity->begin].span;
     symbol->allocatable |= (flags & F2C_DECL_ALLOCATABLE) != 0U;
     symbol->pointer |= (flags & F2C_DECL_POINTER) != 0U;
+    symbol->contiguous |= (flags & F2C_DECL_CONTIGUOUS) != 0U;
     symbol->polymorphic |= type_spec->polymorphic;
     symbol->target |= (flags & F2C_DECL_TARGET) != 0U;
     symbol->optional |= (flags & F2C_DECL_OPTIONAL) != 0U;
