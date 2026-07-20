@@ -387,6 +387,29 @@ static void append_common_view_type_name(Buffer *output, const char *block, size
         f2c_buffer_printf(output, "f2c_common_%s_view_%zu", block, unit_index);
 }
 
+static void append_zero_common_storage_name(Buffer *output, const char *block, size_t unit_index,
+                                            size_t symbol_index) {
+    if (block[0] == '\0')
+        f2c_buffer_printf(output, "f2c_blank_common_zero_%zu_%zu", unit_index, symbol_index);
+    else
+        f2c_buffer_printf(output, "f2c_common_%s_zero_%zu_%zu", block, unit_index, symbol_index);
+}
+
+static void emit_zero_common_storage(Context *context, Unit *unit, size_t unit_index,
+                                     const char *block) {
+    size_t symbol_index;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        const Symbol *symbol = &unit->symbols[symbol_index];
+        if (symbol->common_block == NULL || strcmp(symbol->common_block, block) != 0 ||
+            symbol->common_size != 0U)
+            continue;
+        f2c_buffer_printf(&context->output, "static _Alignas(%llu) %s ",
+                          (unsigned long long)symbol->common_alignment, f2c_symbol_c_type(symbol));
+        append_zero_common_storage_name(&context->output, block, unit_index, symbol_index);
+        f2c_buffer_append(&context->output, "[1] F2C_UNUSED = {0};\n");
+    }
+}
+
 static uint64_t common_view_extent(const Unit *unit, const char *block) {
     uint64_t extent = 0U;
     uint64_t maximum_alignment = 1U;
@@ -400,12 +423,12 @@ static uint64_t common_view_extent(const Unit *unit, const char *block) {
         end = symbol->common_offset + symbol->common_size;
         if (end > extent)
             extent = end;
-        if (symbol->common_alignment > maximum_alignment)
+        if (symbol->common_size != 0U && symbol->common_alignment > maximum_alignment)
             maximum_alignment = symbol->common_alignment;
     }
     if (maximum_alignment != 0U && extent % maximum_alignment != 0U)
         extent += maximum_alignment - extent % maximum_alignment;
-    return extent;
+    return extent == 0U ? 1U : extent;
 }
 
 static void emit_common_field(Buffer *output, Unit *unit, const Symbol *member) {
@@ -438,20 +461,29 @@ static void emit_common_view_definition(Context *context, Unit *unit, size_t uni
                                         const char *block) {
     size_t member_index = 0U;
     Symbol *member;
+    int emitted_field = 0;
     f2c_buffer_append(&context->output, "struct ");
     append_common_view_type_name(&context->output, block, unit_index);
     f2c_buffer_append(&context->output, " {\n");
     while ((member = find_common_member(unit, block, member_index)) != NULL) {
-        emit_common_field(&context->output, unit, member);
+        if (member->common_size != 0U) {
+            emit_common_field(&context->output, unit, member);
+            emitted_field = 1;
+        }
         ++member_index;
     }
+    if (!emitted_field)
+        f2c_buffer_append(&context->output, "    unsigned char empty_storage;\n");
     f2c_buffer_append(&context->output, "};\n");
     member_index = 0U;
     while ((member = find_common_member(unit, block, member_index)) != NULL) {
-        f2c_buffer_append(&context->output, "_Static_assert(offsetof(struct ");
-        append_common_view_type_name(&context->output, block, unit_index);
-        f2c_buffer_printf(&context->output, ", field_%zu) == %lluU, \"COMMON field offset\");\n",
-                          member_index, (unsigned long long)member->common_offset);
+        if (member->common_size != 0U) {
+            f2c_buffer_append(&context->output, "_Static_assert(offsetof(struct ");
+            append_common_view_type_name(&context->output, block, unit_index);
+            f2c_buffer_printf(&context->output,
+                              ", field_%zu) == %lluU, \"COMMON field offset\");\n", member_index,
+                              (unsigned long long)member->common_offset);
+        }
         ++member_index;
     }
     f2c_buffer_append(&context->output, "_Static_assert(sizeof(struct ");
@@ -491,7 +523,7 @@ static uint64_t common_storage_extent(const Unit *unit, const char *block) {
         end = offset + size;
         if (end > extent)
             extent = end;
-        if (alignment > maximum_alignment)
+        if (size != 0U && alignment > maximum_alignment)
             maximum_alignment = alignment;
     }
     if (maximum_alignment != 0U && extent % maximum_alignment != 0U)
@@ -736,10 +768,14 @@ void f2c_emit_common_blocks(Context *context) {
             }
             initializer_owner = find_common_initializer_owner(context, first->common_block,
                                                               &initializer_owner_index);
-            for (view_index = 0U; view_index < context->units.count; ++view_index)
-                if (unit_has_common_block(&context->units.items[view_index], first->common_block))
+            for (view_index = 0U; view_index < context->units.count; ++view_index) {
+                if (unit_has_common_block(&context->units.items[view_index], first->common_block)) {
                     emit_common_view_definition(context, &context->units.items[view_index],
                                                 view_index, first->common_block);
+                    emit_zero_common_storage(context, &context->units.items[view_index], view_index,
+                                             first->common_block);
+                }
+            }
             for (view_index = 0U; view_index < context->units.count; ++view_index)
                 if (unit_has_common_block(&context->units.items[view_index], first->common_block))
                     emit_common_equivalence_view_definitions(context,
@@ -782,6 +818,8 @@ void f2c_emit_common_blocks(Context *context) {
                         char *initializer;
                         ++member_index;
                         if (!common_symbol_has_initializer(initializer_symbol))
+                            continue;
+                        if (initializer_symbol->common_size == 0U)
                             continue;
                         initializer = f2c_unit_static_storage_initializer(initializer_owner,
                                                                           initializer_symbol);

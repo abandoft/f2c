@@ -269,7 +269,7 @@ static int common_element_layout(Unit *unit, const Symbol *symbol, uint64_t *siz
     case TYPE_CHARACTER:
         if ((kind != 1 && kind != 4) ||
             !common_character_length(unit, symbol, &signed_character_length) ||
-            signed_character_length <= 0)
+            signed_character_length < 0)
             return 0;
         character_length = (uint64_t)signed_character_length;
         if (!checked_multiply(character_length, (uint64_t)kind, size))
@@ -288,7 +288,7 @@ static int common_symbol_layout(Unit *unit, const Symbol *symbol, uint64_t *size
     uint64_t element_size;
     uint64_t element_count;
     if (!common_element_layout(unit, symbol, &element_size, alignment) ||
-        !common_element_count(unit, symbol, &element_count) || element_count == 0U)
+        !common_element_count(unit, symbol, &element_count))
         return 0;
     return checked_multiply(element_size, element_count, size);
 }
@@ -306,19 +306,19 @@ static int validate_member_contract(Context *context, Unit *unit, const Symbol *
     }
     if (symbol->rank != 0U) {
         uint64_t count;
-        if (!common_element_count(unit, symbol, &count) || count == 0U) {
-            f2c_diagnostic_span_code(
-                context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
-                "COMMON array '%s' requires a nonempty constant explicit shape", symbol->name);
+        if (!common_element_count(unit, symbol, &count)) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
+                                     "COMMON array '%s' requires a constant explicit shape",
+                                     symbol->name);
             valid = 0;
         }
     }
     if (symbol->type == TYPE_CHARACTER) {
         int64_t length;
-        if (!common_character_length(unit, symbol, &length) || length <= 0) {
+        if (!common_character_length(unit, symbol, &length) || length < 0) {
             f2c_diagnostic_span_code(
                 context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
-                "COMMON CHARACTER entity '%s' requires positive constant length", symbol->name);
+                "COMMON CHARACTER entity '%s' requires nonnegative constant length", symbol->name);
             valid = 0;
         }
     }
@@ -362,7 +362,8 @@ static int common_block_layout(Context *context, Unit *unit, const char *block, 
         uint64_t alignment = 1U;
         if (!validate_member_contract(context, unit, symbol) ||
             !common_symbol_layout(unit, symbol, &size, &alignment) ||
-            !checked_align(cursor, alignment, &cursor) || size > UINT64_MAX - cursor) {
+            (size != 0U && !checked_align(cursor, alignment, &cursor)) ||
+            size > UINT64_MAX - cursor) {
             if (size > UINT64_MAX - cursor)
                 f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT,
                                          &symbol->common_span, 1,
@@ -373,8 +374,9 @@ static int common_block_layout(Context *context, Unit *unit, const char *block, 
             symbol->common_offset = cursor;
             symbol->common_size = size;
             symbol->common_alignment = alignment;
-            cursor += size;
-            if (alignment > maximum_alignment)
+            if (size != 0U)
+                cursor += size;
+            if (size != 0U && alignment > maximum_alignment)
                 maximum_alignment = alignment;
         }
         ++member_index;
@@ -412,16 +414,17 @@ static int unit_common_extent(Unit *unit, const char *block, uint64_t *extent) {
         const int direct = symbol->common_block != NULL && strcmp(symbol->common_block, block) == 0;
         const int associated = symbol->equivalence_common_block != NULL &&
                                strcmp(symbol->equivalence_common_block, block) == 0;
+        const uint64_t size = associated ? symbol->equivalence_size : symbol->common_size;
         if (!direct && !associated)
             continue;
         offset = associated ? symbol->equivalence_common_offset : symbol->common_offset;
-        if ((associated ? symbol->equivalence_size : symbol->common_size) > UINT64_MAX - offset)
+        if (size > UINT64_MAX - offset)
             return 0;
-        candidate = offset + (associated ? symbol->equivalence_size : symbol->common_size);
+        candidate = offset + size;
         if (candidate > end)
             end = candidate;
-        if ((associated ? symbol->equivalence_alignment : symbol->common_alignment) >
-            maximum_alignment)
+        if (size != 0U && (associated ? symbol->equivalence_alignment : symbol->common_alignment) >
+                              maximum_alignment)
             maximum_alignment =
                 associated ? symbol->equivalence_alignment : symbol->common_alignment;
     }
@@ -439,9 +442,15 @@ static Unit *previous_common_owner(Context *context, size_t unit_index, const ch
     return NULL;
 }
 
-static void assign_common_c_name(Context *context, size_t unit_index, Symbol *symbol) {
+static void assign_common_c_name(Context *context, size_t unit_index, size_t symbol_index,
+                                 Symbol *symbol) {
     Buffer name = {0};
-    if (symbol->common_block[0] == '\0')
+    if (symbol->common_size == 0U && symbol->common_block[0] == '\0')
+        f2c_buffer_printf(&name, "f2c_blank_common_zero_%zu_%zu", unit_index, symbol_index);
+    else if (symbol->common_size == 0U)
+        f2c_buffer_printf(&name, "f2c_common_%s_zero_%zu_%zu", symbol->common_block, unit_index,
+                          symbol_index);
+    else if (symbol->common_block[0] == '\0')
         f2c_buffer_printf(&name, "f2c_blank_common.view_%zu.field_%zu", unit_index,
                           symbol->common_index);
     else
@@ -657,7 +666,7 @@ static int validate_equivalence_member(Context *context, Unit *unit,
                                  symbol->name);
         return 0;
     }
-    if (!common_symbol_layout(unit, symbol, &size, &alignment) ||
+    if (!common_symbol_layout(unit, symbol, &size, &alignment) || size == 0U ||
         !equivalence_designator_byte_offset(unit, member, &designator_offset)) {
         f2c_diagnostic_span_code(
             context, F2C_DIAGNOSTIC_UNSUPPORTED, &member->span, 1,
@@ -920,7 +929,7 @@ void f2c_validate_project_storage(Context *context) {
         for (s = 0U; s < unit->symbol_count; ++s) {
             Symbol *symbol = &unit->symbols[s];
             if (symbol->common_block != NULL && symbol->equivalence_common_block == NULL)
-                assign_common_c_name(context, u, symbol);
+                assign_common_c_name(context, u, s, symbol);
         }
     }
 }
