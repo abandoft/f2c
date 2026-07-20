@@ -167,9 +167,15 @@
   数组元素以及由标量下标和 triplet 组成的任意 rank 仿射数组段关联；正负非单位步长、降秩、
   指针再次切片和跨过程关联回写均使用同一描述符路径。切片边界与步长各只求值一次，数组引用、
   inquiry 和归约会消费真实动态 stride；`INTENT(OUT)` 在过程入口清除地址及全部 shape 元数据。
-  向量下标、非 TARGET 对象及 type/kind/rank 不兼容会在生成前硬失败。尚未完成左侧 bounds remapping、
-  `CONTIGUOUS` 契约、带目标设计子的 `ASSOCIATED` 全组合、数组指针派生组件、假定大小最后一维及
-  FINAL 的完整逐维 shape，故本任务保持未关闭。
+  向量下标、非 TARGET 对象及 type/kind/rank 不兼容会在生成前硬失败。数据指针现在可以通过
+  `ALLOCATE/DEALLOCATE` 创建和释放标量、数组、延迟长度 CHARACTER 及派生类型目标；局部、模块、
+  哑实参和派生组件统一传播 lower/extent/stride 与“目标是否由 ALLOCATE 创建”的来源状态。
+  再次分配已关联指针会按标准创建新目标，完整目标别名继承释放能力，而普通 `TARGET`、可分配实体、
+  数组元素和数组段不会被错误交给 `free`。`STAT/ERRMSG`、重复释放、跨过程回写、rank-specific FINAL、
+  派生类型 `SOURCE=` 深复制和 deferred CHARACTER 定长赋值均有严格 C17、sanitizer 与 gfortran
+  差分。尚未完成左侧 bounds remapping、`CONTIGUOUS` 契约、带目标设计子的 `ASSOCIATED` 全组合、
+  数组指针派生组件的完整数组表达式/关联、假定大小最后一维及 FINAL 的完整逐维 shape，故本任务
+  保持未关闭。
 - [ ] 把字符长度、逐维 shape、`VALUE`、`OPTIONAL`、`INTENT`、别名限制和嵌套过程签名纳入
   项目级接口兼容检查。
 - [x] 过程接口参数类型、kind、rank、intent、可选性、动态属性及嵌套过程元数据均使用原子扩容的
