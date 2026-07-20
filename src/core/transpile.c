@@ -71,8 +71,6 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
         features->min = 1;
     else if (strcmp(name, "max") == 0)
         features->max = 1;
-    else if (strcmp(name, "random_number") == 0)
-        features->random = 1;
 }
 
 static void collect_statement_features(F2cStatement *statement, F2cRequiredFeatures *features) {
@@ -84,8 +82,8 @@ static void collect_statement_features(F2cStatement *statement, F2cRequiredFeatu
         statement->kind == F2C_STMT_ENDFILE || statement->kind == F2C_STMT_INQUIRE ||
         statement->kind == F2C_STMT_CLOSE)
         features->io = 1;
-    if (statement->kind == F2C_STMT_CALL && statement->name != NULL &&
-        strcmp(statement->name, "random_number") == 0)
+    if (statement->intrinsic == F2C_INTRINSIC_RANDOM_NUMBER ||
+        statement->intrinsic == F2C_INTRINSIC_RANDOM_SEED)
         features->random = 1;
     if (statement->intrinsic == F2C_INTRINSIC_MVBITS)
         features->bit_intrinsic = 1;
@@ -705,7 +703,20 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
         if (needs_random) {
             f2c_buffer_append(
                 &context.output,
-                "static uint64_t f2c_random_state = UINT64_C(0xD1B54A32D192ED03);\n"
+                "#define F2C_RANDOM_SEED_WORDS 2U\n"
+                "#define F2C_RANDOM_DEFAULT_STATE UINT64_C(0xD1B54A32D192ED03)\n"
+                "static _Thread_local uint64_t f2c_random_state = F2C_RANDOM_DEFAULT_STATE;\n"
+                "static inline F2C_UNUSED void f2c_random_seed_reset(void) { f2c_random_state = "
+                "F2C_RANDOM_DEFAULT_STATE; }\n"
+                "static inline F2C_UNUSED void f2c_random_seed_put(const int32_t *v, size_t n) "
+                "{ uint64_t state; if (v == NULL || n < F2C_RANDOM_SEED_WORDS) abort(); state = "
+                "(uint64_t)(uint32_t)v[0] | ((uint64_t)(uint32_t)v[1] << 32); "
+                "f2c_random_state = state != 0U ? state : F2C_RANDOM_DEFAULT_STATE; }\n"
+                "static inline F2C_UNUSED void f2c_random_seed_get(int32_t *v, size_t n) { "
+                "uint64_t state = f2c_random_state; size_t i; if (v == NULL || n < "
+                "F2C_RANDOM_SEED_WORDS) abort(); for (i = 0U; i < n; ++i) v[i] = 0; v[0] = "
+                "(int32_t)(uint32_t)state; v[1] = "
+                "(int32_t)(uint32_t)(state >> 32); }\n"
                 "static inline F2C_UNUSED uint64_t f2c_random_bits(void) { uint64_t x = "
                 "f2c_random_state; x ^= x >> 12; x ^= x << 25; x ^= x >> 27; "
                 "f2c_random_state = x; return x * UINT64_C(2685821657736338717); }\n"

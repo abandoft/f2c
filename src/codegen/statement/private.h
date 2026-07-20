@@ -22,5 +22,7 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
                                   size_t line, int depth);
 int f2c_emit_mvbits_statement(Context *context, Unit *unit, const F2cStatement *statement,
                               int depth);
+int f2c_emit_random_statement(Context *context, Unit *unit, const F2cStatement *statement,
+                              int depth);
 
 #endif

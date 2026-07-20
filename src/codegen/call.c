@@ -502,8 +502,7 @@ void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
         f2c_buffer_append(output, call.prelude.data != NULL ? call.prelude.data : "");
     }
     emit_indent(output, depth + (has_scope ? 1 : 0));
-    f2c_buffer_printf(output, "%s(",
-                      strcmp(name, "random_number") == 0 ? "F2C_RANDOM_NUMBER" : name);
+    f2c_buffer_printf(output, "%s(", name);
     for (i = 0U; i < count; ++i)
         f2c_buffer_printf(output, "%s%s", i == 0U ? "" : ", ", call.arguments[i]);
     for (i = 0U; i < count; ++i) {

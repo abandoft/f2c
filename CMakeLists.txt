@@ -137,6 +137,7 @@ set(
     src/codegen/statement/loop.c
     src/codegen/statement/select.c
     src/codegen/statement/private.h
+    src/codegen/statement/random.c
     src/codegen/statement/target.c
     src/codegen/statement/type_select.c
     src/codegen/statement/where.c
@@ -254,6 +255,7 @@ set(
     src/semantic/validation/intrinsic/character.c
     src/semantic/validation/intrinsic/model.c
     src/semantic/validation/intrinsic/numeric.c
+    src/semantic/validation/intrinsic/random.c
     src/semantic/validation/intrinsic/representation.c
     src/semantic/validation/lifetime.c
     src/semantic/validation/private.h
@@ -514,6 +516,10 @@ if(F2C_BUILD_TESTING)
         NAME numeric_operation_intrinsic_semantics
         COMMAND f2c_numeric_operation_intrinsic_tests
     )
+
+    add_executable(f2c_random_intrinsic_tests test/test_random_intrinsic.c)
+    f2c_configure_test_target(f2c_random_intrinsic_tests)
+    add_test(NAME random_intrinsic_semantics COMMAND f2c_random_intrinsic_tests)
 
     add_executable(
         f2c_real_representation_intrinsic_tests
