@@ -48,6 +48,8 @@ jobs:
         run: sh test/named_construct_differential.sh build/numerical/f2c
       - name: Differential-test legacy labeled control flow
         run: sh test/legacy_control_differential.sh build/numerical/f2c
+      - name: Differential-test alternate-return control flow
+        run: sh test/alternate_return_differential.sh build/numerical/f2c
       - name: Differential-test COMMON storage semantics
         run: sh test/common_storage_differential.sh build/numerical/f2c
       - name: Differential-test EQUIVALENCE storage semantics
