@@ -113,19 +113,47 @@ static void test_common_storage_mismatch_diagnostic(void) {
                                  "  integer :: value\n"
                                  "  common /shared/ value\n"
                                  "end subroutine integer_view\n"
-                                 "subroutine real_view()\n"
-                                 "  real :: value\n"
+                                 "subroutine double_view()\n"
+                                 "  double precision :: value\n"
                                  "  common /shared/ value\n"
-                                 "end subroutine real_view\n";
+                                 "end subroutine double_view\n";
     DiagnosticCapture capture = {0};
     F2cResult result = transpile_with_diagnostics(source, &capture);
     expect(result.code == NULL && result.error_count != 0U,
-           "incompatible cross-unit COMMON layouts suppress generated C");
+           "different named COMMON storage extents suppress generated C");
     expect(capture.captured && capture.code == F2C_DIAGNOSTIC_SEMANTIC && capture.line == 7U &&
                capture.column == 19U,
            "COMMON layout mismatch reports the incompatible member span");
-    expect(result.diagnostics != NULL && strstr(result.diagnostics, "storage-incompatible") != NULL,
-           "COMMON layout mismatch explains the storage contract");
+    expect(result.diagnostics != NULL && strstr(result.diagnostics, "storage bytes") != NULL,
+           "COMMON layout mismatch reports both storage extents");
+    f2c_result_free(&result);
+}
+
+static void test_common_storage_views(void) {
+    static const char source[] = "subroutine array_view()\n"
+                                 "  real :: values(2)\n"
+                                 "  common /shared/ values\n"
+                                 "end subroutine array_view\n"
+                                 "subroutine scalar_view()\n"
+                                 "  real :: first, second\n"
+                                 "  common /shared/ first, second\n"
+                                 "end subroutine scalar_view\n"
+                                 "subroutine integer_view()\n"
+                                 "  integer :: words(2)\n"
+                                 "  common /shared/ words\n"
+                                 "end subroutine integer_view\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile_with_diagnostics(source, &capture);
+    expect(result.error_count == 0U && result.code != NULL,
+           "COMMON accepts equal-size array, scalar, and heterogeneous storage views");
+    expect(result.code != NULL && strstr(result.code, "union f2c_common_shared_storage") != NULL &&
+               strstr(result.code, "struct f2c_common_shared_view_0") != NULL &&
+               strstr(result.code, "struct f2c_common_shared_view_1") != NULL &&
+               strstr(result.code, "struct f2c_common_shared_view_2") != NULL,
+           "COMMON emits one checked view per declaring program unit");
+    expect(result.code != NULL && strstr(result.code, "_Static_assert(offsetof(") != NULL &&
+               strstr(result.code, "_Static_assert(sizeof(") != NULL,
+           "COMMON views carry compile-time ABI layout checks");
     f2c_result_free(&result);
 }
 
@@ -155,13 +183,13 @@ static void test_block_data_common_initialization(void) {
     expect(result.error_count == 0U && result.code != NULL,
            "BLOCK DATA initializes named COMMON storage at translation time");
     expect(result.code != NULL &&
-               strstr(result.code, "F2C_COMMON_INITIALIZED_STORAGE struct f2c_common_state") !=
-                   NULL &&
+               strstr(result.code,
+                      "F2C_COMMON_INITIALIZED_STORAGE union f2c_common_state_storage") != NULL &&
                strstr(result.code, ".field_0 = INT64_C(7)") != NULL &&
                strstr(result.code, ".field_1 = {INT64_C(11), INT64_C(13), INT64_C(17)}") != NULL &&
                strstr(result.code, ".field_2 = F2C_COMPLEX_FLOAT_INITIALIZER") != NULL &&
                strstr(result.code, ".field_3 = INT64_C(19)") != NULL &&
-               strstr(result.code, ".field_4 = \"ok  \"") != NULL,
+               strstr(result.code, ".field_4 = {'o', 'k', ' ', ' '}") != NULL,
            "COMMON fields receive portable scalar, array, COMPLEX, and CHARACTER initializers");
     expect(result.code != NULL && strstr(result.code, "initialize_state(") == NULL,
            "BLOCK DATA is not emitted as a callable C procedure");
@@ -308,6 +336,7 @@ int main(void) {
     test_conflicting_equivalence_groups();
     test_blank_common_and_mixed_blocks();
     test_common_storage_mismatch_diagnostic();
+    test_common_storage_views();
     test_block_data_common_initialization();
     test_block_data_constraints();
     test_module_data_initialization();
