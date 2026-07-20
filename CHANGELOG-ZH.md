@@ -1,3 +1,13 @@
+## 1.19.0
+
+- 建立集中的可移植数值模型，明确 `INTEGER(KIND=1/2/4/8)`、IEEE binary32 与 binary64 的 radix、digits、precision、range、指数边界和极值，并在生成代码中验证目标平台契约。
+- 为 `DIGITS`、`EPSILON`、`HUGE`、`KIND`、`MAXEXPONENT`、`MINEXPONENT`、`PRECISION`、`RADIX`、`RANGE`、`TINY`、`SELECTED_INT_KIND` 和 `SELECTED_REAL_KIND` 完善 typed IR、参数关联、结果类型及语义诊断。
+- 将数值模型查询和 kind 选择纳入溢出安全的常量求值器，覆盖支持的整数/实数/复数 kind、标准失败码、参数表达式及声明 kind 选择器。
+- 使用精确的 C17 常量降低数值查询，保证 inquiry 实参不被求值，并修正非默认整数 kind 的 `HUGE`、`DIGITS` 和 `RANGE` 语义。
+- 为动态 `SELECTED_INT_KIND` 和 `SELECTED_REAL_KIND` 生成按需内联辅助函数，支持乱序关键字、可选参数及实参一次求值，且不引入外部运行时。
+- 增加正向、负向、边界、严格 C17、ASan/UBSan 和原生 Fortran 差分测试，并将数值模型差分纳入数值验证流水线。
+- 重新通过全部 155 个 Reference BLAS 和 3,535 个 Reference LAPACK 源文件、官方正确性与逐结果审计，以及 71 项性能矩阵。
+
 ## 1.18.0
 
 - 为 `BIT_SIZE`、`BTEST`、`IAND`、`IBCLR`、`IBITS`、`IBSET`、`IEOR`、`IOR`、`ISHFT`、`ISHFTC`、`NOT` 和 `MVBITS` 建立完整的 typed IR、参数关联和结果类型流程。

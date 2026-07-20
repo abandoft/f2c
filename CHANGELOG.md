@@ -1,3 +1,13 @@
+## 1.19.0
+
+- Added a centralized portable numeric model for `INTEGER(KIND=1/2/4/8)`, IEEE binary32, and IEEE binary64, including radix, digits, precision, range, exponent bounds, extrema, and generated target-contract checks.
+- Completed typed-IR signatures, argument association, result typing, and semantic diagnostics for `DIGITS`, `EPSILON`, `HUGE`, `KIND`, `MAXEXPONENT`, `MINEXPONENT`, `PRECISION`, `RADIX`, `RANGE`, `TINY`, `SELECTED_INT_KIND`, and `SELECTED_REAL_KIND`.
+- Integrated numeric-model inquiries and kind selection into the overflow-safe constant evaluator across supported integer, real, and complex kinds, standard failure codes, parameter expressions, and declaration kind selectors.
+- Lowered numeric inquiries to exact C17 constants without evaluating inquiry arguments, correcting nondefault-integer-kind `HUGE`, `DIGITS`, and `RANGE` semantics.
+- Added on-demand inline lowering for dynamic `SELECTED_INT_KIND` and `SELECTED_REAL_KIND`, including shuffled keywords, optional arguments, and single evaluation without an external runtime.
+- Added positive, negative, boundary, strict-C17, ASan/UBSan, and native-Fortran differential tests, with numeric-model differential validation in the numerical CI workflow.
+- Revalidated all 155 Reference BLAS and 3,535 Reference LAPACK sources, the official correctness and per-result audits, and the complete 71-case performance matrix.
+
 ## 1.18.0
 
 - Added complete typed-IR, argument-association, and result-typing paths for `BIT_SIZE`, `BTEST`, `IAND`, `IBCLR`, `IBITS`, `IBSET`, `IEOR`, `IOR`, `ISHFT`, `ISHFTC`, `NOT`, and `MVBITS`.
