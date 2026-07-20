@@ -278,12 +278,36 @@ static void record_actual_parameter(Symbol *external, size_t parameter, const F2
         external->external_parameter_procedures[parameter] = actual;
 }
 
+static int alternate_return_actual(const Line *line, size_t begin, size_t end) {
+    return line != NULL && begin < end && line->tokens[begin].kind == F2C_TOKEN_OPERATOR &&
+           f2c_token_equals(&line->tokens[begin], "*");
+}
+
 static int record_external_signature(Unit *unit, Symbol *external, const Line *line, size_t open,
                                      size_t close) {
-    const size_t count = actual_argument_count(line, open + 1U, close);
+    const size_t actual_count = actual_argument_count(line, open + 1U, close);
+    size_t alternate_count = 0U;
+    size_t count;
     size_t parameter = 0U;
     size_t begin = open + 1U;
     size_t index;
+    for (index = begin; index <= close; ++index) {
+        size_t nested_close;
+        if (index < close && left_delimiter(line->tokens[index].kind)) {
+            if (!f2c_token_matching_delimiter(line->tokens, close, index, &nested_close))
+                return 0;
+            index = nested_close;
+            continue;
+        }
+        if (index < close && line->tokens[index].kind != F2C_TOKEN_COMMA)
+            continue;
+        if (alternate_return_actual(line, begin, index))
+            ++alternate_count;
+        begin = index + 1U;
+    }
+    if (alternate_count > actual_count)
+        return 0;
+    count = actual_count - alternate_count;
     if (!f2c_symbol_resize_external_parameters(external, count)) {
         if (unit->context != NULL)
             f2c_diagnostic_code(unit->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line->number, 1,
@@ -291,6 +315,8 @@ static int record_external_signature(Unit *unit, Symbol *external, const Line *l
                                 external->name);
         return 0;
     }
+    external->external_alternate_return_count = alternate_count;
+    begin = open + 1U;
     for (index = begin; index <= close && parameter < count; ++index) {
         size_t nested_close;
         F2cExpr *expression;
@@ -302,6 +328,10 @@ static int record_external_signature(Unit *unit, Symbol *external, const Line *l
         }
         if (index < close && line->tokens[index].kind != F2C_TOKEN_COMMA)
             continue;
+        if (alternate_return_actual(line, begin, index)) {
+            begin = index + 1U;
+            continue;
+        }
         expression = f2c_parse_expression_tokens(unit, &line->tokens[begin], index - begin,
                                                  line->text, NULL);
         record_actual_parameter(external, parameter++, expression);
