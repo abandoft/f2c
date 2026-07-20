@@ -23,6 +23,17 @@ static uint64_t equivalence_group_extent(const Unit *unit, size_t group_index) {
     return extent;
 }
 
+static int equivalence_group_is_common(const Unit *unit, size_t group_index) {
+    size_t symbol_index;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        const Symbol *symbol = &unit->symbols[symbol_index];
+        if (symbol->equivalence_associated && symbol->equivalence_group == group_index &&
+            symbol->equivalence_common_block != NULL)
+            return 1;
+    }
+    return 0;
+}
+
 static void emit_equivalence_value_declaration(Buffer *output, Unit *unit, const Symbol *symbol) {
     f2c_buffer_printf(output, "    _Alignas(%llu) %s value",
                       (unsigned long long)symbol->equivalence_alignment, f2c_symbol_c_type(symbol));
@@ -62,6 +73,8 @@ void f2c_unit_emit_equivalence_declarations(Context *context, Unit *unit) {
         const Symbol *initializer_symbol = NULL;
         char *initializer = NULL;
         int persistent = unit->save_all;
+        if (equivalence_group_is_common(unit, group_index))
+            continue;
         for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
             const Symbol *symbol = &unit->symbols[symbol_index];
             uint64_t suffix;

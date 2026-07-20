@@ -342,16 +342,23 @@ static int unit_common_extent(Unit *unit, const char *block, uint64_t *extent) {
     size_t index;
     for (index = 0U; index < unit->symbol_count; ++index) {
         const Symbol *symbol = &unit->symbols[index];
+        uint64_t offset;
         uint64_t candidate;
-        if (symbol->common_block == NULL || strcmp(symbol->common_block, block) != 0)
+        const int direct = symbol->common_block != NULL && strcmp(symbol->common_block, block) == 0;
+        const int associated = symbol->equivalence_common_block != NULL &&
+                               strcmp(symbol->equivalence_common_block, block) == 0;
+        if (!direct && !associated)
             continue;
-        if (symbol->common_size > UINT64_MAX - symbol->common_offset)
+        offset = associated ? symbol->equivalence_common_offset : symbol->common_offset;
+        if ((associated ? symbol->equivalence_size : symbol->common_size) > UINT64_MAX - offset)
             return 0;
-        candidate = symbol->common_offset + symbol->common_size;
+        candidate = offset + (associated ? symbol->equivalence_size : symbol->common_size);
         if (candidate > end)
             end = candidate;
-        if (symbol->common_alignment > maximum_alignment)
-            maximum_alignment = symbol->common_alignment;
+        if ((associated ? symbol->equivalence_alignment : symbol->common_alignment) >
+            maximum_alignment)
+            maximum_alignment =
+                associated ? symbol->equivalence_alignment : symbol->common_alignment;
     }
     return checked_align(end, maximum_alignment, extent);
 }
@@ -380,6 +387,150 @@ static void assign_common_c_name(Context *context, size_t unit_index, Symbol *sy
     if (symbol->c_name == NULL)
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &symbol->common_span, 1,
                                  "out of memory naming COMMON entity '%s'", symbol->name);
+}
+
+static int equivalence_common_group_seen(const Unit *unit, size_t symbol_index, const char *block,
+                                         size_t group_index) {
+    size_t index;
+    for (index = 0U; index < symbol_index; ++index) {
+        const Symbol *symbol = &unit->symbols[index];
+        if (symbol->equivalence_associated && symbol->equivalence_group == group_index &&
+            symbol->equivalence_common_block != NULL &&
+            strcmp(symbol->equivalence_common_block, block) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+static void assign_equivalence_common_c_name(Context *context, size_t unit_index,
+                                             size_t symbol_index, Symbol *symbol) {
+    Buffer name = {0};
+    if (symbol->equivalence_common_block[0] == '\0')
+        f2c_buffer_printf(&name, "f2c_blank_common.equivalence_%zu_%zu_%zu.value", unit_index,
+                          symbol->equivalence_group, symbol_index);
+    else
+        f2c_buffer_printf(&name, "f2c_common_%s.equivalence_%zu_%zu_%zu.value",
+                          symbol->equivalence_common_block, unit_index, symbol->equivalence_group,
+                          symbol_index);
+    free(symbol->c_name);
+    symbol->c_name = f2c_buffer_take(&name);
+    if (symbol->c_name == NULL)
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &symbol->declaration_span, 1,
+            "out of memory naming COMMON-associated EQUIVALENCE entity '%s'", symbol->name);
+}
+
+static int extend_common_with_equivalence(Context *context, Unit *unit, size_t unit_index,
+                                          const char *block, uint64_t *extent) {
+    uint64_t maximum_alignment = 1U;
+    size_t symbol_index;
+    int valid = 1;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        const Symbol *symbol = &unit->symbols[symbol_index];
+        if (symbol->common_block != NULL && strcmp(symbol->common_block, block) == 0 &&
+            symbol->common_alignment > maximum_alignment)
+            maximum_alignment = symbol->common_alignment;
+    }
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        Symbol *first = &unit->symbols[symbol_index];
+        size_t anchor_index = SIZE_MAX;
+        uint64_t shift = 0U;
+        int shift_negative = 0;
+        size_t candidate_index;
+        if (!first->equivalence_associated || first->equivalence_common_block == NULL ||
+            strcmp(first->equivalence_common_block, block) != 0 ||
+            equivalence_common_group_seen(unit, symbol_index, block, first->equivalence_group))
+            continue;
+        for (candidate_index = 0U; candidate_index < unit->symbol_count; ++candidate_index) {
+            Symbol *candidate = &unit->symbols[candidate_index];
+            uint64_t candidate_shift;
+            int candidate_negative;
+            if (!candidate->equivalence_associated ||
+                candidate->equivalence_group != first->equivalence_group ||
+                candidate->common_block == NULL || strcmp(candidate->common_block, block) != 0)
+                continue;
+            candidate_negative = candidate->common_offset < candidate->equivalence_offset;
+            candidate_shift = candidate_negative
+                                  ? candidate->equivalence_offset - candidate->common_offset
+                                  : candidate->common_offset - candidate->equivalence_offset;
+            if (anchor_index == SIZE_MAX) {
+                anchor_index = candidate_index;
+                shift = candidate_shift;
+                shift_negative = candidate_negative;
+            } else if (shift != candidate_shift || shift_negative != candidate_negative) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, &candidate->common_span, 1,
+                    "EQUIVALENCE constraints disagree with COMMON block '%s' offsets",
+                    display_block_name(block));
+                valid = 0;
+            }
+        }
+        if (anchor_index == SIZE_MAX) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &first->declaration_span, 1,
+                                     "EQUIVALENCE COMMON association has no block anchor");
+            valid = 0;
+            continue;
+        }
+        for (candidate_index = 0U; candidate_index < unit->symbol_count; ++candidate_index) {
+            Symbol *candidate = &unit->symbols[candidate_index];
+            uint64_t offset;
+            uint64_t end;
+            if (!candidate->equivalence_associated ||
+                candidate->equivalence_group != first->equivalence_group)
+                continue;
+            if (shift_negative) {
+                if (candidate->equivalence_offset < shift) {
+                    f2c_diagnostic_span_code(
+                        context, F2C_DIAGNOSTIC_SEMANTIC, &candidate->declaration_span, 1,
+                        "EQUIVALENCE cannot extend COMMON block '%s' before its first storage "
+                        "unit",
+                        display_block_name(block));
+                    valid = 0;
+                    continue;
+                }
+                offset = candidate->equivalence_offset - shift;
+            } else {
+                if (candidate->equivalence_offset > UINT64_MAX - shift) {
+                    f2c_diagnostic_span_code(
+                        context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, &candidate->declaration_span, 1,
+                        "EQUIVALENCE COMMON offset exceeds the supported size range");
+                    valid = 0;
+                    continue;
+                }
+                offset = candidate->equivalence_offset + shift;
+            }
+            if (candidate->equivalence_alignment == 0U ||
+                offset % candidate->equivalence_alignment != 0U) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_UNSUPPORTED, &candidate->declaration_span, 1,
+                    "COMMON-associated EQUIVALENCE places '%s' at an unrepresentable alignment",
+                    candidate->name);
+                valid = 0;
+                continue;
+            }
+            if (candidate->equivalence_size > UINT64_MAX - offset) {
+                f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT,
+                                         &candidate->declaration_span, 1,
+                                         "EQUIVALENCE COMMON storage exceeds the supported size "
+                                         "range");
+                valid = 0;
+                continue;
+            }
+            candidate->equivalence_common_offset = offset;
+            end = offset + candidate->equivalence_size;
+            if (end > *extent)
+                *extent = end;
+            if (candidate->equivalence_alignment > maximum_alignment)
+                maximum_alignment = candidate->equivalence_alignment;
+            assign_equivalence_common_c_name(context, unit_index, candidate_index, candidate);
+        }
+    }
+    if (!checked_align(*extent, maximum_alignment, extent)) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, &unit->header_span, 1,
+                                 "COMMON storage exceeds the supported size range");
+        return 0;
+    }
+    return valid;
 }
 
 static size_t symbol_index_by_name(const Unit *unit, const char *name) {
@@ -439,14 +590,6 @@ static int validate_equivalence_member(Context *context, Unit *unit,
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &member->span, 1,
                                  "EQUIVALENCE entity '%s' must have fixed local non-dummy storage",
                                  symbol->name);
-        return 0;
-    }
-    if (symbol->common_block != NULL) {
-        f2c_diagnostic_span_code(
-            context, F2C_DIAGNOSTIC_UNSUPPORTED, &member->span, 1,
-            "EQUIVALENCE association with COMMON entity '%s' is not yet representable in the "
-            "portable storage model",
-            symbol->name);
         return 0;
     }
     if (!common_symbol_layout(unit, symbol, &size, &alignment) ||
@@ -516,6 +659,7 @@ void f2c_resolve_equivalence_storage(Context *context, Unit *unit) {
         uint64_t extent = 0U;
         uint64_t maximum_alignment = 1U;
         size_t root_index = SIZE_MAX;
+        const char *component_common_block = NULL;
         size_t symbol_index;
         if (!involved[seed] || assigned[seed])
             continue;
@@ -580,6 +724,15 @@ void f2c_resolve_equivalence_storage(Context *context, Unit *unit) {
                 continue;
             if (offsets[symbol_index] < minimum_offset)
                 minimum_offset = offsets[symbol_index];
+            if (unit->symbols[symbol_index].common_block != NULL) {
+                if (component_common_block == NULL)
+                    component_common_block = unit->symbols[symbol_index].common_block;
+                else if (strcmp(component_common_block, unit->symbols[symbol_index].common_block) !=
+                         0)
+                    f2c_diagnostic_span_code(
+                        context, F2C_DIAGNOSTIC_SEMANTIC, &unit->symbols[symbol_index].common_span,
+                        1, "one EQUIVALENCE group cannot associate different COMMON blocks");
+            }
         }
         for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
             Symbol *symbol = &unit->symbols[symbol_index];
@@ -606,6 +759,14 @@ void f2c_resolve_equivalence_storage(Context *context, Unit *unit) {
             symbol->equivalence_associated = 1;
             symbol->equivalence_group = component_index;
             symbol->equivalence_offset = normalized;
+            if (component_common_block != NULL) {
+                free(symbol->equivalence_common_block);
+                symbol->equivalence_common_block = f2c_strdup(component_common_block);
+                if (symbol->equivalence_common_block == NULL)
+                    f2c_diagnostic_span_code(
+                        context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &symbol->declaration_span, 1,
+                        "out of memory recording EQUIVALENCE COMMON association");
+            }
             if (root_index == SIZE_MAX)
                 root_index = symbol_index;
             if (end > extent)
@@ -676,6 +837,8 @@ void f2c_validate_project_storage(Context *context) {
                 continue;
             if (!common_block_layout(context, unit, symbol->common_block, &extent))
                 continue;
+            if (!extend_common_with_equivalence(context, unit, u, symbol->common_block, &extent))
+                continue;
             canonical_unit =
                 previous_common_owner(context, u, symbol->common_block, &canonical_extent);
             if (symbol->common_block[0] != '\0' && canonical_unit != NULL &&
@@ -690,7 +853,7 @@ void f2c_validate_project_storage(Context *context) {
         }
         for (s = 0U; s < unit->symbol_count; ++s) {
             Symbol *symbol = &unit->symbols[s];
-            if (symbol->common_block != NULL)
+            if (symbol->common_block != NULL && symbol->equivalence_common_block == NULL)
                 assign_common_c_name(context, u, symbol);
         }
     }

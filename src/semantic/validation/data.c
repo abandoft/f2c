@@ -196,8 +196,9 @@ static int symbol_supports_static_data(const Unit *unit, const Symbol *symbol) {
     if (symbol == NULL || symbol->alias_to != NULL || symbol->allocatable || symbol->pointer ||
         symbol->procedure_pointer || symbol->type == TYPE_DERIVED)
         return 0;
-    if (symbol->common_block != NULL)
-        return unit != NULL && unit->kind == UNIT_BLOCK_DATA && symbol->common_block[0] != '\0';
+    if (symbol->common_block != NULL || symbol->equivalence_common_block != NULL)
+        return unit != NULL && unit->kind == UNIT_BLOCK_DATA && symbol->common_block != NULL &&
+               symbol->common_block[0] != '\0';
     if (symbol->module_entity)
         return unit != NULL && unit->kind == UNIT_MODULE;
     return symbol->type != TYPE_CHARACTER && symbol->type != TYPE_COMPLEX &&
@@ -238,7 +239,8 @@ static int common_value_has_static_form(Unit *unit, const Symbol *symbol, const 
 }
 
 static int data_value_has_static_form(Unit *unit, const Symbol *symbol, const F2cExpr *value) {
-    return symbol != NULL && (symbol->common_block != NULL || symbol->module_entity)
+    return symbol != NULL && (symbol->common_block != NULL ||
+                              symbol->equivalence_common_block != NULL || symbol->module_entity)
                ? common_value_has_static_form(unit, symbol, value)
                : expression_has_static_c_form(value, 0U);
 }
@@ -437,16 +439,26 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
                                      "DATA target cannot be a use-associated entity");
             return 0;
         }
-        if (symbol->common_block != NULL && validation->unit->kind != UNIT_BLOCK_DATA) {
+        if ((symbol->common_block != NULL || symbol->equivalence_common_block != NULL) &&
+            validation->unit->kind != UNIT_BLOCK_DATA) {
             f2c_diagnostic_span_code(
                 validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
                 "a COMMON object may be initialized only in a BLOCK DATA program unit");
             return 0;
         }
         if (validation->unit->kind == UNIT_BLOCK_DATA &&
-            (symbol->common_block == NULL || symbol->common_block[0] == '\0')) {
+            ((symbol->common_block == NULL && symbol->equivalence_common_block == NULL) ||
+             (symbol->common_block != NULL ? symbol->common_block[0] == '\0'
+                                           : symbol->equivalence_common_block[0] == '\0'))) {
             f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
                                      "a BLOCK DATA target must belong to a named COMMON block");
+            return 0;
+        }
+        if (symbol->common_block == NULL && symbol->equivalence_common_block != NULL) {
+            f2c_diagnostic_span_code(
+                validation->context, F2C_DIAGNOSTIC_UNSUPPORTED, &target->span, 1,
+                "DATA initialization through an EQUIVALENCE-associated COMMON view is not yet "
+                "representable as one C17 static initializer");
             return 0;
         }
         if (!expression_extent(target, &extent)) {

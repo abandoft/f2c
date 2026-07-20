@@ -438,6 +438,122 @@ static void emit_common_view_definition(Context *context, Unit *unit, size_t uni
                       (unsigned long long)common_view_extent(unit, block));
 }
 
+static void append_common_equivalence_view_type_name(Buffer *output, const char *block,
+                                                     size_t unit_index, size_t group_index,
+                                                     size_t symbol_index) {
+    if (block[0] == '\0')
+        f2c_buffer_printf(output, "f2c_blank_common_equivalence_%zu_%zu_%zu", unit_index,
+                          group_index, symbol_index);
+    else
+        f2c_buffer_printf(output, "f2c_common_%s_equivalence_%zu_%zu_%zu", block, unit_index,
+                          group_index, symbol_index);
+}
+
+static uint64_t common_storage_extent(const Unit *unit, const char *block) {
+    uint64_t extent = 0U;
+    uint64_t maximum_alignment = 1U;
+    size_t symbol_index;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        const Symbol *symbol = &unit->symbols[symbol_index];
+        const int associated = symbol->equivalence_common_block != NULL &&
+                               strcmp(symbol->equivalence_common_block, block) == 0;
+        const int direct = symbol->common_block != NULL && strcmp(symbol->common_block, block) == 0;
+        const uint64_t offset =
+            associated ? symbol->equivalence_common_offset : symbol->common_offset;
+        const uint64_t size = associated ? symbol->equivalence_size : symbol->common_size;
+        const uint64_t alignment =
+            associated ? symbol->equivalence_alignment : symbol->common_alignment;
+        uint64_t end;
+        if ((!associated && !direct) || size > UINT64_MAX - offset)
+            continue;
+        end = offset + size;
+        if (end > extent)
+            extent = end;
+        if (alignment > maximum_alignment)
+            maximum_alignment = alignment;
+    }
+    if (maximum_alignment != 0U && extent % maximum_alignment != 0U)
+        extent += maximum_alignment - extent % maximum_alignment;
+    return extent;
+}
+
+static void emit_common_equivalence_value(Buffer *output, Unit *unit, const Symbol *symbol) {
+    f2c_buffer_printf(output, "    _Alignas(%llu) %s value",
+                      (unsigned long long)symbol->equivalence_alignment, f2c_symbol_c_type(symbol));
+    if (symbol->type == TYPE_CHARACTER) {
+        const uint64_t code_unit_size = (uint64_t)(symbol->kind > 0 ? symbol->kind : 1);
+        f2c_buffer_printf(output, "[%llu]",
+                          (unsigned long long)(symbol->equivalence_size / code_unit_size));
+    } else if (symbol->rank != 0U) {
+        size_t dimension;
+        f2c_buffer_append(output, "[F2C_MAX(1, ");
+        for (dimension = 0U; dimension < symbol->rank; ++dimension) {
+            char *lower =
+                f2c_emit_typed_expression(unit, symbol->dimensions[dimension].lower_expression);
+            char *upper =
+                f2c_emit_typed_expression(unit, symbol->dimensions[dimension].upper_expression);
+            f2c_buffer_printf(output, "%s((%s) - (%s) + 1)", dimension == 0U ? "" : " * ", upper,
+                              lower);
+            free(lower);
+            free(upper);
+        }
+        f2c_buffer_append(output, ")]");
+    }
+    f2c_buffer_append(output, ";\n");
+}
+
+static void emit_common_equivalence_view_definitions(Context *context, Unit *unit,
+                                                     size_t unit_index, const char *block) {
+    const uint64_t extent = common_storage_extent(unit, block);
+    size_t symbol_index;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        const Symbol *symbol = &unit->symbols[symbol_index];
+        uint64_t suffix;
+        if (symbol->equivalence_common_block == NULL ||
+            strcmp(symbol->equivalence_common_block, block) != 0)
+            continue;
+        suffix = extent - symbol->equivalence_common_offset - symbol->equivalence_size;
+        f2c_buffer_append(&context->output, "struct ");
+        append_common_equivalence_view_type_name(&context->output, block, unit_index,
+                                                 symbol->equivalence_group, symbol_index);
+        f2c_buffer_append(&context->output, " {\n");
+        if (symbol->equivalence_common_offset != 0U)
+            f2c_buffer_printf(&context->output, "    unsigned char prefix[%llu];\n",
+                              (unsigned long long)symbol->equivalence_common_offset);
+        emit_common_equivalence_value(&context->output, unit, symbol);
+        if (suffix != 0U)
+            f2c_buffer_printf(&context->output, "    unsigned char suffix[%llu];\n",
+                              (unsigned long long)suffix);
+        f2c_buffer_append(&context->output, "};\n_Static_assert(offsetof(struct ");
+        append_common_equivalence_view_type_name(&context->output, block, unit_index,
+                                                 symbol->equivalence_group, symbol_index);
+        f2c_buffer_printf(&context->output,
+                          ", value) == %lluU, \"COMMON EQUIVALENCE value offset\");\n",
+                          (unsigned long long)symbol->equivalence_common_offset);
+        f2c_buffer_append(&context->output, "_Static_assert(sizeof(struct ");
+        append_common_equivalence_view_type_name(&context->output, block, unit_index,
+                                                 symbol->equivalence_group, symbol_index);
+        f2c_buffer_printf(&context->output, ") == %lluU, \"COMMON EQUIVALENCE view size\");\n",
+                          (unsigned long long)extent);
+    }
+}
+
+static void emit_common_equivalence_union_members(Context *context, Unit *unit, size_t unit_index,
+                                                  const char *block) {
+    size_t symbol_index;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        const Symbol *symbol = &unit->symbols[symbol_index];
+        if (symbol->equivalence_common_block == NULL ||
+            strcmp(symbol->equivalence_common_block, block) != 0)
+            continue;
+        f2c_buffer_append(&context->output, "    struct ");
+        append_common_equivalence_view_type_name(&context->output, block, unit_index,
+                                                 symbol->equivalence_group, symbol_index);
+        f2c_buffer_printf(&context->output, " equivalence_%zu_%zu_%zu;\n", unit_index,
+                          symbol->equivalence_group, symbol_index);
+    }
+}
+
 void f2c_emit_common_blocks(Context *context) {
     size_t unit_index;
     int emitted_macro = 0;
@@ -466,6 +582,11 @@ void f2c_emit_common_blocks(Context *context) {
                 if (unit_has_common_block(&context->units.items[view_index], first->common_block))
                     emit_common_view_definition(context, &context->units.items[view_index],
                                                 view_index, first->common_block);
+            for (view_index = 0U; view_index < context->units.count; ++view_index)
+                if (unit_has_common_block(&context->units.items[view_index], first->common_block))
+                    emit_common_equivalence_view_definitions(context,
+                                                             &context->units.items[view_index],
+                                                             view_index, first->common_block);
             initializer_owner = find_common_initializer_owner(context, first->common_block,
                                                               &initializer_owner_index);
             f2c_buffer_append(&context->output, initializer_owner != NULL
@@ -479,6 +600,8 @@ void f2c_emit_common_blocks(Context *context) {
                 f2c_buffer_append(&context->output, "    struct ");
                 append_common_view_type_name(&context->output, first->common_block, view_index);
                 f2c_buffer_printf(&context->output, " view_%zu;\n", view_index);
+                emit_common_equivalence_union_members(context, &context->units.items[view_index],
+                                                      view_index, first->common_block);
             }
             f2c_buffer_append(&context->output, "} ");
             append_common_storage_name(&context->output, first->common_block);

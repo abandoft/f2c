@@ -23,6 +23,7 @@ static void free_symbol(Symbol *symbol) {
     free(symbol->generic_candidates);
     free(symbol->generic_origin_name);
     free(symbol->alias_to);
+    free(symbol->equivalence_common_block);
     free(symbol->common_block);
     free(symbol->derived_type_name);
     free(symbol->c_type);
