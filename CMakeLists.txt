@@ -253,6 +253,12 @@ set(
 
 function(f2c_configure_core_target target)
     target_compile_features(${target} PUBLIC c_std_17)
+    if(NOT MSVC)
+        # Static consumers must inherit the C math library used by semantic
+        # constant evaluation. Unix, MinGW, and Emscripten provide it as libm;
+        # the MSVC CRT exposes the same functions without a separate library.
+        target_link_libraries(${target} PUBLIC m)
+    endif()
     target_compile_definitions(
         ${target}
         PRIVATE
