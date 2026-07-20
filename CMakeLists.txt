@@ -93,9 +93,11 @@ set(
     src/codegen/descriptor/private.h
     src/codegen/descriptor/view.c
     src/codegen/expression.c
+    src/codegen/expression/associated.c
     src/codegen/expression/bit.c
     src/codegen/expression/call.c
     src/codegen/expression/character.c
+    src/codegen/expression/descriptor.c
     src/codegen/expression/derived_actual.c
     src/codegen/expression/inquiry.c
     src/codegen/expression/leaf.c
@@ -137,6 +139,7 @@ set(
     src/codegen/statement/assignment.c
     src/codegen/statement/bit.c
     src/codegen/statement/loop.c
+    src/codegen/statement/pointer.c
     src/codegen/statement/select.c
     src/codegen/statement/private.h
     src/codegen/statement/random.c
@@ -178,6 +181,7 @@ set(
     src/frontend/analyze.c
     src/frontend/attributes.c
     src/frontend/declaration/common.c
+    src/frontend/declaration/contiguous.c
     src/frontend/declaration/dimension.c
     src/frontend/declaration/entity.c
     src/frontend/declaration/namelist.c
@@ -644,6 +648,26 @@ if(F2C_BUILD_TESTING)
                     -DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/test/reference_performance_matrix.sh
                     -P ${CMAKE_CURRENT_SOURCE_DIR}/test/performance_scope_validation.cmake
             )
+            add_test(
+                NAME pointer_remapping_runtime_guard
+                COMMAND
+                    ${F2C_SH_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/test/pointer_remapping_guard.sh
+                    $<TARGET_FILE:f2c>
+            )
+            find_program(F2C_GFORTRAN_EXECUTABLE gfortran)
+            if(F2C_GFORTRAN_EXECUTABLE)
+                add_test(
+                    NAME pointer_association_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/pointer_association_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
+            endif()
         endif()
     endif()
 
