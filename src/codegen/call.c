@@ -1,6 +1,7 @@
 #include "internal/f2c.h"
 
 #include "codegen/descriptor/private.h"
+#include "codegen/value/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,7 @@ typedef struct LoweredCall {
     Buffer postlude;
     int has_transfers;
     int has_descriptors;
+    int has_temporaries;
     size_t array_conversion_count;
 } LoweredCall;
 
@@ -68,7 +70,8 @@ char *f2c_bridge_implicit_mutable_actual(const Symbol *callee, size_t parameter,
     return f2c_buffer_take(&result);
 }
 
-static char *lower_scalar_actual(Unit *unit, const F2cExpr *ast) {
+static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const F2cExpr *ast, size_t index,
+                                 int depth) {
     char *result = NULL;
     if (ast != NULL && ast->kind == F2C_EXPR_KEYWORD_ARGUMENT && ast->child_count == 1U)
         ast = ast->children[0];
@@ -76,6 +79,27 @@ static char *lower_scalar_actual(Unit *unit, const F2cExpr *ast) {
         return NULL;
     if (ast->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
+    if (ast->type == TYPE_DERIVED && ast->derived_type != NULL && !ast->definable) {
+        Buffer name = {0};
+        Buffer reference = {0};
+        f2c_buffer_printf(&name, "f2c_call_derived_%zu", index);
+        if (name.data == NULL)
+            return NULL;
+        emit_indent(&call->prelude, depth);
+        f2c_buffer_printf(&call->prelude, "%s %s;\n", ast->derived_type->c_name, name.data);
+        if (!f2c_emit_derived_clone_expression(&call->prelude, unit, ast, name.data, "call_actual",
+                                               index, depth)) {
+            free(name.data);
+            return NULL;
+        }
+        emit_indent(&call->postlude, depth);
+        f2c_buffer_printf(&call->postlude, "f2c_destroy_%s(&%s);\n", ast->derived_type->c_name,
+                          name.data);
+        f2c_buffer_printf(&reference, "&%s", name.data);
+        free(name.data);
+        call->has_temporaries = 1;
+        return f2c_buffer_take(&reference);
+    }
     {
         int supported = 0;
         char *code = f2c_emit_expression_ast(unit, ast, &supported);
@@ -216,7 +240,7 @@ static int lower_call(LoweredCall *lowered, Unit *unit, const Symbol *callee,
         lowered->owned_transfers[i] = lowered->arguments[i] != NULL;
         lowered->has_transfers |= lowered->owned_transfers[i];
         if (lowered->arguments[i] == NULL)
-            lowered->arguments[i] = lower_scalar_actual(unit, expression);
+            lowered->arguments[i] = lower_scalar_actual(lowered, unit, expression, i, depth + 1);
         if (lowered->arguments[i] == NULL)
             return 0;
     }
@@ -471,7 +495,7 @@ void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
         lowered_call_free(&call);
         return;
     }
-    has_scope = call.has_transfers || call.has_descriptors;
+    has_scope = call.has_transfers || call.has_descriptors || call.has_temporaries;
     if (has_scope) {
         emit_indent(output, depth);
         f2c_buffer_append(output, "{\n");
