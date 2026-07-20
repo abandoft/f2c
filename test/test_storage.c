@@ -246,6 +246,63 @@ static void test_block_data_constraints(void) {
     f2c_result_free(&result);
 }
 
+static void test_module_data_initialization(void) {
+    static const char source[] = "module configured_state\n"
+                                 "  implicit none\n"
+                                 "  integer :: values(3), selected\n"
+                                 "  complex :: point\n"
+                                 "  character(len=3) :: names(2)\n"
+                                 "  data values / 2, 3, 5 /, selected / 7 /\n"
+                                 "  data point / (1.5, -2.0) /, names / 'a', 'xyz' /\n"
+                                 "end module configured_state\n"
+                                 "program inspect_module_data\n"
+                                 "  use configured_state\n"
+                                 "  implicit none\n"
+                                 "  print *, values, selected, point, names\n"
+                                 "end program inspect_module_data\n";
+    static const char invalid_executable[] = "module invalid_module\n"
+                                             "  implicit none\n"
+                                             "  integer :: value\n"
+                                             "  value = 1\n"
+                                             "end module invalid_module\n";
+    static const char invalid_use_target[] = "module data_provider\n"
+                                             "  integer :: value\n"
+                                             "end module data_provider\n"
+                                             "module invalid_data_consumer\n"
+                                             "  use data_provider\n"
+                                             "  data value / 1 /\n"
+                                             "end module invalid_data_consumer\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile_with_diagnostics(source, &capture);
+    expect(result.error_count == 0U && result.code != NULL,
+           "module DATA statements reach typed static-storage emission");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_module_configured_state_values[") != NULL &&
+               strstr(result.code, "= {INT64_C(2), INT64_C(3), INT64_C(5)}") != NULL &&
+               strstr(result.code, "f2c_module_configured_state_selected = INT64_C(7)") != NULL &&
+               strstr(result.code, "F2C_COMPLEX_FLOAT_INITIALIZER") != NULL &&
+               strstr(result.code, "f2c_module_configured_state_names[(size_t)(3) *") != NULL,
+           "module DATA preserves numeric, complex, and CHARACTER array storage");
+    expect(result.code != NULL && strstr(result.code, "f2c_data_initialized_") == NULL,
+           "module DATA never depends on a runtime first-use guard");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile_with_diagnostics(invalid_executable, &capture);
+    expect(result.error_count != 0U && result.code == NULL && result.diagnostics != NULL &&
+               strstr(result.diagnostics,
+                      "MODULE specification part cannot contain executable statements") != NULL,
+           "module specification parts reject executable statements before code generation");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile_with_diagnostics(invalid_use_target, &capture);
+    expect(result.error_count != 0U && result.code == NULL && result.diagnostics != NULL &&
+               strstr(result.diagnostics, "DATA target cannot be a use-associated entity") != NULL,
+           "module DATA cannot initialize storage owned by another module");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_equivalence_rank_diagnostic();
     test_conflicting_equivalence_groups();
@@ -253,5 +310,6 @@ int main(void) {
     test_common_storage_mismatch_diagnostic();
     test_block_data_common_initialization();
     test_block_data_constraints();
+    test_module_data_initialization();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
