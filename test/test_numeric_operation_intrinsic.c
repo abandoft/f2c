@@ -36,7 +36,7 @@ static void expect_diagnostic(const char *declarations, const char *expression,
 }
 
 static void test_rounding_contracts(void) {
-    expect_diagnostic("", "aint()", "AINT requires exactly 1 argument");
+    expect_diagnostic("", "aint()", "aint requires between 1 and 2 arguments");
     expect_diagnostic("  integer :: value\n", "aint(value)", "AINT argument A must be REAL");
     expect_diagnostic("  complex :: value\n", "anint(value)", "ANINT argument A must be REAL");
     expect_diagnostic("  integer :: value\n", "ceiling(value)", "CEILING argument A must be REAL");
