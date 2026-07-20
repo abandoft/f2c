@@ -163,8 +163,13 @@
   `ELEMENTAL` 结果和其他可元素化数组表达式生成连续临时量及描述符，覆盖数值、CHARACTER 和
   含可分配组件的派生类型，并按 `INTENT` 管理复制和所有权。假定长度 CHARACTER 数组从描述符
   绑定元素长度；向量下标用于 `INTENT(OUT/INOUT)` 会在语义阶段硬失败。函数表达式中的同类过程
-  实参、局部指针的非连续关联、假定大小最后一维及 FINAL 的完整逐维 shape 仍未统一，故本任务
-  保持未关闭。
+  实参仍需统一。局部、模块及哑实参数组指针现保存动态 lower/extent/stride，支持与完整目标、标量
+  数组元素以及由标量下标和 triplet 组成的任意 rank 仿射数组段关联；正负非单位步长、降秩、
+  指针再次切片和跨过程关联回写均使用同一描述符路径。切片边界与步长各只求值一次，数组引用、
+  inquiry 和归约会消费真实动态 stride；`INTENT(OUT)` 在过程入口清除地址及全部 shape 元数据。
+  向量下标、非 TARGET 对象及 type/kind/rank 不兼容会在生成前硬失败。尚未完成左侧 bounds remapping、
+  `CONTIGUOUS` 契约、带目标设计子的 `ASSOCIATED` 全组合、数组指针派生组件、假定大小最后一维及
+  FINAL 的完整逐维 shape，故本任务保持未关闭。
 - [ ] 把字符长度、逐维 shape、`VALUE`、`OPTIONAL`、`INTENT`、别名限制和嵌套过程签名纳入
   项目级接口兼容检查。
 - [x] 过程接口参数类型、kind、rank、intent、可选性、动态属性及嵌套过程元数据均使用原子扩容的
