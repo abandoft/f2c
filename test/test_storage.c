@@ -191,6 +191,41 @@ static void test_blank_common_and_mixed_blocks(void) {
     f2c_result_free(&result);
 }
 
+static void test_zero_sized_common_storage(void) {
+    static const char source[] = "subroutine write_zero_storage()\n"
+                                 "  integer :: empty(0), value\n"
+                                 "  character(len=0) :: text\n"
+                                 "  common /state/ empty, text, value\n"
+                                 "  value = 42\n"
+                                 "end subroutine write_zero_storage\n"
+                                 "subroutine clear_zero_storage()\n"
+                                 "  integer :: none(1:0), result\n"
+                                 "  character(len=0) :: label\n"
+                                 "  common /state/ none, label, result\n"
+                                 "  result = 0\n"
+                                 "end subroutine clear_zero_storage\n";
+    static const char invalid_equivalence[] = "program invalid_zero_equivalence\n"
+                                              "  integer :: empty(0), value\n"
+                                              "  equivalence (empty, value)\n"
+                                              "end program invalid_zero_equivalence\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile_with_diagnostics(source, &capture);
+    expect(result.error_count == 0U && result.code != NULL,
+           "zero-sized arrays and zero-length CHARACTER reach COMMON code generation");
+    expect(result.code != NULL && strstr(result.code, "f2c_common_state_zero_") != NULL &&
+               strstr(result.code, "empty_storage") == NULL &&
+               strstr(result.code, "COMMON field offset") != NULL,
+           "zero-sized COMMON entities use non-layout placeholder addresses");
+    f2c_result_free(&result);
+
+    memset(&capture, 0, sizeof(capture));
+    result = transpile_with_diagnostics(invalid_equivalence, &capture);
+    expect(result.error_count != 0U && result.code == NULL && result.diagnostics != NULL &&
+               strstr(result.diagnostics, "requires constant nonempty intrinsic storage") != NULL,
+           "zero-sized EQUIVALENCE designators fail before code generation");
+    f2c_result_free(&result);
+}
+
 static void test_common_storage_mismatch_diagnostic(void) {
     static const char source[] = "subroutine integer_view()\n"
                                  "  integer :: value\n"
@@ -419,6 +454,7 @@ int main(void) {
     test_conflicting_equivalence_groups();
     test_equivalence_storage_views();
     test_blank_common_and_mixed_blocks();
+    test_zero_sized_common_storage();
     test_common_storage_mismatch_diagnostic();
     test_common_storage_views();
     test_block_data_common_initialization();
