@@ -65,6 +65,7 @@ foreach(
        namelist_internal
        pointer_semantics
        pointer_section
+       pointer_bounds_once
        pointer_allocation
        pointer_deallocation_errors
        pointer_dummy
