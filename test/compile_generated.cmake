@@ -116,6 +116,8 @@ foreach(
        elemental_procedure
        array_inquiry
        bit_intrinsics
+       numeric_operation_intrinsics
+       numeric_operation_derived_ownership
        real_representation_intrinsics
        character_intrinsics
        descriptor_temporary
