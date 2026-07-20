@@ -160,10 +160,12 @@ void f2c_build_statement_ir(Context *context, Unit *unit) {
             return;
         }
         for (i = 0U; i < unit->statement_count; ++i) {
-            Line *line = &context->lines.items[unit->begin + 1U + i];
+            const size_t line_index = unit->begin + 1U + i;
+            Line *line = &context->lines.items[line_index];
             Line inactive = {0};
             const Line *syntax_line = line;
-            if (!f2c_unit_line_is_active(unit, line)) {
+            if (!f2c_unit_line_is_active(unit, line) ||
+                f2c_line_in_derived_type(unit, line_index)) {
                 inactive.text = "";
                 inactive.source_name = line->source_name;
                 inactive.number = line->number;

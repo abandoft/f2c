@@ -35,6 +35,7 @@ void f2c_emit_prototypes(Context *context);
 void f2c_emit_procedure_prototype(Buffer *output, Unit *unit);
 void f2c_emit_interface_header(Context *context);
 void f2c_emit_common_blocks(Context *context);
+char *f2c_unit_static_storage_initializer(Unit *unit, const Symbol *symbol);
 void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth);
 void f2c_emit_block_scope_begin(Buffer *output, Unit *unit, size_t line, int depth);
 void f2c_emit_block_scope_end(Buffer *output, Unit *unit, size_t line, int depth);

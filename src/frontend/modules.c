@@ -351,13 +351,17 @@ static int clone_module_symbol(Unit *unit, const Symbol *source, const char *loc
     target->optional = source->optional;
     target->derived_type = source->derived_type;
     target->declaration_line = source->declaration_line;
-    target->initializer_syntax = source->initializer_syntax;
+    if (source->parameter)
+        target->initializer_syntax = source->initializer_syntax;
+    else
+        memset(&target->initializer_syntax, 0, sizeof(target->initializer_syntax));
     target->character_length_syntax = source->character_length_syntax;
     target->declaration_span = source->declaration_span;
     free(target->c_name);
     target->c_name = f2c_strdup(source->c_name);
     free(target->initializer);
-    target->initializer = source->initializer != NULL ? f2c_strdup(source->initializer) : NULL;
+    target->initializer =
+        source->parameter && source->initializer != NULL ? f2c_strdup(source->initializer) : NULL;
     free(target->character_length);
     target->character_length =
         source->character_length != NULL ? f2c_strdup(source->character_length) : NULL;
@@ -366,7 +370,8 @@ static int clone_module_symbol(Unit *unit, const Symbol *source, const char *loc
         source->derived_type_name != NULL ? f2c_strdup(source->derived_type_name) : NULL;
     free(target->c_type);
     target->c_type = source->c_type != NULL ? f2c_strdup(source->c_type) : NULL;
-    if (target->c_name == NULL || (source->initializer != NULL && target->initializer == NULL) ||
+    if (target->c_name == NULL ||
+        (source->parameter && source->initializer != NULL && target->initializer == NULL) ||
         (source->character_length != NULL && target->character_length == NULL) ||
         (source->derived_type_name != NULL && target->derived_type_name == NULL) ||
         (source->c_type != NULL && target->c_type == NULL))

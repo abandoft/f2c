@@ -56,10 +56,8 @@ int f2c_build_typed_program(Context *context) {
     for (index = 0U; index < context->modules.count; ++index) {
         context->options = &context->modules.items[index].options;
         f2c_analyze_module(context, &context->modules.items[index]);
-        if (context->result.error_count == 0U) {
-            f2c_validate_unit_expressions(context, &context->modules.items[index]);
-            context->modules.items[index].phase = F2C_UNIT_TYPED_IR;
-        }
+        if (context->result.error_count == 0U)
+            f2c_build_statement_ir(context, &context->modules.items[index]);
     }
     for (index = 0U; index < context->units.count; ++index) {
         context->options = &context->units.items[index].options;
@@ -83,7 +81,7 @@ int f2c_build_typed_program(Context *context) {
         }
     }
     if (context->result.error_count == 0U)
-        f2c_validate_common_storage(context);
+        f2c_validate_project_storage(context);
     if (context->result.error_count != 0U)
         return 0;
     context->phase = F2C_COMPILATION_TYPED_IR;

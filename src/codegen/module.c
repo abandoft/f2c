@@ -110,12 +110,16 @@ void f2c_emit_project_modules(Context *context) {
                                     : context->lines.items[module->begin].number;
             size_t dimension;
             char *initializer =
-                symbol->initializer != NULL
+                symbol->data_initializer || symbol->data_element_initializers != NULL
+                    ? f2c_unit_static_storage_initializer(module, symbol)
+                : symbol->initializer_expression != NULL
                     ? f2c_emit_typed_expression(module, symbol->initializer_expression)
                     : NULL;
-            if (symbol->initializer != NULL && initializer == NULL) {
+            if ((symbol->initializer_expression != NULL ||
+                 symbol->data_element_initializers != NULL || symbol->data_initializer) &&
+                initializer == NULL) {
                 f2c_diagnostic(context, line, 1,
-                               "typed initializer for module entity '%s' cannot be emitted",
+                               "static initializer for module entity '%s' cannot be emitted",
                                symbol->name);
                 return;
             }
@@ -151,6 +155,19 @@ void f2c_emit_project_modules(Context *context) {
                 free(length);
             } else if (symbol->rank != 0U) {
                 f2c_buffer_append(&context->output, "[");
+                if (symbol->type == TYPE_CHARACTER) {
+                    char *length = f2c_symbol_character_length(module, symbol);
+                    if (length == NULL) {
+                        free(initializer);
+                        f2c_diagnostic(context, line, 1,
+                                       "typed character length for module entity '%s' cannot be "
+                                       "emitted",
+                                       symbol->name);
+                        return;
+                    }
+                    f2c_buffer_printf(&context->output, "(size_t)(%s) * ", length);
+                    free(length);
+                }
                 for (dimension = 0U; dimension < symbol->rank; ++dimension) {
                     char *lower = f2c_emit_typed_expression(
                         module, symbol->dimensions[dimension].lower_expression);

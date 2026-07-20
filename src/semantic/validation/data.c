@@ -193,12 +193,13 @@ static int expression_has_static_c_form(const F2cExpr *expression, size_t depth)
 }
 
 static int symbol_supports_static_data(const Unit *unit, const Symbol *symbol) {
-    if (symbol == NULL || symbol->module_entity || symbol->alias_to != NULL ||
-        symbol->allocatable || symbol->pointer || symbol->procedure_pointer ||
-        symbol->type == TYPE_DERIVED)
+    if (symbol == NULL || symbol->alias_to != NULL || symbol->allocatable || symbol->pointer ||
+        symbol->procedure_pointer || symbol->type == TYPE_DERIVED)
         return 0;
     if (symbol->common_block != NULL)
         return unit != NULL && unit->kind == UNIT_BLOCK_DATA && symbol->common_block[0] != '\0';
+    if (symbol->module_entity)
+        return unit != NULL && unit->kind == UNIT_MODULE;
     return symbol->type != TYPE_CHARACTER && symbol->type != TYPE_COMPLEX &&
            symbol->type != TYPE_DOUBLE_COMPLEX;
 }
@@ -237,7 +238,7 @@ static int common_value_has_static_form(Unit *unit, const Symbol *symbol, const 
 }
 
 static int data_value_has_static_form(Unit *unit, const Symbol *symbol, const F2cExpr *value) {
-    return symbol != NULL && symbol->common_block != NULL
+    return symbol != NULL && (symbol->common_block != NULL || symbol->module_entity)
                ? common_value_has_static_form(unit, symbol, value)
                : expression_has_static_c_form(value, 0U);
 }
@@ -429,6 +430,11 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
                                      target != NULL ? &target->span : &validation->group->span, 1,
                                      "DATA target must be a definable non-dummy, non-dynamic "
                                      "variable");
+            return 0;
+        }
+        if (symbol->use_associated) {
+            f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
+                                     "DATA target cannot be a use-associated entity");
             return 0;
         }
         if (symbol->common_block != NULL && validation->unit->kind != UNIT_BLOCK_DATA) {
@@ -627,12 +633,13 @@ static void validate_group(Context *context, Unit *unit, F2cStatement *statement
                                  group->expanded_value_count, group->expanded_target_count);
         valid = 0;
     }
-    if (unit->kind == UNIT_BLOCK_DATA && valid) {
+    if ((unit->kind == UNIT_BLOCK_DATA || unit->kind == UNIT_MODULE) && valid) {
         for (index = 0U; index < group->target_count; ++index) {
             if (!data_item_has_static_initializer(&group->targets[index])) {
                 f2c_diagnostic_span_code(
                     context, F2C_DIAGNOSTIC_UNSUPPORTED, &group->span, 1,
-                    "BLOCK DATA initializer cannot be represented as portable static C17 data");
+                    "%s initializer cannot be represented as portable static C17 data",
+                    unit->kind == UNIT_BLOCK_DATA ? "BLOCK DATA" : "module DATA");
                 valid = 0;
                 break;
             }

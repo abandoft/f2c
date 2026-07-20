@@ -470,7 +470,8 @@ void f2c_emit_common_blocks(Context *context) {
                     char *initializer;
                     if (initializer_symbol == NULL)
                         continue;
-                    initializer = f2c_unit_common_initializer(initializer_unit, initializer_symbol);
+                    initializer =
+                        f2c_unit_static_storage_initializer(initializer_unit, initializer_symbol);
                     if (initializer == NULL) {
                         f2c_diagnostic_span_code(
                             context, F2C_DIAGNOSTIC_UNSUPPORTED,

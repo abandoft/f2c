@@ -50,6 +50,21 @@ static void validate_block_data_unit(Context *context, Unit *unit) {
     }
 }
 
+static void validate_module_specification_unit(Context *context, Unit *unit) {
+    size_t index;
+    if (unit == NULL || unit->kind != UNIT_MODULE)
+        return;
+    for (index = 0U; index < unit->statement_count; ++index) {
+        const F2cStatement *statement = statement_body(&unit->statements[index]);
+        if (statement == NULL || statement->kind == F2C_STMT_EMPTY ||
+            statement->kind == F2C_STMT_DECLARATION || statement->kind == F2C_STMT_DATA)
+            continue;
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &statement->span, 1,
+                                 "a MODULE specification part cannot contain executable "
+                                 "statements");
+    }
+}
+
 static void validate_common_initialization_owner(Context *context, size_t unit_index,
                                                  size_t symbol_index, Unit *unit,
                                                  const Symbol *symbol) {
@@ -214,10 +229,12 @@ static void validate_member_match(Context *context, Unit *unit, const Symbol *sy
         canonical->name);
 }
 
-void f2c_validate_common_storage(Context *context) {
+void f2c_validate_project_storage(Context *context) {
     size_t u;
     if (context == NULL)
         return;
+    for (u = 0U; u < context->modules.count; ++u)
+        validate_module_specification_unit(context, &context->modules.items[u]);
     for (u = 0U; u < context->units.count; ++u)
         validate_block_data_unit(context, &context->units.items[u]);
     for (u = 0U; u < context->units.count; ++u) {

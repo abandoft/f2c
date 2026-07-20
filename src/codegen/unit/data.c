@@ -159,7 +159,31 @@ static char *numeric_data_array_initializer(Unit *unit, const Symbol *symbol) {
     return f2c_buffer_take(&initializer);
 }
 
-char *f2c_unit_common_initializer(Unit *unit, const Symbol *symbol) {
+static char *numeric_array_constructor_initializer(Unit *unit, const Symbol *symbol) {
+    const F2cExpr *constructor = symbol->initializer_expression;
+    Buffer initializer = {0};
+    size_t element;
+    if (constructor == NULL || constructor->kind != F2C_EXPR_ARRAY_CONSTRUCTOR ||
+        constructor->child_count == 0U)
+        return NULL;
+    f2c_buffer_append(&initializer, "{");
+    for (element = 0U; element < constructor->child_count; ++element) {
+        char *value =
+            static_numeric_initializer(unit, symbol->type, constructor->children[element]);
+        if (value == NULL) {
+            free(f2c_buffer_take(&initializer));
+            return NULL;
+        }
+        if (element != 0U)
+            f2c_buffer_append(&initializer, ", ");
+        f2c_buffer_append(&initializer, value);
+        free(value);
+    }
+    f2c_buffer_append(&initializer, "}");
+    return f2c_buffer_take(&initializer);
+}
+
+char *f2c_unit_static_storage_initializer(Unit *unit, const Symbol *symbol) {
     if (unit == NULL || symbol == NULL)
         return NULL;
     if (symbol->type == TYPE_CHARACTER) {
@@ -174,6 +198,8 @@ char *f2c_unit_common_initializer(Unit *unit, const Symbol *symbol) {
     }
     if (symbol->rank != 0U && symbol->data_element_initializers != NULL)
         return numeric_data_array_initializer(unit, symbol);
+    if (symbol->rank != 0U && symbol->initializer_expression != NULL)
+        return numeric_array_constructor_initializer(unit, symbol);
     if (symbol->initializer_expression != NULL)
         return static_numeric_initializer(unit, symbol->type, symbol->initializer_expression);
     return NULL;
