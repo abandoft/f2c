@@ -46,6 +46,7 @@ int f2c_ast_is_generated_c_intrinsic(const char *name);
 const F2cExpr *f2c_ast_intrinsic_argument_value(const F2cExpr *argument);
 const F2cExpr *f2c_ast_intrinsic_argument(const F2cExpr *call, const char *keyword,
                                           size_t position);
+void f2c_ast_resolve_intrinsic_call(AstParser *parser, F2cExpr *expression);
 void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expression);
 int f2c_ast_common_expression_kind(Type result_type, const F2cExpr *left, const F2cExpr *right);
 

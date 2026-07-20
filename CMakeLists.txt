@@ -53,6 +53,7 @@ set(
     src/ast/expression.c
     src/ast/format.c
     src/ast/format.h
+    src/ast/intrinsic.c
     src/ast/interface/header.c
     src/ast/interface/header.h
     src/ast/interface/specific.c
