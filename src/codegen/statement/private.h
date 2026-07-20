@@ -24,5 +24,6 @@ int f2c_emit_mvbits_statement(Context *context, Unit *unit, const F2cStatement *
                               int depth);
 int f2c_emit_random_statement(Context *context, Unit *unit, const F2cStatement *statement,
                               int depth);
+int f2c_emit_time_statement(Context *context, Unit *unit, const F2cStatement *statement, int depth);
 
 #endif

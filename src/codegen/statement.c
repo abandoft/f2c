@@ -239,6 +239,13 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
         if (!f2c_emit_random_statement(context, unit, statement, *depth))
             f2c_diagnostic(context, source_line->number, 1,
                            "cannot lower random intrinsic invocation");
+    } else if (statement->kind == F2C_STMT_CALL &&
+               (statement->intrinsic == F2C_INTRINSIC_CPU_TIME ||
+                statement->intrinsic == F2C_INTRINSIC_DATE_AND_TIME ||
+                statement->intrinsic == F2C_INTRINSIC_SYSTEM_CLOCK)) {
+        if (!f2c_emit_time_statement(context, unit, statement, *depth))
+            f2c_diagnostic(context, source_line->number, 1,
+                           "cannot lower time intrinsic invocation");
     } else if (statement->kind == F2C_STMT_CALL) {
         if (f2c_array_emit_elemental_call(context, unit, statement, *depth)) {
             return 1;

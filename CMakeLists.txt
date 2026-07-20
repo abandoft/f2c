@@ -139,6 +139,7 @@ set(
     src/codegen/statement/select.c
     src/codegen/statement/private.h
     src/codegen/statement/random.c
+    src/codegen/statement/time.c
     src/codegen/statement/target.c
     src/codegen/statement/type_select.c
     src/codegen/statement/where.c
@@ -170,6 +171,7 @@ set(
     src/core/generated/record.c
     src/core/generated/relation.c
     src/core/generated/stream.c
+    src/core/generated/time.c
     src/core/support.c
     src/core/transpile.c
     src/frontend/analyze.c
@@ -259,6 +261,7 @@ set(
     src/semantic/validation/intrinsic/numeric.c
     src/semantic/validation/intrinsic/random.c
     src/semantic/validation/intrinsic/representation.c
+    src/semantic/validation/intrinsic/time.c
     src/semantic/validation/lifetime.c
     src/semantic/validation/private.h
     src/semantic/validation/procedure.c
@@ -522,6 +525,10 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_random_intrinsic_tests test/test_random_intrinsic.c)
     f2c_configure_test_target(f2c_random_intrinsic_tests)
     add_test(NAME random_intrinsic_semantics COMMAND f2c_random_intrinsic_tests)
+
+    add_executable(f2c_time_intrinsic_tests test/test_time_intrinsic.c)
+    f2c_configure_test_target(f2c_time_intrinsic_tests)
+    add_test(NAME time_intrinsic_semantics COMMAND f2c_time_intrinsic_tests)
 
     add_executable(
         f2c_real_representation_intrinsic_tests
