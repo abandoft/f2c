@@ -28,7 +28,7 @@
 - [x] ASan/UBSan、libFuzzer、生成结果复现、WebAssembly 构建、BLAS/LAPACK 数值验证、性能和
   发布已经拆分为独立工作流。
 - [x] 当前本地严格 AppleClang 静态 Debug、静态 Release、共享 Release 与 ASan/UBSan Debug
-  构建基线已经建立；本轮普通与 ASan/UBSan 严格 CTest 均为 39/39，架构边界检查作为独立测试运行。
+  构建基线已经建立；本轮普通与 ASan/UBSan 严格 CTest 均为 40/40，架构边界检查作为独立测试运行。
 - [x] 固定 Reference LAPACK 3.12.1 提交
   `6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca`；3,535 个 Fortran 文件和 155 个 BLAS 文件
   已有严格 C17 编译门禁。
@@ -123,7 +123,9 @@
 - [ ] 将参数、kind、字符长度、数组边界和初始化中的规格表达式全部纳入溢出安全的常量求值器，
   补齐标准允许的 inquiry/specification intrinsic。`SIZE/SHAPE/LBOUND/UBOUND` 现已建立 typed
   rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级，仍需补齐其余规格
-  intrinsic 和所有允许出现位置。
+  intrinsic 和所有允许出现位置。字符常量求值现已覆盖 `ACHAR/ADJUSTL/ADJUSTR/CHAR/IACHAR`、
+  `ICHAR/INDEX/LEN/LEN_TRIM/REPEAT/SCAN/TRIM/VERIFY`、连接、参数引用、嵌入 NUL、空串、反向搜索
+  和结果 kind 范围，并可直接生成 CHARACTER 声明初始化器。
 - [x] 移除 `f2c_emit_cached_expression` 和 `f2c_translate_expression` 原始文本降级路径；模块实体、
   派生类型组件、声明初始化、字符长度、数组边界、语句函数结果和模块常量均在语义阶段建立表达式
   AST。除表达式 parser 自身及其测试入口声明外，全部生产代码均不得调用原始文本表达式解析器；
@@ -227,7 +229,11 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   `BIT_SIZE/BTEST/IAND/IBCLR/IBITS/IBSET/IEOR/IOR/ISHFT/ISHFTC/NOT/MVBITS` 已覆盖
   `INTEGER(KIND=1/2/4/8)`、关键字参数、常量折叠、elemental 数组、符号位及完整位宽边界；
   `MVBITS` 对标量别名、重叠数组段和标量广播使用写入前快照。严格 C17、UBSan 及 gfortran
-  逐项差分已进入 CI，但其他 F90 intrinsic 尚未全部完成，因此本项保持未关闭。
+  逐项差分已进入 CI。字符 intrinsic `ACHAR/ADJUSTL/ADJUSTR/CHAR/IACHAR/ICHAR/INDEX/LEN`、
+  `LEN_TRIM/REPEAT/SCAN/TRIM/VERIFY` 现已覆盖类型化参数关联、结果 kind/长度、常量折叠、关键字
+  `BACK/KIND`、标量与 elemental 数组、空串及嵌入 NUL；生成端使用无符号字节、溢出检查和有界
+  临时存储，严格 C17、UBSan 及 gfortran 字节级差分已进入 CI。其他 F90 intrinsic 尚未全部完成，
+  因此本项保持未关闭。
 - [ ] 让 `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/TRANSPOSE/MATMUL` 等支持任意合法数组
   表达式、所有已支持 kind/rank、零大小数组和非默认下界，而不是只接受具名整数组。上述 intrinsic
   的数值、LOGICAL、COMPLEX 和 CHARACTER 输入现共用列主序数组视图与一次性临时量引擎；
@@ -349,7 +355,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 系统审计严格别名、整数溢出、移位、浮点收缩、复数、求值顺序和指针算术，保证生成代码
   不依赖未定义行为或编译器扩展。位操作 intrinsic 已统一使用固定位宽无符号表示和 `memcpy`
   位复制，规避有符号移位、移位量等于位宽及别名未定义行为，并以符号位、完整位宽、零长度和
-  重叠 `MVBITS` 的 UBSan 执行覆盖；其他生成路径仍需继续审计。
+  重叠 `MVBITS` 的 UBSan 执行覆盖；字符 intrinsic 已使用无符号字节、`size_t` 溢出检查、显式
+  长度和可复用临时存储覆盖空串、嵌入 NUL 及嵌套变换；其他生成路径仍需继续审计。
 - [ ] 对辅助函数做基于 IR 使用信息的可达性生成，控制单文件输出的体积、C 编译时间和链接重复；
   不得以引入新的独立运行时库解决该问题。
 - [ ] 为数组描述符、I/O、格式、NAMELIST、派生类型复制/终结等生成逻辑建立结构化 emitter，
