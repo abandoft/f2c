@@ -176,9 +176,9 @@ static void validate_interface_definition(Context *context, Unit *caller, const 
         if (declared->type != defined->type || declared->kind != defined->kind ||
             !same_shape_contract(declared, defined) ||
             declared->allocatable != defined->allocatable ||
-            declared->pointer != defined->pointer || declared->optional != defined->optional ||
-            declared->intent != defined->intent || declared->external != defined->external ||
-            !same_character_length(declared, defined)) {
+            declared->pointer != defined->pointer || declared->contiguous != defined->contiguous ||
+            declared->optional != defined->optional || declared->intent != defined->intent ||
+            declared->external != defined->external || !same_character_length(declared, defined)) {
             f2c_diagnostic(context, line, 1,
                            "dummy argument %zu of explicit interface '%s' is incompatible with "
                            "the project definition",
@@ -309,6 +309,7 @@ static void bind_external(Context *context, Unit *caller, Symbol *external) {
         external->external_parameter_optional[i] = dummy != NULL && dummy->optional;
         external->external_parameter_allocatable[i] = dummy != NULL && dummy->allocatable;
         external->external_parameter_pointer[i] = dummy != NULL && dummy->pointer;
+        external->external_parameter_contiguous[i] = dummy != NULL && dummy->contiguous;
         external->external_parameter_descriptor[i] = f2c_symbol_uses_descriptor(dummy);
         external->external_parameter_derived_types[i] = dummy != NULL ? dummy->derived_type : NULL;
         external->external_parameter_polymorphic[i] = dummy != NULL && dummy->polymorphic;
@@ -356,6 +357,7 @@ static int bind_internal(Context *context, Unit *definition) {
         symbol->external_parameter_optional[i] = dummy != NULL && dummy->optional;
         symbol->external_parameter_allocatable[i] = dummy != NULL && dummy->allocatable;
         symbol->external_parameter_pointer[i] = dummy != NULL && dummy->pointer;
+        symbol->external_parameter_contiguous[i] = dummy != NULL && dummy->contiguous;
         symbol->external_parameter_descriptor[i] = f2c_symbol_uses_descriptor(dummy);
         symbol->external_parameter_derived_types[i] = dummy != NULL ? dummy->derived_type : NULL;
         symbol->external_parameter_polymorphic[i] = dummy != NULL && dummy->polymorphic;

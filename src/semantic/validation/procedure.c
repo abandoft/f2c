@@ -372,6 +372,8 @@ int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const
             expected->external_parameter_allocatable[i] !=
                 actual->external_parameter_allocatable[i] ||
             expected->external_parameter_pointer[i] != actual->external_parameter_pointer[i] ||
+            expected->external_parameter_contiguous[i] !=
+                actual->external_parameter_contiguous[i] ||
             expected->external_parameter_descriptor[i] !=
                 actual->external_parameter_descriptor[i] ||
             expected->external_parameter_derived_types[i] !=
@@ -501,6 +503,8 @@ static int overriding_signatures_compatible(const F2cTypeBinding *parent,
                 actual->external_parameter_allocatable[actual_argument] ||
             expected->external_parameter_pointer[expected_argument] !=
                 actual->external_parameter_pointer[actual_argument] ||
+            expected->external_parameter_contiguous[expected_argument] !=
+                actual->external_parameter_contiguous[actual_argument] ||
             expected->external_parameter_descriptor[expected_argument] !=
                 actual->external_parameter_descriptor[actual_argument])
             return 0;

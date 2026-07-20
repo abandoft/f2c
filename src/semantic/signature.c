@@ -11,6 +11,7 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
     int *optional = NULL;
     int *allocatable = NULL;
     int *pointer = NULL;
+    int *contiguous = NULL;
     int *descriptor = NULL;
     F2cDerivedType **derived_types = NULL;
     int *polymorphic = NULL;
@@ -25,9 +26,10 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
         if (count > SIZE_MAX / sizeof(*types) || count > SIZE_MAX / sizeof(*kinds) ||
             count > SIZE_MAX / sizeof(*ranks) || count > SIZE_MAX / sizeof(*intents) ||
             count > SIZE_MAX / sizeof(*optional) || count > SIZE_MAX / sizeof(*allocatable) ||
-            count > SIZE_MAX / sizeof(*pointer) || count > SIZE_MAX / sizeof(*descriptor) ||
-            count > SIZE_MAX / sizeof(*derived_types) || count > SIZE_MAX / sizeof(*polymorphic) ||
-            count > SIZE_MAX / sizeof(*procedures) || count > SIZE_MAX / sizeof(*constant))
+            count > SIZE_MAX / sizeof(*pointer) || count > SIZE_MAX / sizeof(*contiguous) ||
+            count > SIZE_MAX / sizeof(*descriptor) || count > SIZE_MAX / sizeof(*derived_types) ||
+            count > SIZE_MAX / sizeof(*polymorphic) || count > SIZE_MAX / sizeof(*procedures) ||
+            count > SIZE_MAX / sizeof(*constant))
             return 0;
         types = (Type *)calloc(count, sizeof(*types));
         kinds = (int *)calloc(count, sizeof(*kinds));
@@ -36,14 +38,16 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
         optional = (int *)calloc(count, sizeof(*optional));
         allocatable = (int *)calloc(count, sizeof(*allocatable));
         pointer = (int *)calloc(count, sizeof(*pointer));
+        contiguous = (int *)calloc(count, sizeof(*contiguous));
         descriptor = (int *)calloc(count, sizeof(*descriptor));
         derived_types = (F2cDerivedType **)calloc(count, sizeof(*derived_types));
         polymorphic = (int *)calloc(count, sizeof(*polymorphic));
         procedures = (Symbol **)calloc(count, sizeof(*procedures));
         constant = (int *)calloc(count, sizeof(*constant));
         if (types == NULL || kinds == NULL || ranks == NULL || intents == NULL ||
-            optional == NULL || allocatable == NULL || pointer == NULL || descriptor == NULL ||
-            derived_types == NULL || polymorphic == NULL || procedures == NULL || constant == NULL)
+            optional == NULL || allocatable == NULL || pointer == NULL || contiguous == NULL ||
+            descriptor == NULL || derived_types == NULL || polymorphic == NULL ||
+            procedures == NULL || constant == NULL)
             goto failed;
         copy_count =
             symbol->external_parameter_count < count ? symbol->external_parameter_count : count;
@@ -56,6 +60,8 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
             memcpy(allocatable, symbol->external_parameter_allocatable,
                    copy_count * sizeof(*allocatable));
             memcpy(pointer, symbol->external_parameter_pointer, copy_count * sizeof(*pointer));
+            memcpy(contiguous, symbol->external_parameter_contiguous,
+                   copy_count * sizeof(*contiguous));
             memcpy(descriptor, symbol->external_parameter_descriptor,
                    copy_count * sizeof(*descriptor));
             memcpy(derived_types, symbol->external_parameter_derived_types,
@@ -74,6 +80,7 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
     free(symbol->external_parameter_optional);
     free(symbol->external_parameter_allocatable);
     free(symbol->external_parameter_pointer);
+    free(symbol->external_parameter_contiguous);
     free(symbol->external_parameter_descriptor);
     free(symbol->external_parameter_derived_types);
     free(symbol->external_parameter_polymorphic);
@@ -86,6 +93,7 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
     symbol->external_parameter_optional = optional;
     symbol->external_parameter_allocatable = allocatable;
     symbol->external_parameter_pointer = pointer;
+    symbol->external_parameter_contiguous = contiguous;
     symbol->external_parameter_descriptor = descriptor;
     symbol->external_parameter_derived_types = derived_types;
     symbol->external_parameter_polymorphic = polymorphic;
@@ -104,6 +112,7 @@ failed:
     free(optional);
     free(allocatable);
     free(pointer);
+    free(contiguous);
     free(descriptor);
     free(derived_types);
     free(polymorphic);

@@ -96,6 +96,7 @@ static int copy_signature_to_symbol(Context *context, Unit *host, Unit *procedur
         external->external_parameter_optional[i] = dummy != NULL && dummy->optional;
         external->external_parameter_allocatable[i] = dummy != NULL && dummy->allocatable;
         external->external_parameter_pointer[i] = dummy != NULL && dummy->pointer;
+        external->external_parameter_contiguous[i] = dummy != NULL && dummy->contiguous;
         external->external_parameter_descriptor[i] = f2c_symbol_uses_descriptor(dummy);
         external->external_parameter_derived_types[i] = dummy != NULL ? dummy->derived_type : NULL;
         external->external_parameter_polymorphic[i] = dummy != NULL && dummy->polymorphic;

@@ -341,6 +341,7 @@ static int clone_module_symbol(Unit *unit, const Symbol *source, const char *loc
     target->saved = !source->external;
     target->allocatable = source->allocatable;
     target->pointer = source->pointer;
+    target->contiguous = source->contiguous;
     target->procedure_pointer = source->procedure_pointer;
     target->polymorphic = source->polymorphic;
     target->target = source->target;
@@ -411,6 +412,8 @@ static int clone_module_symbol(Unit *unit, const Symbol *source, const char *loc
             source->external_parameter_allocatable[parameter];
         target->external_parameter_pointer[parameter] =
             source->external_parameter_pointer[parameter];
+        target->external_parameter_contiguous[parameter] =
+            source->external_parameter_contiguous[parameter];
         target->external_parameter_descriptor[parameter] =
             source->external_parameter_descriptor[parameter];
         target->external_parameter_derived_types[parameter] =
@@ -501,6 +504,7 @@ static int import_module_procedure(Unit *unit, Unit *procedure, const char *loca
         symbol->external_parameter_optional[i] = dummy != NULL && dummy->optional;
         symbol->external_parameter_allocatable[i] = dummy != NULL && dummy->allocatable;
         symbol->external_parameter_pointer[i] = dummy != NULL && dummy->pointer;
+        symbol->external_parameter_contiguous[i] = dummy != NULL && dummy->contiguous;
         symbol->external_parameter_descriptor[i] = f2c_symbol_uses_descriptor(dummy);
         symbol->external_parameter_derived_types[i] = dummy != NULL ? dummy->derived_type : NULL;
         symbol->external_parameter_polymorphic[i] = dummy != NULL && dummy->polymorphic;
