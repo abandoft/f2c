@@ -7,6 +7,7 @@
 - Added on-demand portable C17 lowering that depends only on libc/libm and introduces no external runtime.
 - Corrected resolution of explicitly `EXTERNAL` procedures whose names match intrinsics so user procedures always take precedence.
 - Propagated the libm link contract through CMake on non-MSVC targets and explicitly initialized constant-evaluation state, improving build portability for static consumers, Linux, WebAssembly, and MSVC.
+- Standardized canonical IEEE hexadecimal real constants, eliminating C-library formatting differences from generated code.
 
 ## 1.19.0
 
