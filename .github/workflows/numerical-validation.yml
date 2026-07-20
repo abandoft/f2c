@@ -52,6 +52,8 @@ jobs:
         run: sh test/alternate_return_differential.sh build/numerical/f2c
       - name: Differential-test pointer association
         run: sh test/pointer_association_differential.sh build/numerical/f2c
+      - name: Differential-test pointer allocation and deallocation
+        run: sh test/pointer_allocation_differential.sh build/numerical/f2c
       - name: Differential-test COMMON storage semantics
         run: sh test/common_storage_differential.sh build/numerical/f2c
       - name: Differential-test EQUIVALENCE storage semantics
