@@ -100,28 +100,46 @@ static void test_common_equivalence_static_data(void) {
                                  "  data extension / 31, 37 /\n"
                                  "end block data initialize_common_equivalence\n";
     static const char multiple_views[] = "program read_multiple_views\n"
-                                         "  integer :: values(3)\n"
+                                         "  integer :: values(4)\n"
                                          "  common /state/ values\n"
                                          "end program read_multiple_views\n"
                                          "block data initialize_multiple_views\n"
-                                         "  integer :: shared(2), extension(2)\n"
-                                         "  common /state/ shared\n"
+                                         "  integer :: prefix, shared(2), extension(2)\n"
+                                         "  common /state/ prefix, shared\n"
                                          "  equivalence (shared(2), extension(1))\n"
-                                         "  data shared(1) / 11 /, extension / 31, 37 /\n"
+                                         "  data prefix / 11 /, extension / 31, 37 /\n"
                                          "end block data initialize_multiple_views\n";
+    static const char overlapping_views[] = "program read_overlapping_views\n"
+                                            "  integer :: values(3)\n"
+                                            "  common /state/ values\n"
+                                            "end program read_overlapping_views\n"
+                                            "block data initialize_overlapping_views\n"
+                                            "  integer :: shared(2), extension(2)\n"
+                                            "  common /state/ shared\n"
+                                            "  equivalence (shared(2), extension(1))\n"
+                                            "  data shared(2) / 19 /, extension(1) / 31 /\n"
+                                            "end block data initialize_overlapping_views\n";
     F2cResult result = transpile("common_equivalence_data.f90", source);
     expect(result.error_count == 0U && result.code != NULL,
            "BLOCK DATA accepts one COMMON-associated EQUIVALENCE initializer view");
     expect(result.code != NULL &&
                strstr(result.code, "F2C_COMMON_INITIALIZED_STORAGE union") != NULL &&
-               strstr(result.code, " = { .equivalence_") != NULL &&
-               strstr(result.code, ".value = {INT64_C(31), INT64_C(37)}") != NULL,
+               strstr(result.code, " = { .initializer_") != NULL &&
+               strstr(result.code, " = {INT64_C(31), INT64_C(37)}") != NULL,
            "COMMON-associated EQUIVALENCE DATA becomes a static typed union initializer");
     f2c_result_free(&result);
 
-    expect_failure("multiple_common_equivalence_views.f90", multiple_views,
-                   "initializers require more than one overlapping C17 storage view",
-                   "COMMON DATA rejects ambiguous initialization through multiple union views");
+    result = transpile("multiple_common_equivalence_views.f90", multiple_views);
+    expect(result.error_count == 0U && result.code != NULL,
+           "BLOCK DATA accepts non-overlapping initializers from multiple COMMON views");
+    expect(result.code != NULL && strstr(result.code, "COMMON initializer field offset") != NULL &&
+               strstr(result.code, ".initializer_") != NULL,
+           "multiple COMMON DATA views lower through one offset-checked initializer view");
+    f2c_result_free(&result);
+
+    expect_failure("overlapping_common_equivalence_views.f90", overlapping_views,
+                   "DATA initializers for 'shared' and 'extension' overlap in storage",
+                   "COMMON DATA rejects truly overlapping initialization regions");
 }
 
 static void test_data_diagnostics(void) {
