@@ -19,10 +19,32 @@ static F2cExpr *parse_range(Unit *unit, F2cTokenRange range) {
                : NULL;
 }
 
+static F2cExpr *parse_alternate_return(F2cTokenRange range) {
+    char *label = NULL;
+    F2cExpr *argument;
+    if (range.count == 2U)
+        label = f2c_statement_copy_label_token(&range.tokens[1]);
+    argument = f2c_expr_new(F2C_EXPR_ALTERNATE_RETURN, TYPE_UNKNOWN, label,
+                            label != NULL ? strlen(label) : 0U);
+    free(label);
+    if (argument == NULL)
+        return NULL;
+    argument->span = range_span(range);
+    argument->source = f2c_token_range_text(range);
+    if (argument->source == NULL) {
+        f2c_expr_free(argument);
+        return NULL;
+    }
+    return argument;
+}
+
 static F2cExpr *parse_actual(Unit *unit, F2cTokenRange range) {
     const size_t equals = f2c_token_range_find_top_level(range, 0U, F2C_TOKEN_OPERATOR, "=");
     F2cExpr *value;
     F2cExpr *argument;
+    if (range.count != 0U && range.tokens[0].kind == F2C_TOKEN_OPERATOR &&
+        f2c_token_equals(&range.tokens[0], "*"))
+        return parse_alternate_return(range);
     if (equals == SIZE_MAX)
         return parse_range(unit, range);
     if (equals != 1U || range.tokens[0].kind != F2C_TOKEN_IDENTIFIER || equals + 1U == range.count)
