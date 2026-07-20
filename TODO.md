@@ -254,8 +254,10 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   `EXPONENT/FRACTION/NEAREST/RRSPACING/SCALE/SET_EXPONENT/SPACING` 已覆盖类型化参数关联、
   elemental rank/shape、binary32/binary64 结果 kind、常量折叠和边界语义；运行时降级仅使用 libc/libm，
   对超出 C `int` 范围的整数指数执行显式保护，并由严格 C17、ASan/UBSan 与原生 Fortran 逐值差分
-  验证。显式 `EXTERNAL` 的同名过程优先于内建函数。其他 F90 intrinsic 尚未全部完成，因此本项保持
-  未关闭。
+  验证。`RANDOM_NUMBER` 与 `RANDOM_SEED` 已按 intrinsic subroutine 建模，覆盖 REAL 标量、任意 rank
+  数组及非连续段、`SIZE/PUT/GET`、无参重置、种子状态往返和线程局部状态；数组实参使用统一
+  描述符临时量及写回路径，严格 C17、ASan/UBSan 与原生 Fortran 属性差分已进入数值验证 CI。
+  显式 `EXTERNAL` 的同名过程优先于内建函数。其他 F90 intrinsic 尚未全部完成，因此本项保持未关闭。
 - [ ] 让 `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/TRANSPOSE/MATMUL` 等支持任意合法数组
   表达式、所有已支持 kind/rank、零大小数组和非默认下界，而不是只接受具名整数组。上述 intrinsic
   的数值、LOGICAL、COMPLEX 和 CHARACTER 输入现共用列主序数组视图与一次性临时量引擎；
