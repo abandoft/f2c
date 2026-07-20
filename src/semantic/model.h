@@ -100,6 +100,9 @@ struct Symbol {
     int64_t alias_offset;
     char *common_block;
     size_t common_index;
+    uint64_t common_offset;
+    uint64_t common_size;
+    uint64_t common_alignment;
     F2cSourceSpan common_span;
     size_t declaration_line;
     F2cSourceSpan declaration_span;

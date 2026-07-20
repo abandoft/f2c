@@ -89,6 +89,34 @@ static void append_character_constant(Buffer *output, unsigned char value) {
         f2c_buffer_printf(output, "0x%02X", (unsigned int)value);
 }
 
+static char *fixed_character_initializer(Unit *unit, const Symbol *symbol,
+                                         const F2cExpr *expression) {
+    Buffer initializer = {0};
+    int64_t declared_length;
+    char *value = NULL;
+    size_t value_length = 0U;
+    size_t offset;
+    if (symbol->character_length_expression == NULL ||
+        !f2c_evaluate_integer_constant(unit, symbol->character_length_expression,
+                                       &declared_length) ||
+        declared_length <= 0 || (uint64_t)declared_length > SIZE_MAX)
+        return NULL;
+    if (!f2c_evaluate_character_constant(unit, expression, &value, &value_length)) {
+        free(value);
+        return NULL;
+    }
+    f2c_buffer_append(&initializer, "{");
+    for (offset = 0U; offset < (size_t)declared_length; ++offset) {
+        if (offset != 0U)
+            f2c_buffer_append(&initializer, ", ");
+        append_character_constant(&initializer, offset < value_length ? (unsigned char)value[offset]
+                                                                      : (unsigned char)' ');
+    }
+    f2c_buffer_append(&initializer, "}");
+    free(value);
+    return f2c_buffer_take(&initializer);
+}
+
 static char *character_data_array_initializer(Unit *unit, const Symbol *symbol) {
     Buffer initializer = {0};
     int64_t declared_length;
@@ -190,6 +218,8 @@ char *f2c_unit_static_storage_initializer(Unit *unit, const Symbol *symbol) {
         if (symbol->rank != 0U && symbol->data_element_initializers != NULL)
             return character_data_array_initializer(unit, symbol);
         if (symbol->initializer_expression != NULL) {
+            if (symbol->common_block != NULL)
+                return fixed_character_initializer(unit, symbol, symbol->initializer_expression);
             int supported = 0;
             char *initializer = f2c_character_declaration_initializer(unit, symbol, &supported);
             return supported ? initializer : NULL;

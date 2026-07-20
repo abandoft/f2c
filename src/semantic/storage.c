@@ -1,6 +1,8 @@
 #include "semantic/semantic.h"
 
+#include <limits.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 static const char *display_block_name(const char *block) {
@@ -152,81 +154,211 @@ static int common_character_length(Unit *unit, const Symbol *symbol, int64_t *le
            *length >= 0;
 }
 
-static const Symbol *find_previous_member(const Context *context, size_t unit_index,
-                                          size_t symbol_index, const char *block,
-                                          size_t common_index, Unit **owner) {
-    size_t u;
-    for (u = 0U; u <= unit_index; ++u) {
-        Unit *unit = &context->units.items[u];
-        const size_t limit = u == unit_index ? symbol_index : unit->symbol_count;
-        size_t s;
-        for (s = 0U; s < limit; ++s) {
-            const Symbol *candidate = &unit->symbols[s];
-            if (candidate->common_block != NULL && candidate->common_index == common_index &&
-                strcmp(candidate->common_block, block) == 0) {
-                *owner = unit;
-                return candidate;
-            }
-        }
+static int resolved_kind(const Symbol *symbol) {
+    return symbol->kind > 0 ? symbol->kind : f2c_default_kind(symbol->type);
+}
+
+static int common_element_layout(Unit *unit, const Symbol *symbol, uint64_t *size,
+                                 uint64_t *alignment) {
+    uint64_t character_length;
+    int64_t signed_character_length;
+    const int kind = resolved_kind(symbol);
+    switch (symbol->type) {
+    case TYPE_INTEGER:
+    case TYPE_LOGICAL:
+    case TYPE_REAL:
+    case TYPE_DOUBLE:
+        if (kind != 1 && kind != 2 && kind != 4 && kind != 8 && kind != 16)
+            return 0;
+        *size = (uint64_t)kind;
+        *alignment = kind > 8 ? UINT64_C(16) : (uint64_t)kind;
+        return 1;
+    case TYPE_COMPLEX:
+    case TYPE_DOUBLE_COMPLEX:
+        if (kind != 4 && kind != 8 && kind != 16)
+            return 0;
+        *size = (uint64_t)kind * UINT64_C(2);
+        *alignment = kind > 8 ? UINT64_C(16) : (uint64_t)kind;
+        return 1;
+    case TYPE_CHARACTER:
+        if ((kind != 1 && kind != 4) ||
+            !common_character_length(unit, symbol, &signed_character_length) ||
+            signed_character_length <= 0)
+            return 0;
+        character_length = (uint64_t)signed_character_length;
+        if (!checked_multiply(character_length, (uint64_t)kind, size))
+            return 0;
+        *alignment = (uint64_t)kind;
+        return 1;
+    case TYPE_DERIVED:
+    case TYPE_UNKNOWN:
+    default:
+        return 0;
     }
-    return NULL;
 }
 
-static int derived_storage_compatible(const Symbol *left, const Symbol *right) {
-    if (left->type != TYPE_DERIVED)
-        return 1;
-    if (left->derived_type == right->derived_type)
-        return 1;
-    return left->c_type != NULL && right->c_type != NULL &&
-           strcmp(left->c_type, right->c_type) == 0;
+static int common_symbol_layout(Unit *unit, const Symbol *symbol, uint64_t *size,
+                                uint64_t *alignment) {
+    uint64_t element_size;
+    uint64_t element_count;
+    if (!common_element_layout(unit, symbol, &element_size, alignment) ||
+        !common_element_count(unit, symbol, &element_count) || element_count == 0U)
+        return 0;
+    return checked_multiply(element_size, element_count, size);
 }
 
-static void validate_member_contract(Context *context, Unit *unit, const Symbol *symbol) {
+static int validate_member_contract(Context *context, Unit *unit, const Symbol *symbol) {
+    uint64_t size;
+    uint64_t alignment;
+    int valid = 1;
     if (symbol->argument || symbol->parameter || symbol->external || symbol->allocatable ||
         symbol->pointer || symbol->automatic_character || symbol->deferred_character) {
         f2c_diagnostic_span_code(
             context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
             "COMMON entity '%s' must have static non-dummy, non-parameter storage", symbol->name);
+        valid = 0;
     }
     if (symbol->rank != 0U) {
         uint64_t count;
-        if (!common_element_count(unit, symbol, &count))
-            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
-                                     "COMMON array '%s' requires constant explicit shape",
-                                     symbol->name);
+        if (!common_element_count(unit, symbol, &count) || count == 0U) {
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
+                "COMMON array '%s' requires a nonempty constant explicit shape", symbol->name);
+            valid = 0;
+        }
     }
     if (symbol->type == TYPE_CHARACTER) {
         int64_t length;
-        if (!common_character_length(unit, symbol, &length))
-            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
-                                     "COMMON CHARACTER entity '%s' requires constant length",
-                                     symbol->name);
+        if (!common_character_length(unit, symbol, &length) || length <= 0) {
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
+                "COMMON CHARACTER entity '%s' requires positive constant length", symbol->name);
+            valid = 0;
+        }
     }
+    if (valid && !common_symbol_layout(unit, symbol, &size, &alignment)) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &symbol->common_span, 1,
+                                 "COMMON entity '%s' has no portable fixed C17 storage layout",
+                                 symbol->name);
+        valid = 0;
+    }
+    return valid;
 }
 
-static void validate_member_match(Context *context, Unit *unit, const Symbol *symbol,
-                                  Unit *canonical_unit, const Symbol *canonical) {
-    uint64_t count;
-    uint64_t canonical_count;
-    int64_t length;
-    int64_t canonical_length;
-    const int shape_known = common_element_count(unit, symbol, &count);
-    const int canonical_shape_known =
-        common_element_count(canonical_unit, canonical, &canonical_count);
-    const int length_known = common_character_length(unit, symbol, &length);
-    const int canonical_length_known =
-        common_character_length(canonical_unit, canonical, &canonical_length);
-    if (symbol->type == canonical->type && symbol->kind == canonical->kind &&
-        symbol->rank == canonical->rank && shape_known && canonical_shape_known &&
-        count == canonical_count && length_known && canonical_length_known &&
-        length == canonical_length && derived_storage_compatible(symbol, canonical))
-        return;
-    f2c_diagnostic_span_code(
-        context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
-        "COMMON block '%s' member %zu ('%s') is storage-incompatible with '%s' in another "
-        "program unit",
-        display_block_name(symbol->common_block), symbol->common_index + 1U, symbol->name,
-        canonical->name);
+static Symbol *common_member(Unit *unit, const char *block, size_t member_index) {
+    size_t symbol_index;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        Symbol *symbol = &unit->symbols[symbol_index];
+        if (symbol->common_block != NULL && symbol->common_index == member_index &&
+            strcmp(symbol->common_block, block) == 0)
+            return symbol;
+    }
+    return NULL;
+}
+
+static int checked_align(uint64_t value, uint64_t alignment, uint64_t *result) {
+    const uint64_t remainder = alignment != 0U ? value % alignment : 0U;
+    const uint64_t padding = remainder != 0U ? alignment - remainder : 0U;
+    if (value > UINT64_MAX - padding)
+        return 0;
+    *result = value + padding;
+    return 1;
+}
+
+static int common_block_layout(Context *context, Unit *unit, const char *block, uint64_t *extent) {
+    uint64_t cursor = 0U;
+    uint64_t maximum_alignment = 1U;
+    size_t member_index = 0U;
+    Symbol *symbol;
+    int valid = 1;
+    while ((symbol = common_member(unit, block, member_index)) != NULL) {
+        uint64_t size = 0U;
+        uint64_t alignment = 1U;
+        if (!validate_member_contract(context, unit, symbol) ||
+            !common_symbol_layout(unit, symbol, &size, &alignment) ||
+            !checked_align(cursor, alignment, &cursor) || size > UINT64_MAX - cursor) {
+            if (size > UINT64_MAX - cursor)
+                f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT,
+                                         &symbol->common_span, 1,
+                                         "COMMON block '%s' exceeds the supported storage size",
+                                         display_block_name(block));
+            valid = 0;
+        } else {
+            symbol->common_offset = cursor;
+            symbol->common_size = size;
+            symbol->common_alignment = alignment;
+            cursor += size;
+            if (alignment > maximum_alignment)
+                maximum_alignment = alignment;
+        }
+        ++member_index;
+    }
+    if (!checked_align(cursor, maximum_alignment, extent)) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, &unit->header_span, 1,
+                                 "COMMON block '%s' exceeds the supported storage size",
+                                 display_block_name(block));
+        return 0;
+    }
+    return valid;
+}
+
+static Symbol *first_common_member(Unit *unit, const char *block) {
+    return common_member(unit, block, 0U);
+}
+
+static int block_seen_earlier_in_unit(const Unit *unit, size_t symbol_index, const char *block) {
+    size_t index;
+    for (index = 0U; index < symbol_index; ++index)
+        if (unit->symbols[index].common_block != NULL &&
+            strcmp(unit->symbols[index].common_block, block) == 0)
+            return 1;
+    return 0;
+}
+
+static int unit_common_extent(Unit *unit, const char *block, uint64_t *extent) {
+    uint64_t maximum_alignment = 1U;
+    uint64_t end = 0U;
+    size_t index;
+    for (index = 0U; index < unit->symbol_count; ++index) {
+        const Symbol *symbol = &unit->symbols[index];
+        uint64_t candidate;
+        if (symbol->common_block == NULL || strcmp(symbol->common_block, block) != 0)
+            continue;
+        if (symbol->common_size > UINT64_MAX - symbol->common_offset)
+            return 0;
+        candidate = symbol->common_offset + symbol->common_size;
+        if (candidate > end)
+            end = candidate;
+        if (symbol->common_alignment > maximum_alignment)
+            maximum_alignment = symbol->common_alignment;
+    }
+    return checked_align(end, maximum_alignment, extent);
+}
+
+static Unit *previous_common_owner(Context *context, size_t unit_index, const char *block,
+                                   uint64_t *extent) {
+    size_t index;
+    for (index = 0U; index < unit_index; ++index) {
+        Unit *unit = &context->units.items[index];
+        if (first_common_member(unit, block) != NULL && unit_common_extent(unit, block, extent))
+            return unit;
+    }
+    return NULL;
+}
+
+static void assign_common_c_name(Context *context, size_t unit_index, Symbol *symbol) {
+    Buffer name = {0};
+    if (symbol->common_block[0] == '\0')
+        f2c_buffer_printf(&name, "f2c_blank_common.view_%zu.field_%zu", unit_index,
+                          symbol->common_index);
+    else
+        f2c_buffer_printf(&name, "f2c_common_%s.view_%zu.field_%zu", symbol->common_block,
+                          unit_index, symbol->common_index);
+    free(symbol->c_name);
+    symbol->c_name = f2c_buffer_take(&name);
+    if (symbol->c_name == NULL)
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &symbol->common_span, 1,
+                                 "out of memory naming COMMON entity '%s'", symbol->name);
 }
 
 void f2c_validate_project_storage(Context *context) {
@@ -241,17 +373,33 @@ void f2c_validate_project_storage(Context *context) {
         Unit *unit = &context->units.items[u];
         size_t s;
         for (s = 0U; s < unit->symbol_count; ++s) {
-            const Symbol *symbol = &unit->symbols[s];
-            const Symbol *canonical;
-            Unit *canonical_unit = NULL;
+            Symbol *symbol = &unit->symbols[s];
+            uint64_t extent;
+            uint64_t canonical_extent;
+            Unit *canonical_unit;
             if (symbol->common_block == NULL)
                 continue;
             validate_common_initialization_owner(context, u, s, unit, symbol);
-            validate_member_contract(context, unit, symbol);
-            canonical = find_previous_member(context, u, s, symbol->common_block,
-                                             symbol->common_index, &canonical_unit);
-            if (canonical != NULL)
-                validate_member_match(context, unit, symbol, canonical_unit, canonical);
+            if (block_seen_earlier_in_unit(unit, s, symbol->common_block))
+                continue;
+            if (!common_block_layout(context, unit, symbol->common_block, &extent))
+                continue;
+            canonical_unit =
+                previous_common_owner(context, u, symbol->common_block, &canonical_extent);
+            if (symbol->common_block[0] != '\0' && canonical_unit != NULL &&
+                canonical_extent != extent) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
+                    "COMMON block '%s' has %llu storage bytes but an earlier program unit has "
+                    "%llu",
+                    display_block_name(symbol->common_block), (unsigned long long)extent,
+                    (unsigned long long)canonical_extent);
+            }
+        }
+        for (s = 0U; s < unit->symbol_count; ++s) {
+            Symbol *symbol = &unit->symbols[s];
+            if (symbol->common_block != NULL)
+                assign_common_c_name(context, u, symbol);
         }
     }
 }

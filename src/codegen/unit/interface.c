@@ -314,36 +314,13 @@ static void append_common_storage_name(Buffer *output, const char *block) {
         f2c_buffer_printf(output, "f2c_common_%s", block);
 }
 
-static size_t common_member_count(const Context *context, const char *block) {
-    size_t count = 0U;
-    size_t unit_index;
-    for (unit_index = 0U; unit_index < context->units.count; ++unit_index) {
-        const Unit *unit = &context->units.items[unit_index];
-        size_t symbol_index;
-        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
-            const Symbol *candidate = &unit->symbols[symbol_index];
-            if (candidate->common_block != NULL && strcmp(candidate->common_block, block) == 0 &&
-                candidate->common_index + 1U > count)
-                count = candidate->common_index + 1U;
-        }
-    }
-    return count;
-}
-
-static Symbol *find_common_member(Context *context, const char *block, size_t member_index,
-                                  Unit **owner) {
-    size_t unit_index;
-    for (unit_index = 0U; unit_index < context->units.count; ++unit_index) {
-        Unit *unit = &context->units.items[unit_index];
-        size_t symbol_index;
-        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
-            Symbol *candidate = &unit->symbols[symbol_index];
-            if (candidate->common_block != NULL && strcmp(candidate->common_block, block) == 0 &&
-                candidate->common_index == member_index) {
-                *owner = unit;
-                return candidate;
-            }
-        }
+static Symbol *find_common_member(Unit *unit, const char *block, size_t member_index) {
+    size_t symbol_index;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        Symbol *candidate = &unit->symbols[symbol_index];
+        if (candidate->common_block != NULL && candidate->common_index == member_index &&
+            strcmp(candidate->common_block, block) == 0)
+            return candidate;
     }
     return NULL;
 }
@@ -354,53 +331,126 @@ static int common_symbol_has_initializer(const Symbol *symbol) {
             symbol->data_initializer);
 }
 
-static Symbol *find_common_initializer(Context *context, const char *block, size_t member_index,
-                                       Unit **owner) {
+static int unit_has_common_block(const Unit *unit, const char *block) {
+    size_t symbol_index;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index)
+        if (unit->symbols[symbol_index].common_block != NULL &&
+            strcmp(unit->symbols[symbol_index].common_block, block) == 0)
+            return 1;
+    return 0;
+}
+
+static Unit *find_common_initializer_owner(Context *context, const char *block,
+                                           size_t *owner_index) {
     size_t unit_index;
     for (unit_index = 0U; unit_index < context->units.count; ++unit_index) {
         Unit *unit = &context->units.items[unit_index];
         size_t symbol_index;
         for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
             Symbol *candidate = &unit->symbols[symbol_index];
-            if (candidate->common_block != NULL && candidate->common_index == member_index &&
-                strcmp(candidate->common_block, block) == 0 &&
+            if (candidate->common_block != NULL && strcmp(candidate->common_block, block) == 0 &&
                 common_symbol_has_initializer(candidate)) {
-                *owner = unit;
-                return candidate;
+                *owner_index = unit_index;
+                return unit;
             }
         }
     }
     return NULL;
 }
 
-static int common_block_has_initializer(Context *context, const char *block) {
-    size_t unit_index;
-    for (unit_index = 0U; unit_index < context->units.count; ++unit_index) {
-        const Unit *unit = &context->units.items[unit_index];
-        size_t symbol_index;
-        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
-            const Symbol *symbol = &unit->symbols[symbol_index];
-            if (symbol->common_block != NULL && strcmp(symbol->common_block, block) == 0 &&
-                common_symbol_has_initializer(symbol))
-                return 1;
-        }
+static void append_common_view_type_name(Buffer *output, const char *block, size_t unit_index) {
+    if (block[0] == '\0')
+        f2c_buffer_printf(output, "f2c_blank_common_view_%zu", unit_index);
+    else
+        f2c_buffer_printf(output, "f2c_common_%s_view_%zu", block, unit_index);
+}
+
+static uint64_t common_view_extent(const Unit *unit, const char *block) {
+    uint64_t extent = 0U;
+    uint64_t maximum_alignment = 1U;
+    size_t symbol_index;
+    for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+        const Symbol *symbol = &unit->symbols[symbol_index];
+        uint64_t end;
+        if (symbol->common_block == NULL || strcmp(symbol->common_block, block) != 0 ||
+            symbol->common_size > UINT64_MAX - symbol->common_offset)
+            continue;
+        end = symbol->common_offset + symbol->common_size;
+        if (end > extent)
+            extent = end;
+        if (symbol->common_alignment > maximum_alignment)
+            maximum_alignment = symbol->common_alignment;
     }
-    return 0;
+    if (maximum_alignment != 0U && extent % maximum_alignment != 0U)
+        extent += maximum_alignment - extent % maximum_alignment;
+    return extent;
+}
+
+static void emit_common_field(Buffer *output, Unit *unit, const Symbol *member) {
+    f2c_buffer_printf(output, "    _Alignas(%llu) %s field_%zu",
+                      (unsigned long long)member->common_alignment, f2c_symbol_c_type(member),
+                      member->common_index);
+    if (member->type == TYPE_CHARACTER) {
+        const uint64_t code_unit_size = (uint64_t)(member->kind > 0 ? member->kind : 1);
+        f2c_buffer_printf(output, "[%llu]",
+                          (unsigned long long)(member->common_size / code_unit_size));
+    } else if (member->rank != 0U) {
+        size_t dimension;
+        f2c_buffer_append(output, "[F2C_MAX(1, ");
+        for (dimension = 0U; dimension < member->rank; ++dimension) {
+            char *lower =
+                f2c_emit_typed_expression(unit, member->dimensions[dimension].lower_expression);
+            char *upper =
+                f2c_emit_typed_expression(unit, member->dimensions[dimension].upper_expression);
+            f2c_buffer_printf(output, "%s((%s) - (%s) + 1)", dimension == 0U ? "" : " * ", upper,
+                              lower);
+            free(lower);
+            free(upper);
+        }
+        f2c_buffer_append(output, ")]");
+    }
+    f2c_buffer_append(output, ";\n");
+}
+
+static void emit_common_view_definition(Context *context, Unit *unit, size_t unit_index,
+                                        const char *block) {
+    size_t member_index = 0U;
+    Symbol *member;
+    f2c_buffer_append(&context->output, "struct ");
+    append_common_view_type_name(&context->output, block, unit_index);
+    f2c_buffer_append(&context->output, " {\n");
+    while ((member = find_common_member(unit, block, member_index)) != NULL) {
+        emit_common_field(&context->output, unit, member);
+        ++member_index;
+    }
+    f2c_buffer_append(&context->output, "};\n");
+    member_index = 0U;
+    while ((member = find_common_member(unit, block, member_index)) != NULL) {
+        f2c_buffer_append(&context->output, "_Static_assert(offsetof(struct ");
+        append_common_view_type_name(&context->output, block, unit_index);
+        f2c_buffer_printf(&context->output, ", field_%zu) == %lluU, \"COMMON field offset\");\n",
+                          member_index, (unsigned long long)member->common_offset);
+        ++member_index;
+    }
+    f2c_buffer_append(&context->output, "_Static_assert(sizeof(struct ");
+    append_common_view_type_name(&context->output, block, unit_index);
+    f2c_buffer_printf(&context->output, ") == %lluU, \"COMMON view size\");\n",
+                      (unsigned long long)common_view_extent(unit, block));
 }
 
 void f2c_emit_common_blocks(Context *context) {
-    size_t u;
+    size_t unit_index;
     int emitted_macro = 0;
-    for (u = 0U; u < context->units.count; ++u) {
-        Unit *unit = &context->units.items[u];
-        size_t s;
-        for (s = 0U; s < unit->symbol_count; ++s) {
-            Symbol *first = &unit->symbols[s];
-            size_t member_count;
-            size_t member_index;
-            int initialized;
+    for (unit_index = 0U; unit_index < context->units.count; ++unit_index) {
+        Unit *unit = &context->units.items[unit_index];
+        size_t symbol_index;
+        for (symbol_index = 0U; symbol_index < unit->symbol_count; ++symbol_index) {
+            Symbol *first = &unit->symbols[symbol_index];
+            size_t view_index;
+            size_t initializer_owner_index = 0U;
+            Unit *initializer_owner;
             if (first->common_block == NULL ||
-                common_block_emitted_before(context, u, s, first->common_block))
+                common_block_emitted_before(context, unit_index, symbol_index, first->common_block))
                 continue;
             if (!emitted_macro) {
                 f2c_buffer_append(
@@ -408,70 +458,44 @@ void f2c_emit_common_blocks(Context *context) {
                     "#if defined(_MSC_VER)\n#define F2C_COMMON_STORAGE __declspec(selectany)\n"
                     "#elif defined(__GNUC__) || defined(__clang__)\n"
                     "#define F2C_COMMON_STORAGE __attribute__((weak))\n"
-                    "#else\n#define F2C_COMMON_STORAGE\n#endif\n");
-                f2c_buffer_append(&context->output, "#define F2C_COMMON_INITIALIZED_STORAGE\n");
+                    "#else\n#define F2C_COMMON_STORAGE\n#endif\n"
+                    "#define F2C_COMMON_INITIALIZED_STORAGE\n");
                 emitted_macro = 1;
             }
-            member_count = common_member_count(context, first->common_block);
-            initialized = common_block_has_initializer(context, first->common_block);
-            f2c_buffer_append(&context->output, initialized
-                                                    ? "F2C_COMMON_INITIALIZED_STORAGE struct "
-                                                    : "F2C_COMMON_STORAGE struct ");
+            for (view_index = 0U; view_index < context->units.count; ++view_index)
+                if (unit_has_common_block(&context->units.items[view_index], first->common_block))
+                    emit_common_view_definition(context, &context->units.items[view_index],
+                                                view_index, first->common_block);
+            initializer_owner = find_common_initializer_owner(context, first->common_block,
+                                                              &initializer_owner_index);
+            f2c_buffer_append(&context->output, initializer_owner != NULL
+                                                    ? "F2C_COMMON_INITIALIZED_STORAGE union "
+                                                    : "F2C_COMMON_STORAGE union ");
             append_common_storage_name(&context->output, first->common_block);
-            f2c_buffer_append(&context->output, " {\n");
-            for (member_index = 0U; member_index < member_count; ++member_index) {
-                Unit *member_unit = NULL;
-                Symbol *member =
-                    find_common_member(context, first->common_block, member_index, &member_unit);
-                if (member == NULL)
+            f2c_buffer_append(&context->output, "_storage {\n");
+            for (view_index = 0U; view_index < context->units.count; ++view_index) {
+                if (!unit_has_common_block(&context->units.items[view_index], first->common_block))
                     continue;
-                f2c_buffer_printf(&context->output, "    %s field_%zu", f2c_symbol_c_type(member),
-                                  member_index);
-                if (member->type == TYPE_CHARACTER && member->rank == 0U &&
-                    member->character_length != NULL) {
-                    char *length =
-                        f2c_emit_typed_expression(member_unit, member->character_length_expression);
-                    f2c_buffer_printf(&context->output, "[(%s) + 1]", length);
-                    free(length);
-                } else if (member->rank != 0U) {
-                    size_t d;
-                    f2c_buffer_append(&context->output, "[F2C_MAX(1, ");
-                    if (member->type == TYPE_CHARACTER) {
-                        char *length = member->character_length != NULL
-                                           ? f2c_emit_typed_expression(
-                                                 member_unit, member->character_length_expression)
-                                           : f2c_strdup("1U");
-                        f2c_buffer_printf(&context->output, "(size_t)(%s) * ", length);
-                        free(length);
-                    }
-                    for (d = 0U; d < member->rank; ++d) {
-                        char *lower = f2c_emit_typed_expression(
-                            member_unit, member->dimensions[d].lower_expression);
-                        char *upper = f2c_emit_typed_expression(
-                            member_unit, member->dimensions[d].upper_expression);
-                        f2c_buffer_printf(&context->output, "%s((%s) - (%s) + 1)",
-                                          d == 0U ? "" : " * ", upper, lower);
-                        free(lower);
-                        free(upper);
-                    }
-                    f2c_buffer_append(&context->output, ")]");
-                }
-                f2c_buffer_append(&context->output, ";\n");
+                f2c_buffer_append(&context->output, "    struct ");
+                append_common_view_type_name(&context->output, first->common_block, view_index);
+                f2c_buffer_printf(&context->output, " view_%zu;\n", view_index);
             }
             f2c_buffer_append(&context->output, "} ");
             append_common_storage_name(&context->output, first->common_block);
-            if (initialized) {
+            if (initializer_owner != NULL) {
+                size_t member_index = 0U;
                 int emitted_initializer = 0;
-                f2c_buffer_append(&context->output, " = {\n");
-                for (member_index = 0U; member_index < member_count; ++member_index) {
-                    Unit *initializer_unit = NULL;
-                    Symbol *initializer_symbol = find_common_initializer(
-                        context, first->common_block, member_index, &initializer_unit);
+                Symbol *initializer_symbol;
+                f2c_buffer_printf(&context->output, " = { .view_%zu = {\n",
+                                  initializer_owner_index);
+                while ((initializer_symbol = find_common_member(
+                            initializer_owner, first->common_block, member_index)) != NULL) {
                     char *initializer;
-                    if (initializer_symbol == NULL)
+                    ++member_index;
+                    if (!common_symbol_has_initializer(initializer_symbol))
                         continue;
                     initializer =
-                        f2c_unit_static_storage_initializer(initializer_unit, initializer_symbol);
+                        f2c_unit_static_storage_initializer(initializer_owner, initializer_symbol);
                     if (initializer == NULL) {
                         f2c_diagnostic_span_code(
                             context, F2C_DIAGNOSTIC_UNSUPPORTED,
@@ -482,14 +506,14 @@ void f2c_emit_common_blocks(Context *context) {
                             initializer_symbol->name);
                         continue;
                     }
-                    f2c_buffer_printf(&context->output, "    .field_%zu = %s,\n", member_index,
-                                      initializer);
+                    f2c_buffer_printf(&context->output, "    .field_%zu = %s,\n",
+                                      initializer_symbol->common_index, initializer);
                     free(initializer);
                     emitted_initializer = 1;
                 }
                 if (!emitted_initializer)
                     f2c_buffer_append(&context->output, "    0\n");
-                f2c_buffer_append(&context->output, "}");
+                f2c_buffer_append(&context->output, "} }");
             }
             f2c_buffer_append(&context->output, ";\n");
         }
