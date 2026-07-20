@@ -532,6 +532,10 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_time_intrinsic_tests)
     add_test(NAME time_intrinsic_semantics COMMAND f2c_time_intrinsic_tests)
 
+    add_executable(f2c_alternate_return_tests test/test_alternate_return.c)
+    f2c_configure_test_target(f2c_alternate_return_tests)
+    add_test(NAME alternate_return_semantics COMMAND f2c_alternate_return_tests)
+
     add_executable(
         f2c_real_representation_intrinsic_tests
         test/test_real_representation_intrinsic.c
