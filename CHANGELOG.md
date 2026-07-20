@@ -6,7 +6,7 @@
 - Integrated real-representation intrinsics into the overflow-safe constant evaluator with exact hexadecimal C17 constants for static initialization.
 - Added on-demand portable C17 lowering that depends only on libc/libm and introduces no external runtime.
 - Corrected resolution of explicitly `EXTERNAL` procedures whose names match intrinsics so user procedures always take precedence.
-- Propagated the libm link contract through CMake on non-MSVC targets so static consumers, Linux, and WebAssembly builds can use the mathematical semantics directly.
+- Propagated the libm link contract through CMake on non-MSVC targets and explicitly initialized constant-evaluation state, improving build portability for static consumers, Linux, WebAssembly, and MSVC.
 
 ## 1.19.0
 

@@ -6,7 +6,7 @@
 - 将实数表示 intrinsic 纳入溢出安全的常量求值器，为静态初始化生成精确十六进制 C17 常量。
 - 使用按需内联且仅依赖 libc/libm 的可移植 C17 辅助函数完成动态降级，不引入外部运行时。
 - 修正与 intrinsic 同名的显式 `EXTERNAL` 过程解析，使用户过程始终优先于内建函数。
-- 在非 MSVC 平台通过 CMake 传播 libm 链接契约，保证静态库消费者、Linux 和 WebAssembly 构建可直接使用数学语义。
+- 在非 MSVC 平台通过 CMake 传播 libm 链接契约，并明确初始化常量求值状态，完善静态库消费者、Linux、WebAssembly 和 MSVC 的构建可移植性。
 
 ## 1.19.0
 
