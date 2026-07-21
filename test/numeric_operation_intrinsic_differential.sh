@@ -41,7 +41,11 @@ cmake -E make_directory "$WORK"
     -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
     -fno-sanitize-recover=all "$WORK/generated-ownership.c" -lm \
     -o "$WORK/generated-ownership-sanitized"
-"$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -Wno-compare-reals \
+# GCC 14 reports the descriptor fields of an allocatable component in a
+# function result as uninitialized before standard automatic allocation.
+# Preserve the diagnostic without making this compiler false positive fatal.
+"$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -Wno-error=uninitialized \
+    -Wno-compare-reals \
     "$SOURCE" -o "$WORK/native"
 
 "$WORK/generated" >"$WORK/generated.out"
