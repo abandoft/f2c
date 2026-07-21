@@ -186,10 +186,14 @@
   求值一次，目标元素数、连续性、整数范围及 stride 溢出均受保护。`CONTIGUOUS` 已进入声明、模块
   导入、显式接口兼容、描述符入口、指针关联和过程调用契约；普通 `CALL` 覆盖现有可物化类型，函数
   表达式覆盖数值及 CHARACTER 数组段。`ASSOCIATED(pointer,target)` 已支持关键字参数、标量元素、
-  substring、完整数组及任意 rank 仿射数组段，并比较字符长度、数据地址、extent 和 stride。尚未
-  完成函数表达式中含动态组件的派生类型连续临时量、数组/可分配函数结果、从具有 `TARGET` 属性的
-  父对象继承目标资格的非指针派生组件、向量下标 `ASSOCIATED` 约束、假定大小最后一维及 FINAL 的
-  完整逐维 shape，故本任务保持未关闭。
+  substring、完整数组及任意 rank 仿射数组段，并比较字符长度、数据地址、extent 和 stride。假定
+  大小数组现把最后一维建模为显式“无 extent”约束：元素寻址仍按前维 extent 计算列主序偏移，
+  `LBOUND` 保留最后维声明下界，`SIZE/UBOUND` 仅允许查询小于 rank 的维度，动态 `DIM` 在运行时
+  执行同一边界检查；`SHAPE`、整数组表达式/I/O、最后维省略段上界及向 assumed-shape 哑实参传递会
+  在生成前硬失败。最后维显式封闭的连续多维段可用于 inquiry 和归约，严格 C17、sanitizer 与
+  gfortran 差分覆盖非默认下界、动态 `DIM`、元素访问和段元素顺序。尚未完成函数表达式中含动态
+  组件的派生类型连续临时量、数组/可分配函数结果、从具有 `TARGET` 属性的父对象继承目标资格的
+  非指针派生组件、向量下标 `ASSOCIATED` 约束及 FINAL 的完整逐维 shape，故本任务保持未关闭。
 - [ ] 把字符长度、逐维 shape、`VALUE`、`OPTIONAL`、`INTENT`、别名限制和嵌套过程签名纳入
   项目级接口兼容检查。
 - [x] 过程接口参数类型、kind、rank、intent、可选性、动态属性及嵌套过程元数据均使用原子扩容的
@@ -294,7 +298,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 完成 F90 全部 intrinsic 及项目承诺的旧式 intrinsic；重点补齐位操作、字符处理、数值模型、
   kind 选择、数组 inquiry 和随机数语义。数组 inquiry 子集已覆盖非默认下界、零 extent 的标准
   `LBOUND=1/UBOUND=0`、动态 `DIM`、`KIND=1/2/4/8`、切片/构造器/elemental 数组表达式、可分配
-  结果和假定形状哑实参；独立负向语义测试、严格 C17 执行及 gfortran 差分已进入 CI。位操作
+  结果、假定形状哑实参，以及假定大小数组可查询的前维 extent 和全部声明下界；独立负向语义测试、
+  严格 C17 执行及 gfortran 差分已进入 CI。位操作
   `BIT_SIZE/BTEST/IAND/IBCLR/IBITS/IBSET/IEOR/IOR/ISHFT/ISHFTC/NOT/MVBITS` 已覆盖
   `INTEGER(KIND=1/2/4/8)`、关键字参数、常量折叠、elemental 数组、符号位及完整位宽边界；
   `MVBITS` 对标量别名、重叠数组段和标量广播使用写入前快照。严格 C17、UBSan 及 gfortran
