@@ -491,7 +491,7 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
         if (!has_view &&
             (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i] ||
              !f2c_descriptor_materialize_view(&call->prelude, &call->postlude, unit, expression,
-                                              callee->external_parameter_intents[i], i, depth,
+                                              callee->external_parameter_intents[i], 0U, i, depth,
                                               &view)))
             return 0;
         if (actual != NULL)
