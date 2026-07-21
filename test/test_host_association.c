@@ -43,6 +43,36 @@ static void test_scalar_capture_lowering(void) {
     f2c_result_free(&result);
 }
 
+static void test_automatic_array_portability(void) {
+    static const char source[] = "subroutine automatic_extent(limit, total)\n"
+                                 "  implicit none(type, external)\n"
+                                 "  integer, intent(in) :: limit\n"
+                                 "  integer, intent(out) :: total\n"
+                                 "  integer :: scratch(limit)\n"
+                                 "  scratch = limit\n"
+                                 "  total = sum(scratch)\n"
+                                 "  if (total < 0) return\n"
+                                 "end subroutine automatic_extent\n";
+    F2cResult result = transpile(source, "automatic-extent.f90");
+    expect(result.error_count == 0U && result.code != NULL,
+           "an automatic array completes portable storage lowering");
+    expect_contains(result.code, "size_t f2c_auto_extent_scratch_1 = 0U;",
+                    "automatic array bounds are captured in entry metadata");
+    expect_contains(result.code,
+                    "if (!f2c_size_multiply(f2c_auto_count_scratch, "
+                    "f2c_auto_extent_scratch_1, &f2c_auto_count_scratch)) abort();",
+                    "automatic array element counts reject overflow");
+    expect_contains(result.code, "int32_t *scratch = NULL;",
+                    "automatic arrays use a C17 pointer instead of a variable-length array");
+    expect_contains(result.code, "scratch = (int32_t *)calloc(",
+                    "automatic array storage is initialized through a portable allocation");
+    expect_contains(result.code, "free(scratch); scratch = NULL;",
+                    "automatic array storage is released on every procedure exit");
+    expect(result.code == NULL || strstr(result.code, "scratch[F2C_MAX") == NULL,
+           "automatic array lowering emits no VLA declaration");
+    f2c_result_free(&result);
+}
+
 static void test_procedure_pointer_capture_diagnostic(void) {
     static const char source[] = "program host_procedure_pointer\n"
                                  "  implicit none(type, external)\n"
@@ -123,6 +153,7 @@ static void test_capturing_procedure_value_diagnostic(void) {
 
 int main(void) {
     test_scalar_capture_lowering();
+    test_automatic_array_portability();
     test_procedure_pointer_capture_diagnostic();
     test_dynamic_descriptor_capture_diagnostic();
     test_capturing_procedure_value_diagnostic();
