@@ -43,9 +43,11 @@ static void validate_allocated_intrinsic(Context *context, size_t line, const ch
 
 static int associated_target_has_vector_subscript(const F2cExpr *target) {
     size_t selector;
-    if (target == NULL || target->kind != F2C_EXPR_ARRAY_REFERENCE)
+    if (target == NULL ||
+        (target->kind != F2C_EXPR_ARRAY_REFERENCE && target->kind != F2C_EXPR_COMPONENT))
         return 0;
-    for (selector = 0U; selector < target->child_count; ++selector) {
+    for (selector = target->kind == F2C_EXPR_COMPONENT ? 1U : 0U; selector < target->child_count;
+         ++selector) {
         const F2cExpr *subscript = target->children[selector];
         if (subscript != NULL && subscript->kind != F2C_EXPR_ARRAY_SECTION && subscript->rank != 0U)
             return 1;
@@ -78,11 +80,12 @@ static void validate_associated_intrinsic(Context *context, size_t line, const c
         pointer != NULL && (pointer->kind == F2C_EXPR_NAME || pointer->kind == F2C_EXPR_COMPONENT)
             ? pointer->symbol
             : NULL;
-    Symbol *target_symbol = target != NULL && (target->kind == F2C_EXPR_NAME ||
-                                               target->kind == F2C_EXPR_ARRAY_REFERENCE ||
-                                               target->kind == F2C_EXPR_SUBSTRING)
-                                ? target->symbol
-                                : NULL;
+    Symbol *target_symbol =
+        target != NULL &&
+                (target->kind == F2C_EXPR_NAME || target->kind == F2C_EXPR_ARRAY_REFERENCE ||
+                 target->kind == F2C_EXPR_COMPONENT || target->kind == F2C_EXPR_SUBSTRING)
+            ? target->symbol
+            : NULL;
     if (pointer_symbol == NULL ||
         (!pointer_symbol->pointer && !pointer_symbol->procedure_pointer)) {
         f2c_diagnostic_at(context, line,
