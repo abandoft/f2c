@@ -629,6 +629,10 @@ cleanup:
 char *f2c_symbol_element_count(Unit *unit, Symbol *symbol) {
     Buffer count = {0};
     size_t d;
+    if (f2c_symbol_is_automatic_array(unit, symbol)) {
+        f2c_buffer_printf(&count, "f2c_auto_count_%s", f2c_symbol_c_name(unit, symbol));
+        return f2c_buffer_take(&count);
+    }
     for (d = 0U; d < symbol->rank; ++d) {
         char *extent = f2c_symbol_dimension_extent(unit, symbol, d);
         if (extent == NULL) {
