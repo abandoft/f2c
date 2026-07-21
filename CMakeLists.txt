@@ -109,6 +109,7 @@ set(
     src/codegen/expression/representation.c
     src/codegen/expression/reduction.c
     src/codegen/expression/statement_function.c
+    src/codegen/expression/view.c
     src/codegen/io.c
     src/codegen/io/control/common.c
     src/codegen/io/control/inquire.c
