@@ -21,9 +21,9 @@ static char *emit_bound(Unit *unit, const F2cExpr *expression) {
                : NULL;
 }
 
-static int emit_section(Buffer *prelude, Unit *unit, const Symbol *symbol, const F2cExpr *section,
-                        size_t source_dimension, size_t result_dimension, int depth, char **index,
-                        F2cDescriptorView *view) {
+static int emit_section(Buffer *prelude, Unit *unit, const F2cExpr *expression,
+                        const F2cExpr *section, size_t source_dimension, size_t result_dimension,
+                        int depth, char **index, F2cDescriptorView *view) {
     char *declared_lower = NULL;
     char *declared_upper = NULL;
     char *explicit_first = NULL;
@@ -38,14 +38,14 @@ static int emit_section(Buffer *prelude, Unit *unit, const Symbol *symbol, const
     int success = 0;
     if (section == NULL || section->child_count != 3U)
         return 0;
-    declared_lower = f2c_symbol_dimension_lower(unit, symbol, source_dimension);
-    declared_upper = f2c_symbol_dimension_upper(unit, symbol, source_dimension);
+    declared_lower = f2c_descriptor_dimension_lower(unit, expression, source_dimension);
+    declared_upper = f2c_descriptor_dimension_upper(unit, expression, source_dimension);
     explicit_first = emit_bound(unit, section->children[0]);
     explicit_last = emit_bound(unit, section->children[1]);
     step = emit_bound(unit, section->children[2]);
     if (step == NULL)
         step = f2c_strdup("1");
-    base_stride = f2c_descriptor_source_stride(unit, symbol, source_dimension);
+    base_stride = f2c_descriptor_expression_stride(unit, expression, source_dimension);
     first_name = temporary_name("first", source_dimension);
     last_name = temporary_name("last", source_dimension);
     step_name = temporary_name("step", source_dimension);
@@ -120,22 +120,26 @@ int f2c_descriptor_association_view(Buffer *prelude, Unit *unit, const F2cExpr *
     char *reference = NULL;
     size_t source_dimension;
     size_t result_dimension = 0U;
+    size_t selector_offset;
     int success = 0;
     if (prelude == NULL || unit == NULL || expression == NULL || view == NULL ||
         expression->symbol == NULL || expression->rank == 0U)
         return 0;
-    if (expression->kind == F2C_EXPR_NAME)
+    if (expression->kind == F2C_EXPR_NAME ||
+        (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U))
         return f2c_descriptor_view(unit, expression, view);
     symbol = expression->symbol;
+    selector_offset = f2c_descriptor_selector_offset(expression);
     memset(view, 0, sizeof(*view));
-    if (expression->kind != F2C_EXPR_ARRAY_REFERENCE || expression->child_count != symbol->rank)
+    if ((expression->kind != F2C_EXPR_ARRAY_REFERENCE && expression->kind != F2C_EXPR_COMPONENT) ||
+        expression->child_count != symbol->rank + selector_offset)
         return 0;
 
     for (source_dimension = 0U; source_dimension < symbol->rank; ++source_dimension) {
-        const F2cExpr *selector = expression->children[source_dimension];
+        const F2cExpr *selector = f2c_descriptor_selector(expression, source_dimension);
         if (selector->kind == F2C_EXPR_ARRAY_SECTION) {
-            if (!emit_section(prelude, unit, symbol, selector, source_dimension, result_dimension,
-                              depth, &indices[source_dimension], view))
+            if (!emit_section(prelude, unit, expression, selector, source_dimension,
+                              result_dimension, depth, &indices[source_dimension], view))
                 goto cleanup;
             ++result_dimension;
         } else if (selector->rank == 0U) {
@@ -156,7 +160,7 @@ int f2c_descriptor_association_view(Buffer *prelude, Unit *unit, const F2cExpr *
     }
     if (result_dimension != expression->rank)
         goto cleanup;
-    reference = f2c_emit_array_reference(unit, expression->symbol, indices, symbol->rank);
+    reference = f2c_descriptor_element_designator(unit, expression, indices, symbol->rank);
     if (reference != NULL) {
         Buffer data = {0};
         f2c_buffer_printf(&data, "(&%s)", reference);

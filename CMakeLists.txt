@@ -81,6 +81,7 @@ set(
     src/codegen/array.c
     src/codegen/array/assignment.c
     src/codegen/array/call.c
+    src/codegen/array/component.c
     src/codegen/array/constructor.c
     src/codegen/array/element.c
     src/codegen/array/private.h
@@ -89,6 +90,7 @@ set(
     src/codegen/codegen.h
     src/codegen/data.c
     src/codegen/descriptor/association.c
+    src/codegen/descriptor/designator.c
     src/codegen/descriptor/materialize.c
     src/codegen/descriptor/private.h
     src/codegen/descriptor/view.c
