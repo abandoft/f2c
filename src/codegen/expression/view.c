@@ -29,7 +29,7 @@ static const F2cExpr *call_argument(const F2cExpr *call, const char *keyword, si
 }
 
 static int section_has_unit_stride(Unit *unit, const F2cExpr *section) {
-    int64_t value;
+    int64_t value = 0;
     return section != NULL && section->child_count == 3U &&
            (section->children[2]->kind == F2C_EXPR_INVALID ||
             f2c_evaluate_integer_constant(unit, section->children[2], &value)) &&
