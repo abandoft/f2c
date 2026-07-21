@@ -1,3 +1,16 @@
+## 1.21.0
+
+- 为 `AINT`、`ANINT`、`CEILING`、`DIM`、`FLOOR`、`MERGE`、`MOD`、`MODULO`、`NINT` 和 `SIGN` 完善 typed IR、常量求值与可移植 C17 降级，覆盖受支持的旧式具体名称、关键字参数、kind 选择和 elemental 数组。
+- 集中管理派生类型值的深复制所有权，覆盖构造器、赋值、`WHERE`、过程实参、描述符和表达式临时量。
+- 实现项目级具名及空白 `COMMON`、`BLOCK DATA`、模块 `DATA` 和可组合的 `EQUIVALENCE` 存储，支持别名初始化、零大小布局及可移植的非对齐访问。
+- 支持 `RANDOM_NUMBER`、`RANDOM_SEED`、`DATE_AND_TIME`、`SYSTEM_CLOCK` 和 `CPU_TIME` intrinsic 过程，提供明确的实参契约和仅依赖 libc 的 C17 降级。
+- 支持 alternate return 的类型化接口、调用、选择器、控制流分派及作用域清理。
+- 扩展数据指针语义，支持仿射数组段、动态下界/extent/stride、跨过程关联、分配来源、rank remapping、`CONTIGUOUS` 和 `ASSOCIATED` 契约。
+- 为派生类型数组指针组件增加完整的描述符路径，覆盖切片、赋值快照、过程调用、数组查询和分配生命周期。
+- 增加显式的假定大小数组约束与安全查询降级，并通过统一数组表达式路径逐元素处理数组值查询结果。
+- 强制检查动态数组段合形，并以宽位有符号下标运算保证边界、步长、向量下标和标量广播只求值一次。
+- 通过显式类型化捕获支持单层内部过程宿主关联，覆盖直接、同级和递归调用，并对不支持的逃逸闭包及动态捕获给出硬诊断。
+
 ## 1.20.0
 
 - 完整支持 `EXPONENT`、`FRACTION`、`NEAREST`、`RRSPACING`、`SCALE`、`SET_EXPONENT` 和 `SPACING` 实数表示 intrinsic。
