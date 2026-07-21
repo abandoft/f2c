@@ -8,6 +8,8 @@ char *f2c_array_emit_expression(Unit *unit, const F2cExpr *expression);
 F2cExpr *f2c_array_clone_expression(const F2cExpr *expression);
 F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, size_t rank,
                                       const char *const *ordinals);
+char *f2c_array_inquiry_dimension(Unit *unit, const F2cExpr *call, size_t dimension);
+char *f2c_array_inquiry_element(Unit *unit, const F2cExpr *call, const char *ordinal);
 char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t dimension);
 int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *expression,
                                        size_t identifier, const char *role, size_t *temporary,
