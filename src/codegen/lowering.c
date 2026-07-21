@@ -367,6 +367,11 @@ char *f2c_symbol_dimension_lower(Unit *unit, const Symbol *symbol, size_t dimens
     Buffer result = {0};
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
+    if (f2c_symbol_is_automatic_array(unit, symbol)) {
+        f2c_buffer_printf(&result, "f2c_auto_lower_%s_%zu", f2c_symbol_c_name(unit, symbol),
+                          dimension + 1U);
+        return f2c_buffer_take(&result);
+    }
     if (f2c_symbol_uses_descriptor(symbol)) {
         f2c_buffer_printf(&result, "%s_lower_%zu", f2c_symbol_c_name(unit, symbol), dimension + 1U);
         return f2c_buffer_take(&result);
@@ -378,6 +383,14 @@ char *f2c_symbol_dimension_upper(Unit *unit, const Symbol *symbol, size_t dimens
     Buffer result = {0};
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
+    if (f2c_symbol_is_automatic_array(unit, symbol)) {
+        f2c_buffer_printf(&result,
+                          "(f2c_auto_lower_%s_%zu + (int64_t)f2c_auto_extent_%s_%zu - "
+                          "INT64_C(1))",
+                          f2c_symbol_c_name(unit, symbol), dimension + 1U,
+                          f2c_symbol_c_name(unit, symbol), dimension + 1U);
+        return f2c_buffer_take(&result);
+    }
     if (f2c_symbol_uses_descriptor(symbol)) {
         f2c_buffer_printf(&result, "(%s_lower_%zu + %s_extent_%zu - 1)",
                           f2c_symbol_c_name(unit, symbol), dimension + 1U,
@@ -404,6 +417,11 @@ char *f2c_symbol_dimension_extent(Unit *unit, const Symbol *symbol, size_t dimen
     int64_t lower_value;
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
+    if (f2c_symbol_is_automatic_array(unit, symbol)) {
+        f2c_buffer_printf(&result, "f2c_auto_extent_%s_%zu", f2c_symbol_c_name(unit, symbol),
+                          dimension + 1U);
+        return f2c_buffer_take(&result);
+    }
     if (f2c_symbol_uses_descriptor(symbol)) {
         f2c_buffer_printf(&result, "%s_extent_%zu", f2c_symbol_c_name(unit, symbol),
                           dimension + 1U);
