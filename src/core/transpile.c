@@ -525,7 +525,10 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             &context.output,
             "static inline F2C_UNUSED bool f2c_size_multiply(size_t left, size_t right, "
             "size_t *result) { if (right != 0U && left > SIZE_MAX / right) return false; "
-            "*result = left * right; return true; }\n");
+            "*result = left * right; return true; }\n"
+            "static inline F2C_UNUSED bool f2c_default_integer_bounds(int64_t lower, "
+            "size_t extent) { return lower >= (int64_t)INT32_MIN && lower <= "
+            "(int64_t)INT32_MAX && extent <= (size_t)INT32_MAX; }\n");
         f2c_buffer_append(
             &context.output,
             "static inline F2C_UNUSED size_t f2c_inquiry_extent(int64_t dimension, size_t "
