@@ -1,5 +1,7 @@
 #include "codegen/expression/private.h"
 
+#include "codegen/descriptor/private.h"
+
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -288,75 +290,36 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
             left = f2c_buffer_take(&cast);
         }
         if (expression->child_count > 1U && expression->symbol->rank != 0U) {
+            char *indices[F2C_MAX_RANK] = {0};
+            char *designator = NULL;
             size_t selector;
-            char *character_length = NULL;
-            f2c_expression_append_component(&result, left, expression->children[0]->derived_type,
-                                            expression->symbol);
-            f2c_buffer_append(&result, "[");
-            if (expression->symbol->type == TYPE_CHARACTER) {
-                if (expression->symbol->deferred_character) {
-                    Buffer dynamic_length = {0};
-                    f2c_expression_append_component(&dynamic_length, left,
-                                                    expression->children[0]->derived_type,
-                                                    expression->symbol);
-                    f2c_buffer_append(&dynamic_length, "_character_length");
-                    character_length = f2c_buffer_take(&dynamic_length);
-                } else {
-                    character_length = f2c_symbol_character_length(unit, expression->symbol);
-                }
-                f2c_buffer_printf(&result, "(size_t)(%s) * (size_t)(",
-                                  character_length != NULL ? character_length : "1U");
+            if (expression->child_count != expression->symbol->rank + 1U) {
+                free(left);
+                *supported = 0;
+                return NULL;
             }
-            for (selector = 1U; selector < expression->child_count; ++selector) {
-                char *index = f2c_expression_emit(unit, expression->children[selector], supported);
-                char *lower;
-                if (expression->symbol->allocatable || expression->symbol->pointer) {
-                    Buffer dynamic_lower = {0};
-                    f2c_expression_append_component(&dynamic_lower, left,
-                                                    expression->children[0]->derived_type,
-                                                    expression->symbol);
-                    f2c_buffer_printf(&dynamic_lower, "_lower_%zu", selector);
-                    lower = f2c_buffer_take(&dynamic_lower);
-                } else {
-                    lower = f2c_symbol_dimension_lower(unit, expression->symbol, selector - 1U);
+            for (selector = 0U; selector < expression->symbol->rank; ++selector) {
+                const F2cExpr *index = expression->children[selector + 1U];
+                if (index == NULL || index->kind == F2C_EXPR_ARRAY_SECTION || index->rank != 0U) {
+                    *supported = 0;
+                    break;
                 }
-                if (!*supported || index == NULL || lower == NULL) {
-                    free(index);
-                    free(lower);
-                    free(character_length);
-                    free(left);
-                    free(result.data);
-                    return NULL;
-                }
-                if (selector > 1U) {
-                    size_t prior;
-                    f2c_buffer_append(&result, " + (");
-                    for (prior = 0U; prior + 1U < selector; ++prior) {
-                        char *extent;
-                        if (expression->symbol->allocatable || expression->symbol->pointer) {
-                            Buffer dynamic_extent = {0};
-                            f2c_expression_append_component(&dynamic_extent, left,
-                                                            expression->children[0]->derived_type,
-                                                            expression->symbol);
-                            f2c_buffer_printf(&dynamic_extent, "_extent_%zu", prior + 1U);
-                            extent = f2c_buffer_take(&dynamic_extent);
-                        } else {
-                            extent = f2c_symbol_dimension_extent(unit, expression->symbol, prior);
-                        }
-                        f2c_buffer_printf(&result, "%s(size_t)(%s)", prior == 0U ? "" : " * ",
-                                          extent != NULL ? extent : "0U");
-                        free(extent);
-                    }
-                    f2c_buffer_append(&result, ") * ");
-                }
-                f2c_buffer_printf(&result, "(((int32_t)(%s)) - (%s))", index, lower);
-                free(index);
-                free(lower);
+                indices[selector] = f2c_expression_emit(unit, index, supported);
+                if (!*supported || indices[selector] == NULL)
+                    break;
             }
-            if (expression->symbol->type == TYPE_CHARACTER)
-                f2c_buffer_append(&result, ")");
-            f2c_buffer_append(&result, "]");
-            free(character_length);
+            if (*supported)
+                designator = f2c_descriptor_element_designator(unit, expression, indices,
+                                                               expression->symbol->rank);
+            for (selector = 0U; selector < expression->symbol->rank; ++selector)
+                free(indices[selector]);
+            free(left);
+            if (!*supported || designator == NULL) {
+                free(designator);
+                *supported = 0;
+                return NULL;
+            }
+            return designator;
         } else if (expression->symbol->pointer && expression->symbol->rank == 0U) {
             f2c_buffer_append(&result, "(*(");
             f2c_expression_append_component(&result, left, expression->children[0]->derived_type,
