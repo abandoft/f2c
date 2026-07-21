@@ -447,7 +447,7 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
     for (i = 0U; i < count && i < callee->external_parameter_count; ++i) {
         const F2cExpr *expression = argument_expressions != NULL ? argument_expressions[i] : NULL;
         Symbol *actual;
-        const char *name = NULL;
+        char *name = NULL;
         const char *c_type;
         char *character_length = NULL;
         Buffer deallocatable = {0};
@@ -470,9 +470,13 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
         actual = expression != NULL ? expression->symbol : NULL;
         if (expression == NULL || expression->rank != callee->external_parameter_ranks[i] ||
             (callee->external_parameter_allocatable[i] &&
-             (expression->kind != F2C_EXPR_NAME || actual == NULL || !actual->allocatable)) ||
+             ((expression->kind != F2C_EXPR_NAME && expression->kind != F2C_EXPR_COMPONENT) ||
+              actual == NULL || !actual->allocatable ||
+              (expression->kind == F2C_EXPR_COMPONENT && expression->child_count != 1U))) ||
             (callee->external_parameter_pointer[i] &&
-             (expression->kind != F2C_EXPR_NAME || actual == NULL || !actual->pointer)))
+             ((expression->kind != F2C_EXPR_NAME && expression->kind != F2C_EXPR_COMPONENT) ||
+              actual == NULL || !actual->pointer ||
+              (expression->kind == F2C_EXPR_COMPONENT && expression->child_count != 1U))))
             return 0;
         has_view = actual != NULL && actual->equivalence_unaligned
                        ? 0
@@ -491,15 +495,21 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
                                               &view)))
             return 0;
         if (actual != NULL)
-            name = f2c_symbol_c_name(unit, actual);
+            name = f2c_descriptor_storage_designator(unit, expression);
+        if (actual != NULL && name == NULL)
+            goto descriptor_failed;
         c_type = f2c_expression_c_type(expression);
         if (expression->type == TYPE_CHARACTER)
             character_length = view.character_length != NULL
                                    ? f2c_strdup(view.character_length)
                                    : f2c_character_length_expression(unit, expression);
-        if (actual != NULL && actual->pointer)
+        if (actual != NULL && actual->pointer &&
+            (expression->kind == F2C_EXPR_NAME ||
+             (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U)))
             f2c_buffer_printf(&deallocatable, "%s_deallocatable", name);
-        else if (actual != NULL && actual->allocatable)
+        else if (actual != NULL && actual->allocatable &&
+                 (expression->kind == F2C_EXPR_NAME ||
+                  (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U)))
             f2c_buffer_printf(&deallocatable, "(%s != NULL)", name);
         else
             f2c_buffer_append(&deallocatable, "false");
@@ -548,9 +558,15 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
             }
             if (actual->deferred_character) {
                 emit_indent(&call->postlude, depth);
-                f2c_buffer_printf(&call->postlude,
-                                  "f2c_char_len_%s = f2c_call_descriptor_%zu.character_length;\n",
-                                  name, i);
+                if (expression->kind == F2C_EXPR_COMPONENT)
+                    f2c_buffer_printf(
+                        &call->postlude,
+                        "%s_character_length = f2c_call_descriptor_%zu.character_length;\n", name,
+                        i);
+                else
+                    f2c_buffer_printf(
+                        &call->postlude,
+                        "f2c_char_len_%s = f2c_call_descriptor_%zu.character_length;\n", name, i);
             }
             for (dimension = 0U; dimension < actual->rank; ++dimension) {
                 emit_indent(&call->postlude, depth);
@@ -569,11 +585,13 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
                 }
             }
         }
+        free(name);
         f2c_descriptor_view_free(&view);
         call->has_descriptors = 1;
         continue;
 
     descriptor_failed:
+        free(name);
         f2c_descriptor_view_free(&view);
         return 0;
     }
