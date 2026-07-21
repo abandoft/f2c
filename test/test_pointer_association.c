@@ -87,6 +87,55 @@ static void test_intent_out_initialization(void) {
     f2c_result_free(&result);
 }
 
+static void test_array_pointer_component_lowering(void) {
+    static const char source[] =
+        "program component_pointer\n"
+        "  implicit none\n"
+        "  type :: box\n"
+        "    integer, pointer :: values(:)\n"
+        "    integer, pointer :: matrix(:, :)\n"
+        "  end type box\n"
+        "  type(box) :: object, source\n"
+        "  integer, target :: storage(-2:9), grid(2,3)\n"
+        "  object%values(4:) => storage(0:6:2)\n"
+        "  source%values(-1:) => storage(-1:4)\n"
+        "  object%values => source%values(0:3:2)\n"
+        "  if (.not. associated(object%values, source%values(0:3:2))) stop 1\n"
+        "  call consume(object%values)\n"
+        "  call clear(object%values)\n"
+        "  object%values => source%values\n"
+        "  object%matrix(0:1,-1:1) => grid\n"
+        "  object%values = [1, 2]\n"
+        "  nullify(object%matrix)\n"
+        "contains\n"
+        "  subroutine consume(values)\n"
+        "    integer, intent(in) :: values(:)\n"
+        "  end subroutine consume\n"
+        "  subroutine clear(values)\n"
+        "    integer, pointer, intent(inout) :: values(:)\n"
+        "    nullify(values)\n"
+        "  end subroutine clear\n"
+        "end program component_pointer\n";
+    F2cResult result = transpile(source, "component-pointer.f90");
+    expect(result.error_count == 0U && result.code != NULL,
+           "array POINTER components complete semantic analysis and C17 lowering");
+    expect_contains(result.code, "(object).values_lower_1 = (int32_t)f2c_pointer_bound_lower_1",
+                    "component pointer bounds update the owning object's descriptor metadata");
+    expect_contains(result.code, "(source).values_stride_1)}, (const bool[]){true}",
+                    "ASSOCIATED compares component target sections with their dynamic stride");
+    expect_contains(result.code, ".deallocatable = (object).values_deallocatable",
+                    "component array actuals preserve pointer provenance in call descriptors");
+    expect_contains(result.code, "(object).values = (int32_t *)f2c_call_descriptor_0.data;",
+                    "pointer dummy calls return association changes to component storage");
+    expect_contains(result.code, "f2c_component_values[f2c_component_linear++]",
+                    "whole component array assignment uses overlap-safe element storage");
+    expect_contains(result.code,
+                    "(object).matrix_lower_2 = 1; (object).matrix_extent_2 = 0; "
+                    "(object).matrix_stride_2 = 0;",
+                    "NULLIFY clears every component descriptor dimension");
+    f2c_result_free(&result);
+}
+
 static void test_invalid_targets(void) {
     static const char vector_subscript[] = "program vector_target\n"
                                            "  integer, target :: target_value(4)\n"
@@ -190,6 +239,7 @@ static void test_invalid_targets(void) {
 int main(void) {
     test_section_lowering();
     test_intent_out_initialization();
+    test_array_pointer_component_lowering();
     test_invalid_targets();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
