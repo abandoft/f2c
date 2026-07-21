@@ -175,12 +175,15 @@ static int append_copy_out(Buffer *cleanup, Unit *unit, const F2cExpr *expressio
 }
 
 int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit,
-                                    const F2cExpr *expression, F2cIntent intent, size_t identifier,
-                                    int depth, F2cDescriptorView *view) {
+                                    const F2cExpr *expression, F2cIntent intent,
+                                    size_t minimum_count, size_t identifier, int depth,
+                                    F2cDescriptorView *view) {
     F2cExpr *element = NULL;
     char *element_code = NULL;
     char *count = NULL;
     char *character_length = NULL;
+    char storage_count_name[96];
+    const char *storage_count;
     const char *c_type;
     int copy_in;
     int copy_out;
@@ -211,6 +214,15 @@ int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit
     for (dimension = 0U; dimension < view->rank; ++dimension)
         f2c_buffer_printf(prelude, "%s%s", dimension == 0U ? "" : ", ", view->extent[dimension]);
     f2c_buffer_append(prelude, "});\n");
+    storage_count = count;
+    if (minimum_count != 0U) {
+        (void)snprintf(storage_count_name, sizeof(storage_count_name),
+                       "f2c_call_actual_%zu_storage_count", identifier);
+        indent(prelude, depth);
+        f2c_buffer_printf(prelude, "const size_t %s = %s < %zuU ? %zuU : %s;\n", storage_count_name,
+                          count, minimum_count, minimum_count, count);
+        storage_count = storage_count_name;
+    }
     c_type = f2c_expression_c_type(expression);
     if (expression->type == TYPE_CHARACTER) {
         character_length = f2c_character_length_expression(unit, expression);
@@ -230,32 +242,36 @@ int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit
             goto failed;
         indent(prelude, depth);
         f2c_buffer_printf(prelude, "if (%s != 0U && %s > SIZE_MAX / %s) abort();\n",
-                          character_length, count, character_length);
+                          character_length, storage_count, character_length);
         indent(prelude, depth);
         f2c_buffer_printf(prelude,
                           "char *%s = (char *)malloc(%s == 0U || %s == 0U ? 1U : "
                           "%s * %s);\n",
-                          view->data, count, character_length, count, character_length);
+                          view->data, storage_count, character_length, storage_count,
+                          character_length);
     } else if (expression->type == TYPE_DERIVED) {
         indent(prelude, depth);
-        f2c_buffer_printf(prelude, "if (%s > SIZE_MAX / sizeof(%s)) abort();\n", count, c_type);
+        f2c_buffer_printf(prelude, "if (%s > SIZE_MAX / sizeof(%s)) abort();\n", storage_count,
+                          c_type);
         indent(prelude, depth);
         f2c_buffer_printf(prelude, "%s *%s = (%s *)calloc(%s == 0U ? 1U : %s, sizeof(%s));\n",
-                          c_type, view->data, c_type, count, count, c_type);
+                          c_type, view->data, c_type, storage_count, storage_count, c_type);
     } else if (!copy_in) {
         indent(prelude, depth);
-        f2c_buffer_printf(prelude, "if (%s > SIZE_MAX / sizeof(%s)) abort();\n", count, c_type);
+        f2c_buffer_printf(prelude, "if (%s > SIZE_MAX / sizeof(%s)) abort();\n", storage_count,
+                          c_type);
         indent(prelude, depth);
         f2c_buffer_printf(prelude, "%s *%s = (%s *)calloc(%s == 0U ? 1U : %s, sizeof(%s));\n",
-                          c_type, view->data, c_type, count, count, c_type);
+                          c_type, view->data, c_type, storage_count, storage_count, c_type);
     } else {
         indent(prelude, depth);
-        f2c_buffer_printf(prelude, "if (%s > SIZE_MAX / sizeof(%s)) abort();\n", count, c_type);
+        f2c_buffer_printf(prelude, "if (%s > SIZE_MAX / sizeof(%s)) abort();\n", storage_count,
+                          c_type);
         indent(prelude, depth);
         f2c_buffer_printf(prelude,
                           "%s *%s = (%s *)malloc(%s == 0U ? sizeof(%s) : "
                           "%s * sizeof(%s));\n",
-                          c_type, view->data, c_type, count, c_type, count, c_type);
+                          c_type, view->data, c_type, storage_count, c_type, storage_count, c_type);
     }
     indent(prelude, depth);
     f2c_buffer_printf(prelude, "if (%s == NULL) abort();\n", view->data);
