@@ -5,6 +5,7 @@ program array_inquiry
   integer :: section_shape(2), section_lower(2), section_upper(2)
   integer :: expression_shape(2), expression_lower(2), expression_upper(2)
   integer :: constructor_shape(1)
+  integer :: direct_result(6)
   integer(kind=8) :: shape8(2), lower8(2), upper8(2), size8
   integer, allocatable :: dynamic(:, :), dynamic_shape(:), empty(:)
   integer :: dim_value
@@ -40,6 +41,13 @@ program array_inquiry
   if (any(expression_lower /= [1, 1])) error stop 18
   if (any(expression_upper /= [3, 3])) error stop 19
   if (constructor_shape(1) /= 3 .or. size(matrix + 1) /= 9) error stop 20
+
+  direct_result = -99
+  direct_result(2:3) = lbound(matrix)
+  direct_result(1:3:2) = shape(matrix) + [10, 20]
+  direct_result(4:5) = ubound(matrix(1:-1:-1, 4:6:2))
+  direct_result(6:6) = shape([1, 2, 3]) + 7
+  if (any(direct_result /= [13, -1, 23, 3, 2, 10])) error stop 30
 
   dim_value = 2
   size8 = size(kind=8, array=matrix, dim=dim_value)
