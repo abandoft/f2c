@@ -51,7 +51,6 @@ program pointer_section
 
   evaluations = 0
   worker%offset = 0
-  nullify(selected_words)
   module_storage = [1, 2, 3, 4, 5, 6]
   call associate_module()
   if (size(module_view) /= 3) stop 19
