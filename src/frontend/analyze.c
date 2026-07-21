@@ -142,6 +142,9 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
         f2c_mark_call_targets(unit, &context->lines.items[i]);
     }
     f2c_parse_access_statements(context, unit);
+    if (!f2c_import_host_symbols(context, unit))
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, header_line, 1,
+                            "out of memory importing host-associated entities");
     f2c_discover_implicit_symbols(context, unit);
     {
         int in_specification_part = 1;

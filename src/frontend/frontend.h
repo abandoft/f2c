@@ -29,6 +29,7 @@ int f2c_discover_units(Context *context);
 int f2c_discover_modules(Context *context);
 Symbol *f2c_find_symbol(Unit *unit, const char *name);
 Symbol *f2c_ensure_symbol(Unit *unit, const char *name);
+int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *local_name);
 F2cNamelistGroup *f2c_find_namelist(Unit *unit, const char *name);
 F2cDerivedType *f2c_find_derived_type(Unit *unit, const char *name);
 int f2c_line_in_derived_type(const Unit *unit, size_t line_index);
@@ -52,6 +53,7 @@ void f2c_validate_implicit_external(Context *context, Unit *unit);
 int f2c_build_procedure_registry(Context *context);
 void f2c_import_module(Context *context, Unit *unit, Line *source_line);
 void f2c_import_host_module(Context *context, Unit *unit);
+int f2c_import_host_symbols(Context *context, Unit *unit);
 int f2c_has_supported_module(const Context *context);
 int f2c_supported_module_needs_complex(const Context *context);
 

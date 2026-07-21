@@ -96,6 +96,7 @@ set(
     src/codegen/descriptor/private.h
     src/codegen/descriptor/view.c
     src/codegen/expression.c
+    src/codegen/host.c
     src/codegen/expression/associated.c
     src/codegen/expression/bit.c
     src/codegen/expression/call.c
@@ -194,6 +195,7 @@ set(
     src/frontend/declaration/syntax.c
     src/frontend/declaration/type.c
     src/frontend/derived.c
+    src/frontend/host.c
     src/frontend/frontend.h
     src/frontend/interface.c
     src/frontend/lexer.c
@@ -240,6 +242,7 @@ set(
     src/semantic/constant/numeric.c
     src/semantic/constant/private.h
     src/semantic/constant/real.c
+    src/semantic/host.c
     src/semantic/implicit.c
     src/semantic/implicit/declaration.c
     src/semantic/implicit/private.h
@@ -545,6 +548,10 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_alternate_return_tests)
     add_test(NAME alternate_return_semantics COMMAND f2c_alternate_return_tests)
 
+    add_executable(f2c_host_association_tests test/test_host_association.c)
+    f2c_configure_test_target(f2c_host_association_tests)
+    add_test(NAME host_association_semantics COMMAND f2c_host_association_tests)
+
     add_executable(f2c_pointer_association_tests test/test_pointer_association.c)
     f2c_configure_test_target(f2c_pointer_association_tests)
     add_test(NAME pointer_association_semantics COMMAND f2c_pointer_association_tests)
@@ -686,6 +693,16 @@ if(F2C_BUILD_TESTING)
                         FC=${F2C_GFORTRAN_EXECUTABLE}
                         ${F2C_SH_EXECUTABLE}
                         ${CMAKE_CURRENT_SOURCE_DIR}/test/pointer_association_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
+                add_test(
+                    NAME host_association_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/host_association_differential.sh
                         $<TARGET_FILE:f2c>
                 )
             endif()

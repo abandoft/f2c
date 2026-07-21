@@ -287,7 +287,7 @@ static int import_derived_type(Unit *unit, F2cDerivedType *derived, const char *
     return 1;
 }
 
-static int clone_module_symbol(Unit *unit, const Symbol *source, const char *local_name) {
+int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *local_name) {
     Symbol *target = f2c_find_symbol(unit, local_name);
     char *procedure_interface_name = source->procedure_interface_name != NULL
                                          ? f2c_strdup(source->procedure_interface_name)
@@ -527,7 +527,7 @@ static int import_project_member(Context *context, Unit *unit, Unit *module, con
                                      module->name);
             return 0;
         }
-        imported = clone_module_symbol(unit, symbol, local_name);
+        imported = f2c_clone_associated_symbol(unit, symbol, local_name);
         if (imported < 0) {
             f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &association->local.span, 1,
                                      "USE local name '%s' denotes conflicting entities",
@@ -645,7 +645,7 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
             continue;
         if (syntax != NULL && !f2c_module_symbol_is_public(module, &module->symbols[i]))
             continue;
-        imported = clone_module_symbol(unit, &module->symbols[i], module->symbols[i].name);
+        imported = f2c_clone_associated_symbol(unit, &module->symbols[i], module->symbols[i].name);
         if (imported == 0) {
             f2c_diagnostic(context, line, 1, "out of memory importing module entity");
         } else if (imported < 0) {

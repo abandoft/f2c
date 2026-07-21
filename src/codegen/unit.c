@@ -125,6 +125,8 @@ static void emit_declarations(Context *context, Unit *unit) {
         Symbol *symbol = &unit->symbols[i];
         const int persistent = unit->save_all || symbol->saved || symbol->initializer != NULL;
         char *initializer = NULL;
+        if (symbol->host_associated && !symbol->host_capture)
+            continue;
         if (symbol->procedure_pointer && !symbol->argument && !symbol->module_entity) {
             f2c_unit_indent(output, 1);
             if (persistent)
@@ -134,8 +136,9 @@ static void emit_declarations(Context *context, Unit *unit) {
             continue;
         }
         if (symbol->argument || symbol->parameter || symbol->external || symbol->module_entity ||
-            symbol->common_block != NULL || symbol->equivalence_associated ||
-            symbol->alias_to != NULL || symbol->statement_function ||
+            symbol->host_associated || symbol->common_block != NULL ||
+            symbol->equivalence_associated || symbol->alias_to != NULL ||
+            symbol->statement_function ||
             (unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
              strcmp(symbol->name, unit->result_name) == 0)) {
             continue;
@@ -387,8 +390,9 @@ static void emit_declarations(Context *context, Unit *unit) {
 
 static int has_local_declaration(Unit *unit, Symbol *symbol) {
     return !symbol->argument && !symbol->parameter && !symbol->external && !symbol->module_entity &&
-           symbol->common_block == NULL && !symbol->equivalence_associated &&
-           symbol->alias_to == NULL && !symbol->statement_function &&
+           !symbol->host_associated && symbol->common_block == NULL &&
+           !symbol->equivalence_associated && symbol->alias_to == NULL &&
+           !symbol->statement_function &&
            !(unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
              strcmp(symbol->name, unit->result_name) == 0);
 }
@@ -675,6 +679,8 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
     for (i = 0U; i < unit->symbol_count; ++i) {
         Symbol *symbol = &unit->symbols[i];
         size_t dimension;
+        if (symbol->host_associated && !symbol->host_capture)
+            continue;
         if (symbol == function_result || symbol->external)
             continue;
         if ((symbol->allocatable || symbol->pointer) && symbol->argument) {

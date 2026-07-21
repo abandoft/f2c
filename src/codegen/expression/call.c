@@ -277,6 +277,13 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
                                    !expression->resolved_procedure->interface_abstract
                                ? expression->resolved_procedure
                                : NULL;
+    const Unit *capture_procedure =
+        resolved != NULL && resolved->internal
+            ? resolved
+            : (expression->symbol != NULL && expression->symbol->procedure_interface != NULL &&
+                       expression->symbol->procedure_interface->internal
+                   ? expression->symbol->procedure_interface
+                   : NULL);
     const Symbol *resolved_result = resolved != NULL && resolved->result_name != NULL
                                         ? f2c_find_symbol((Unit *)resolved, resolved->result_name)
                                         : NULL;
@@ -687,6 +694,17 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
             actual);
         free(actual);
     }
+    if (!f2c_emit_host_capture_actuals(
+            &result, unit, capture_procedure,
+            expression->child_count != 0U ||
+                (expression->type == TYPE_CHARACTER && !allocatable_result))) {
+        f2c_expression_free_arguments(arguments, types, expression->child_count);
+        free(f2c_buffer_take(&result));
+        free(contiguous_setup.data);
+        free(contiguous_cleanup.data);
+        *supported = 0;
+        return NULL;
+    }
     for (i = 0U; i < expression->child_count; ++i) {
         const F2cExpr *actual = expression->children[i];
         const Symbol *resolved_dummy =
@@ -708,6 +726,14 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         length = f2c_character_length_expression(unit, actual);
         f2c_buffer_printf(&result, ", %s", length != NULL ? length : "1U");
         free(length);
+    }
+    if (!f2c_emit_host_capture_lengths(&result, unit, capture_procedure)) {
+        f2c_expression_free_arguments(arguments, types, expression->child_count);
+        free(f2c_buffer_take(&result));
+        free(contiguous_setup.data);
+        free(contiguous_cleanup.data);
+        *supported = 0;
+        return NULL;
     }
     if (expression->type == TYPE_CHARACTER && !allocatable_result) {
         char *result_length = f2c_character_length_expression(unit, expression);

@@ -70,6 +70,9 @@ struct Symbol {
     int target;
     int module_entity;
     int use_associated;
+    int host_associated;
+    int host_capture;
+    size_t host_symbol_index;
     F2cAccessibility access;
     F2cSourceSpan access_span;
     int deferred_character;
@@ -284,6 +287,8 @@ struct Unit {
     int interface_body;
     int interface_abstract;
     size_t host_index;
+    size_t host_capture_begin;
+    size_t host_capture_count;
     Unit *signature_host;
     char *interface_generic_name;
     Unit *interfaces;

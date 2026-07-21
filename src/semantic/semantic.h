@@ -6,6 +6,7 @@
 
 void f2c_validate_unit_expressions(Context *context, Unit *unit);
 void f2c_validate_project_storage(Context *context);
+int f2c_finalize_host_association(Context *context);
 void f2c_resolve_equivalence_storage(Context *context, Unit *unit);
 void f2c_resolve_derived_semantics(Context *context);
 int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count);

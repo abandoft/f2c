@@ -111,6 +111,7 @@ foreach(
        many_arguments
        statement_function
        statement_function_single_eval
+       host_association
        do_semantics
        data_statement
        lexical_literals

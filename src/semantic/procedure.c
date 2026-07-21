@@ -251,6 +251,8 @@ static void bind_external(Context *context, Unit *caller, Symbol *external) {
     if (procedure == NULL || procedure->definition == caller)
         return;
     definition = procedure->definition;
+    if (definition->internal)
+        external->procedure_interface = definition;
     if (definition->internal &&
         (external->c_name == NULL || strcmp(external->c_name, definition->name) != 0)) {
         char *resolved_name = f2c_strdup(definition->name);
@@ -339,6 +341,7 @@ static int bind_internal(Context *context, Unit *definition) {
     symbol->external_subroutine = definition->kind == UNIT_SUBROUTINE;
     symbol->external_alternate_return_count = definition->alternate_return_count;
     symbol->external_signature_observed = 1;
+    symbol->procedure_interface = definition;
     if (!f2c_copy_function_result_metadata(symbol, definition))
         return 0;
     if (!copy_function_character_length(symbol, definition))

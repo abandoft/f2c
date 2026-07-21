@@ -7,6 +7,9 @@ void f2c_emit_supported_modules(Context *context);
 void f2c_emit_project_modules(Context *context);
 void f2c_emit_derived_types(Context *context);
 void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, const char *name);
+int f2c_emit_host_capture_actuals(Buffer *output, Unit *caller, const Unit *procedure,
+                                  int has_prior_argument);
+int f2c_emit_host_capture_lengths(Buffer *output, Unit *caller, const Unit *procedure);
 char *f2c_emit_intrinsic(const char *name, char **arguments, const Type *argument_types,
                          size_t count, Type result_type);
 char *f2c_emit_numeric_conversion(const char *operand, Type actual, Type target);
