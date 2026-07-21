@@ -26,6 +26,7 @@ char *f2c_emit_unaligned_designator_address(Unit *unit, const F2cExpr *expressio
 char *f2c_symbol_dimension_lower(Unit *unit, const Symbol *symbol, size_t dimension);
 char *f2c_symbol_dimension_upper(Unit *unit, const Symbol *symbol, size_t dimension);
 char *f2c_symbol_dimension_extent(Unit *unit, const Symbol *symbol, size_t dimension);
+int f2c_symbol_is_automatic_array(Unit *unit, const Symbol *symbol);
 char *f2c_emit_expression_ast(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_emit_pointer_designator(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_emit_typed_expression(Unit *unit, const F2cExpr *expression);
