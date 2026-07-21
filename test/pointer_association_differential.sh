@@ -27,6 +27,13 @@ cmake -E make_directory "$WORK"
 for fixture in pointer_section derived_pointer_component; do
     source=$ROOT/test/fixtures/$fixture.f90
     case_work=$WORK/$fixture
+    native_warning_options=
+    # GCC 14 diagnoses the hidden length field of an associated deferred-length
+    # CHARACTER pointer as uninitialized. Keep the warning visible without
+    # weakening any other diagnostic or the generated-C warning policy.
+    if [ "$fixture" = pointer_section ]; then
+        native_warning_options=-Wno-error=uninitialized
+    fi
     cmake -E make_directory "$case_work"
 
     "$F2C" "$source" -o "$case_work/generated.c"
@@ -37,7 +44,7 @@ for fixture in pointer_section derived_pointer_component; do
         -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
         -fno-sanitize-recover=all "$case_work/generated.c" -lm \
         -o "$case_work/generated-sanitized"
-    "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror \
+    "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror $native_warning_options \
         -J"$case_work" -I"$case_work" "$source" -o "$case_work/native"
 
     "$case_work/generated" >"$case_work/generated.out"
