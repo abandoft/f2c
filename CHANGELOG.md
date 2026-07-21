@@ -1,3 +1,16 @@
+## 1.21.0
+
+- Added typed IR, constant evaluation, and portable C17 lowering for `AINT`, `ANINT`, `CEILING`, `DIM`, `FLOOR`, `MERGE`, `MOD`, `MODULO`, `NINT`, and `SIGN`, including supported legacy specific names, keyword arguments, kind selection, and elemental arrays.
+- Centralized deep-copy ownership for derived values across constructors, assignments, `WHERE`, procedure arguments, descriptors, and expression temporaries.
+- Implemented project-wide named and blank `COMMON`, `BLOCK DATA`, module `DATA`, and composable `EQUIVALENCE` storage, including aliased initialization, zero-sized layouts, and portable unaligned access.
+- Added intrinsic procedure support for `RANDOM_NUMBER`, `RANDOM_SEED`, `DATE_AND_TIME`, `SYSTEM_CLOCK`, and `CPU_TIME` with explicit argument contracts and libc-only C17 lowering.
+- Added typed alternate-return interfaces, calls, selectors, control-flow dispatch, and scope cleanup.
+- Expanded data-pointer semantics with affine array sections, dynamic lower bounds, extents and strides, cross-procedure association, allocation provenance, rank remapping, `CONTIGUOUS`, and `ASSOCIATED` contracts.
+- Added full descriptor-based handling for array pointer components of derived types, including slicing, assignment snapshots, procedure calls, inquiries, and allocation lifecycles.
+- Added explicit assumed-size array constraints and safe inquiry lowering, and elementized array-valued inquiry expressions through the shared array-expression path.
+- Enforced dynamic array-section conformance and single evaluation of bounds, strides, vector subscripts, and scalar broadcasts using wide signed subscript arithmetic.
+- Added single-level internal-procedure host association through explicit typed captures, including direct, sibling, and recursive calls, with hard diagnostics for unsupported escaping closures and dynamic captures.
+
 ## 1.20.0
 
 - Added complete support for the `EXPONENT`, `FRACTION`, `NEAREST`, `RRSPACING`, `SCALE`, `SET_EXPONENT`, and `SPACING` real-representation intrinsics.
