@@ -42,8 +42,9 @@ program array_inquiry
   if (any(expression_upper /= [3, 3])) error stop 19
   if (constructor_shape(1) /= 3 .or. size(matrix + 1) /= 9) error stop 20
 
+  dim_value = 2
   direct_result = -99
-  direct_result(2:3) = lbound(matrix)
+  direct_result(dim_value:dim_value + 1) = lbound(matrix)
   direct_result(1:3:2) = shape(matrix) + [10, 20]
   direct_result(4:5) = ubound(matrix(1:-1:-1, 4:6:2))
   direct_result(6:6) = shape([1, 2, 3]) + 7
