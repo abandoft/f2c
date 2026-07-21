@@ -2067,8 +2067,10 @@ static void test_dynamic_array_sections(void) {
                "rank-three negative-stride section assignment translates successfully");
         expect_contains(rank3.code, "const size_t f2c_extent_2",
                         "rank-three section lowering emits all shape dimensions");
-        expect_contains(rank3.code, "f2c_section_2) * ((-(1)))",
+        expect_contains(rank3.code, "= (-(1));",
                         "rank-three section lowering preserves negative strides");
+        expect_contains(rank3.code, "(int64_t)(f2c_section_2)",
+                        "rank-three section ordinals do not narrow to 32 bits");
         f2c_result_free(&rank3);
     }
 }
