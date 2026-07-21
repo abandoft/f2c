@@ -36,6 +36,27 @@ char *f2c_expression_associated_scalar_target(Unit *unit, const F2cExpr *target,
         free(code);
         return f2c_buffer_take(&result);
     }
+    if (target->kind == F2C_EXPR_COMPONENT) {
+        if (target->rank == 0U && target->symbol->rank != 0U && target->child_count > 1U) {
+            code = f2c_expression_emit(unit, target, supported);
+            if (!*supported || code == NULL) {
+                free(code);
+                return NULL;
+            }
+            f2c_buffer_printf(&result, "&(%s)", code);
+            free(code);
+            return f2c_buffer_take(&result);
+        }
+        code = f2c_descriptor_storage_designator(unit, target);
+        if (code == NULL)
+            return NULL;
+        f2c_buffer_printf(
+            &result, "%s%s",
+            symbol->pointer || symbol->allocatable || symbol->type == TYPE_CHARACTER ? "" : "&",
+            code);
+        free(code);
+        return f2c_buffer_take(&result);
+    }
     if (target->kind != F2C_EXPR_NAME)
         return NULL;
     f2c_buffer_printf(&result, "%s%s",
@@ -100,22 +121,29 @@ char *f2c_expression_associated_array_target(Unit *unit, const F2cExpr *pointer,
     int section[F2C_MAX_RANK] = {0};
     char *pointer_extent[F2C_MAX_RANK] = {0};
     char *pointer_stride[F2C_MAX_RANK] = {0};
+    char *target_storage = NULL;
     char *element_size = NULL;
     Buffer result = {0};
     size_t dimension;
     int success = 0;
     if (pointer_symbol == NULL || target_symbol == NULL || pointer_symbol->rank == 0U ||
         target_symbol->rank == 0U || target_symbol->rank > F2C_MAX_RANK ||
-        (target->kind != F2C_EXPR_NAME && target->kind != F2C_EXPR_ARRAY_REFERENCE))
+        (target->kind != F2C_EXPR_NAME && target->kind != F2C_EXPR_ARRAY_REFERENCE &&
+         target->kind != F2C_EXPR_COMPONENT))
         return NULL;
-    if (target->kind == F2C_EXPR_ARRAY_REFERENCE && target->child_count != target_symbol->rank)
+    if ((target->kind == F2C_EXPR_ARRAY_REFERENCE ||
+         (target->kind == F2C_EXPR_COMPONENT && target->child_count > 1U)) &&
+        target->child_count != target_symbol->rank + f2c_descriptor_selector_offset(target))
+        return NULL;
+    target_storage = f2c_descriptor_storage_designator(unit, target);
+    if (target_storage == NULL)
         return NULL;
     for (dimension = 0U; dimension < target_symbol->rank; ++dimension) {
         const F2cExpr *selector =
-            target->kind == F2C_EXPR_ARRAY_REFERENCE ? target->children[dimension] : NULL;
-        lower[dimension] = f2c_symbol_dimension_lower(unit, target_symbol, dimension);
-        extent[dimension] = f2c_symbol_dimension_extent(unit, target_symbol, dimension);
-        stride[dimension] = f2c_descriptor_source_stride(unit, target_symbol, dimension);
+            target->kind == F2C_EXPR_NAME ? NULL : f2c_descriptor_selector(target, dimension);
+        lower[dimension] = f2c_descriptor_dimension_lower(unit, target, dimension);
+        extent[dimension] = f2c_descriptor_dimension_extent(unit, target, dimension);
+        stride[dimension] = f2c_descriptor_expression_stride(unit, target, dimension);
         if (selector == NULL || selector->kind == F2C_EXPR_ARRAY_SECTION) {
             const F2cExpr *lower_bound =
                 selector != NULL && selector->child_count == 3U ? selector->children[0] : NULL;
@@ -126,10 +154,10 @@ char *f2c_expression_associated_array_target(Unit *unit, const F2cExpr *pointer,
             section[dimension] = 1;
             first[dimension] = lower_bound != NULL && lower_bound->kind != F2C_EXPR_INVALID
                                    ? f2c_expression_emit(unit, lower_bound, supported)
-                                   : f2c_symbol_dimension_lower(unit, target_symbol, dimension);
+                                   : f2c_descriptor_dimension_lower(unit, target, dimension);
             last[dimension] = upper_bound != NULL && upper_bound->kind != F2C_EXPR_INVALID
                                   ? f2c_expression_emit(unit, upper_bound, supported)
-                                  : f2c_symbol_dimension_upper(unit, target_symbol, dimension);
+                                  : f2c_descriptor_dimension_upper(unit, target, dimension);
             step[dimension] = stride_value != NULL && stride_value->kind != F2C_EXPR_INVALID
                                   ? f2c_expression_emit(unit, stride_value, supported)
                                   : f2c_strdup("1");
@@ -154,7 +182,7 @@ char *f2c_expression_associated_array_target(Unit *unit, const F2cExpr *pointer,
             goto cleanup;
     }
     if (target_symbol->type == TYPE_CHARACTER)
-        element_size = f2c_symbol_character_length(unit, target_symbol);
+        element_size = f2c_character_length_expression(unit, target);
     else {
         Buffer size = {0};
         f2c_buffer_printf(&size, "sizeof(%s)", f2c_symbol_c_type(target_symbol));
@@ -167,8 +195,8 @@ char *f2c_expression_associated_array_target(Unit *unit, const F2cExpr *pointer,
     append_size_array(&result, pointer_extent, pointer_symbol->rank);
     f2c_buffer_append(&result, ", ");
     append_stride_array(&result, pointer_stride, pointer_symbol->rank);
-    f2c_buffer_printf(&result, ", (const void *)(%s), (size_t)(%s), %zuU, ",
-                      f2c_symbol_c_name(unit, target_symbol), element_size, target_symbol->rank);
+    f2c_buffer_printf(&result, ", (const void *)(%s), (size_t)(%s), %zuU, ", target_storage,
+                      element_size, target_symbol->rank);
     append_int64_array(&result, lower, target_symbol->rank);
     f2c_buffer_append(&result, ", ");
     append_size_array(&result, extent, target_symbol->rank);
@@ -194,6 +222,7 @@ cleanup:
         free(pointer_stride[dimension]);
     }
     free(element_size);
+    free(target_storage);
     if (!success) {
         free(result.data);
         return NULL;
