@@ -172,6 +172,8 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
                                           depth) ||
         f2c_emit_rank2_section_assignment(context, unit, statement->left, statement->right,
                                           depth) ||
+        f2c_array_emit_component_assignment(context, unit, statement->left, statement->right, line,
+                                            depth) ||
         f2c_emit_whole_array_assignment(context, unit, statement->left, statement->right, line,
                                         depth))
         return 1;
