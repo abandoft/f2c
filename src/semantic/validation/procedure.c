@@ -744,14 +744,17 @@ static void validate_procedure_actual(Context *context, Unit *caller, const Unit
                           index + 1U, definition->name, value->type_kind, dummy->name, dummy->kind);
     }
     if (dummy->allocatable &&
-        (value->kind != F2C_EXPR_NAME || value->symbol == NULL || !value->symbol->allocatable)) {
+        ((value->kind != F2C_EXPR_NAME && value->kind != F2C_EXPR_COMPONENT) ||
+         (value->kind == F2C_EXPR_COMPONENT && value->child_count != 1U) || value->symbol == NULL ||
+         !value->symbol->allocatable)) {
         f2c_diagnostic_at(context, line, value->source_offset + 1U, 1,
                           "argument %zu of procedure '%s' must be an ALLOCATABLE whole object for "
                           "dummy '%s'",
                           index + 1U, definition->name, dummy->name);
     }
-    if (dummy->pointer &&
-        (value->kind != F2C_EXPR_NAME || value->symbol == NULL || !value->symbol->pointer)) {
+    if (dummy->pointer && ((value->kind != F2C_EXPR_NAME && value->kind != F2C_EXPR_COMPONENT) ||
+                           (value->kind == F2C_EXPR_COMPONENT && value->child_count != 1U) ||
+                           value->symbol == NULL || !value->symbol->pointer)) {
         f2c_diagnostic_at(context, line, value->source_offset + 1U, 1,
                           "argument %zu of procedure '%s' must be a POINTER whole object for "
                           "dummy '%s'",
