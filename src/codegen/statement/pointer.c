@@ -208,10 +208,9 @@ static int emit_array_pointer_metadata(Context *context, const F2cStatement *sta
         }
         if (statement->pointer_bounds == F2C_POINTER_BOUNDS_REMAPPING) {
             f2c_buffer_printf(&context->output,
-                              "if (f2c_pointer_bound_lower_%zu < INT32_MIN || "
-                              "f2c_pointer_bound_lower_%zu > INT32_MAX || "
-                              "f2c_pointer_bound_extent_%zu > (size_t)INT32_MAX) abort();\n",
-                              dimension + 1U, dimension + 1U, dimension + 1U);
+                              "if (!f2c_default_integer_bounds(f2c_pointer_bound_lower_%zu, "
+                              "f2c_pointer_bound_extent_%zu)) abort();\n",
+                              dimension + 1U, dimension + 1U);
             indent(&context->output, depth);
             f2c_buffer_printf(&context->output,
                               "%s_lower_%zu = (int32_t)f2c_pointer_bound_lower_%zu; "
@@ -228,16 +227,14 @@ static int emit_array_pointer_metadata(Context *context, const F2cStatement *sta
         }
         if (statement->pointer_bounds == F2C_POINTER_BOUNDS_SPECIFICATION) {
             f2c_buffer_printf(&context->output,
-                              "if (f2c_pointer_bound_lower_%zu < INT32_MIN || "
-                              "f2c_pointer_bound_lower_%zu > INT32_MAX || "
-                              "(size_t)(%s) > (size_t)INT32_MAX) abort();\n",
-                              dimension + 1U, dimension + 1U, view->extent[dimension]);
+                              "if (!f2c_default_integer_bounds(f2c_pointer_bound_lower_%zu, "
+                              "(size_t)(%s))) abort();\n",
+                              dimension + 1U, view->extent[dimension]);
         } else {
             f2c_buffer_printf(&context->output,
-                              "if ((int64_t)(%s) < INT32_MIN || (int64_t)(%s) > INT32_MAX || "
-                              "(size_t)(%s) > (size_t)INT32_MAX) abort();\n",
-                              view->lower[dimension], view->lower[dimension],
-                              view->extent[dimension]);
+                              "if (!f2c_default_integer_bounds((int64_t)(%s), "
+                              "(size_t)(%s))) abort();\n",
+                              view->lower[dimension], view->extent[dimension]);
         }
         indent(&context->output, depth);
         if (statement->pointer_bounds == F2C_POINTER_BOUNDS_SPECIFICATION) {
