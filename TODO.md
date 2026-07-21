@@ -173,6 +173,12 @@
   向量下标、非 TARGET 对象及 type/kind/rank 不兼容会在生成前硬失败。数据指针现在可以通过
   `ALLOCATE/DEALLOCATE` 创建和释放标量、数组、延迟长度 CHARACTER 及派生类型目标；局部、模块、
   哑实参和派生组件统一传播 lower/extent/stride 与“目标是否由 ALLOCATE 创建”的来源状态。
+  数组指针派生组件现与普通数组共用完整 designator/descriptor 入口：支持 bounds specification、
+  跨 rank remapping、指针目标再次切片、`ASSOCIATED` 地址/shape/stride 比较、
+  `SIZE/LBOUND/UBOUND`、归约、假定形状及 POINTER 哑实参回写、`NULLIFY` 和分配生命周期。组件
+  元素引用按动态 stride 寻址，多维组件段保留真实结果 rank；数值、CHARACTER 和派生类型的整个
+  组件数组及组件段赋值先完整快照再写回，不会把数组构造器错误降级为 C 指针替换。严格 C17、
+  sanitizer 和原生 Fortran 差分覆盖非单位 stride、重叠赋值、字符长度及派生类型复制。
   再次分配已关联指针会按标准创建新目标，完整目标别名继承释放能力，而普通 `TARGET`、可分配实体、
   数组元素和数组段不会被错误交给 `free`。`STAT/ERRMSG`、重复释放、跨过程回写、rank-specific FINAL、
   派生类型 `SOURCE=` 深复制和 deferred CHARACTER 定长赋值均有严格 C17、sanitizer 与 gfortran
@@ -181,9 +187,9 @@
   导入、显式接口兼容、描述符入口、指针关联和过程调用契约；普通 `CALL` 覆盖现有可物化类型，函数
   表达式覆盖数值及 CHARACTER 数组段。`ASSOCIATED(pointer,target)` 已支持关键字参数、标量元素、
   substring、完整数组及任意 rank 仿射数组段，并比较字符长度、数据地址、extent 和 stride。尚未
-  完成函数表达式中含动态组件的派生类型连续临时量、数组/可分配函数结果、目标派生组件与向量下标
-  的 `ASSOCIATED` 组合、数组指针派生组件的完整数组表达式/关联、假定大小最后一维及 FINAL 的完整
-  逐维 shape，故本任务保持未关闭。
+  完成函数表达式中含动态组件的派生类型连续临时量、数组/可分配函数结果、从具有 `TARGET` 属性的
+  父对象继承目标资格的非指针派生组件、向量下标 `ASSOCIATED` 约束、假定大小最后一维及 FINAL 的
+  完整逐维 shape，故本任务保持未关闭。
 - [ ] 把字符长度、逐维 shape、`VALUE`、`OPTIONAL`、`INTENT`、别名限制和嵌套过程签名纳入
   项目级接口兼容检查。
 - [x] 过程接口参数类型、kind、rank、intent、可选性、动态属性及嵌套过程元数据均使用原子扩容的
