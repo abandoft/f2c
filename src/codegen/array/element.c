@@ -82,7 +82,7 @@ static F2cExpr *ordinal_subscript(Unit *unit, const F2cExpr *expression, size_t 
     Buffer code = {0};
     if (lower == NULL)
         return NULL;
-    f2c_buffer_printf(&code, "((%s) + (int32_t)(%s))", lower, ordinal);
+    f2c_buffer_printf(&code, "((%s) + (int64_t)(%s))", lower, ordinal);
     free(lower);
     return lowered_integer(f2c_buffer_take(&code));
 }
@@ -107,7 +107,7 @@ static F2cExpr *section_subscript(Unit *unit, const F2cExpr *expression, const F
         free(step);
         return NULL;
     }
-    f2c_buffer_printf(&code, "((%s) + (int32_t)(%s) * (%s))", lower, ordinal, step);
+    f2c_buffer_printf(&code, "((%s) + (int64_t)(%s) * (%s))", lower, ordinal, step);
     free(lower);
     free(step);
     return lowered_integer(f2c_buffer_take(&code));
