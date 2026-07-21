@@ -55,7 +55,7 @@ static int materialize_array(Buffer *output, Unit *unit, const F2cExpr *array, F
     F2cDescriptorView view = {0};
     Buffer prelude = {0};
     Buffer cleanup = {0};
-    if (!f2c_descriptor_materialize_view(&prelude, &cleanup, unit, array, intent, identifier,
+    if (!f2c_descriptor_materialize_view(&prelude, &cleanup, unit, array, intent, 0U, identifier,
                                          depth + 1, &view))
         return 0;
     indent(output, depth);
