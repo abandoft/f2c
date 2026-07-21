@@ -42,6 +42,10 @@ static void test_time_intrinsic_lowering(void) {
     expect(result.code != NULL && strstr(result.code, "f2c_date_values_") != NULL &&
                strstr(result.code, "< 8U) abort()") != NULL,
            "DATE_AND_TIME validates and converts the VALUES array through typed storage");
+    expect(result.code != NULL &&
+               strstr(result.code, "_storage_count = f2c_call_actual_") != NULL &&
+               strstr(result.code, "< 8U ? 8U :") != NULL,
+           "DATE_AND_TIME materialization reserves its required eight-element output capacity");
     expect(result.code != NULL && strstr(result.code, "void system_clock(") == NULL,
            "time intrinsics are not emitted as unresolved external procedures");
     f2c_result_free(&result);
