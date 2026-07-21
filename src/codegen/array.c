@@ -52,7 +52,7 @@ static F2cExpr *section_index_expression(Unit *unit, const F2cExpr *section, Sym
         free(step);
         return NULL;
     }
-    f2c_buffer_printf(&code, "((%s) + f2c_section_%zu * (%s))", lower, ordinal, step);
+    f2c_buffer_printf(&code, "((%s) + (int64_t)f2c_section_%zu * (%s))", lower, ordinal, step);
     free(lower);
     free(step);
     index = (F2cExpr *)calloc(1U, sizeof(*index));
@@ -96,7 +96,7 @@ static F2cExpr *vector_index_expression(Unit *unit, const F2cExpr *selector, siz
         char *reference;
         if (lower == NULL)
             return NULL;
-        f2c_buffer_printf(&code, "((%s) + f2c_section_%zu)", lower, ordinal);
+        f2c_buffer_printf(&code, "((%s) + (int64_t)f2c_section_%zu)", lower, ordinal);
         free(lower);
         index = f2c_buffer_take(&code);
         if (index == NULL)
@@ -213,50 +213,6 @@ failed:
     return NULL;
 }
 
-static int section_extent(Unit *unit, const F2cExpr *section, Symbol *symbol, size_t dimension,
-                          char **extent) {
-    const F2cExpr *lower_expression = section_bound(section, 0U);
-    const F2cExpr *upper_expression = section_bound(section, 1U);
-    const F2cExpr *step_expression = section_bound(section, 2U);
-    char *lower = lower_expression != NULL ? f2c_array_emit_expression(unit, lower_expression)
-                                           : dimension_bound(unit, symbol, dimension, 0);
-    char *upper = upper_expression != NULL ? f2c_array_emit_expression(unit, upper_expression)
-                                           : dimension_bound(unit, symbol, dimension, 1);
-    char *step = step_expression != NULL ? f2c_array_emit_expression(unit, step_expression)
-                                         : f2c_strdup("1");
-    Buffer result = {0};
-    if (lower == NULL || upper == NULL || step == NULL) {
-        free(lower);
-        free(upper);
-        free(step);
-        return 0;
-    }
-    f2c_buffer_printf(&result, "(((%s) - (%s)) / (%s) + 1)", upper, lower, step);
-    free(lower);
-    free(upper);
-    free(step);
-    *extent = f2c_buffer_take(&result);
-    return *extent != NULL;
-}
-
-static int vector_extent(Unit *unit, const F2cExpr *selector, char **extent) {
-    Buffer result = {0};
-    if (selector == NULL || selector->rank != 1U || selector->type != TYPE_INTEGER)
-        return 0;
-    if (selector->shape.rank == 1U && selector->shape.dimensions[0].extent_known) {
-        f2c_buffer_printf(&result, "%llu",
-                          (unsigned long long)selector->shape.dimensions[0].extent);
-        *extent = f2c_buffer_take(&result);
-        return *extent != NULL;
-    }
-    if (selector->kind == F2C_EXPR_NAME && selector->symbol != NULL &&
-        selector->symbol->rank == 1U) {
-        *extent = f2c_symbol_dimension_extent(unit, selector->symbol, 0U);
-        return *extent != NULL;
-    }
-    return 0;
-}
-
 static F2cExpr *clone_whole_array_element(Unit *unit, const F2cExpr *expression,
                                           size_t section_count) {
     F2cExpr *element;
@@ -295,7 +251,7 @@ static F2cExpr *clone_whole_array_element(Unit *unit, const F2cExpr *expression,
             f2c_expr_free(element);
             return NULL;
         }
-        f2c_buffer_printf(&index_text, "((%s) + f2c_section_%zu)", lower, dimension);
+        f2c_buffer_printf(&index_text, "((%s) + (int64_t)f2c_section_%zu)", lower, dimension);
         free(lower);
         index = f2c_expr_new(F2C_EXPR_NAME, TYPE_INTEGER, index_text.data, index_text.length);
         free(f2c_buffer_take(&index_text));
@@ -317,6 +273,7 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
     char *right_code;
     char *character_length = NULL;
     char *extents[F2C_MAX_RANK] = {0};
+    char *right_extents[F2C_MAX_RANK] = {0};
     size_t dimension;
     size_t section_count = 0U;
     const int character_assignment = left != NULL && left->symbol != NULL &&
@@ -332,15 +289,22 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
             left->children[dimension]->rank == 0U)
             continue;
         if (section_count == F2C_MAX_RANK ||
-            !(left->children[dimension]->kind == F2C_EXPR_ARRAY_SECTION
-                  ? section_extent(unit, left->children[dimension], left->symbol, dimension,
-                                   &extents[section_count])
-                  : vector_extent(unit, left->children[dimension], &extents[section_count])))
+            (extents[section_count] =
+                 f2c_array_expression_extent(unit, left, section_count)) == NULL)
             goto cleanup;
         ++section_count;
     }
     if (section_count == 0U)
         goto cleanup;
+    if (right != NULL && right->rank != 0U) {
+        if (right->rank != section_count)
+            goto cleanup;
+        for (dimension = 0U; dimension < section_count; ++dimension) {
+            right_extents[dimension] = f2c_array_expression_extent(unit, right, dimension);
+            if (right_extents[dimension] == NULL)
+                goto cleanup;
+        }
+    }
     lowered_left = clone_array_reference(unit, left);
     lowered_right = clone_whole_array_element(unit, right, section_count);
     if (lowered_left == NULL || lowered_right == NULL) {
@@ -368,17 +332,16 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
     ++emitted_depth;
     for (dimension = 0U; dimension < section_count; ++dimension) {
         f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_printf(&context->output, "int32_t f2c_extent_%zu = (int32_t)(%s);\n", dimension,
-                          extents[dimension]);
+        f2c_buffer_printf(&context->output, "const size_t f2c_extent_%zu = (size_t)(%s);\n",
+                          dimension, extents[dimension]);
     }
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_append(&context->output, "size_t f2c_section_count = 1U;\n");
     for (dimension = 0U; dimension < section_count; ++dimension) {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output,
-                          "size_t f2c_section_extent_%zu = f2c_extent_%zu > 0 ? "
-                          "(size_t)f2c_extent_%zu : 0U;\n",
-                          dimension, dimension, dimension);
+                          "const size_t f2c_section_extent_%zu = f2c_extent_%zu;\n", dimension,
+                          dimension);
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output,
                           "if (f2c_section_extent_%zu != 0U && f2c_section_count > "
@@ -387,6 +350,18 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output, "f2c_section_count *= f2c_section_extent_%zu;\n",
                           dimension);
+    }
+    if (right != NULL && right->rank != 0U) {
+        for (dimension = 0U; dimension < section_count; ++dimension) {
+            f2c_array_indent(&context->output, emitted_depth);
+            f2c_buffer_printf(&context->output,
+                              "const size_t f2c_value_extent_%zu = (size_t)(%s);\n", dimension,
+                              right_extents[dimension]);
+            f2c_array_indent(&context->output, emitted_depth);
+            f2c_buffer_printf(&context->output,
+                              "if (f2c_value_extent_%zu != f2c_section_extent_%zu) abort();\n",
+                              dimension, dimension);
+        }
     }
     if (character_assignment) {
         f2c_array_indent(&context->output, emitted_depth);
@@ -435,7 +410,7 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
     for (dimension = 0U; dimension < section_count; ++dimension) {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output,
-                          "for (int32_t f2c_section_%zu = 0; f2c_section_%zu < f2c_extent_%zu; "
+                          "for (size_t f2c_section_%zu = 0U; f2c_section_%zu < f2c_extent_%zu; "
                           "++f2c_section_%zu) {\n",
                           dimension, dimension, dimension, dimension);
         ++emitted_depth;
@@ -473,7 +448,7 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
     for (dimension = 0U; dimension < section_count; ++dimension) {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output,
-                          "for (int32_t f2c_section_%zu = 0; f2c_section_%zu < f2c_extent_%zu; "
+                          "for (size_t f2c_section_%zu = 0U; f2c_section_%zu < f2c_extent_%zu; "
                           "++f2c_section_%zu) {\n",
                           dimension, dimension, dimension, dimension);
         ++emitted_depth;
@@ -515,8 +490,10 @@ lowered_cleanup:
     f2c_expr_free(lowered_left);
     f2c_expr_free(lowered_right);
 cleanup:
-    for (dimension = 0U; dimension < F2C_MAX_RANK; ++dimension)
+    for (dimension = 0U; dimension < F2C_MAX_RANK; ++dimension) {
         free(extents[dimension]);
+        free(right_extents[dimension]);
+    }
     return result;
 }
 
