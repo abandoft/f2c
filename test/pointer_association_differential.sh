@@ -11,7 +11,6 @@ CC=${CC:-cc}
 FC=${FC:-gfortran}
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 WORK=$ROOT/build/pointer-association-differential
-SOURCE=$ROOT/test/fixtures/pointer_section.f90
 
 if ! command -v "$CC" >/dev/null 2>&1; then
     echo "C compiler not found: $CC" >&2
@@ -25,29 +24,36 @@ fi
 cmake -E remove_directory "$WORK"
 cmake -E make_directory "$WORK"
 
-"$F2C" "$SOURCE" -o "$WORK/generated.c"
-"$CC" -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
-    -Wstrict-prototypes -Wmissing-prototypes -Werror "$WORK/generated.c" -lm \
-    -o "$WORK/generated"
-"$CC" -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
-    -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
-    -fno-sanitize-recover=all "$WORK/generated.c" -lm -o "$WORK/generated-sanitized"
-"$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -J"$WORK" -I"$WORK" \
-    "$SOURCE" -o "$WORK/native"
+for fixture in pointer_section derived_pointer_component; do
+    source=$ROOT/test/fixtures/$fixture.f90
+    case_work=$WORK/$fixture
+    cmake -E make_directory "$case_work"
 
-"$WORK/generated" >"$WORK/generated.out"
-"$WORK/generated-sanitized" >"$WORK/generated-sanitized.out"
-"$WORK/native" >"$WORK/native.out"
+    "$F2C" "$source" -o "$case_work/generated.c"
+    "$CC" -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+        -Wstrict-prototypes -Wmissing-prototypes -Werror "$case_work/generated.c" -lm \
+        -o "$case_work/generated"
+    "$CC" -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+        -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
+        -fno-sanitize-recover=all "$case_work/generated.c" -lm \
+        -o "$case_work/generated-sanitized"
+    "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror \
+        -J"$case_work" -I"$case_work" "$source" -o "$case_work/native"
 
-if ! cmp -s "$WORK/generated.out" "$WORK/native.out"; then
-    echo "generated/native pointer-association behavior mismatch" >&2
-    diff -u "$WORK/native.out" "$WORK/generated.out" >&2 || true
-    exit 1
-fi
-if ! cmp -s "$WORK/generated.out" "$WORK/generated-sanitized.out"; then
-    echo "optimized/sanitized pointer-association output mismatch" >&2
-    diff -u "$WORK/generated.out" "$WORK/generated-sanitized.out" >&2 || true
-    exit 1
-fi
+    "$case_work/generated" >"$case_work/generated.out"
+    "$case_work/generated-sanitized" >"$case_work/generated-sanitized.out"
+    "$case_work/native" >"$case_work/native.out"
+
+    if ! cmp -s "$case_work/generated.out" "$case_work/native.out"; then
+        echo "generated/native pointer-association behavior mismatch: $fixture" >&2
+        diff -u "$case_work/native.out" "$case_work/generated.out" >&2 || true
+        exit 1
+    fi
+    if ! cmp -s "$case_work/generated.out" "$case_work/generated-sanitized.out"; then
+        echo "optimized/sanitized pointer-association output mismatch: $fixture" >&2
+        diff -u "$case_work/generated.out" "$case_work/generated-sanitized.out" >&2 || true
+        exit 1
+    fi
+done
 
 echo "pointer-association differential and sanitizer validation passed"
