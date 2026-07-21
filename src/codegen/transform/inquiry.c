@@ -5,79 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-static char *inquiry_lower(Unit *unit, const F2cExpr *array, size_t dimension) {
-    if (array->kind == F2C_EXPR_NAME && array->symbol != NULL)
-        return f2c_symbol_dimension_lower(unit, array->symbol, dimension);
-    return f2c_strdup("1");
-}
-
-static char *inquiry_extent(Unit *unit, const F2cExpr *call, const F2cExpr *array,
-                            size_t dimension) {
-    if (call != NULL && call->text != NULL && strcmp(call->text, "lbound") == 0 &&
-        f2c_expression_is_whole_assumed_size(array) && dimension + 1U == array->rank)
-        return f2c_strdup("1U");
-    return f2c_array_expression_extent(unit, array, dimension);
-}
-
 char *f2c_transform_inquiry_element(Unit *unit, const F2cExpr *value, size_t index) {
-    const F2cExpr *array =
-        f2c_transform_argument(value, strcmp(value->text, "shape") == 0 ? "source" : "array", 0U);
-    char *extent;
-    char *lower;
-    Buffer result = {0};
-    if (array == NULL || index >= array->rank)
-        return NULL;
-    extent = inquiry_extent(unit, value, array, index);
-    lower = inquiry_lower(unit, array, index);
-    if (extent == NULL || lower == NULL) {
-        free(extent);
-        free(lower);
-        return NULL;
-    }
-    f2c_buffer_printf(&result, "((%s)", f2c_expression_c_type(value));
-    if (strcmp(value->text, "shape") == 0)
-        f2c_buffer_printf(&result, "f2c_inquiry_size_integer((size_t)(%s), %d))", extent,
-                          value->type_kind);
-    else if (strcmp(value->text, "lbound") == 0)
-        f2c_buffer_printf(&result,
-                          "f2c_inquiry_bound_integer(f2c_inquiry_lower_bound("
-                          "(int64_t)(%s), (size_t)(%s)), %d))",
-                          lower, extent, value->type_kind);
-    else
-        f2c_buffer_printf(&result,
-                          "f2c_inquiry_bound_integer(f2c_inquiry_upper("
-                          "f2c_inquiry_lower_bound((int64_t)(%s), (size_t)(%s)), "
-                          "(size_t)(%s)), %d))",
-                          lower, extent, extent, value->type_kind);
-    free(extent);
-    free(lower);
-    return f2c_buffer_take(&result);
-}
-
-static void emit_inquiry_value(Context *context, const Symbol *target, const F2cExpr *call,
-                               const char *extent, const char *lower, size_t dimension, int depth) {
-    const int result_kind = call->type_kind != 0 ? call->type_kind : 4;
-    const int target_kind = target->kind != 0 ? target->kind : 4;
-    f2c_transform_indent(&context->output, depth);
-    f2c_buffer_printf(&context->output, "f2c_inquiry_result[%zuU] = (%s)", dimension,
-                      f2c_symbol_c_type(target));
-    if (strcmp(call->text, "shape") == 0) {
-        f2c_buffer_printf(&context->output,
-                          "f2c_inquiry_bound_integer(f2c_inquiry_size_integer((size_t)(%s), "
-                          "%d), %d);\n",
-                          extent, result_kind, target_kind);
-    } else if (strcmp(call->text, "lbound") == 0) {
-        f2c_buffer_printf(&context->output,
-                          "f2c_inquiry_bound_integer(f2c_inquiry_bound_integer("
-                          "f2c_inquiry_lower_bound((int64_t)(%s), (size_t)(%s)), %d), %d);\n",
-                          lower, extent, result_kind, target_kind);
-    } else {
-        f2c_buffer_printf(&context->output,
-                          "f2c_inquiry_bound_integer(f2c_inquiry_bound_integer("
-                          "f2c_inquiry_upper(f2c_inquiry_lower_bound((int64_t)(%s), "
-                          "(size_t)(%s)), (size_t)(%s)), %d), %d);\n",
-                          lower, extent, extent, result_kind, target_kind);
-    }
+    return f2c_array_inquiry_dimension(unit, value, index);
 }
 
 int f2c_transform_emit_inquiry(Context *context, Unit *unit, const F2cExpr *left,
@@ -85,8 +14,7 @@ int f2c_transform_emit_inquiry(Context *context, Unit *unit, const F2cExpr *left
     Symbol *target = left != NULL ? left->symbol : NULL;
     const F2cExpr *array =
         f2c_transform_argument(call, strcmp(call->text, "shape") == 0 ? "source" : "array", 0U);
-    char *extents[F2C_MAX_RANK] = {0};
-    char *lowers[F2C_MAX_RANK] = {0};
+    char *values[F2C_MAX_RANK] = {0};
     size_t dimension;
     if (target == NULL || left->kind != F2C_EXPR_NAME || target->type != TYPE_INTEGER ||
         target->rank != 1U || array == NULL || array->rank == 0U || array->rank > F2C_MAX_RANK ||
@@ -98,14 +26,11 @@ int f2c_transform_emit_inquiry(Context *context, Unit *unit, const F2cExpr *left
         return 1;
     }
     for (dimension = 0U; dimension < array->rank; ++dimension) {
-        extents[dimension] = inquiry_extent(unit, call, array, dimension);
-        lowers[dimension] = inquiry_lower(unit, array, dimension);
-        if (extents[dimension] == NULL || lowers[dimension] == NULL) {
+        values[dimension] = f2c_array_inquiry_dimension(unit, call, dimension);
+        if (values[dimension] == NULL) {
             size_t cleanup;
-            for (cleanup = 0U; cleanup <= dimension; ++cleanup) {
-                free(extents[cleanup]);
-                free(lowers[cleanup]);
-            }
+            for (cleanup = 0U; cleanup <= dimension; ++cleanup)
+                free(values[cleanup]);
             f2c_diagnostic(context, line, 1, "%s source shape is not available in typed IR",
                            call->text);
             return 1;
@@ -123,9 +48,14 @@ int f2c_transform_emit_inquiry(Context *context, Unit *unit, const F2cExpr *left
                       f2c_symbol_c_type(target), f2c_symbol_c_type(target));
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "if (f2c_inquiry_result == NULL) abort();\n");
-    for (dimension = 0U; dimension < array->rank; ++dimension)
-        emit_inquiry_value(context, target, call, extents[dimension], lowers[dimension], dimension,
-                           depth + 1);
+    for (dimension = 0U; dimension < array->rank; ++dimension) {
+        f2c_transform_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output,
+                          "f2c_inquiry_result[%zuU] = (%s)f2c_inquiry_bound_integer("
+                          "(int64_t)(%s), %d);\n",
+                          dimension, f2c_symbol_c_type(target), values[dimension],
+                          target->kind != 0 ? target->kind : 4);
+    }
 
     if (target->allocatable) {
         const char *name = f2c_symbol_c_name(unit, target);
@@ -157,9 +87,7 @@ int f2c_transform_emit_inquiry(Context *context, Unit *unit, const F2cExpr *left
     }
     f2c_transform_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
-    for (dimension = 0U; dimension < array->rank; ++dimension) {
-        free(extents[dimension]);
-        free(lowers[dimension]);
-    }
+    for (dimension = 0U; dimension < array->rank; ++dimension)
+        free(values[dimension]);
     return 1;
 }
