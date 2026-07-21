@@ -1,5 +1,6 @@
 #include "codegen/array/private.h"
 
+#include "codegen/descriptor/private.h"
 #include "semantic/intrinsic.h"
 
 #include <stdio.h>
@@ -75,9 +76,9 @@ static F2cExpr *lowered_integer(char *code) {
     return lowered_expression(code, TYPE_INTEGER, f2c_default_kind(TYPE_INTEGER));
 }
 
-static F2cExpr *ordinal_subscript(Unit *unit, const Symbol *symbol, size_t dimension,
+static F2cExpr *ordinal_subscript(Unit *unit, const F2cExpr *expression, size_t dimension,
                                   const char *ordinal) {
-    char *lower = f2c_symbol_dimension_lower(unit, symbol, dimension);
+    char *lower = f2c_descriptor_dimension_lower(unit, expression, dimension);
     Buffer code = {0};
     if (lower == NULL)
         return NULL;
@@ -86,7 +87,7 @@ static F2cExpr *ordinal_subscript(Unit *unit, const Symbol *symbol, size_t dimen
     return lowered_integer(f2c_buffer_take(&code));
 }
 
-static F2cExpr *section_subscript(Unit *unit, const F2cExpr *section, const Symbol *symbol,
+static F2cExpr *section_subscript(Unit *unit, const F2cExpr *expression, const F2cExpr *section,
                                   size_t dimension, const char *ordinal) {
     const F2cExpr *lower_expression;
     const F2cExpr *step_expression;
@@ -100,7 +101,7 @@ static F2cExpr *section_subscript(Unit *unit, const F2cExpr *section, const Symb
     step = step_expression != NULL ? f2c_array_emit_expression(unit, step_expression)
                                    : f2c_strdup("1");
     lower = lower_expression != NULL ? f2c_array_emit_expression(unit, lower_expression)
-                                     : f2c_symbol_dimension_lower(unit, symbol, dimension);
+                                     : f2c_descriptor_dimension_lower(unit, expression, dimension);
     if (lower == NULL || step == NULL) {
         free(lower);
         free(step);
@@ -112,7 +113,7 @@ static F2cExpr *section_subscript(Unit *unit, const F2cExpr *section, const Symb
     return lowered_integer(f2c_buffer_take(&code));
 }
 
-static char *section_extent(Unit *unit, const F2cExpr *section, const Symbol *symbol,
+static char *section_extent(Unit *unit, const F2cExpr *expression, const F2cExpr *section,
                             size_t dimension) {
     const F2cExpr *lower_expression;
     const F2cExpr *upper_expression;
@@ -123,13 +124,14 @@ static char *section_extent(Unit *unit, const F2cExpr *section, const Symbol *sy
     char *upper = NULL;
     char *step;
     Buffer result = {0};
-    if (section == NULL || section->child_count != 3U || symbol == NULL)
+    if (section == NULL || section->child_count != 3U || expression == NULL ||
+        expression->symbol == NULL)
         return NULL;
     lower_expression = section->children[0]->kind == F2C_EXPR_INVALID ? NULL : section->children[0];
     upper_expression = section->children[1]->kind == F2C_EXPR_INVALID ? NULL : section->children[1];
     step_expression = section->children[2]->kind == F2C_EXPR_INVALID ? NULL : section->children[2];
-    declared_lower = f2c_symbol_dimension_lower(unit, symbol, dimension);
-    declared_upper = f2c_symbol_dimension_upper(unit, symbol, dimension);
+    declared_lower = f2c_descriptor_dimension_lower(unit, expression, dimension);
+    declared_upper = f2c_descriptor_dimension_upper(unit, expression, dimension);
     step = step_expression != NULL ? f2c_array_emit_expression(unit, step_expression)
                                    : f2c_strdup("1");
     lower = lower_expression != NULL ? f2c_array_emit_expression(unit, lower_expression)
@@ -171,8 +173,7 @@ static F2cExpr *whole_array_element(Unit *unit, const F2cExpr *expression, size_
     element->definable = expression->definable;
     element->type_kind = expression->type_kind;
     for (dimension = 0U; dimension < rank; ++dimension) {
-        F2cExpr *index =
-            ordinal_subscript(unit, expression->symbol, dimension, ordinals[dimension]);
+        F2cExpr *index = ordinal_subscript(unit, expression, dimension, ordinals[dimension]);
         if (index == NULL || !f2c_expr_push(element, index)) {
             f2c_expr_free(index);
             f2c_expr_free(element);
@@ -185,6 +186,7 @@ static F2cExpr *whole_array_element(Unit *unit, const F2cExpr *expression, size_
 static F2cExpr *array_reference_element(Unit *unit, const F2cExpr *expression, size_t rank,
                                         const char *const *ordinals) {
     F2cExpr *element = clone_shell(expression);
+    const size_t selector_offset = f2c_descriptor_selector_offset(expression);
     size_t dimension;
     size_t ordinal = 0U;
     if (element == NULL || expression->symbol == NULL)
@@ -192,13 +194,21 @@ static F2cExpr *array_reference_element(Unit *unit, const F2cExpr *expression, s
     element->rank = 0U;
     memset(&element->shape, 0, sizeof(element->shape));
     element->shape.kind = F2C_SHAPE_SCALAR;
-    for (dimension = 0U; dimension < expression->child_count; ++dimension) {
+    for (dimension = 0U; dimension < selector_offset; ++dimension) {
+        F2cExpr *base = clone_exact(expression->children[dimension]);
+        if (base == NULL || !f2c_expr_push(element, base)) {
+            f2c_expr_free(base);
+            goto failed;
+        }
+    }
+    for (dimension = selector_offset; dimension < expression->child_count; ++dimension) {
         const F2cExpr *selector = expression->children[dimension];
+        const size_t source_dimension = dimension - selector_offset;
         F2cExpr *index;
         if (selector->kind == F2C_EXPR_ARRAY_SECTION) {
             if (ordinal >= rank)
                 goto failed;
-            index = section_subscript(unit, selector, expression->symbol, dimension,
+            index = section_subscript(unit, expression, selector, source_dimension,
                                       ordinals[ordinal++]);
         } else if (selector->rank != 0U) {
             const char *vector_ordinal[1];
@@ -292,7 +302,29 @@ F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, siz
         return NULL;
     if (expression->kind == F2C_EXPR_NAME)
         return whole_array_element(unit, expression, rank, ordinals);
-    if (expression->kind == F2C_EXPR_ARRAY_REFERENCE)
+    if (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U) {
+        F2cExpr *element = clone_shell(expression);
+        size_t dimension;
+        F2cExpr *base = clone_exact(expression->children[0]);
+        if (element == NULL || base == NULL || !f2c_expr_push(element, base)) {
+            f2c_expr_free(base);
+            f2c_expr_free(element);
+            return NULL;
+        }
+        element->rank = 0U;
+        memset(&element->shape, 0, sizeof(element->shape));
+        element->shape.kind = F2C_SHAPE_SCALAR;
+        for (dimension = 0U; dimension < rank; ++dimension) {
+            F2cExpr *index = ordinal_subscript(unit, expression, dimension, ordinals[dimension]);
+            if (index == NULL || !f2c_expr_push(element, index)) {
+                f2c_expr_free(index);
+                f2c_expr_free(element);
+                return NULL;
+            }
+        }
+        return element;
+    }
+    if (expression->kind == F2C_EXPR_ARRAY_REFERENCE || expression->kind == F2C_EXPR_COMPONENT)
         return array_reference_element(unit, expression, rank, ordinals);
     if (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY ||
         expression->kind == F2C_EXPR_KEYWORD_ARGUMENT)
@@ -342,6 +374,7 @@ static const F2cExpr *shape_carrier(const F2cExpr *expression, size_t rank) {
     if (expression == NULL)
         return NULL;
     if ((expression->kind == F2C_EXPR_NAME || expression->kind == F2C_EXPR_ARRAY_REFERENCE ||
+         expression->kind == F2C_EXPR_COMPONENT ||
          expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) &&
         expression->rank == rank)
         return expression;
@@ -378,21 +411,25 @@ char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t 
         return f2c_strdup(carrier->lowered_extent_c);
     if (carrier->kind == F2C_EXPR_NAME && carrier->symbol != NULL)
         return f2c_symbol_dimension_extent(unit, carrier->symbol, dimension);
+    if (carrier->kind == F2C_EXPR_COMPONENT && carrier->symbol != NULL &&
+        carrier->child_count == 1U)
+        return f2c_descriptor_dimension_extent(unit, carrier, dimension);
     if (carrier->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && dimension == 0U) {
         (void)snprintf(literal, sizeof(literal), "%zu", carrier->child_count);
         return f2c_strdup(literal);
     }
-    if (carrier->kind == F2C_EXPR_ARRAY_REFERENCE) {
+    if (carrier->kind == F2C_EXPR_ARRAY_REFERENCE || carrier->kind == F2C_EXPR_COMPONENT) {
+        const size_t selector_offset = f2c_descriptor_selector_offset(carrier);
         size_t selector;
         size_t result_dimension = 0U;
-        for (selector = 0U; selector < carrier->child_count; ++selector) {
+        for (selector = selector_offset; selector < carrier->child_count; ++selector) {
             const F2cExpr *index = carrier->children[selector];
             if (index->kind != F2C_EXPR_ARRAY_SECTION && index->rank == 0U)
                 continue;
             if (result_dimension++ != dimension)
                 continue;
             if (index->kind == F2C_EXPR_ARRAY_SECTION && carrier->symbol != NULL)
-                return section_extent(unit, index, carrier->symbol, selector);
+                return section_extent(unit, carrier, index, selector - selector_offset);
             if (index->rank == 1U)
                 return f2c_array_expression_extent(unit, index, 0U);
             return NULL;
