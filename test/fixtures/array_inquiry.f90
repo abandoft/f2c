@@ -16,6 +16,7 @@ program array_inquiry
   if (any(matrix_shape /= [3, 3])) error stop 1
   if (any(matrix_lower /= [-1, 4])) error stop 2
   if (any(matrix_upper /= [1, 6])) error stop 3
+  if (sum(matrix(:, 4:5)) /= 21 .or. sum(matrix(1, 4:6)) /= 18) error stop 29
 
   shape8 = shape(kind=8, source=matrix)
   lower8 = lbound(kind=8, array=matrix)

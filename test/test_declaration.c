@@ -194,6 +194,19 @@ static void test_contiguous_attribute(void) {
     }
 }
 
+static void test_assumed_size_declaration_context(void) {
+    static const char source[] = "program local_assumed_size\n"
+                                 "  integer :: values(*)\n"
+                                 "end program local_assumed_size\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "assumed-size arrays are rejected outside dummy arguments");
+    expect(capture.captured && capture.code == F2C_DIAGNOSTIC_SEMANTIC,
+           "invalid assumed-size declaration has a stable semantic diagnostic");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_duplicate_attribute();
     test_duplicate_shape();
@@ -201,5 +214,6 @@ int main(void) {
     test_attribute_keywords_as_identifiers();
     test_selected_kind_type_selectors();
     test_contiguous_attribute();
+    test_assumed_size_declaration_context();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

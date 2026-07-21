@@ -24,7 +24,7 @@ fi
 cmake -E remove_directory "$WORK"
 cmake -E make_directory "$WORK"
 
-for fixture in array_inquiry descriptor_temporary; do
+for fixture in array_inquiry assumed_size_inquiry descriptor_temporary; do
     case_work=$WORK/$fixture
     source=$ROOT/test/fixtures/$fixture.f90
     cmake -E make_directory "$case_work"

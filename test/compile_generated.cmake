@@ -119,6 +119,7 @@ foreach(
        where_construct
        elemental_procedure
        array_inquiry
+       assumed_size_inquiry
        bit_intrinsics
        numeric_operation_intrinsics
        numeric_operation_derived_ownership
