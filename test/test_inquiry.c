@@ -111,6 +111,9 @@ static void test_assumed_size_constraints(void) {
     expect(result.code != NULL && strstr(result.code, "(const size_t[]){") != NULL &&
                strstr(result.code, "(size_t)(1U)") != NULL,
            "LBOUND models the final assumed-size dimension without inventing its extent");
+    expect(result.code != NULL && strstr(result.code, "(const int32_t[2])") != NULL &&
+               strstr(result.code, " = lbound(") == NULL,
+           "inquiry array results are elementized for direct array-section assignment");
     f2c_result_free(&result);
 
     expect_assumed_size_diagnostic("integer :: array(n, *)", "shape(array)",
