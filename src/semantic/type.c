@@ -16,6 +16,16 @@ int f2c_symbol_uses_descriptor(const Symbol *symbol) {
     return 0;
 }
 
+int f2c_symbol_is_assumed_size(const Symbol *symbol) {
+    return symbol != NULL && symbol->rank != 0U &&
+           symbol->dimensions[symbol->rank - 1U].kind == F2C_DIMENSION_ASSUMED_SIZE;
+}
+
+int f2c_expression_is_whole_assumed_size(const F2cExpr *expression) {
+    return expression != NULL && expression->kind == F2C_EXPR_NAME &&
+           f2c_symbol_is_assumed_size(expression->symbol);
+}
+
 const char *f2c_c_type(Type type) {
     switch (type) {
     case TYPE_INTEGER:

@@ -684,6 +684,15 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
             unit, symbol->character_length_expression, &constant_length);
     }
     f2c_shape_from_symbol(unit, &symbol->shape, symbol);
+    if (f2c_symbol_is_assumed_size(symbol) && !symbol->argument && !symbol->parameter) {
+        f2c_diagnostic_at_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, 1U, 1,
+                               "assumed-size array '%s' must be a dummy argument", symbol->name);
+    }
+    if (f2c_symbol_is_assumed_size(symbol) && (symbol->allocatable || symbol->pointer)) {
+        f2c_diagnostic_at_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, 1U, 1,
+                               "assumed-size array '%s' cannot have the %s attribute", symbol->name,
+                               symbol->allocatable ? "ALLOCATABLE" : "POINTER");
+    }
     if (symbol->contiguous) {
         const int assumed_shape_dummy =
             symbol->argument && symbol->rank != 0U && symbol->shape.kind == F2C_SHAPE_ASSUMED_SHAPE;

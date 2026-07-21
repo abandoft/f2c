@@ -161,6 +161,45 @@ static const F2cExpr *inquiry_argument(const F2cExpr *call, const char *keyword,
     return NULL;
 }
 
+static int intrinsic_accepts_whole_assumed_size(const char *name) {
+    static const char *const inquiries[] = {
+        "digits", "epsilon",     "huge",        "is_contiguous", "kind",    "lbound",
+        "len",    "maxexponent", "minexponent", "precision",     "present", "radix",
+        "range",  "rank",        "size",        "storage_size",  "tiny",    "ubound",
+    };
+    size_t inquiry;
+    if (name == NULL)
+        return 0;
+    for (inquiry = 0U; inquiry < sizeof(inquiries) / sizeof(inquiries[0]); ++inquiry)
+        if (strcmp(name, inquiries[inquiry]) == 0)
+            return 1;
+    return 0;
+}
+
+static void validate_assumed_size_operands(Context *context, size_t line,
+                                           const char *statement_text, const F2cExpr *expression) {
+    size_t child;
+    if (expression == NULL)
+        return;
+    for (child = 0U; child < expression->child_count; ++child) {
+        const F2cExpr *operand = expression->children[child];
+        if (operand != NULL && operand->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
+            operand->child_count == 1U)
+            operand = operand->children[0];
+        if (!f2c_expression_is_whole_assumed_size(operand))
+            continue;
+        if (expression->kind == F2C_EXPR_CALL &&
+            (!f2c_is_intrinsic_name(expression->text) ||
+             intrinsic_accepts_whole_assumed_size(expression->text)))
+            continue;
+        f2c_diagnostic_at(
+            context, line, f2c_validation_expression_start_column(statement_text, operand), 1,
+            "whole assumed-size array '%s' cannot appear in an expression that requires its "
+            "shape",
+            operand->symbol->name);
+    }
+}
+
 static void validate_matrix_intrinsic(Context *context, size_t line, const char *statement_text,
                                       const F2cExpr *expression) {
     const int transpose = expression->text != NULL && strcmp(expression->text, "transpose") == 0;
@@ -221,6 +260,7 @@ static void validate_array_inquiry(Context *context, Unit *unit, size_t line,
     const F2cExpr *array = inquiry_argument(expression, shape ? "source" : "array", 0U);
     const F2cExpr *dimension = shape ? NULL : inquiry_argument(expression, "dim", 1U);
     const F2cExpr *kind = inquiry_argument(expression, "kind", shape ? 1U : 2U);
+    const int assumed_size = f2c_expression_is_whole_assumed_size(array);
     int64_t value;
     size_t argument;
     for (argument = 0U; argument < expression->child_count; ++argument) {
@@ -237,6 +277,25 @@ static void validate_array_inquiry(Context *context, Unit *unit, size_t line,
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, array), 1,
                           "%s requires a non-scalar array argument", expression->text);
+    if (assumed_size && shape) {
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, array), 1,
+                          "SHAPE source cannot be an assumed-size array");
+    } else if (assumed_size &&
+               (strcmp(expression->text, "size") == 0 || strcmp(expression->text, "ubound") == 0)) {
+        if (dimension == NULL) {
+            f2c_diagnostic_at(context, line,
+                              f2c_validation_expression_start_column(statement_text, array), 1,
+                              "%s of an assumed-size array requires DIM", expression->text);
+        } else if (dimension->type == TYPE_INTEGER && dimension->rank == 0U &&
+                   (array->rank == 1U || (f2c_evaluate_integer_constant(unit, dimension, &value) &&
+                                          value >= (int64_t)array->rank))) {
+            f2c_diagnostic_at(
+                context, line, f2c_validation_expression_start_column(statement_text, dimension), 1,
+                "DIM in %s for an assumed-size array must be less than array rank %zu",
+                expression->text, array->rank);
+        }
+    }
     if (dimension != NULL && (dimension->type != TYPE_INTEGER || dimension->rank != 0U)) {
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, dimension), 1,
@@ -570,6 +629,7 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
     int operator_handled;
     if (expression == NULL)
         return;
+    validate_assumed_size_operands(context, line, statement_text, expression);
     for (i = 0U; i < expression->child_count; ++i)
         f2c_validation_expression_calls(context, unit, line, statement_text,
                                         expression->children[i]);
@@ -590,6 +650,15 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                         "INTEGER vector");
                 }
                 continue;
+            }
+            if (f2c_symbol_is_assumed_size(expression->symbol) &&
+                i + 1U == expression->symbol->rank && selector->child_count >= 2U &&
+                selector->children[1] != NULL && selector->children[1]->kind == F2C_EXPR_INVALID) {
+                f2c_diagnostic_at(
+                    context, line, f2c_validation_expression_start_column(statement_text, selector),
+                    1,
+                    "array section in the final dimension of an assumed-size array requires an "
+                    "upper bound");
             }
             for (part = 0U; part < selector->child_count; ++part) {
                 F2cExpr *bound = selector->children[part];

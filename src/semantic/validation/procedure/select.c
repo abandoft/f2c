@@ -9,6 +9,16 @@ static int array_storage_sequence_actual(const F2cExpr *actual) {
            actual->symbol != NULL && actual->symbol->rank != 0U;
 }
 
+static int assumed_shape_dummy(const Symbol *dummy) {
+    size_t dimension;
+    if (dummy == NULL || !dummy->argument)
+        return 0;
+    for (dimension = 0U; dimension < dummy->rank; ++dimension)
+        if (dummy->dimensions[dimension].kind == F2C_DIMENSION_ASSUMED_SHAPE)
+            return 1;
+    return 0;
+}
+
 static int interface_candidate_matches(Unit *candidate, F2cExpr *const *arguments,
                                        size_t argument_count, int subroutine_call) {
     unsigned char *assigned;
@@ -73,6 +83,7 @@ static int interface_candidate_matches(Unit *candidate, F2cExpr *const *argument
         } else if ((dummy->type != TYPE_UNKNOWN && value->type != TYPE_UNKNOWN &&
                     (dummy->type != value->type || (dummy->kind != 0 && value->type_kind != 0 &&
                                                     dummy->kind != value->type_kind))) ||
+                   (assumed_shape_dummy(dummy) && f2c_expression_is_whole_assumed_size(value)) ||
                    (dummy->rank != value->rank && !(candidate->elemental && dummy->rank == 0U) &&
                     !(dummy->rank != 0U && array_storage_sequence_actual(value))) ||
                    (dummy->allocatable && (value->kind != F2C_EXPR_NAME || value->symbol == NULL ||

@@ -16,6 +16,10 @@ void f2c_validation_io_item(Context *context, size_t line, const char *statement
     f2c_validation_report_parse_error(context, line, statement_text, item->limit,
                                       "implied-DO limit");
     f2c_validation_report_parse_error(context, line, statement_text, item->step, "implied-DO step");
+    if (f2c_expression_is_whole_assumed_size(item->expression))
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, item->expression),
+                          1, "I/O item cannot be a whole assumed-size array");
     for (i = 0U; i < item->child_count; ++i)
         f2c_validation_io_item(context, line, statement_text, &item->children[i]);
 }

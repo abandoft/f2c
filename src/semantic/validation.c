@@ -339,6 +339,14 @@ void f2c_validation_intrinsic_assignment(Context *context, const F2cStatement *s
         return;
     if (left->parse_error_offset != SIZE_MAX || right->parse_error_offset != SIZE_MAX)
         return;
+    if (f2c_expression_is_whole_assumed_size(left))
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_column(statement->text, left), 1,
+                          "assignment target cannot be a whole assumed-size array");
+    if (f2c_expression_is_whole_assumed_size(right))
+        f2c_diagnostic_at(context, statement->line,
+                          f2c_validation_expression_column(statement->text, right), 1,
+                          "assignment value cannot be a whole assumed-size array");
     if (!left->definable && left->kind != F2C_EXPR_CALL) {
         f2c_diagnostic_at(context, statement->line,
                           f2c_validation_expression_column(statement->text, left), 1,

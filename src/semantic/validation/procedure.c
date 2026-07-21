@@ -11,6 +11,16 @@ static int array_storage_sequence_actual(const F2cExpr *actual) {
            actual->symbol != NULL && actual->symbol->rank != 0U;
 }
 
+static int assumed_shape_dummy(const Symbol *dummy) {
+    size_t dimension;
+    if (dummy == NULL || !dummy->argument)
+        return 0;
+    for (dimension = 0U; dimension < dummy->rank; ++dimension)
+        if (dummy->dimensions[dimension].kind == F2C_DIMENSION_ASSUMED_SHAPE)
+            return 1;
+    return 0;
+}
+
 size_t f2c_procedure_dummy_count(const Unit *unit) {
     return unit != NULL && unit->dummy_argument_indices != NULL ? unit->dummy_count
                                                                 : unit->argument_count;
@@ -759,6 +769,15 @@ static void validate_procedure_actual(Context *context, Unit *caller, const Unit
                           "argument %zu of procedure '%s' must be a POINTER whole object for "
                           "dummy '%s'",
                           index + 1U, definition->name, dummy->name);
+    }
+    if (assumed_shape_dummy(dummy) && f2c_expression_is_whole_assumed_size(value)) {
+        f2c_diagnostic_at(context, line, column, 1,
+                          "argument %zu of procedure '%s' is a whole assumed-size array, but "
+                          "dummy '%s' is assumed-shape",
+                          index + 1U,
+                          definition->fortran_name != NULL ? definition->fortran_name
+                                                           : definition->name,
+                          dummy->name);
     }
     if (value->rank != dummy->rank && !(definition->elemental && dummy->rank == 0U) &&
         !(dummy->rank != 0U && array_storage_sequence_actual(value))) {
