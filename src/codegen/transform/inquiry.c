@@ -11,6 +11,14 @@ static char *inquiry_lower(Unit *unit, const F2cExpr *array, size_t dimension) {
     return f2c_strdup("1");
 }
 
+static char *inquiry_extent(Unit *unit, const F2cExpr *call, const F2cExpr *array,
+                            size_t dimension) {
+    if (call != NULL && call->text != NULL && strcmp(call->text, "lbound") == 0 &&
+        f2c_expression_is_whole_assumed_size(array) && dimension + 1U == array->rank)
+        return f2c_strdup("1U");
+    return f2c_array_expression_extent(unit, array, dimension);
+}
+
 char *f2c_transform_inquiry_element(Unit *unit, const F2cExpr *value, size_t index) {
     const F2cExpr *array =
         f2c_transform_argument(value, strcmp(value->text, "shape") == 0 ? "source" : "array", 0U);
@@ -19,7 +27,7 @@ char *f2c_transform_inquiry_element(Unit *unit, const F2cExpr *value, size_t ind
     Buffer result = {0};
     if (array == NULL || index >= array->rank)
         return NULL;
-    extent = f2c_array_expression_extent(unit, array, index);
+    extent = inquiry_extent(unit, value, array, index);
     lower = inquiry_lower(unit, array, index);
     if (extent == NULL || lower == NULL) {
         free(extent);
@@ -90,7 +98,7 @@ int f2c_transform_emit_inquiry(Context *context, Unit *unit, const F2cExpr *left
         return 1;
     }
     for (dimension = 0U; dimension < array->rank; ++dimension) {
-        extents[dimension] = f2c_array_expression_extent(unit, array, dimension);
+        extents[dimension] = inquiry_extent(unit, call, array, dimension);
         lowers[dimension] = inquiry_lower(unit, array, dimension);
         if (extents[dimension] == NULL || lowers[dimension] == NULL) {
             size_t cleanup;

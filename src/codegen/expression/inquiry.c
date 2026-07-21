@@ -48,7 +48,9 @@ char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *s
     Buffer extent_list = {0};
     Buffer lower_list = {0};
     Buffer result = {0};
+    size_t metadata_rank;
     size_t index;
+    int assumed_size;
     if (name == NULL ||
         (strcmp(name, "size") != 0 && strcmp(name, "lbound") != 0 && strcmp(name, "ubound") != 0))
         return NULL;
@@ -59,8 +61,17 @@ char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *s
         *supported = 0;
         return NULL;
     }
-    for (index = 0U; index < array->rank; ++index) {
-        extents[index] = f2c_array_expression_extent(unit, array, index);
+    assumed_size = f2c_expression_is_whole_assumed_size(array);
+    metadata_rank = array->rank;
+    if (assumed_size && strcmp(name, "lbound") != 0)
+        --metadata_rank;
+    if (assumed_size && strcmp(name, "size") == 0 && dimension == NULL)
+        goto unsupported;
+    for (index = 0U; index < metadata_rank; ++index) {
+        if (assumed_size && strcmp(name, "lbound") == 0 && index + 1U == array->rank)
+            extents[index] = f2c_strdup("1U");
+        else
+            extents[index] = f2c_array_expression_extent(unit, array, index);
         if ((array->kind == F2C_EXPR_NAME ||
              (array->kind == F2C_EXPR_COMPONENT && array->child_count == 1U)) &&
             array->symbol != NULL)
@@ -83,24 +94,24 @@ char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *s
             f2c_buffer_printf(&result,
                               "f2c_inquiry_extent((int64_t)(%s), %zuU, "
                               "(const size_t[]){%s})",
-                              dimension_code, array->rank,
+                              dimension_code, metadata_rank,
                               extent_list.data != NULL ? extent_list.data : "");
         else
-            f2c_buffer_printf(&result, "f2c_inquiry_size(%zuU, (const size_t[]){%s})", array->rank,
-                              extent_list.data != NULL ? extent_list.data : "");
+            f2c_buffer_printf(&result, "f2c_inquiry_size(%zuU, (const size_t[]){%s})",
+                              metadata_rank, extent_list.data != NULL ? extent_list.data : "");
         f2c_buffer_printf(&result, ", %d))", expression->type_kind);
     } else if (strcmp(name, "lbound") == 0) {
         f2c_buffer_printf(&result,
                           "f2c_inquiry_bound_integer(f2c_inquiry_lower((int64_t)(%s), %zuU, "
                           "(const int64_t[]){%s}, (const size_t[]){%s}), %d))",
-                          dimension_code, array->rank,
+                          dimension_code, metadata_rank,
                           lower_list.data != NULL ? lower_list.data : "",
                           extent_list.data != NULL ? extent_list.data : "", expression->type_kind);
     } else {
         f2c_buffer_printf(&result,
                           "f2c_inquiry_bound_integer(f2c_inquiry_upper_dimension((int64_t)(%s), "
                           "%zuU, (const int64_t[]){%s}, (const size_t[]){%s}), %d))",
-                          dimension_code, array->rank,
+                          dimension_code, metadata_rank,
                           lower_list.data != NULL ? lower_list.data : "",
                           extent_list.data != NULL ? extent_list.data : "", expression->type_kind);
     }
