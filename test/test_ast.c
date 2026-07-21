@@ -693,6 +693,44 @@ static void test_type_bound_derived_result(void) {
     f2c_expr_free(expression);
 }
 
+static void test_component_section_rank(void) {
+    F2cDerivedType derived = {0};
+    Symbol component = {0};
+    Symbol object = {0};
+    Unit unit = {0};
+    F2cExpr *expression;
+    const char *error_at = NULL;
+
+    derived.name = (char *)"record";
+    derived.c_name = (char *)"record";
+    derived.components = &component;
+    derived.component_count = 1U;
+    component.name = (char *)"values";
+    component.c_name = (char *)"values";
+    component.type = TYPE_INTEGER;
+    component.kind = f2c_default_kind(TYPE_INTEGER);
+    component.rank = 3U;
+    component.pointer = 1;
+    component.derived_owner = &derived;
+    f2c_shape_from_symbol(NULL, &component.shape, &component);
+    object.name = (char *)"object";
+    object.c_name = (char *)"object";
+    object.type = TYPE_DERIVED;
+    object.kind = f2c_default_kind(TYPE_DERIVED);
+    object.derived_type = &derived;
+    unit.symbols = &object;
+    unit.symbol_count = 1U;
+    unit.derived_types = &derived;
+    unit.derived_type_count = 1U;
+
+    expression = f2c_parse_expression_ast(&unit, "object%values(:, 2, :)", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->kind == F2C_EXPR_COMPONENT &&
+               expression->child_count == 4U && expression->rank == 2U &&
+               expression->shape.rank == 2U,
+           "component sections preserve every retained result dimension in the typed AST");
+    f2c_expr_free(expression);
+}
+
 int main(void) {
     test_kind_shape_and_value_category();
     test_typed_numeric_tree();
@@ -709,6 +747,7 @@ int main(void) {
     test_integer_substitution_clone();
     test_integer_iteration_counts();
     test_type_bound_derived_result();
+    test_component_section_rank();
     if (failures != 0) {
         fprintf(stderr, "%d AST test(s) failed\n", failures);
         return 1;

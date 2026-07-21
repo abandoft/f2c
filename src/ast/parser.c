@@ -633,10 +633,13 @@ static F2cExpr *parse_primary(AstParser *parser) {
             for (selector = 1U; selector < selection->child_count; ++selector) {
                 if (selection->children[selector]->kind == F2C_EXPR_ARRAY_SECTION ||
                     selection->children[selector]->rank != 0U) {
-                    selection->rank = 1U;
-                    f2c_ast_set_expression_shape(selection, 1U, F2C_SHAPE_EXPRESSION);
+                    if (selection->rank < F2C_MAX_RANK)
+                        ++selection->rank;
                 }
             }
+            f2c_ast_set_expression_shape(selection, selection->rank,
+                                         selection->rank == 0U ? F2C_SHAPE_SCALAR
+                                                               : F2C_SHAPE_EXPRESSION);
         } else if (expression->rank == 0U) {
             selection->rank = component->rank;
             selection->shape = component->shape;
