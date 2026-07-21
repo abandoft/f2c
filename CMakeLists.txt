@@ -84,6 +84,7 @@ set(
     src/codegen/array/component.c
     src/codegen/array/constructor.c
     src/codegen/array/element.c
+    src/codegen/array/inquiry.c
     src/codegen/array/private.h
     src/codegen/array/temporary.c
     src/codegen/call.c
