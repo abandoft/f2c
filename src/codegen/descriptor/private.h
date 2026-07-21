@@ -26,8 +26,9 @@ const F2cExpr *f2c_descriptor_selector(const F2cExpr *expression, size_t dimensi
 int f2c_descriptor_association_view(Buffer *prelude, Unit *unit, const F2cExpr *expression,
                                     int depth, F2cDescriptorView *view);
 int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit,
-                                    const F2cExpr *expression, F2cIntent intent, size_t identifier,
-                                    int depth, F2cDescriptorView *view);
+                                    const F2cExpr *expression, F2cIntent intent,
+                                    size_t minimum_count, size_t identifier, int depth,
+                                    F2cDescriptorView *view);
 void f2c_descriptor_view_free(F2cDescriptorView *view);
 
 #endif
