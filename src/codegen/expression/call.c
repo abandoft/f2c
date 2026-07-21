@@ -1,6 +1,7 @@
 #include "codegen/expression/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/descriptor/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -69,6 +70,19 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
         }
         return *pointer != NULL && *count != NULL && *stride != NULL;
     }
+    if (array->kind == F2C_EXPR_COMPONENT && array->child_count == 1U && array->symbol != NULL &&
+        array->rank == 1U) {
+        char *component_extent;
+        Buffer count_code = {0};
+        *pointer = f2c_descriptor_storage_designator(unit, array);
+        component_extent = f2c_descriptor_dimension_extent(unit, array, 0U);
+        if (component_extent != NULL)
+            f2c_buffer_printf(&count_code, "(size_t)(%s)", component_extent);
+        free(component_extent);
+        *count = f2c_buffer_take(&count_code);
+        *stride = f2c_descriptor_expression_stride(unit, array, 0U);
+        return *pointer != NULL && *count != NULL && *stride != NULL;
+    }
     if (array->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
         char *constructor = f2c_expression_emit(unit, array, supported);
         Buffer grouped = {0};
@@ -113,16 +127,18 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
         *count = f2c_buffer_take(&extent);
         return *pointer != NULL && *count != NULL && *stride != NULL;
     }
-    if (array->kind != F2C_EXPR_ARRAY_REFERENCE || array->symbol == NULL || array->rank != 1U)
+    if ((array->kind != F2C_EXPR_ARRAY_REFERENCE && array->kind != F2C_EXPR_COMPONENT) ||
+        array->symbol == NULL || array->rank != 1U)
         return 0;
     selector = NULL;
     dimension = 0U;
-    for (size_t i = 0U; i < array->child_count; ++i) {
+    const size_t selector_offset = f2c_descriptor_selector_offset(array);
+    for (size_t i = selector_offset; i < array->child_count; ++i) {
         if (array->children[i]->kind == F2C_EXPR_ARRAY_SECTION) {
             if (selector != NULL)
                 return 0;
             selector = array->children[i];
-            dimension = i;
+            dimension = i - selector_offset;
         } else if (array->children[i]->rank != 0U) {
             return 0;
         }
@@ -130,15 +146,30 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
     if (selector == NULL || selector->child_count != 3U)
         return 0;
     lower = selector->children[0]->kind == F2C_EXPR_INVALID
-                ? f2c_symbol_dimension_lower(unit, array->symbol, dimension)
+                ? f2c_descriptor_dimension_lower(unit, array, dimension)
                 : f2c_expression_emit(unit, selector->children[0], supported);
     upper = selector->children[1]->kind == F2C_EXPR_INVALID
-                ? f2c_symbol_dimension_upper(unit, array->symbol, dimension)
+                ? f2c_descriptor_dimension_upper(unit, array, dimension)
                 : f2c_expression_emit(unit, selector->children[1], supported);
     step = selector->children[2]->kind == F2C_EXPR_INVALID
                ? f2c_strdup("1")
                : f2c_expression_emit(unit, selector->children[2], supported);
-    reference = f2c_expression_emit_array_reference(unit, array, supported);
+    {
+        char *indices[F2C_MAX_RANK] = {0};
+        size_t source_dimension;
+        for (source_dimension = 0U; source_dimension < array->symbol->rank; ++source_dimension) {
+            const F2cExpr *source_selector = f2c_descriptor_selector(array, source_dimension);
+            if (source_selector == selector)
+                indices[source_dimension] = f2c_strdup(lower);
+            else
+                indices[source_dimension] = f2c_expression_emit(unit, source_selector, supported);
+        }
+        reference = *supported ? f2c_descriptor_element_designator(unit, array, indices,
+                                                                   array->symbol->rank)
+                               : NULL;
+        for (source_dimension = 0U; source_dimension < array->symbol->rank; ++source_dimension)
+            free(indices[source_dimension]);
+    }
     if (!*supported || lower == NULL || upper == NULL || step == NULL || reference == NULL) {
         free(lower);
         free(upper);
@@ -160,7 +191,7 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
                       step);
     *count = f2c_buffer_take(&extent);
     for (size_t i = 0U; i < dimension; ++i) {
-        char *dimension_extent = f2c_symbol_dimension_extent(unit, array->symbol, i);
+        char *dimension_extent = f2c_descriptor_dimension_extent(unit, array, i);
         if (dimension_extent == NULL) {
             free(reference);
             free(lower);

@@ -1,6 +1,7 @@
 #include "codegen/expression/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/descriptor/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -60,8 +61,10 @@ char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *s
     }
     for (index = 0U; index < array->rank; ++index) {
         extents[index] = f2c_array_expression_extent(unit, array, index);
-        if (array->kind == F2C_EXPR_NAME && array->symbol != NULL)
-            lowers[index] = f2c_symbol_dimension_lower(unit, array->symbol, index);
+        if ((array->kind == F2C_EXPR_NAME ||
+             (array->kind == F2C_EXPR_COMPONENT && array->child_count == 1U)) &&
+            array->symbol != NULL)
+            lowers[index] = f2c_descriptor_dimension_lower(unit, array, index);
         else
             lowers[index] = f2c_strdup("1");
         if (extents[index] == NULL || lowers[index] == NULL)
