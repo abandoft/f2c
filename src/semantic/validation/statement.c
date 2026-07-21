@@ -20,15 +20,18 @@ static int null_pointer_value(const F2cExpr *expression) {
 
 static int pointer_target_designator(const F2cExpr *expression) {
     return expression != NULL &&
-           (expression->kind == F2C_EXPR_NAME || expression->kind == F2C_EXPR_ARRAY_REFERENCE) &&
+           (expression->kind == F2C_EXPR_NAME || expression->kind == F2C_EXPR_ARRAY_REFERENCE ||
+            expression->kind == F2C_EXPR_COMPONENT) &&
            expression->symbol != NULL;
 }
 
 static int pointer_target_has_vector_subscript(const F2cExpr *expression) {
     size_t selector;
-    if (expression == NULL || expression->kind != F2C_EXPR_ARRAY_REFERENCE)
+    if (expression == NULL ||
+        (expression->kind != F2C_EXPR_ARRAY_REFERENCE && expression->kind != F2C_EXPR_COMPONENT))
         return 0;
-    for (selector = 0U; selector < expression->child_count; ++selector) {
+    for (selector = expression->kind == F2C_EXPR_COMPONENT ? 1U : 0U;
+         selector < expression->child_count; ++selector) {
         const F2cExpr *subscript = expression->children[selector];
         if (subscript != NULL && subscript->kind != F2C_EXPR_ARRAY_SECTION && subscript->rank != 0U)
             return 1;
@@ -59,19 +62,23 @@ static int scalar_integer_expression(const F2cExpr *expression) {
 static F2cPointerBoundsKind validate_pointer_bounds(Context *context, const F2cStatement *statement,
                                                     const Symbol *pointer) {
     const F2cExpr *left = statement != NULL ? statement->left : NULL;
+    const size_t selector_offset = left != NULL && left->kind == F2C_EXPR_COMPONENT ? 1U : 0U;
     size_t dimension;
     size_t upper_count = 0U;
-    if (left == NULL || left->kind != F2C_EXPR_ARRAY_REFERENCE)
+    if (left == NULL ||
+        (left->kind != F2C_EXPR_ARRAY_REFERENCE && left->kind != F2C_EXPR_COMPONENT) ||
+        (left->kind == F2C_EXPR_COMPONENT && left->child_count == 1U))
         return F2C_POINTER_BOUNDS_NONE;
-    if (pointer == NULL || pointer->rank == 0U || left->child_count != pointer->rank) {
+    if (pointer == NULL || pointer->rank == 0U ||
+        left->child_count != pointer->rank + selector_offset) {
         f2c_diagnostic_at(context, statement->line,
                           f2c_validation_expression_start_column(statement->text, left), 1,
                           "pointer bounds must specify exactly one dimension for each pointer "
                           "rank");
         return F2C_POINTER_BOUNDS_INVALID;
     }
-    for (dimension = 0U; dimension < left->child_count; ++dimension) {
-        const F2cExpr *selector = left->children[dimension];
+    for (dimension = 0U; dimension < pointer->rank; ++dimension) {
+        const F2cExpr *selector = left->children[selector_offset + dimension];
         const F2cExpr *lower;
         const F2cExpr *upper;
         const F2cExpr *stride;
@@ -108,7 +115,7 @@ static F2cPointerBoundsKind validate_pointer_bounds(Context *context, const F2cS
             ++upper_count;
         }
     }
-    if (upper_count != 0U && upper_count != left->child_count) {
+    if (upper_count != 0U && upper_count != pointer->rank) {
         f2c_diagnostic_at(context, statement->line,
                           f2c_validation_expression_start_column(statement->text, left), 1,
                           "pointer assignment cannot mix lower-bound specifications with bounds "
@@ -262,12 +269,6 @@ static void validate_pointer_statement(Context *context, Unit *unit, F2cStatemen
                 f2c_diagnostic_at(context, statement->line,
                                   f2c_validation_expression_start_column(statement->text, argument),
                                   1, "NULLIFY object must be a whole POINTER object");
-            } else if (argument->kind == F2C_EXPR_COMPONENT && symbol->rank != 0U) {
-                f2c_diagnostic_at(context, statement->line,
-                                  f2c_validation_expression_start_column(statement->text, argument),
-                                  1,
-                                  "array POINTER components require a component descriptor and "
-                                  "are not yet supported");
             }
         }
         return;
@@ -307,13 +308,6 @@ static void validate_pointer_statement(Context *context, Unit *unit, F2cStatemen
         statement->pointer_bounds = validate_pointer_bounds(context, statement, pointer);
         if (statement->pointer_bounds == F2C_POINTER_BOUNDS_INVALID)
             return;
-        if (left->kind == F2C_EXPR_COMPONENT && pointer->rank != 0U) {
-            f2c_diagnostic_at(context, statement->line,
-                              f2c_validation_expression_start_column(statement->text, left), 1,
-                              "array POINTER components require a component descriptor and are "
-                              "not yet supported");
-            return;
-        }
         if (null_target && statement->pointer_bounds != F2C_POINTER_BOUNDS_NONE) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, right), 1,
