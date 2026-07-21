@@ -120,6 +120,7 @@ foreach(
        elemental_procedure
        array_inquiry
        assumed_size_inquiry
+       array_section_bounds_once
        bit_intrinsics
        numeric_operation_intrinsics
        numeric_operation_derived_ownership
