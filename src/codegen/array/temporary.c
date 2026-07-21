@@ -11,6 +11,12 @@ static int trivial_scalar(const F2cExpr *expression) {
            expression->kind == F2C_EXPR_ABSENT_ARGUMENT;
 }
 
+static int array_inquiry_call(const F2cExpr *expression) {
+    return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
+           (strcmp(expression->text, "shape") == 0 || strcmp(expression->text, "lbound") == 0 ||
+            strcmp(expression->text, "ubound") == 0);
+}
+
 int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_t identifier,
                                           const char *role, size_t *temporary, Buffer *prelude,
                                           int depth, int root) {
@@ -40,6 +46,8 @@ int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_
         f2c_array_indent(prelude, depth);
         f2c_buffer_printf(prelude, "const %s %s = %s;\n", f2c_expression_c_type(expression),
                           name.data, code);
+        f2c_array_indent(prelude, depth);
+        f2c_buffer_printf(prelude, "(void)%s;\n", name.data);
         free(code);
         free(expression->lowered_c);
         expression->lowered_c = f2c_buffer_take(&name);
@@ -80,6 +88,8 @@ int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *ex
         cleanup == NULL || role == NULL)
         return 0;
     if (expression == NULL)
+        return 1;
+    if (array_inquiry_call(expression))
         return 1;
     if (expression->kind != F2C_EXPR_ARRAY_CONSTRUCTOR) {
         for (child = 0U; child < expression->child_count; ++child)
