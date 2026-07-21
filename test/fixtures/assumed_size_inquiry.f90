@@ -14,13 +14,12 @@ contains
     integer, intent(in) :: leading
     integer, intent(in) :: array(0:leading - 1, -2:*)
     integer, intent(out) :: result(10)
-    integer :: bounds(2), dim
+    integer :: dim
 
     dim = 1
     result(1) = size(array, 1)
     result(2) = size(array, dim)
-    bounds = lbound(array)
-    result(3:4) = bounds
+    result(3:4) = lbound(array)
     result(5) = lbound(array, dim)
     dim = 2
     result(6) = lbound(array, dim)
