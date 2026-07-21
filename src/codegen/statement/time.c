@@ -126,7 +126,7 @@ static int emit_date_and_time(Buffer *output, Unit *unit, const F2cStatement *st
         !emit_character_actual(unit, zone, &zone_pointer, &zone_length))
         goto cleanup;
     if (values != NULL &&
-        !f2c_descriptor_materialize_view(&prelude, &cleanup, unit, values, F2C_INTENT_INOUT,
+        !f2c_descriptor_materialize_view(&prelude, &cleanup, unit, values, F2C_INTENT_INOUT, 8U,
                                          identifier, depth + 1, &view))
         goto cleanup;
     indent(output, depth);
@@ -135,6 +135,8 @@ static int emit_date_and_time(Buffer *output, Unit *unit, const F2cStatement *st
     if (values != NULL) {
         indent(output, depth + 1);
         f2c_buffer_printf(output, "int64_t f2c_date_values_%zu[8] = {0};\n", identifier);
+        indent(output, depth + 1);
+        f2c_buffer_printf(output, "if ((size_t)(%s) < 8U) abort();\n", view.extent[0]);
     }
     indent(output, depth + 1);
     f2c_buffer_printf(
@@ -149,8 +151,6 @@ static int emit_date_and_time(Buffer *output, Unit *unit, const F2cStatement *st
     else
         f2c_buffer_append(output, "NULL);\n");
     if (values != NULL) {
-        indent(output, depth + 1);
-        f2c_buffer_printf(output, "if ((size_t)(%s) < 8U) abort();\n", view.extent[0]);
         indent(output, depth + 1);
         f2c_buffer_printf(output,
                           "for (size_t f2c_date_index_%zu = 0U; f2c_date_index_%zu < 8U; "
