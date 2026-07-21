@@ -267,23 +267,49 @@ static F2cExpr *clone_whole_array_element(Unit *unit, const F2cExpr *expression,
 
 int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExpr *left,
                                       const F2cExpr *right, int depth) {
-    F2cExpr *lowered_left;
-    F2cExpr *lowered_right;
+    F2cExpr *prepared_left = NULL;
+    F2cExpr *prepared_right = NULL;
+    F2cExpr *lowered_left = NULL;
+    F2cExpr *lowered_right = NULL;
     char *left_code;
     char *right_code;
     char *character_length = NULL;
     char *extents[F2C_MAX_RANK] = {0};
     char *right_extents[F2C_MAX_RANK] = {0};
+    Buffer prelude = {0};
+    Buffer temporary_cleanup = {0};
     size_t dimension;
     size_t section_count = 0U;
+    size_t temporary = 0U;
+    size_t identifier;
     const int character_assignment = left != NULL && left->symbol != NULL &&
                                      left->symbol->type == TYPE_CHARACTER && right != NULL &&
                                      right->type == TYPE_CHARACTER;
     const int scalar_character_source = character_assignment && right->rank == 0U;
     int emitted_depth = depth;
     int result = 0;
-    if (left == NULL || left->kind != F2C_EXPR_ARRAY_REFERENCE || left->symbol == NULL)
+    if (context == NULL || unit == NULL || left == NULL || right == NULL ||
+        left->kind != F2C_EXPR_ARRAY_REFERENCE || left->symbol == NULL)
         return 0;
+    identifier = left->span.begin.line;
+    prepared_left = f2c_array_clone_expression(left);
+    prepared_right = f2c_array_clone_expression(right);
+    if (prepared_left == NULL || prepared_right == NULL ||
+        !f2c_array_hoist_scalar_subexpressions(unit, prepared_left, identifier, "section_left",
+                                               &temporary, &prelude, depth + 1, 1) ||
+        !f2c_array_hoist_scalar_subexpressions(
+            unit, prepared_right, identifier, "section_right", &temporary, &prelude, depth + 1,
+            prepared_right->rank != 0U || prepared_right->type == TYPE_CHARACTER ||
+                prepared_right->type == TYPE_DERIVED) ||
+        !f2c_array_materialize_constructors(context, unit, prepared_left, identifier,
+                                            "section_left", &temporary, &prelude,
+                                            &temporary_cleanup, depth + 1) ||
+        !f2c_array_materialize_constructors(context, unit, prepared_right, identifier,
+                                            "section_right", &temporary, &prelude,
+                                            &temporary_cleanup, depth + 1))
+        goto cleanup;
+    left = prepared_left;
+    right = prepared_right;
     for (dimension = 0U; dimension < left->child_count; ++dimension) {
         if (left->children[dimension]->kind != F2C_EXPR_ARRAY_SECTION &&
             left->children[dimension]->rank == 0U)
@@ -330,6 +356,7 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_append(&context->output, "{\n");
     ++emitted_depth;
+    f2c_buffer_append(&context->output, prelude.data != NULL ? prelude.data : "");
     for (dimension = 0U; dimension < section_count; ++dimension) {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output, "const size_t f2c_extent_%zu = (size_t)(%s);\n",
@@ -478,6 +505,8 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "free(f2c_section_scalar);\n");
     }
+    f2c_buffer_append(&context->output,
+                      temporary_cleanup.data != NULL ? temporary_cleanup.data : "");
     --emitted_depth;
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_append(&context->output, "}\n");
@@ -494,6 +523,10 @@ cleanup:
         free(extents[dimension]);
         free(right_extents[dimension]);
     }
+    free(prelude.data);
+    free(temporary_cleanup.data);
+    f2c_expr_free(prepared_left);
+    f2c_expr_free(prepared_right);
     return result;
 }
 
