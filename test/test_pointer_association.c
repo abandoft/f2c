@@ -54,6 +54,8 @@ static void test_section_lowering(void) {
                     "section extent is computed from single-evaluation temporaries");
     expect_contains(result.code, "const int64_t f2c_pointer_bound_lower_1",
                     "pointer lower bounds are captured in single-evaluation temporaries");
+    expect_contains(result.code, "f2c_default_integer_bounds(",
+                    "pointer metadata uses a warning-free checked narrowing boundary");
     expect_contains(result.code, "size_t f2c_pointer_remap_count = 1U;",
                     "rank remapping validates the requested pointer element count");
     expect_contains(result.code, "f2c_pointer_target_count < f2c_pointer_remap_count",
