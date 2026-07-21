@@ -298,8 +298,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 完成 F90 全部 intrinsic 及项目承诺的旧式 intrinsic；重点补齐位操作、字符处理、数值模型、
   kind 选择、数组 inquiry 和随机数语义。数组 inquiry 子集已覆盖非默认下界、零 extent 的标准
   `LBOUND=1/UBOUND=0`、动态 `DIM`、`KIND=1/2/4/8`、切片/构造器/elemental 数组表达式、可分配
-  结果、假定形状哑实参，以及假定大小数组可查询的前维 extent 和全部声明下界；独立负向语义测试、
-  严格 C17 执行及 gfortran 差分已进入 CI。位操作
+  结果、假定形状哑实参，以及假定大小数组可查询的前维 extent 和全部声明下界；数组结果现经统一
+  elementizer 可直接写入连续或非连续数组段，并可嵌套在 elemental 数组表达式中，不再回退成伪 C
+  函数调用。独立负向语义测试、严格 C17 执行及 gfortran 差分已进入 CI。位操作
   `BIT_SIZE/BTEST/IAND/IBCLR/IBITS/IBSET/IEOR/IOR/ISHFT/ISHFTC/NOT/MVBITS` 已覆盖
   `INTEGER(KIND=1/2/4/8)`、关键字参数、常量折叠、elemental 数组、符号位及完整位宽边界；
   `MVBITS` 对标量别名、重叠数组段和标量广播使用写入前快照。严格 C17、UBSan 及 gfortran
