@@ -332,6 +332,11 @@ F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, siz
     if (expression->kind == F2C_EXPR_CALL) {
         if (expression->text != NULL && strcmp(expression->text, "transpose") == 0)
             return transpose_element(unit, expression, ordinals);
+        if (rank == 1U && expression->text != NULL &&
+            (strcmp(expression->text, "shape") == 0 || strcmp(expression->text, "lbound") == 0 ||
+             strcmp(expression->text, "ubound") == 0))
+            return lowered_expression(f2c_array_inquiry_element(unit, expression, ordinals[0]),
+                                      expression->type, expression->type_kind);
         intrinsic = f2c_find_intrinsic(expression->text);
         return ((intrinsic != NULL && intrinsic->rank_rule == F2C_INTRINSIC_RANK_ELEMENTAL) ||
                 (expression->resolved_procedure != NULL &&
