@@ -5,6 +5,7 @@ module pointer_section_bounds
   integer, pointer :: module_view(:)
   integer, pointer, contiguous :: module_contiguous_view(:)
   type :: contiguous_worker
+    integer :: offset
   contains
     procedure :: mutate => mutate_bound
   end type contiguous_worker
@@ -24,7 +25,7 @@ contains
     class(contiguous_worker), intent(in) :: self
     integer, contiguous, intent(inout) :: pointer_value(:)
     pointer_value(3) = 1404
-    mutate_bound = sum(pointer_value)
+    mutate_bound = sum(pointer_value) + self%offset
   end function mutate_bound
 end module pointer_section_bounds
 
@@ -49,6 +50,8 @@ program pointer_section
   type(contiguous_worker) :: worker
 
   evaluations = 0
+  worker%offset = 0
+  nullify(selected_words)
   module_storage = [1, 2, 3, 4, 5, 6]
   call associate_module()
   if (size(module_view) /= 3) stop 19
