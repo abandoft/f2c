@@ -548,6 +548,16 @@ if(F2C_BUILD_TESTING)
         COMMAND f2c_numeric_operation_intrinsic_tests
     )
 
+    add_executable(
+        f2c_mathematical_conversion_intrinsic_tests
+        test/test_mathematical_conversion_intrinsic.c
+    )
+    f2c_configure_test_target(f2c_mathematical_conversion_intrinsic_tests)
+    add_test(
+        NAME mathematical_conversion_intrinsic_semantics
+        COMMAND f2c_mathematical_conversion_intrinsic_tests
+    )
+
     add_executable(f2c_random_intrinsic_tests test/test_random_intrinsic.c)
     f2c_configure_test_target(f2c_random_intrinsic_tests)
     add_test(NAME random_intrinsic_semantics COMMAND f2c_random_intrinsic_tests)
