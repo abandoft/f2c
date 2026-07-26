@@ -1,3 +1,15 @@
+## 1.24.0
+
+- Completed complex initialization-constant evaluation across kind 4 and 8, parameter references, mixed numeric arithmetic, scaled division, exponentiation, and every supported complex mathematical intrinsic.
+- Composed `CMPLX`, `CONJG`, `AIMAG`, `REAL`, `DBLE`, `INT`, and `ABS` in complex constant expressions, emitting portable static C17 initializers for modules, declarations, `DATA`, and `COMMON`.
+- Rejected complex division by zero and zero-valued complex `LOG` before code generation, avoiding runtime complex-library calls at file scope.
+- Added typed IR, kind validation, constant folding, elemental-array semantics, and normalized C17 conversion for `LOGICAL(L, KIND)`.
+- Added keyword arguments, blank-padded lexical comparison, constant folding, and elemental lowering for `LGE`, `LGT`, `LLE`, and `LLT`.
+- Completed exact argument and result type contracts for `MAX0`, `MIN0`, `AMAX0`, `AMIN0`, `MAX1`, `MIN1`, `AMAX1`, `AMIN1`, `DMAX1`, and `DMIN1`.
+- Corrected legacy specific-extrema conversion order so selection occurs in the source type before checked result conversion.
+- Centralized integer constant literal emission and expanded static folding for scalar mathematical and conversion expressions.
+- Expanded strict C17, sanitizer, and native Fortran differential coverage, and added character-intrinsic differential validation to the default CTest gate.
+
 ## 1.23.0
 
 - Added dedicated typed IR, canonical keyword association, type/kind/rank validation, and elemental lowering for the core mathematical and numeric conversion intrinsics.
