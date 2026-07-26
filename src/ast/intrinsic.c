@@ -40,6 +40,9 @@ static const F2cExpr *typed_intrinsic_primary(const F2cExpr *expression,
     case F2C_INTRINSIC_REAL:
         keyword = "a";
         break;
+    case F2C_INTRINSIC_LOGICAL:
+        keyword = "l";
+        break;
     case F2C_INTRINSIC_AIMAG:
     case F2C_INTRINSIC_CONJG:
         keyword = "z";
