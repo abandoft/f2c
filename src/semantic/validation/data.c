@@ -226,11 +226,10 @@ static int common_value_has_static_form(Unit *unit, const Symbol *symbol, const 
     case TYPE_DOUBLE:
         return f2c_evaluate_real_constant(unit, value, &real_value);
     case TYPE_COMPLEX:
-    case TYPE_DOUBLE_COMPLEX:
-        if (value->kind == F2C_EXPR_COMPLEX_LITERAL && value->child_count == 2U)
-            return f2c_evaluate_real_constant(unit, value->children[0], &real_value) &&
-                   f2c_evaluate_real_constant(unit, value->children[1], &real_value);
-        return f2c_evaluate_real_constant(unit, value, &real_value);
+    case TYPE_DOUBLE_COMPLEX: {
+        double imaginary_value;
+        return f2c_evaluate_complex_constant(unit, value, &real_value, &imaginary_value);
+    }
     case TYPE_CHARACTER:
         supported =
             f2c_evaluate_character_constant(unit, value, &character_value, &character_length);
