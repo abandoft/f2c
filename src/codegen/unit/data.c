@@ -1,5 +1,7 @@
 #include "codegen/unit/private.h"
 
+#include "codegen/literal/real.h"
+
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -42,6 +44,9 @@ static char *static_numeric_initializer(Unit *unit, Type target_type, const F2cE
     int64_t integer_value;
     double real_value;
     double imaginary_value = 0.0;
+    char *real_literal;
+    char *imaginary_literal;
+    const int real_kind = target_type == TYPE_REAL || target_type == TYPE_COMPLEX ? 4 : 8;
     if (expression == NULL)
         return NULL;
     if (target_type == TYPE_INTEGER || target_type == TYPE_LOGICAL) {
@@ -60,18 +65,32 @@ static char *static_numeric_initializer(Unit *unit, Type target_type, const F2cE
     if (target_type == TYPE_REAL || target_type == TYPE_DOUBLE) {
         if (!f2c_evaluate_real_constant(unit, expression, &real_value))
             return NULL;
-        f2c_buffer_printf(&initializer, "(%s)(%a)", f2c_c_type(target_type), real_value);
+        real_literal = f2c_real_constant_literal(real_value, real_kind);
+        if (real_literal == NULL)
+            return NULL;
+        f2c_buffer_printf(&initializer, "(%s)(%s)", f2c_c_type(target_type), real_literal);
+        free(real_literal);
         return f2c_buffer_take(&initializer);
     }
     if (target_type != TYPE_COMPLEX && target_type != TYPE_DOUBLE_COMPLEX)
         return NULL;
     if (!f2c_evaluate_complex_constant(unit, expression, &real_value, &imaginary_value))
         return NULL;
-    f2c_buffer_printf(&initializer, "%s((%s)(%a), (%s)(%a))",
+    real_literal = f2c_real_constant_literal(real_value, real_kind);
+    imaginary_literal = f2c_real_constant_literal(imaginary_value, real_kind);
+    if (real_literal == NULL || imaginary_literal == NULL) {
+        free(real_literal);
+        free(imaginary_literal);
+        return NULL;
+    }
+    f2c_buffer_printf(&initializer, "%s((%s)(%s), (%s)(%s))",
                       target_type == TYPE_DOUBLE_COMPLEX ? "F2C_COMPLEX_DOUBLE_INITIALIZER"
                                                          : "F2C_COMPLEX_FLOAT_INITIALIZER",
-                      target_type == TYPE_DOUBLE_COMPLEX ? "double" : "float", real_value,
-                      target_type == TYPE_DOUBLE_COMPLEX ? "double" : "float", imaginary_value);
+                      target_type == TYPE_DOUBLE_COMPLEX ? "double" : "float", real_literal,
+                      target_type == TYPE_DOUBLE_COMPLEX ? "double" : "float",
+                      imaginary_literal);
+    free(real_literal);
+    free(imaginary_literal);
     return f2c_buffer_take(&initializer);
 }
 
