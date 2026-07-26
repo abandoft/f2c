@@ -103,10 +103,12 @@ set(
     src/codegen/expression/bit.c
     src/codegen/expression/call.c
     src/codegen/expression/character.c
+    src/codegen/expression/conversion.c
     src/codegen/expression/descriptor.c
     src/codegen/expression/derived_actual.c
     src/codegen/expression/inquiry.c
     src/codegen/expression/leaf.c
+    src/codegen/expression/mathematical.c
     src/codegen/expression/model.c
     src/codegen/expression/numeric.c
     src/codegen/expression/private.h
@@ -175,8 +177,10 @@ set(
     src/core/cleanup.c
     src/core/generated/bit.c
     src/core/generated/character.c
+    src/core/generated/conversion.c
     src/core/generated/io.c
     src/core/generated/list.c
+    src/core/generated/mathematical.c
     src/core/generated/model.c
     src/core/generated/numeric.c
     src/core/generated/private.h
@@ -242,6 +246,8 @@ set(
     src/semantic/constant.c
     src/semantic/constant/bit.c
     src/semantic/constant/character.c
+    src/semantic/constant/conversion.c
+    src/semantic/constant/mathematical.c
     src/semantic/constant/model.c
     src/semantic/constant/numeric.c
     src/semantic/constant/private.h
@@ -273,6 +279,8 @@ set(
     src/semantic/validation/intrinsic/arguments.h
     src/semantic/validation/intrinsic/bit.c
     src/semantic/validation/intrinsic/character.c
+    src/semantic/validation/intrinsic/conversion.c
+    src/semantic/validation/intrinsic/mathematical.c
     src/semantic/validation/intrinsic/model.c
     src/semantic/validation/intrinsic/numeric.c
     src/semantic/validation/intrinsic/random.c
