@@ -266,10 +266,49 @@ static size_t maximum_argument_index(const F2cExpr *argument) {
     return *end == '\0' && value >= 1UL && value <= 64UL ? (size_t)value - 1U : SIZE_MAX;
 }
 
+static const char *extremum_name(const F2cExpr *expression) {
+    static const char *const names[] = {"amax0", "amax1", "amin0", "amin1", "dmax1",
+                                        "dmin1", "max0",  "max1",  "min0",  "min1"};
+    static const char *const display[] = {"AMAX0", "AMAX1", "AMIN0", "AMIN1", "DMAX1",
+                                          "DMIN1", "MAX0",  "MAX1",  "MIN0",  "MIN1"};
+    size_t index;
+    if (expression == NULL || expression->text == NULL)
+        return "extremum intrinsic";
+    for (index = 0U; index < sizeof(names) / sizeof(names[0]); ++index)
+        if (strcmp(expression->text, names[index]) == 0)
+            return display[index];
+    return display_name(expression->intrinsic);
+}
+
+static int specific_extremum_contract(const F2cExpr *expression, Type *type, int *kind) {
+    if (expression == NULL || expression->text == NULL || type == NULL || kind == NULL)
+        return 0;
+    if (strcmp(expression->text, "max0") == 0 || strcmp(expression->text, "min0") == 0 ||
+        strcmp(expression->text, "amax0") == 0 || strcmp(expression->text, "amin0") == 0) {
+        *type = TYPE_INTEGER;
+        *kind = 4;
+        return 1;
+    }
+    if (strcmp(expression->text, "max1") == 0 || strcmp(expression->text, "min1") == 0 ||
+        strcmp(expression->text, "amax1") == 0 || strcmp(expression->text, "amin1") == 0) {
+        *type = TYPE_REAL;
+        *kind = 4;
+        return 1;
+    }
+    if (strcmp(expression->text, "dmax1") == 0 || strcmp(expression->text, "dmin1") == 0) {
+        *type = TYPE_DOUBLE;
+        *kind = 8;
+        return 1;
+    }
+    return 0;
+}
+
 static void validate_extremum(Context *context, size_t line, const char *statement_text,
                               F2cExpr *expression) {
-    const char *name = display_name(expression->intrinsic);
+    const char *name = extremum_name(expression);
     const F2cExpr *values[64] = {0};
+    Type required_type = TYPE_UNKNOWN;
+    int required_kind = 0;
     size_t positional = 0U;
     size_t argument;
     int saw_keyword = 0;
@@ -305,6 +344,18 @@ static void validate_extremum(Context *context, size_t line, const char *stateme
     }
     if (values[0] == NULL || values[1] == NULL)
         return;
+    if (specific_extremum_contract(expression, &required_type, &required_kind)) {
+        for (argument = 0U; argument < 64U; ++argument) {
+            if (values[argument] != NULL && (values[argument]->type != required_type ||
+                                             expression_kind(values[argument]) != required_kind))
+                f2c_diagnostic_at(
+                    context, line,
+                    f2c_validation_expression_start_column(statement_text, values[argument]), 1,
+                    "%s argument A%zu must be %s(kind=%d)", name, argument + 1U,
+                    f2c_validation_type_name(required_type), required_kind);
+        }
+        return;
+    }
     if (values[0]->type != TYPE_INTEGER && !is_real(values[0]->type)) {
         diagnose_type(context, line, statement_text, name, "A1", values[0], "INTEGER or REAL");
         return;
