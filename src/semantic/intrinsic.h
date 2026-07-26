@@ -46,6 +46,8 @@ int f2c_is_intrinsic_name(const char *name);
 int f2c_is_intrinsic_subroutine(const char *name);
 int f2c_intrinsic_is_bit(F2cIntrinsicId intrinsic);
 int f2c_intrinsic_is_character(F2cIntrinsicId intrinsic);
+int f2c_intrinsic_is_conversion(F2cIntrinsicId intrinsic);
+int f2c_intrinsic_is_mathematical(F2cIntrinsicId intrinsic);
 int f2c_intrinsic_is_numeric_model(F2cIntrinsicId intrinsic);
 int f2c_intrinsic_is_numeric_operation(F2cIntrinsicId intrinsic);
 int f2c_intrinsic_is_real_representation(F2cIntrinsicId intrinsic);
