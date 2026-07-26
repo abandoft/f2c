@@ -53,6 +53,13 @@ struct F2cExpr {
     size_t temporary_index;
     size_t contiguous_temporary_index;
     int has_contiguous_temporary;
+    size_t host_descriptor_temporary_begin;
+    size_t host_descriptor_temporary_count;
+    int has_host_descriptor_lifecycle;
+    size_t ordered_temporary_index;
+    size_t ordered_argument_temporary_index;
+    int ordered_argument_materialized;
+    int has_order_sensitive_call;
     size_t statement_temporary_index;
     size_t statement_nested_temporary_begin;
     F2cExpr **children;

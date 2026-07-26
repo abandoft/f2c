@@ -118,12 +118,6 @@ static int validate_capture(Context *context, Unit *unit, Symbol *capture) {
                        name);
         return 0;
     }
-    if (f2c_symbol_uses_descriptor(source) && !source->argument) {
-        f2c_diagnostic(context, line, 1,
-                       "host association of local dynamic descriptor '%s' is not yet supported",
-                       name);
-        return 0;
-    }
     return 1;
 }
 

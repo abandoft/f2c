@@ -4,10 +4,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+static int call_has_allocatable_result(const F2cExpr *expression) {
+    const Unit *procedure = expression != NULL ? expression->resolved_procedure : NULL;
+    const Symbol *result = procedure != NULL && procedure->result_name != NULL
+                               ? f2c_find_symbol((Unit *)procedure, procedure->result_name)
+                               : NULL;
+    return (result != NULL && result->allocatable) ||
+           (expression != NULL && expression->symbol != NULL &&
+            expression->symbol->external_result_allocatable);
+}
+
 int f2c_unit_expression_is_character_temporary(const F2cExpr *expression) {
     const int function_call = expression != NULL && expression->kind == F2C_EXPR_CALL &&
                               expression->type == TYPE_CHARACTER && expression->text != NULL &&
-                              !f2c_is_intrinsic_name(expression->text);
+                              !f2c_is_intrinsic_name(expression->text) &&
+                              !call_has_allocatable_result(expression);
     const int intrinsic_call = expression != NULL && expression->kind == F2C_EXPR_CALL &&
                                (expression->intrinsic == F2C_INTRINSIC_ADJUSTL ||
                                 expression->intrinsic == F2C_INTRINSIC_ADJUSTR ||
@@ -54,10 +65,26 @@ static const F2cExpr *actual_value(const F2cExpr *expression) {
 }
 
 static int user_procedure_call(const F2cExpr *expression) {
+    const int explicitly_external =
+        expression != NULL && expression->symbol != NULL && expression->symbol->external_declared;
     return expression != NULL && expression->kind == F2C_EXPR_CALL &&
            expression->intrinsic == F2C_INTRINSIC_NONE && expression->text != NULL &&
-           (expression->resolved_procedure != NULL || expression->symbol != NULL ||
+           (expression->resolved_procedure != NULL || explicitly_external ||
             !f2c_is_intrinsic_name(expression->text));
+}
+
+static const Unit *capture_procedure(const F2cExpr *expression) {
+    const Unit *resolved = expression != NULL && expression->resolved_procedure != NULL &&
+                                   !expression->resolved_procedure->interface_abstract
+                               ? expression->resolved_procedure
+                               : NULL;
+    if (resolved != NULL && resolved->internal)
+        return resolved;
+    return expression != NULL && expression->symbol != NULL &&
+                   expression->symbol->procedure_interface != NULL &&
+                   expression->symbol->procedure_interface->internal
+               ? expression->symbol->procedure_interface
+               : NULL;
 }
 
 static int derived_actual_temporary(const F2cExpr *expression) {
@@ -165,24 +192,99 @@ static int call_has_derived_actual(const F2cExpr *expression) {
     return 0;
 }
 
+static int call_has_managed_lifecycle(const F2cExpr *expression) {
+    return call_has_derived_actual(expression) || call_has_contiguous_actual(expression) ||
+           (expression != NULL && expression->has_host_descriptor_lifecycle);
+}
+
 static int materialized_call_result(const F2cExpr *expression) {
-    return (call_has_derived_actual(expression) || call_has_contiguous_actual(expression)) &&
+    return call_has_managed_lifecycle(expression) && !call_has_allocatable_result(expression) &&
            expression->rank == 0U && expression->type != TYPE_UNKNOWN &&
            expression->type != TYPE_CHARACTER && expression->type != TYPE_DERIVED;
 }
 
 static int materialized_derived_call_result(const F2cExpr *expression) {
-    return call_has_derived_actual(expression) && expression->rank == 0U &&
-           expression->type == TYPE_DERIVED && expression->derived_type != NULL;
+    return call_has_managed_lifecycle(expression) && !call_has_allocatable_result(expression) &&
+           expression->rank == 0U && expression->type == TYPE_DERIVED &&
+           expression->derived_type != NULL;
 }
 
+static int materialized_descriptor_call_result(const F2cExpr *expression) {
+    return call_has_managed_lifecycle(expression) && call_has_allocatable_result(expression);
+}
+
+static const F2cExpr *ordered_binary_operand(const F2cExpr *expression) {
+    if (expression == NULL || expression->kind != F2C_EXPR_BINARY ||
+        expression->child_count != 2U || expression->rank != 0U)
+        return NULL;
+    if (expression->children[0] != NULL && expression->children[0]->has_order_sensitive_call)
+        return expression->children[0];
+    if (expression->children[1] != NULL && expression->children[1]->has_order_sensitive_call)
+        return expression->children[1];
+    return NULL;
+}
+
+static int can_materialize_ordered_operand(const F2cExpr *operand) {
+    return operand != NULL && operand->rank == 0U && operand->type != TYPE_UNKNOWN &&
+           operand->type != TYPE_DERIVED && !call_has_allocatable_result(operand);
+}
+
+static int call_uses_argument_values(const F2cExpr *expression) {
+    if (expression == NULL)
+        return 0;
+    switch (expression->intrinsic) {
+    case F2C_INTRINSIC_BIT_SIZE:
+    case F2C_INTRINSIC_DIGITS:
+    case F2C_INTRINSIC_EPSILON:
+    case F2C_INTRINSIC_HUGE:
+    case F2C_INTRINSIC_KIND:
+    case F2C_INTRINSIC_MAXEXPONENT:
+    case F2C_INTRINSIC_MINEXPONENT:
+    case F2C_INTRINSIC_PRECISION:
+    case F2C_INTRINSIC_RADIX:
+    case F2C_INTRINSIC_RANGE:
+    case F2C_INTRINSIC_TINY:
+        return 0;
+    case F2C_INTRINSIC_NONE:
+    default:
+        return 1;
+    }
+}
+
+static void assign_ordered_call_arguments(F2cExpr *expression, size_t *next) {
+    const size_t first =
+        expression != NULL && expression->symbol != NULL && expression->symbol->type_bound ? 1U
+                                                                                           : 0U;
+    size_t child;
+    if (expression == NULL || expression->kind != F2C_EXPR_CALL ||
+        (expression->symbol != NULL && expression->symbol->statement_function) ||
+        !call_uses_argument_values(expression))
+        return;
+    for (child = first; child < expression->child_count; ++child) {
+        F2cExpr *actual = expression->children[child];
+        if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
+            actual->child_count == 1U)
+            actual = actual->children[0];
+        if (actual != NULL && actual->has_order_sensitive_call &&
+            can_materialize_ordered_operand(actual) &&
+            actual->ordered_argument_temporary_index == SIZE_MAX)
+            actual->ordered_argument_temporary_index = (*next)++;
+    }
+}
+
+typedef struct ExpressionTemporaryAssigner {
+    Unit *unit;
+    size_t next;
+} ExpressionTemporaryAssigner;
+
 static void assign_expression_temporary(F2cExpr *expression, void *state) {
-    size_t *next = (size_t *)state;
+    ExpressionTemporaryAssigner *assigner = (ExpressionTemporaryAssigner *)state;
+    size_t *next = &assigner->next;
+    size_t child;
     if (f2c_unit_expression_is_character_temporary(expression))
         expression->temporary_index = (*next)++;
     if (user_procedure_call(expression)) {
         const size_t first = expression->symbol != NULL && expression->symbol->type_bound ? 1U : 0U;
-        size_t child;
         for (child = first; child < expression->child_count; ++child) {
             F2cExpr *actual = expression->children[child];
             if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
@@ -192,16 +294,54 @@ static void assign_expression_temporary(F2cExpr *expression, void *state) {
                 actual->temporary_index = (*next)++;
         }
         assign_call_contiguous_actuals(expression, next);
+        {
+            const Unit *procedure = capture_procedure(expression);
+            const size_t descriptor_count =
+                f2c_host_capture_local_descriptor_count(assigner->unit, procedure);
+            expression->has_host_descriptor_lifecycle =
+                f2c_host_capture_has_descriptor_lifecycle(assigner->unit, procedure);
+            if (descriptor_count > SIZE_MAX - *next) {
+                f2c_diagnostic(assigner->unit->context,
+                               assigner->unit->context->lines.items[assigner->unit->begin].number,
+                               1, "host-capture descriptor temporary count overflow");
+                return;
+            }
+            if (descriptor_count != 0U) {
+                expression->host_descriptor_temporary_begin = *next;
+                expression->host_descriptor_temporary_count = descriptor_count;
+                *next += descriptor_count;
+            }
+        }
         if (materialized_call_result(expression) && expression->temporary_index == SIZE_MAX)
+            expression->temporary_index = (*next)++;
+        if (materialized_descriptor_call_result(expression) &&
+            expression->temporary_index == SIZE_MAX)
             expression->temporary_index = (*next)++;
         if (materialized_derived_call_result(expression) &&
             expression->statement_temporary_index == SIZE_MAX)
             expression->statement_temporary_index = (*next)++;
     }
+    assign_ordered_call_arguments(expression, next);
+    expression->has_order_sensitive_call = user_procedure_call(expression);
+    if (call_uses_argument_values(expression))
+        for (child = 0U; child < expression->child_count; ++child)
+            if (expression->children[child] != NULL &&
+                expression->children[child]->has_order_sensitive_call)
+                expression->has_order_sensitive_call = 1;
+    if (expression->ordered_temporary_index == SIZE_MAX &&
+        can_materialize_ordered_operand(ordered_binary_operand(expression)))
+        expression->ordered_temporary_index = (*next)++;
 }
 
 static void emit_expression_temporary(F2cExpr *expression, void *state) {
     Buffer *output = (Buffer *)state;
+    const F2cExpr *ordered_operand = ordered_binary_operand(expression);
+    size_t descriptor;
+    for (descriptor = 0U; descriptor < expression->host_descriptor_temporary_count; ++descriptor) {
+        f2c_unit_indent(output, 1);
+        f2c_buffer_printf(output, "f2c_descriptor f2c_host_descriptor_%zu = {0};\n",
+                          expression->host_descriptor_temporary_begin + descriptor);
+    }
     if (expression->has_contiguous_temporary) {
         f2c_unit_indent(output, 1);
         f2c_buffer_printf(output, "f2c_descriptor f2c_contiguous_source_%zu = {0};\n",
@@ -228,6 +368,12 @@ static void emit_expression_temporary(F2cExpr *expression, void *state) {
         f2c_buffer_printf(output, "%s f2c_expression_result_%zu = {0};\n",
                           f2c_expression_c_type(expression), expression->temporary_index);
     }
+    if (materialized_descriptor_call_result(expression) &&
+        expression->temporary_index != SIZE_MAX) {
+        f2c_unit_indent(output, 1);
+        f2c_buffer_printf(output, "f2c_descriptor f2c_expression_descriptor_result_%zu = {0};\n",
+                          expression->temporary_index);
+    }
     if (materialized_derived_call_result(expression) &&
         expression->statement_temporary_index != SIZE_MAX) {
         f2c_unit_indent(output, 1);
@@ -237,15 +383,35 @@ static void emit_expression_temporary(F2cExpr *expression, void *state) {
         f2c_buffer_printf(output, "bool f2c_derived_result_live_%zu = false;\n",
                           expression->statement_temporary_index);
     }
+    if (ordered_operand != NULL && expression->ordered_temporary_index != SIZE_MAX) {
+        f2c_unit_indent(output, 1);
+        if (ordered_operand->type == TYPE_CHARACTER)
+            f2c_buffer_printf(output, "char *f2c_ordered_value_%zu = NULL;\n",
+                              expression->ordered_temporary_index);
+        else
+            f2c_buffer_printf(output, "%s f2c_ordered_value_%zu = {0};\n",
+                              f2c_expression_c_type(ordered_operand),
+                              expression->ordered_temporary_index);
+    }
+    if (expression->ordered_argument_temporary_index != SIZE_MAX) {
+        f2c_unit_indent(output, 1);
+        if (expression->type == TYPE_CHARACTER)
+            f2c_buffer_printf(output, "char *f2c_ordered_argument_%zu = NULL;\n",
+                              expression->ordered_argument_temporary_index);
+        else
+            f2c_buffer_printf(output, "%s f2c_ordered_argument_%zu = {0};\n",
+                              f2c_expression_c_type(expression),
+                              expression->ordered_argument_temporary_index);
+    }
 }
 
 void f2c_unit_prepare_expression_temporaries(Unit *unit) {
     size_t statement;
-    size_t next = 0U;
+    ExpressionTemporaryAssigner assigner = {unit, 0U};
     for (statement = 0U; statement < unit->statement_count; ++statement)
         if (!f2c_unit_statement_is_function_definition(unit, statement))
             f2c_visit_statement_expressions(&unit->statements[statement],
-                                            assign_expression_temporary, &next);
+                                            assign_expression_temporary, &assigner);
 }
 
 void f2c_unit_emit_expression_temporaries(Buffer *output, Unit *unit) {

@@ -14,6 +14,7 @@ static F2cExpr *clone_expression(const F2cExpr *source) {
     if (clone == NULL)
         return NULL;
     *clone = *source;
+    clone->ordered_argument_materialized = 0;
     clone->text = NULL;
     clone->source = NULL;
     clone->lowered_c = NULL;

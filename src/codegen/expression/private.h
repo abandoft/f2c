@@ -22,9 +22,8 @@ char *f2c_expression_associated_array_target(Unit *unit, const F2cExpr *pointer,
                                              int *supported);
 char *f2c_expression_descriptor_actual(Buffer *setup, Buffer *cleanup, Unit *unit,
                                        const F2cExpr *actual, F2cIntent intent, int *supported);
-char *f2c_expression_wrap_contiguous_call(const F2cExpr *expression, int allocatable_result,
-                                          Buffer *setup, Buffer *cleanup, char *call,
-                                          int *supported);
+char *f2c_expression_wrap_managed_call(const F2cExpr *expression, int allocatable_result,
+                                       Buffer *setup, Buffer *cleanup, char *call, int *supported);
 char *f2c_expression_bit_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_character_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_numeric_model_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);

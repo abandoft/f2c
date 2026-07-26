@@ -89,16 +89,12 @@ char *f2c_expression_descriptor_actual(Buffer *setup, Buffer *cleanup, Unit *uni
     return f2c_buffer_take(&result);
 }
 
-char *f2c_expression_wrap_contiguous_call(const F2cExpr *expression, int allocatable_result,
-                                          Buffer *setup, Buffer *cleanup, char *call,
-                                          int *supported) {
+char *f2c_expression_wrap_managed_call(const F2cExpr *expression, int allocatable_result,
+                                       Buffer *setup, Buffer *cleanup, char *call, int *supported) {
     Buffer result = {0};
     if (setup->data == NULL)
         return call;
-    if (call == NULL || expression->rank != 0U || expression->type == TYPE_UNKNOWN ||
-        expression->type == TYPE_DERIVED || allocatable_result ||
-        expression->temporary_index == SIZE_MAX) {
-        free(call);
+    if (call == NULL) {
         free(setup->data);
         free(cleanup->data);
         setup->data = NULL;
@@ -107,9 +103,48 @@ char *f2c_expression_wrap_contiguous_call(const F2cExpr *expression, int allocat
         return NULL;
     }
     f2c_buffer_printf(&result, "(%s", setup->data);
-    if (expression->type == TYPE_CHARACTER)
+    if (cleanup->data == NULL) {
+        f2c_buffer_printf(&result, "%s)", call);
+        free(call);
+        free(setup->data);
+        setup->data = NULL;
+        return f2c_buffer_take(&result);
+    }
+    if (expression->type == TYPE_UNKNOWN ||
+        (allocatable_result && expression->temporary_index == SIZE_MAX) ||
+        (!allocatable_result && expression->type == TYPE_DERIVED &&
+         (expression->rank != 0U || expression->derived_type == NULL ||
+          expression->statement_temporary_index == SIZE_MAX)) ||
+        (!allocatable_result && expression->type != TYPE_DERIVED &&
+         expression->temporary_index == SIZE_MAX) ||
+        (!allocatable_result && expression->rank != 0U)) {
+        free(call);
+        free(setup->data);
+        free(cleanup->data);
+        setup->data = NULL;
+        cleanup->data = NULL;
+        *supported = 0;
+        return NULL;
+    }
+    if (allocatable_result)
+        f2c_buffer_printf(&result,
+                          "f2c_expression_descriptor_result_%zu = (%s), %s"
+                          "f2c_expression_descriptor_result_%zu)",
+                          expression->temporary_index, call,
+                          cleanup->data != NULL ? cleanup->data : "", expression->temporary_index);
+    else if (expression->type == TYPE_CHARACTER)
         f2c_buffer_printf(&result, "(void)(%s), %sf2c_character_result_%zu)", call,
                           cleanup->data != NULL ? cleanup->data : "", expression->temporary_index);
+    else if (expression->type == TYPE_DERIVED)
+        f2c_buffer_printf(&result,
+                          "f2c_materialize_move_%s(&f2c_derived_result_%zu, "
+                          "&f2c_derived_result_live_%zu, %s), %s"
+                          "f2c_take_%s(&f2c_derived_result_%zu, &f2c_derived_result_live_%zu))",
+                          expression->derived_type->c_name, expression->statement_temporary_index,
+                          expression->statement_temporary_index, call,
+                          cleanup->data != NULL ? cleanup->data : "",
+                          expression->derived_type->c_name, expression->statement_temporary_index,
+                          expression->statement_temporary_index);
     else
         f2c_buffer_printf(&result,
                           "f2c_expression_result_%zu = (%s), %s"

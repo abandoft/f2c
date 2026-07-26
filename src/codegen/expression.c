@@ -355,17 +355,51 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
             return NULL;
         }
         {
-            char *binary = f2c_emit_character_concatenation(unit, expression, left, right);
+            const int order_left = expression->children[0]->has_order_sensitive_call;
+            const int order_right = expression->children[1]->has_order_sensitive_call;
+            const int ordered =
+                expression->ordered_temporary_index != SIZE_MAX && (order_left || order_right);
+            Buffer temporary = {0};
+            Buffer sequenced = {0};
+            const char *left_value = left;
+            const char *right_value = right;
+            const char *ordered_code = order_left ? left : right;
+            char *binary;
+            if (ordered) {
+                f2c_buffer_printf(&temporary, "f2c_ordered_value_%zu",
+                                  expression->ordered_temporary_index);
+                if (temporary.data == NULL) {
+                    free(left);
+                    free(right);
+                    *supported = 0;
+                    return NULL;
+                }
+                if (order_left)
+                    left_value = temporary.data;
+                else
+                    right_value = temporary.data;
+            }
+            binary = f2c_emit_character_concatenation(unit, expression, left_value, right_value);
             if (binary == NULL)
-                binary =
-                    f2c_emit_character_comparison(unit, expression->children[0], left,
-                                                  expression->text, expression->children[1], right);
+                binary = f2c_emit_character_comparison(unit, expression->children[0], left_value,
+                                                       expression->text, expression->children[1],
+                                                       right_value);
             if (binary == NULL)
-                binary =
-                    f2c_emit_binary(unit, left, expression->children[0]->type, expression->text,
-                                    right, expression->children[1]->type, &result_type);
+                binary = f2c_emit_binary(unit, left_value, expression->children[0]->type,
+                                         expression->text, right_value,
+                                         expression->children[1]->type, &result_type);
+            if (ordered && binary != NULL) {
+                f2c_buffer_printf(&sequenced, "(%s = (%s), %s)", temporary.data, ordered_code,
+                                  binary);
+                free(binary);
+                binary = f2c_buffer_take(&sequenced);
+            }
+            if (binary == NULL)
+                *supported = 0;
             free(left);
             free(right);
+            free(temporary.data);
+            free(sequenced.data);
             return binary;
         }
     case F2C_EXPR_CALL:

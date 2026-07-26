@@ -670,6 +670,14 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
         lowered_call_free(&call);
         return;
     }
+    if (f2c_host_capture_has_descriptor_lifecycle(unit, capture_procedure)) {
+        if (!f2c_emit_host_capture_statement_descriptors(&call.prelude, &call.postlude, unit,
+                                                         capture_procedure, depth + 1)) {
+            lowered_call_free(&call);
+            return;
+        }
+        call.has_descriptors = 1;
+    }
     has_scope = call.has_transfers || call.has_descriptors || call.has_temporaries ||
                 (alternate_call != NULL && alternate_call->label_count != 0U);
     if (has_scope) {
@@ -683,7 +691,7 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
     f2c_buffer_printf(output, "%s(", name);
     for (i = 0U; i < count; ++i)
         f2c_buffer_printf(output, "%s%s", i == 0U ? "" : ", ", call.arguments[i]);
-    if (!f2c_emit_host_capture_actuals(output, unit, capture_procedure, count != 0U)) {
+    if (!f2c_emit_host_capture_statement_actuals(output, unit, capture_procedure, count != 0U)) {
         lowered_call_free(&call);
         return;
     }

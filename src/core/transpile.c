@@ -528,7 +528,16 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             "*result = left * right; return true; }\n"
             "static inline F2C_UNUSED bool f2c_default_integer_bounds(int64_t lower, "
             "size_t extent) { return lower >= (int64_t)INT32_MIN && lower <= "
-            "(int64_t)INT32_MAX && extent <= (size_t)INT32_MAX; }\n");
+            "(int64_t)INT32_MAX && extent <= (size_t)INT32_MAX; }\n"
+            "static inline F2C_UNUSED bool f2c_descriptor_bridge_valid(const "
+            "f2c_descriptor *descriptor, size_t rank, size_t element_size) { size_t "
+            "dimension; if (descriptor == NULL || descriptor->rank != rank || "
+            "descriptor->element_size != element_size || rank > 15U) return false; for "
+            "(dimension = 0U; dimension < rank; ++dimension) { int64_t extent = "
+            "descriptor->extent[dimension]; if (extent < 0 || "
+            "!f2c_default_integer_bounds(descriptor->lower[dimension], (size_t)extent) || "
+            "(extent > 1 && descriptor->stride[dimension] == 0)) return false; } return "
+            "true; }\n");
         f2c_buffer_append(
             &context.output,
             "static inline F2C_UNUSED size_t f2c_inquiry_extent(int64_t dimension, size_t "

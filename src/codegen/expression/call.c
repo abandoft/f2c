@@ -38,6 +38,16 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
         return NULL;
     if (actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
+    if (actual->ordered_argument_materialized) {
+        if (actual->rank != 0U || actual->type == TYPE_DERIVED || actual->type == TYPE_UNKNOWN) {
+            *supported = 0;
+            return NULL;
+        }
+        if (actual->type == TYPE_CHARACTER)
+            return f2c_strdup(code);
+        f2c_buffer_printf(&result, "&%s", code);
+        return f2c_buffer_take(&result);
+    }
     symbol = actual->symbol;
     if (symbol != NULL && symbol->equivalence_unaligned) {
         if (actual->rank != 0U ||
@@ -102,8 +112,8 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
                                  !procedure->external_subroutine &&
                                  procedure->type == TYPE_CHARACTER;
     Buffer result = {0};
-    Buffer contiguous_setup = {0};
-    Buffer contiguous_cleanup = {0};
+    Buffer call_setup = {0};
+    Buffer call_cleanup = {0};
     char *callee;
     size_t parameter;
     size_t explicit_argument = 1U;
@@ -173,8 +183,8 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
             if (explicit_argument >= expression->child_count) {
                 free(callee);
                 free(result.data);
-                free(contiguous_setup.data);
-                free(contiguous_cleanup.data);
+                free(call_setup.data);
+                free(call_cleanup.data);
                 *supported = 0;
                 return NULL;
             }
@@ -187,15 +197,15 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
             free(code);
             free(callee);
             free(result.data);
-            free(contiguous_setup.data);
-            free(contiguous_cleanup.data);
+            free(call_setup.data);
+            free(call_cleanup.data);
             *supported = 0;
             return NULL;
         }
         lowered = *supported && code != NULL
                       ? (procedure->external_parameter_descriptor[parameter]
                              ? f2c_expression_descriptor_actual(
-                                   &contiguous_setup, &contiguous_cleanup, unit, actual,
+                                   &call_setup, &call_cleanup, unit, actual,
                                    procedure->external_parameter_intents[parameter], supported)
                              : emit_external_actual(unit, actual, code, supported))
                       : NULL;
@@ -203,8 +213,8 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
         if (lowered == NULL) {
             free(callee);
             free(result.data);
-            free(contiguous_setup.data);
-            free(contiguous_cleanup.data);
+            free(call_setup.data);
+            free(call_cleanup.data);
             *supported = 0;
             return NULL;
         }
@@ -261,18 +271,17 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
     {
         char *call = f2c_buffer_take(&result);
         free(callee);
-        return f2c_expression_wrap_contiguous_call(expression, allocatable_result,
-                                                   &contiguous_setup, &contiguous_cleanup, call,
-                                                   supported);
+        return f2c_expression_wrap_managed_call(expression, allocatable_result, &call_setup,
+                                                &call_cleanup, call, supported);
     }
 }
 
-char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported) {
+static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supported) {
     char **arguments = NULL;
     Type *types = NULL;
     Buffer result = {0};
-    Buffer contiguous_setup = {0};
-    Buffer contiguous_cleanup = {0};
+    Buffer call_setup = {0};
+    Buffer call_cleanup = {0};
     const Unit *resolved = expression->resolved_procedure != NULL &&
                                    !expression->resolved_procedure->interface_abstract
                                ? expression->resolved_procedure
@@ -657,22 +666,22 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
             actual_expression->symbol->equivalence_unaligned && intent != F2C_INTENT_IN) {
             f2c_expression_free_arguments(arguments, types, expression->child_count);
             free(f2c_buffer_take(&result));
-            free(contiguous_setup.data);
-            free(contiguous_cleanup.data);
+            free(call_setup.data);
+            free(call_cleanup.data);
             *supported = 0;
             return NULL;
         }
         char *actual =
             descriptor
-                ? f2c_expression_descriptor_actual(&contiguous_setup, &contiguous_cleanup, unit,
+                ? f2c_expression_descriptor_actual(&call_setup, &call_cleanup, unit,
                                                    expression->children[i], intent, supported)
                 : emit_external_actual(unit, expression->children[i], arguments[i], supported);
         char *bridged;
         if (actual == NULL) {
             f2c_expression_free_arguments(arguments, types, expression->child_count);
             free(f2c_buffer_take(&result));
-            free(contiguous_setup.data);
-            free(contiguous_cleanup.data);
+            free(call_setup.data);
+            free(call_cleanup.data);
             *supported = 0;
             return NULL;
         }
@@ -683,8 +692,8 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         if (actual == NULL) {
             f2c_expression_free_arguments(arguments, types, expression->child_count);
             free(f2c_buffer_take(&result));
-            free(contiguous_setup.data);
-            free(contiguous_cleanup.data);
+            free(call_setup.data);
+            free(call_cleanup.data);
             *supported = 0;
             return NULL;
         }
@@ -694,14 +703,17 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
             actual);
         free(actual);
     }
-    if (!f2c_emit_host_capture_actuals(
-            &result, unit, capture_procedure,
+    if (!f2c_emit_host_capture_expression_descriptors(
+            &call_setup, &call_cleanup, unit, capture_procedure,
+            expression->host_descriptor_temporary_begin) ||
+        !f2c_emit_host_capture_expression_actuals(
+            &result, unit, capture_procedure, expression->host_descriptor_temporary_begin,
             expression->child_count != 0U ||
                 (expression->type == TYPE_CHARACTER && !allocatable_result))) {
         f2c_expression_free_arguments(arguments, types, expression->child_count);
         free(f2c_buffer_take(&result));
-        free(contiguous_setup.data);
-        free(contiguous_cleanup.data);
+        free(call_setup.data);
+        free(call_cleanup.data);
         *supported = 0;
         return NULL;
     }
@@ -730,8 +742,8 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
     if (!f2c_emit_host_capture_lengths(&result, unit, capture_procedure)) {
         f2c_expression_free_arguments(arguments, types, expression->child_count);
         free(f2c_buffer_take(&result));
-        free(contiguous_setup.data);
-        free(contiguous_cleanup.data);
+        free(call_setup.data);
+        free(call_cleanup.data);
         *supported = 0;
         return NULL;
     }
@@ -762,7 +774,94 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
             f2c_buffer_printf(&result, ", f2c_expression_result_%zu)", expression->temporary_index);
     }
     f2c_expression_free_arguments(arguments, types, expression->child_count);
-    return f2c_expression_wrap_contiguous_call(expression, allocatable_result, &contiguous_setup,
-                                               &contiguous_cleanup, f2c_buffer_take(&result),
-                                               supported);
+    return f2c_expression_wrap_managed_call(expression, allocatable_result, &call_setup,
+                                            &call_cleanup, f2c_buffer_take(&result), supported);
+}
+
+typedef struct OrderedArgumentState {
+    F2cExpr *expression;
+    char *original_lowered;
+    int original_materialized;
+} OrderedArgumentState;
+
+static void restore_ordered_arguments(OrderedArgumentState *states, size_t count) {
+    size_t index;
+    for (index = count; index != 0U; --index) {
+        OrderedArgumentState *state = &states[index - 1U];
+        char *temporary = state->expression->lowered_c;
+        state->expression->lowered_c = state->original_lowered;
+        state->expression->ordered_argument_materialized = state->original_materialized;
+        free(temporary);
+    }
+}
+
+char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported) {
+    OrderedArgumentState *states = NULL;
+    Buffer setup = {0};
+    Buffer cleanup = {0};
+    size_t state_count = 0U;
+    size_t argument;
+    char *call;
+    if (expression == NULL || supported == NULL)
+        return NULL;
+    if (expression->child_count != 0U) {
+        if (expression->child_count > SIZE_MAX / sizeof(*states)) {
+            *supported = 0;
+            return NULL;
+        }
+        states = (OrderedArgumentState *)calloc(expression->child_count, sizeof(*states));
+        if (states == NULL) {
+            *supported = 0;
+            return NULL;
+        }
+    }
+    for (argument = 0U; argument < expression->child_count; ++argument) {
+        F2cExpr *actual = (F2cExpr *)intrinsic_argument_value(expression->children[argument]);
+        Buffer name = {0};
+        char *code;
+        OrderedArgumentState *state;
+        if (actual == NULL || actual->ordered_argument_temporary_index == SIZE_MAX ||
+            actual->ordered_argument_materialized)
+            continue;
+        code = f2c_expression_emit(unit, actual, supported);
+        if (!*supported || code == NULL) {
+            free(code);
+            goto failed;
+        }
+        f2c_buffer_printf(&name, "f2c_ordered_argument_%zu",
+                          actual->ordered_argument_temporary_index);
+        if (name.data == NULL) {
+            free(code);
+            *supported = 0;
+            goto failed;
+        }
+        f2c_buffer_printf(&setup, "%s = (%s), ", name.data, code);
+        free(code);
+        if (setup.failed) {
+            free(name.data);
+            *supported = 0;
+            goto failed;
+        }
+        state = &states[state_count++];
+        state->expression = actual;
+        state->original_lowered = actual->lowered_c;
+        state->original_materialized = actual->ordered_argument_materialized;
+        actual->lowered_c = f2c_buffer_take(&name);
+        actual->ordered_argument_materialized = 1;
+    }
+    call = emit_call_body(unit, expression, supported);
+    restore_ordered_arguments(states, state_count);
+    free(states);
+    if (!*supported || call == NULL) {
+        free(call);
+        free(setup.data);
+        return NULL;
+    }
+    return f2c_expression_wrap_managed_call(expression, 0, &setup, &cleanup, call, supported);
+
+failed:
+    restore_ordered_arguments(states, state_count);
+    free(states);
+    free(setup.data);
+    return NULL;
 }
