@@ -351,6 +351,11 @@ static void test_intrinsic_type_registry(void) {
     expect(f2c_find_intrinsic("verify") != NULL &&
                f2c_find_intrinsic("verify")->id == F2C_INTRINSIC_VERIFY,
            "character intrinsics have stable typed-IR identities");
+    expect(f2c_find_intrinsic("lge") != NULL && f2c_find_intrinsic("lge")->id == F2C_INTRINSIC_LGE,
+           "lexical comparison intrinsics have stable typed-IR identities");
+    expect(f2c_find_intrinsic("logical") != NULL &&
+               f2c_find_intrinsic("logical")->id == F2C_INTRINSIC_LOGICAL,
+           "LOGICAL conversion has a stable typed-IR identity");
     expect(f2c_find_intrinsic("selected_real_kind") != NULL &&
                f2c_find_intrinsic("selected_real_kind")->id == F2C_INTRINSIC_SELECTED_REAL_KIND,
            "numeric model intrinsics have stable typed-IR identities");
@@ -427,6 +432,34 @@ static void test_intrinsic_type_registry(void) {
     expect(intrinsic_call != NULL && error_at == NULL &&
                intrinsic_call->intrinsic == F2C_INTRINSIC_MODULO,
            "MODULO has a stable typed-IR identity and keyword association");
+    f2c_expr_free(intrinsic_call);
+
+    intrinsic_call = f2c_parse_expression_ast(&unit, "logical(kind=1, l=.true.)", &error_at);
+    expect(intrinsic_call != NULL && error_at == NULL &&
+               intrinsic_call->intrinsic == F2C_INTRINSIC_LOGICAL &&
+               intrinsic_call->type == TYPE_LOGICAL && intrinsic_call->type_kind == 1,
+           "LOGICAL selected KIND is represented in typed IR");
+    f2c_expr_free(intrinsic_call);
+
+    intrinsic_call = f2c_parse_expression_ast(&unit, "lge(string_b='A ', string_a='A')", &error_at);
+    expect(intrinsic_call != NULL && error_at == NULL &&
+               intrinsic_call->intrinsic == F2C_INTRINSIC_LGE &&
+               intrinsic_call->type == TYPE_LOGICAL && intrinsic_call->type_kind == 4,
+           "lexical comparison keyword association produces a default LOGICAL result");
+    f2c_expr_free(intrinsic_call);
+
+    intrinsic_call = f2c_parse_expression_ast(&unit, "max1(1.75,-2.25)", &error_at);
+    expect(intrinsic_call != NULL && error_at == NULL &&
+               intrinsic_call->intrinsic == F2C_INTRINSIC_MAX &&
+               intrinsic_call->type == TYPE_INTEGER && intrinsic_call->type_kind == 4,
+           "legacy MAX1 preserves its exact REAL-to-INTEGER result contract");
+    f2c_expr_free(intrinsic_call);
+
+    intrinsic_call = f2c_parse_expression_ast(&unit, "amax0(1,2)", &error_at);
+    expect(intrinsic_call != NULL && error_at == NULL &&
+               intrinsic_call->intrinsic == F2C_INTRINSIC_MAX &&
+               intrinsic_call->type == TYPE_REAL && intrinsic_call->type_kind == 4,
+           "legacy AMAX0 preserves its exact INTEGER-to-REAL result contract");
     f2c_expr_free(intrinsic_call);
 }
 

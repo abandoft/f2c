@@ -123,6 +123,14 @@ static void test_character_intrinsics(Unit *unit) {
            "backward VERIFY folds the last nonmember");
     expect(evaluate_source(unit, "verify('AAAA','A')", &value) && value == 0,
            "VERIFY folds an all-member string to zero");
+    expect(evaluate_source(unit, "lge(string_a='A',string_b='A ')", &value) && value == 1,
+           "LGE folds with Fortran blank padding");
+    expect(evaluate_source(unit, "lgt('B','A')", &value) && value == 1,
+           "LGT folds in the default character collating sequence");
+    expect(evaluate_source(unit, "lle('A ','A')", &value) && value == 1,
+           "LLE treats trailing blanks as equal padding");
+    expect(evaluate_source(unit, "llt('A','B')", &value) && value == 1,
+           "LLT folds a strict lexical ordering");
     expect(evaluate_source(unit, "len(repeat('xy',3),kind=2)", &value) && value == 6,
            "REPEAT length folds through LEN with an explicit result kind");
     expect(evaluate_character_source(unit, "trim(adjustl('  AB  '))//repeat('x',2)", &characters,
@@ -145,6 +153,23 @@ static void test_character_intrinsics(Unit *unit) {
     characters = NULL;
     expect(!evaluate_character_source(unit, "repeat('x',-1)", &characters, &length),
            "negative REPEAT counts are not folded");
+}
+
+static void test_legacy_conversion_and_extrema(Unit *unit) {
+    int64_t integer = 0;
+    double real = 0.0;
+    expect(evaluate_source(unit, "logical(l=.true.,kind=1)", &integer) && integer == 1,
+           "LOGICAL conversion folds and normalizes the selected kind");
+    expect(evaluate_source(unit, "max0(-7,3)", &integer) && integer == 3,
+           "MAX0 folds its default INTEGER arguments");
+    expect(evaluate_source(unit, "max1(1.75,-2.25)", &integer) && integer == 1,
+           "MAX1 selects in REAL before truncating to INTEGER");
+    expect(evaluate_source(unit, "min1(1.75,-2.25)", &integer) && integer == -2,
+           "MIN1 selects in REAL before truncating toward zero");
+    expect(evaluate_real_source(unit, "amax0(7,-3)", &real) && real == 7.0,
+           "AMAX0 selects INTEGER arguments before REAL conversion");
+    expect(evaluate_real_source(unit, "dmin1(1.5d0,-2.5d0)", &real) && real == -2.5,
+           "DMIN1 folds in binary64");
 }
 
 static void test_numeric_model_intrinsics(Unit *unit) {
@@ -387,6 +412,7 @@ int main(void) {
     expect(!evaluate_source(&unit, "cycle_a", &value),
            "cyclic parameter references terminate with failure");
     test_character_intrinsics(&unit);
+    test_legacy_conversion_and_extrema(&unit);
     test_numeric_model_intrinsics(&unit);
     test_real_representation_intrinsics(&unit);
     test_numeric_operation_intrinsics(&unit);
