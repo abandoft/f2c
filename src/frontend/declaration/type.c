@@ -76,16 +76,8 @@ static int named_kind_value(Unit *unit, const F2cToken *token, int *value) {
     name = f2c_token_text(token);
     if (name == NULL)
         return 0;
-    if (strcmp(name, "int8") == 0) {
-        *value = 1;
-    } else if (strcmp(name, "int16") == 0) {
-        *value = 2;
-    } else if (strcmp(name, "int32") == 0 || strcmp(name, "real32") == 0 ||
-               strcmp(name, "sp") == 0) {
-        *value = 4;
-    } else if (strcmp(name, "int64") == 0 || strcmp(name, "real64") == 0 ||
-               strcmp(name, "dp") == 0) {
-        *value = 8;
+    if (f2c_named_kind_constant(name, &constant)) {
+        *value = (int)constant;
     } else {
         symbol = unit != NULL ? f2c_find_symbol(unit, name) : NULL;
         if (symbol == NULL) {
