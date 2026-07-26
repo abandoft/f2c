@@ -7,7 +7,7 @@
 - Added keyword arguments, blank-padded lexical comparison, constant folding, and elemental lowering for `LGE`, `LGT`, `LLE`, and `LLT`.
 - Completed exact argument and result type contracts for `MAX0`, `MIN0`, `AMAX0`, `AMIN0`, `MAX1`, `MIN1`, `AMAX1`, `AMIN1`, `DMAX1`, and `DMIN1`.
 - Corrected legacy specific-extrema conversion order so selection occurs in the source type before checked result conversion.
-- Centralized integer constant literal emission and expanded static folding for scalar mathematical and conversion expressions.
+- Centralized integer and floating constant literal emission, making static initializers consistent across compilers, and expanded static folding for scalar mathematical and conversion expressions.
 - Expanded strict C17, sanitizer, and native Fortran differential coverage, and added character-intrinsic differential validation to the default CTest gate.
 
 ## 1.23.0
