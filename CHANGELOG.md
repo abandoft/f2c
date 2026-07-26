@@ -1,3 +1,13 @@
+## 1.22.0
+
+- Added support for internal procedures capturing host-local `ALLOCATABLE`, data `POINTER`, and deferred-length `CHARACTER` entities, with bidirectional synchronization of storage addresses, allocation provenance, character lengths, and array lower bounds, extents, and positive or negative strides.
+- Completed dynamic host-state propagation for internal subroutines and functions across direct, sibling, and recursive calls, early `RETURN`, deallocation and reallocation, and local dynamic entities with `SAVE`.
+- Preserved scalar, character, derived-type, and allocatable function results safely before host-descriptor writeback and cleanup, preventing result lifetimes from being overwritten by host-state updates.
+- Explicitly sequenced side-effecting function calls in binary expressions, character concatenation, user-procedure arguments, and intrinsic arguments while keeping numeric model inquiry and `BIT_SIZE` arguments unevaluated.
+- Added bridge-boundary validation for host descriptors covering rank, element size, integer ranges, extents, and strides, rejecting corrupted or incompatible dynamic state.
+- Split host-association code generation into capture-resolution and descriptor-lifecycle modules, clarifying responsibilities across semantics, temporary planning, and call lowering.
+- Added strict C17, ASan/UBSan, and native Fortran differential coverage, and isolated native module artifacts to prevent concurrent builds from contaminating test results.
+
 ## 1.21.0
 
 - Added typed IR, constant evaluation, and portable C17 lowering for `AINT`, `ANINT`, `CEILING`, `DIM`, `FLOOR`, `MERGE`, `MOD`, `MODULO`, `NINT`, and `SIGN`, including supported legacy specific names, keyword arguments, kind selection, and elemental arrays.
