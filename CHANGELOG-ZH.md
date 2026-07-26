@@ -1,3 +1,13 @@
+## 1.23.0
+
+- 为核心数学和数值转换 intrinsic 增加独立 typed IR、规范关键字关联、type/kind/rank 校验及 elemental 降级。
+- 完善实数与复数 `ABS`、`ACOS`、`ASIN`、`ATAN`、`ATAN2`、`COS`、`COSH`、`EXP`、`LOG`、`LOG10`、`SIN`、`SINH`、`SQRT`、`TAN` 和 `TANH`，以及 `DPROD`、`MAX`、`MIN` 的可移植 C17/libm 降级。
+- 支持保持 kind 的 `AIMAG`、`CMPLX`、`CONJG`、`DBLE`、`INT` 和 `REAL` 转换，覆盖标准旧式具体名称及乱序关键字参数。
+- 将标量数学和转换表达式纳入溢出安全的常量求值器，支持目标 kind 舍入、定义域检查及整数范围保护。
+- 保证 `MAX` 和 `MIN` 保留窄位及宽位整数 kind，并修正 `CMPLX` 默认 kind 和 `REAL(COMPLEX)` 分量 kind 语义。
+- 在声明与初始化常量求值中统一识别 `ISO_FORTRAN_ENV` 整数和实数 kind 常量，包括 intrinsic `KIND=` 使用的局部参数别名。
+- 保证显式声明的外部过程在语义校验、功能选择和 C17 生成中始终优先于同名 intrinsic。
+
 ## 1.22.0
 
 - 支持内部过程捕获宿主局部 `ALLOCATABLE`、数据 `POINTER` 和 deferred-length `CHARACTER`，并双向同步存储地址、分配来源、字符长度及数组 lower、extent 和正负 stride。

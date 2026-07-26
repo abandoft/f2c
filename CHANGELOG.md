@@ -1,3 +1,13 @@
+## 1.23.0
+
+- Added dedicated typed IR, canonical keyword association, type/kind/rank validation, and elemental lowering for the core mathematical and numeric conversion intrinsics.
+- Completed portable C17/libm lowering for real and complex `ABS`, `ACOS`, `ASIN`, `ATAN`, `ATAN2`, `COS`, `COSH`, `EXP`, `LOG`, `LOG10`, `SIN`, `SINH`, `SQRT`, `TAN`, and `TANH`, together with `DPROD`, `MAX`, and `MIN`.
+- Added kind-preserving `AIMAG`, `CMPLX`, `CONJG`, `DBLE`, `INT`, and `REAL` conversions, including standard legacy specific names and shuffled keyword arguments.
+- Integrated scalar mathematical and conversion expressions into the overflow-safe constant evaluator with target-kind rounding, domain checks, and checked integer ranges.
+- Preserved narrow and wide integer kinds through `MAX` and `MIN`, and corrected `CMPLX` default-kind and `REAL(COMPLEX)` component-kind semantics.
+- Recognized `ISO_FORTRAN_ENV` integer and real kind constants throughout declaration and initialization-constant evaluation, including local parameter aliases used by intrinsic `KIND=` arguments.
+- Ensured explicitly declared external procedures take precedence over same-named intrinsics throughout validation, feature selection, and C17 emission.
+
 ## 1.22.0
 
 - Added support for internal procedures capturing host-local `ALLOCATABLE`, data `POINTER`, and deferred-length `CHARACTER` entities, with bidirectional synchronization of storage addresses, allocation provenance, character lengths, and array lower bounds, extents, and positive or negative strides.
