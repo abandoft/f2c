@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 static int expression_kind(const F2cExpr *expression) {
     return expression != NULL && expression->type_kind != 0
@@ -54,6 +55,31 @@ int f2c_constant_evaluate_mathematical_integer(F2cConstantEvaluation *evaluation
     }
     if (expression->intrinsic != F2C_INTRINSIC_MAX && expression->intrinsic != F2C_INTRINSIC_MIN)
         return 0;
+    if (expression->text != NULL &&
+        (strcmp(expression->text, "max1") == 0 || strcmp(expression->text, "min1") == 0)) {
+        double selected;
+        double candidate;
+        source = extremum_argument(expression, 0U);
+        if (source == NULL ||
+            !f2c_constant_evaluate_real(evaluation, source, &selected, depth + 1U) ||
+            isnan(selected))
+            return 0;
+        for (index = 1U; index < expression->child_count; ++index) {
+            source = extremum_argument(expression, index);
+            if (source == NULL ||
+                !f2c_constant_evaluate_real(evaluation, source, &candidate, depth + 1U) ||
+                isnan(candidate))
+                return 0;
+            if ((expression->intrinsic == F2C_INTRINSIC_MAX && candidate > selected) ||
+                (expression->intrinsic == F2C_INTRINSIC_MIN && candidate < selected))
+                selected = candidate;
+        }
+        selected = trunc(selected);
+        if (!isfinite(selected) || selected < (double)INT32_MIN || selected > (double)INT32_MAX)
+            return 0;
+        *value = (int64_t)selected;
+        return 1;
+    }
     source = extremum_argument(expression, 0U);
     if (source == NULL || !f2c_constant_evaluate_integer(evaluation, source, value, depth + 1U))
         return 0;
