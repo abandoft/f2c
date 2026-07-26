@@ -305,22 +305,29 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         resolved_result != NULL
             ? resolved_result->allocatable
             : (expression->symbol != NULL && expression->symbol->external_result_allocatable);
+    const int intrinsic_call =
+        expression->text != NULL && f2c_is_intrinsic_name(expression->text) &&
+        (expression->symbol == NULL || !expression->symbol->external_declared);
     size_t i;
     size_t derived_actual_count = 0U;
     if (expression->symbol != NULL && expression->symbol->type_bound)
         return emit_type_bound_call(unit, expression, supported);
     if (expression->symbol != NULL && expression->symbol->statement_function)
         return f2c_expression_statement_function(unit, expression, supported);
-    if (f2c_intrinsic_is_bit(expression->intrinsic) &&
+    if (intrinsic_call && f2c_intrinsic_is_bit(expression->intrinsic) &&
         expression->intrinsic != F2C_INTRINSIC_MVBITS)
         return f2c_expression_bit_intrinsic(unit, expression, supported);
-    if (f2c_intrinsic_is_character(expression->intrinsic))
+    if (intrinsic_call && f2c_intrinsic_is_character(expression->intrinsic))
         return f2c_expression_character_intrinsic(unit, expression, supported);
-    if (f2c_intrinsic_is_numeric_model(expression->intrinsic))
+    if (intrinsic_call && f2c_intrinsic_is_conversion(expression->intrinsic))
+        return f2c_expression_conversion_intrinsic(unit, expression, supported);
+    if (intrinsic_call && f2c_intrinsic_is_mathematical(expression->intrinsic))
+        return f2c_expression_mathematical_intrinsic(unit, expression, supported);
+    if (intrinsic_call && f2c_intrinsic_is_numeric_model(expression->intrinsic))
         return f2c_expression_numeric_model_intrinsic(unit, expression, supported);
-    if (f2c_intrinsic_is_numeric_operation(expression->intrinsic))
+    if (intrinsic_call && f2c_intrinsic_is_numeric_operation(expression->intrinsic))
         return f2c_expression_numeric_operation_intrinsic(unit, expression, supported);
-    if (f2c_intrinsic_is_real_representation(expression->intrinsic))
+    if (intrinsic_call && f2c_intrinsic_is_real_representation(expression->intrinsic))
         return f2c_expression_real_representation_intrinsic(unit, expression, supported);
     if (expression->text != NULL && strcmp(expression->text, "present") == 0 &&
         expression->child_count == 1U && expression->children[0] != NULL &&
@@ -591,7 +598,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         *supported = 0;
         return NULL;
     }
-    if (f2c_is_intrinsic_name(expression->text)) {
+    if (intrinsic_call) {
         char *intrinsic = f2c_emit_intrinsic(expression->text, arguments, types,
                                              expression->child_count, expression->type);
         f2c_expression_free_arguments(arguments, types, expression->child_count);
