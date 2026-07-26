@@ -303,6 +303,23 @@ static int character_integer_result(const F2cExpr *expression, uint64_t result, 
     return 1;
 }
 
+static int character_constant_compare(const char *left, size_t left_length, const char *right,
+                                      size_t right_length) {
+    const size_t length = left_length > right_length ? left_length : right_length;
+    size_t index;
+    for (index = 0U; index < length; ++index) {
+        const unsigned char left_value =
+            index < left_length ? (unsigned char)left[index] : (unsigned char)' ';
+        const unsigned char right_value =
+            index < right_length ? (unsigned char)right[index] : (unsigned char)' ';
+        if (left_value < right_value)
+            return -1;
+        if (left_value > right_value)
+            return 1;
+    }
+    return 0;
+}
+
 static int evaluate_character_intrinsic(F2cConstantEvaluation *evaluation,
                                         const F2cExpr *expression, int64_t *value, size_t depth) {
     const F2cExpr *first;
@@ -318,6 +335,25 @@ static int evaluate_character_intrinsic(F2cConstantEvaluation *evaluation,
     if (expression == NULL || expression->rank != 0U ||
         !f2c_intrinsic_is_character(expression->intrinsic))
         return 0;
+    if (expression->intrinsic == F2C_INTRINSIC_LGE || expression->intrinsic == F2C_INTRINSIC_LGT ||
+        expression->intrinsic == F2C_INTRINSIC_LLE || expression->intrinsic == F2C_INTRINSIC_LLT) {
+        int comparison;
+        first =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "string_a", 0U);
+        second =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "string_b", 1U);
+        if (!f2c_evaluate_character_constant(evaluation->unit, first, &left, &left_length) ||
+            !f2c_evaluate_character_constant(evaluation->unit, second, &right, &right_length))
+            goto cleanup;
+        comparison = character_constant_compare(left, left_length, right, right_length);
+        *value = expression->intrinsic == F2C_INTRINSIC_LGE   ? comparison >= 0
+                 : expression->intrinsic == F2C_INTRINSIC_LGT ? comparison > 0
+                 : expression->intrinsic == F2C_INTRINSIC_LLE ? comparison <= 0
+                                                              : comparison < 0;
+        free(left);
+        free(right);
+        return 1;
+    }
     if (expression->intrinsic == F2C_INTRINSIC_IACHAR ||
         expression->intrinsic == F2C_INTRINSIC_ICHAR) {
         first = f2c_intrinsic_argument(expression->children, expression->child_count, "c", 0U);
