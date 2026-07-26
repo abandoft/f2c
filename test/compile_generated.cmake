@@ -112,6 +112,7 @@ foreach(
        statement_function
        statement_function_single_eval
        host_association
+       host_dynamic_association
        do_semantics
        data_statement
        lexical_literals
