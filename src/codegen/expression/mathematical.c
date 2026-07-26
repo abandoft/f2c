@@ -1,5 +1,9 @@
 #include "codegen/expression/private.h"
 
+#include "codegen/literal/integer.h"
+#include "codegen/literal/real.h"
+
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -270,11 +274,26 @@ static char *emit_extremum(Unit *unit, const F2cExpr *expression, int *supported
 }
 
 char *f2c_expression_mathematical_intrinsic(Unit *unit, const F2cExpr *expression, int *supported) {
+    int64_t integer_value;
+    double real_value;
+    char *constant;
     if (unit == NULL || expression == NULL || supported == NULL || expression->rank != 0U ||
         !f2c_intrinsic_is_mathematical(expression->intrinsic)) {
         if (supported != NULL)
             *supported = 0;
         return NULL;
+    }
+    if (expression->type == TYPE_INTEGER &&
+        f2c_evaluate_integer_constant(unit, expression, &integer_value)) {
+        constant = f2c_integer_constant_literal(integer_value, expression_kind(expression));
+        if (constant != NULL)
+            return constant;
+    }
+    if ((expression->type == TYPE_REAL || expression->type == TYPE_DOUBLE) &&
+        f2c_evaluate_real_constant(unit, expression, &real_value)) {
+        constant = f2c_real_constant_literal(real_value, expression_kind(expression));
+        if (constant != NULL)
+            return constant;
     }
     if (expression->intrinsic == F2C_INTRINSIC_ABS)
         return emit_abs(unit, expression, supported);
