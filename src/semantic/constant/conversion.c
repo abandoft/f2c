@@ -47,6 +47,15 @@ int f2c_constant_evaluate_conversion_integer(F2cConstantEvaluation *evaluation,
     double real;
     double minimum;
     double limit;
+    if (expression != NULL && expression->rank == 0U &&
+        expression->intrinsic == F2C_INTRINSIC_LOGICAL) {
+        source = argument(expression, "l", 0U);
+        if (source == NULL || source->type != TYPE_LOGICAL ||
+            !f2c_constant_evaluate_integer(evaluation, source, &integer, depth + 1U))
+            return 0;
+        *value = integer != 0;
+        return 1;
+    }
     if (expression == NULL || expression->rank != 0U ||
         expression->intrinsic != F2C_INTRINSIC_INT ||
         !integer_bounds(expression_kind(expression), &minimum, &limit))
