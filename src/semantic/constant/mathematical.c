@@ -204,6 +204,22 @@ static int evaluate_unary(F2cConstantEvaluation *evaluation, const F2cExpr *expr
     return store_real(expression_kind(expression), result, value);
 }
 
+static int evaluate_complex_absolute(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
+                                     double *value, size_t depth) {
+    const F2cExpr *source = argument(expression, "a", 0U);
+    F2cComplexConstant input;
+    const int kind = source != NULL ? expression_kind(source) : 0;
+    if (source == NULL || (source->type != TYPE_COMPLEX && source->type != TYPE_DOUBLE_COMPLEX) ||
+        !f2c_constant_evaluate_complex(evaluation, source, &input, depth + 1U))
+        return 0;
+    if (kind == 4)
+        return store_real(expression_kind(expression),
+                          (double)hypotf((float)input.real, (float)input.imaginary), value);
+    if (kind == 8)
+        return store_real(expression_kind(expression), hypot(input.real, input.imaginary), value);
+    return 0;
+}
+
 static int evaluate_atan2(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
                           double *value, size_t depth) {
     const F2cExpr *y = argument(expression, "y", 0U);
@@ -262,6 +278,11 @@ int f2c_constant_evaluate_mathematical_real(F2cConstantEvaluation *evaluation,
         (expression->type != TYPE_REAL && expression->type != TYPE_DOUBLE) ||
         !f2c_intrinsic_is_mathematical(expression->intrinsic))
         return 0;
+    if (expression->intrinsic == F2C_INTRINSIC_ABS) {
+        const F2cExpr *source = argument(expression, "a", 0U);
+        if (source != NULL && (source->type == TYPE_COMPLEX || source->type == TYPE_DOUBLE_COMPLEX))
+            return evaluate_complex_absolute(evaluation, expression, value, depth);
+    }
     if (expression->intrinsic == F2C_INTRINSIC_ATAN2)
         return evaluate_atan2(evaluation, expression, value, depth);
     if (expression->intrinsic == F2C_INTRINSIC_DPROD)
