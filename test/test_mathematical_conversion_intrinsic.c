@@ -56,6 +56,7 @@ static void test_mathematical_contracts(void) {
                       "MAX has no argument named 'mystery'");
     expect_diagnostic("", "sqrt(-1.0)", "SQRT argument X must be greater than or equal to zero");
     expect_diagnostic("", "log(0.0)", "LOG argument X must be greater than zero");
+    expect_diagnostic("", "log((0.0,0.0))", "LOG argument X must be nonzero");
     expect_diagnostic("", "asin(2.0)", "ASIN argument X must be magnitude no greater than one");
 }
 
@@ -202,6 +203,40 @@ static void test_iso_environment_kind_alias(void) {
     f2c_result_free(&result);
 }
 
+static void test_complex_static_initialization(void) {
+    static const char source[] =
+        "module complex_constant_module\n"
+        "  implicit none\n"
+        "  complex(kind=8), parameter :: seed = cmplx(0.25_8, -0.5_8, kind=8)\n"
+        "  complex(kind=8), parameter :: folded = exp(log(seed)) + conjg(seed)\n"
+        "  complex(kind=8), save :: state = sqrt((-3.0_8, 4.0_8))\n"
+        "  complex(kind=8), save :: promoted = 3.5_8\n"
+        "  real(kind=8), save :: magnitude = abs(folded)\n"
+        "  real(kind=8), save :: imaginary = aimag(folded)\n"
+        "  integer(kind=2), save :: integral = int(folded, kind=2)\n"
+        "end module complex_constant_module\n";
+    F2cOptions options = {"complex_constant_module.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    const char *module = result.code != NULL
+                             ? strstr(result.code, "/* Fortran module complex_constant_module. */")
+                             : NULL;
+    expect(result.code != NULL && result.error_count == 0U,
+           "nested complex initialization expressions reach C17 module emission");
+    expect(module != NULL &&
+               strstr(module, "F2C_COMPLEX_DOUBLE_INITIALIZER((double)(0x1p-1), "
+                              "(double)(0x0p+0))") != NULL &&
+               strstr(module, "F2C_COMPLEX_DOUBLE_INITIALIZER((double)(0x1p+0), "
+                              "(double)(0x1p+1))") != NULL &&
+               strstr(module, "F2C_COMPLEX_DOUBLE_INITIALIZER((double)(0x1.cp+1), "
+                              "(double)(0x0p+0))") != NULL,
+           "complex parameters and declarations become portable static component initializers");
+    expect(module != NULL && strstr(module, "cexp(") == NULL && strstr(module, "clog(") == NULL &&
+               strstr(module, "conj(") == NULL && strstr(module, "cabs(") == NULL &&
+               strstr(module, "cimag(") == NULL,
+           "module initialization never emits runtime complex library calls at file scope");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_mathematical_contracts();
     test_conversion_contracts();
@@ -209,5 +244,6 @@ int main(void) {
     test_elemental_lowering();
     test_external_name_precedence();
     test_iso_environment_kind_alias();
+    test_complex_static_initialization();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
