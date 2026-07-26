@@ -120,6 +120,24 @@ static char *emit_real(Unit *unit, const F2cExpr *expression, int *supported) {
     return emit_real_component(unit, source, f2c_expression_c_type(expression), supported);
 }
 
+static char *emit_logical(Unit *unit, const F2cExpr *expression, int *supported) {
+    const F2cExpr *source = argument(expression, "l", 0U);
+    char *code;
+    Buffer result = {0};
+    if (source == NULL || source->rank != 0U || source->type != TYPE_LOGICAL) {
+        *supported = 0;
+        return NULL;
+    }
+    code = f2c_expression_emit(unit, source, supported);
+    if (!*supported || code == NULL) {
+        free(code);
+        return NULL;
+    }
+    f2c_buffer_printf(&result, "((%s)((%s) != 0))", f2c_expression_c_type(expression), code);
+    free(code);
+    return f2c_buffer_take(&result);
+}
+
 static char *emit_cmplx(Unit *unit, const F2cExpr *expression, int *supported) {
     const int specific = strcmp(expression->text, "dcmplx") == 0;
     const F2cExpr *real_source = argument(expression, "x", 0U);
@@ -170,8 +188,10 @@ char *f2c_expression_conversion_intrinsic(Unit *unit, const F2cExpr *expression,
             *supported = 0;
         return NULL;
     }
-    if (expression->type == TYPE_INTEGER &&
+    if ((expression->type == TYPE_INTEGER || expression->type == TYPE_LOGICAL) &&
         f2c_evaluate_integer_constant(unit, expression, &integer_value)) {
+        if (expression->type == TYPE_LOGICAL)
+            return f2c_strdup(integer_value != 0 ? "true" : "false");
         constant = f2c_integer_constant_literal(integer_value, expression_kind(expression));
         if (constant != NULL)
             return constant;
@@ -194,6 +214,8 @@ char *f2c_expression_conversion_intrinsic(Unit *unit, const F2cExpr *expression,
         return emit_real(unit, expression, supported);
     case F2C_INTRINSIC_INT:
         return emit_int(unit, expression, supported);
+    case F2C_INTRINSIC_LOGICAL:
+        return emit_logical(unit, expression, supported);
     case F2C_INTRINSIC_NONE:
     default:
         *supported = 0;
