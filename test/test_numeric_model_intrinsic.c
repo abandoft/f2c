@@ -118,6 +118,8 @@ static void test_inquiry_arguments_are_not_evaluated(void) {
            "the inquiry fixture retains the external procedure declaration");
     expect(result.code != NULL && strstr(result.code, "touch_integer()") == NULL,
            "numeric inquiry codegen does not evaluate its model expression");
+    expect(result.code != NULL && strstr(result.code, "f2c_ordered_argument_") == NULL,
+           "numeric inquiry arguments do not allocate unused ordering temporaries");
     expect(result.code != NULL &&
                strstr(result.code, "F2C_WRITE(f2c_unit_stream(6, false), (INT32_MAX))") != NULL,
            "INTEGER(4) HUGE remains an integer model constant");
