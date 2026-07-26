@@ -85,6 +85,14 @@ static int evaluate_real_source(Unit *unit, const char *source, double *value) {
     return result;
 }
 
+static int evaluate_complex_source(Unit *unit, const char *source, double *real,
+                                   double *imaginary) {
+    F2cExpr *expression = parse_canonical_expression(unit, source);
+    const int result = f2c_evaluate_complex_constant(unit, expression, real, imaginary);
+    f2c_expr_free(expression);
+    return result;
+}
+
 static void test_character_intrinsics(Unit *unit) {
     char *characters = NULL;
     size_t length = 0U;
@@ -265,6 +273,58 @@ static void test_numeric_operation_intrinsics(Unit *unit) {
            "real MERGE folds the selected source at its declared kind");
 }
 
+static int close_to(double actual, double expected, double tolerance) {
+    return fabs(actual - expected) <= tolerance;
+}
+
+static void test_complex_constants(Unit *unit) {
+    double real = 0.0;
+    double imaginary = 0.0;
+    double component = 0.0;
+    int64_t integer = 0;
+    expect(evaluate_complex_source(unit, "(1.25d0,-2.5d0)*(2.0d0,0.5d0)", &real, &imaginary) &&
+               real == 3.75 && imaginary == -4.375,
+           "binary64 complex multiplication folds both components");
+    expect(evaluate_complex_source(unit, "cmplx(7.0,-4.0)/cmplx(2.0,1.0)", &real, &imaginary) &&
+               real == 2.0 && imaginary == -3.0,
+           "complex division uses a finite scaled denominator");
+    expect(
+        evaluate_complex_source(unit, "(1.0d300,1.0d300)/(1.0d300,-1.0d300)", &real, &imaginary) &&
+            real == 0.0 && imaginary == 1.0,
+        "scaled complex division avoids overflow for extreme binary64 components");
+    expect(evaluate_complex_source(unit, "(1.0,1.0)**3", &real, &imaginary) && real == -2.0 &&
+               imaginary == 2.0,
+           "complex integer powers fold with target-kind rounding");
+    expect(evaluate_complex_source(unit, "(0.0d0,0.0d0)**2.5d0", &real, &imaginary) &&
+               real == 0.0 && imaginary == 0.0,
+           "zero complex bases fold for positive real exponents");
+    expect(evaluate_complex_source(unit, "sqrt((-3.0d0,4.0d0))", &real, &imaginary) &&
+               real == 1.0 && imaginary == 2.0,
+           "complex square root folds on its principal branch");
+    expect(evaluate_complex_source(unit, "exp(log(cmplx(1.25d0,-0.75d0)))", &real, &imaginary) &&
+               close_to(real, 1.25, 1.0e-14) && close_to(imaginary, -0.75, 1.0e-14),
+           "nested complex mathematical intrinsics compose in initialization expressions");
+    expect(evaluate_complex_source(unit, "conjg(cmplx(1.5,-2.25))", &real, &imaginary) &&
+               real == 1.5 && imaginary == 2.25,
+           "CONJG folds without losing the complex component kind");
+    expect(evaluate_complex_source(unit, "sin(asin(cmplx(0.25d0,-0.5d0,kind=8)))", &real,
+                                   &imaginary) &&
+               close_to(real, 0.25, 2.0e-14) && close_to(imaginary, -0.5, 2.0e-14),
+           "inverse complex trigonometric constants use consistent principal branches");
+    expect(evaluate_real_source(unit, "abs((3.0,4.0))", &component) && component == 5.0,
+           "complex ABS folds to a real component-kind result");
+    expect(evaluate_real_source(unit, "aimag(conjg((2.0d0,-7.0d0)))", &component) &&
+               component == 7.0,
+           "AIMAG folds through nested complex conversion expressions");
+    expect(evaluate_real_source(unit, "real(cmplx(1.25d0,-9.0d0),kind=4)", &component) &&
+               component == 1.25,
+           "REAL extracts and rounds a complex initialization constant to the selected kind");
+    expect(evaluate_source(unit, "int(cmplx(-3.75d0,100.0d0),kind=2)", &integer) && integer == -3,
+           "INT truncates the real part of a complex constant into the selected integer kind");
+    expect(!evaluate_complex_source(unit, "cmplx(1.0,1.0)/cmplx(0.0,0.0)", &real, &imaginary),
+           "complex constant division by zero is rejected");
+}
+
 int main(void) {
     Symbol symbols[3];
     Unit unit;
@@ -330,6 +390,7 @@ int main(void) {
     test_numeric_model_intrinsics(&unit);
     test_real_representation_intrinsics(&unit);
     test_numeric_operation_intrinsics(&unit);
+    test_complex_constants(&unit);
 
     f2c_expr_free(symbols[0].initializer_expression);
     f2c_expr_free(symbols[1].initializer_expression);
