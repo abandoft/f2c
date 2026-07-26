@@ -58,6 +58,23 @@ static void test_valid_contracts(void) {
     f2c_result_free(&result);
 }
 
+static void test_bit_size_argument_is_not_evaluated(void) {
+    static const char source[] = "program bit_size_inquiry_evaluation\n"
+                                 "  implicit none\n"
+                                 "  integer, external :: touch_integer\n"
+                                 "  print *, bit_size(touch_integer())\n"
+                                 "end program bit_size_inquiry_evaluation\n";
+    F2cOptions options = {"bit_size_inquiry_evaluation.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "BIT_SIZE with a procedure expression transpiles");
+    expect(result.code != NULL && strstr(result.code, "touch_integer()") == NULL,
+           "BIT_SIZE codegen does not evaluate its inquiry argument");
+    expect(result.code != NULL && strstr(result.code, "f2c_ordered_argument_") == NULL,
+           "BIT_SIZE does not allocate an unused ordering temporary");
+    f2c_result_free(&result);
+}
+
 static void test_type_and_kind_diagnostics(void) {
     expect_diagnostic("  value = iand(1.0, 2)", "IAND argument i must be INTEGER",
                       "noninteger bit operands suppress generated code");
@@ -123,6 +140,7 @@ static void test_mvbits_diagnostics(void) {
 
 int main(void) {
     test_valid_contracts();
+    test_bit_size_argument_is_not_evaluated();
     test_type_and_kind_diagnostics();
     test_constant_range_diagnostics();
     test_keyword_diagnostics();
