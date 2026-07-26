@@ -28,6 +28,39 @@ static int matmul_result_kind(const F2cExpr *expression) {
     return result != 0 ? result : f2c_default_kind(expression->type);
 }
 
+static const F2cExpr *typed_intrinsic_primary(const F2cExpr *expression,
+                                              const F2cIntrinsicSignature *signature) {
+    const char *keyword = "x";
+    if (expression == NULL || signature == NULL)
+        return NULL;
+    switch (signature->id) {
+    case F2C_INTRINSIC_ABS:
+    case F2C_INTRINSIC_DBLE:
+    case F2C_INTRINSIC_INT:
+    case F2C_INTRINSIC_REAL:
+        keyword = "a";
+        break;
+    case F2C_INTRINSIC_AIMAG:
+    case F2C_INTRINSIC_CONJG:
+        keyword = "z";
+        break;
+    case F2C_INTRINSIC_ATAN2:
+        keyword = "y";
+        break;
+    case F2C_INTRINSIC_CMPLX:
+        keyword = "x";
+        break;
+    case F2C_INTRINSIC_MAX:
+    case F2C_INTRINSIC_MIN:
+        keyword = "a1";
+        break;
+    case F2C_INTRINSIC_NONE:
+    default:
+        break;
+    }
+    return f2c_intrinsic_argument(expression->children, expression->child_count, keyword, 0U);
+}
+
 static void resolve_intrinsic_type(F2cExpr *expression, const F2cIntrinsicSignature *signature) {
     Type *argument_types = expression->child_count != 0U
                                ? (Type *)malloc(expression->child_count * sizeof(*argument_types))
@@ -41,6 +74,21 @@ static void resolve_intrinsic_type(F2cExpr *expression, const F2cIntrinsicSignat
             : TYPE_UNKNOWN;
     free(argument_types);
 
+    if (signature != NULL && (f2c_intrinsic_is_mathematical(signature->id) ||
+                              f2c_intrinsic_is_conversion(signature->id))) {
+        const F2cExpr *primary = typed_intrinsic_primary(expression, signature);
+        if (primary != NULL) {
+            if (signature->id == F2C_INTRINSIC_ABS || signature->id == F2C_INTRINSIC_AIMAG) {
+                expression->type = primary->type == TYPE_DOUBLE_COMPLEX ? TYPE_DOUBLE
+                                   : primary->type == TYPE_COMPLEX      ? TYPE_REAL
+                                                                        : primary->type;
+            } else if (signature->id == F2C_INTRINSIC_REAL) {
+                expression->type = primary->type == TYPE_DOUBLE_COMPLEX ? TYPE_DOUBLE : TYPE_REAL;
+            } else if (signature->type_rule == F2C_INTRINSIC_TYPE_FIRST) {
+                expression->type = primary->type;
+            }
+        }
+    }
     if (signature != NULL && f2c_intrinsic_is_real_representation(signature->id)) {
         const F2cExpr *model =
             f2c_intrinsic_argument(expression->children, expression->child_count, "x", 0U);
@@ -64,12 +112,16 @@ static void resolve_intrinsic_type(F2cExpr *expression, const F2cIntrinsicSignat
         if (source != NULL)
             expression->type = source->type;
     }
-    if (strcmp(expression->text, "real") == 0 && expression->child_count >= 2U) {
-        const Type kind_type = f2c_ast_kind_type_from_argument(expression->children[1]);
+    if (strcmp(expression->text, "real") == 0) {
+        const F2cExpr *kind =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 1U);
+        const Type kind_type = f2c_ast_kind_type_from_argument(kind);
         if (kind_type == TYPE_REAL || kind_type == TYPE_DOUBLE)
             expression->type = kind_type;
-    } else if (strcmp(expression->text, "cmplx") == 0 && expression->child_count >= 3U) {
-        const Type kind_type = f2c_ast_kind_type_from_argument(expression->children[2]);
+    } else if (strcmp(expression->text, "cmplx") == 0) {
+        const F2cExpr *kind =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 2U);
+        const Type kind_type = f2c_ast_kind_type_from_argument(kind);
         if (kind_type == TYPE_REAL)
             expression->type = TYPE_COMPLEX;
         else if (kind_type == TYPE_DOUBLE)
@@ -149,16 +201,8 @@ static void resolve_intrinsic_kind(F2cExpr *expression, const F2cIntrinsicSignat
             expression->derived_type = source->derived_type;
         }
     }
-    if (strcmp(expression->text, "real") == 0 && expression->child_count >= 2U) {
-        const int selected_kind = f2c_ast_kind_value_from_argument(expression->children[1]);
-        if (selected_kind != 0)
-            expression->type_kind = selected_kind;
-    } else if (strcmp(expression->text, "cmplx") == 0 && expression->child_count >= 3U) {
-        const int selected_kind = f2c_ast_kind_value_from_argument(expression->children[2]);
-        if (selected_kind != 0)
-            expression->type_kind = selected_kind;
-    } else if (strcmp(expression->text, "size") == 0 || strcmp(expression->text, "lbound") == 0 ||
-               strcmp(expression->text, "ubound") == 0 || strcmp(expression->text, "shape") == 0) {
+    if (strcmp(expression->text, "size") == 0 || strcmp(expression->text, "lbound") == 0 ||
+        strcmp(expression->text, "ubound") == 0 || strcmp(expression->text, "shape") == 0) {
         const F2cExpr *kind_argument = f2c_ast_intrinsic_argument(
             expression, "kind", strcmp(expression->text, "shape") == 0 ? 1U : 2U);
         const int selected_kind = f2c_ast_kind_value_from_argument(kind_argument);
@@ -175,6 +219,25 @@ static void resolve_intrinsic_kind(F2cExpr *expression, const F2cIntrinsicSignat
         const int selected_kind = f2c_ast_kind_value_from_argument(kind_argument);
         if (selected_kind != 0)
             expression->type_kind = selected_kind;
+    }
+    if (strcmp(expression->text, "real") == 0) {
+        const F2cExpr *source =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "a", 0U);
+        const F2cExpr *kind =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 1U);
+        const int selected_kind = f2c_ast_kind_value_from_argument(kind);
+        if (selected_kind != 0) {
+            expression->type_kind = selected_kind;
+        } else if (source != NULL &&
+                   (source->type == TYPE_COMPLEX || source->type == TYPE_DOUBLE_COMPLEX)) {
+            expression->type_kind =
+                source->type_kind != 0 ? source->type_kind : f2c_default_kind(source->type);
+        }
+    } else if (strcmp(expression->text, "cmplx") == 0) {
+        const F2cExpr *kind =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 2U);
+        const int selected_kind = f2c_ast_kind_value_from_argument(kind);
+        expression->type_kind = selected_kind != 0 ? selected_kind : 4;
     }
 }
 
