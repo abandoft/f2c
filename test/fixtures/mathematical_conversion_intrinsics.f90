@@ -1,5 +1,33 @@
+module mathematical_conversion_constants
+  implicit none
+
+  complex(kind=8), parameter :: constant_base = cmplx(0.25_8, -0.5_8, kind=8)
+  complex(kind=8), parameter :: constant_acos = acos(constant_base)
+  complex(kind=8), parameter :: constant_asin = asin(constant_base)
+  complex(kind=8), parameter :: constant_atan = atan(constant_base)
+  complex(kind=8), parameter :: constant_cos = cos(constant_base)
+  complex(kind=8), parameter :: constant_cosh = cosh(constant_base)
+  complex(kind=8), parameter :: constant_exp = exp(constant_base)
+  complex(kind=8), parameter :: constant_log = log(constant_base)
+  complex(kind=8), parameter :: constant_sin = sin(constant_base)
+  complex(kind=8), parameter :: constant_sinh = sinh(constant_base)
+  complex(kind=8), parameter :: constant_sqrt = sqrt(constant_base)
+  complex(kind=8), parameter :: constant_tan = tan(constant_base)
+  complex(kind=8), parameter :: constant_tanh = tanh(constant_base)
+  complex(kind=8), parameter :: constant_conjg = conjg(constant_base)
+  complex(kind=8), parameter :: constant_arithmetic = &
+    (constant_base + constant_conjg) * cmplx(2.0_8, 1.0_8, kind=8) / &
+    cmplx(1.0_8, -1.0_8, kind=8)
+  complex(kind=8), parameter :: constant_power = constant_base**3
+  real(kind=8), parameter :: constant_real = real(constant_arithmetic, kind=8)
+  real(kind=8), parameter :: constant_imaginary = aimag(constant_arithmetic)
+  real(kind=8), parameter :: constant_magnitude = abs(constant_arithmetic)
+  integer(kind=2), parameter :: constant_integer = int(constant_arithmetic, kind=2)
+end module mathematical_conversion_constants
+
 program mathematical_conversion_intrinsics
   use, intrinsic :: iso_fortran_env, only: real32, real64
+  use mathematical_conversion_constants
   implicit none
 
   integer, parameter :: working_kind = real32
@@ -64,6 +92,26 @@ program mathematical_conversion_intrinsics
   if (abs(tan(atan(c4)) - c4) > 64.0 * epsilon(r4)) error stop 32
   if (abs(tan(c4) - sin(c4) / cos(c4)) > 64.0 * epsilon(r4)) error stop 33
   if (abs(tanh(c4) - sinh(c4) / cosh(c4)) > 64.0 * epsilon(r4)) error stop 34
+  if (abs(constant_acos - acos(constant_base)) > 128.0d0 * epsilon(r8)) error stop 35
+  if (abs(constant_asin - asin(constant_base)) > 128.0d0 * epsilon(r8)) error stop 36
+  if (abs(constant_atan - atan(constant_base)) > 128.0d0 * epsilon(r8)) error stop 37
+  if (abs(constant_cos - cos(constant_base)) > 128.0d0 * epsilon(r8)) error stop 38
+  if (abs(constant_cosh - cosh(constant_base)) > 128.0d0 * epsilon(r8)) error stop 39
+  if (abs(constant_exp - exp(constant_base)) > 128.0d0 * epsilon(r8)) error stop 40
+  if (abs(constant_log - log(constant_base)) > 128.0d0 * epsilon(r8)) error stop 41
+  if (abs(constant_sin - sin(constant_base)) > 128.0d0 * epsilon(r8)) error stop 42
+  if (abs(constant_sinh - sinh(constant_base)) > 128.0d0 * epsilon(r8)) error stop 43
+  if (abs(constant_sqrt - sqrt(constant_base)) > 128.0d0 * epsilon(r8)) error stop 44
+  if (abs(constant_tan - tan(constant_base)) > 128.0d0 * epsilon(r8)) error stop 45
+  if (abs(constant_tanh - tanh(constant_base)) > 128.0d0 * epsilon(r8)) error stop 46
+  if (constant_conjg /= conjg(constant_base)) error stop 47
+  if (abs(constant_arithmetic - cmplx(0.25d0, 0.75d0, kind=8)) > &
+      128.0d0 * epsilon(r8)) error stop 48
+  if (abs(constant_power - cmplx(-0.171875d0, 0.03125d0, kind=8)) > &
+      128.0d0 * epsilon(r8)) error stop 49
+  if (constant_real /= 0.25d0 .or. constant_imaginary /= 0.75d0 .or. &
+      abs(constant_magnitude - sqrt(0.625d0)) > epsilon(r8) .or. &
+      constant_integer /= 0_2) error stop 50
 
   i1 = max(-120_1, 100_1)
   i2 = min(30000_2, -20000_2)

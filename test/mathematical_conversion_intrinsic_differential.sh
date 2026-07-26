@@ -33,7 +33,7 @@ cmake -E make_directory "$WORK"
     -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
     -fno-sanitize-recover=all "$WORK/generated.c" -lm -o "$WORK/generated-sanitized"
 "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -Wno-compare-reals \
-    "$SOURCE" -o "$WORK/native"
+    -J "$WORK" -I "$WORK" "$SOURCE" -o "$WORK/native"
 
 "$WORK/generated" >"$WORK/generated.out"
 "$WORK/generated-sanitized" >"$WORK/generated-sanitized.out"
