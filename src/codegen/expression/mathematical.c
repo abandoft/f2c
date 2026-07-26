@@ -222,7 +222,8 @@ static char *emit_extremum(Unit *unit, const F2cExpr *expression, int *supported
     const F2cExpr *values[64] = {0};
     const char *macro =
         expression->intrinsic == F2C_INTRINSIC_MAX ? "F2C_FORTRAN_MAX" : "F2C_FORTRAN_MIN";
-    const char *type = f2c_expression_c_type(expression);
+    const char *comparison_type;
+    const char *result_type = f2c_expression_c_type(expression);
     size_t positional = 0U;
     size_t count = 0U;
     size_t index;
@@ -248,6 +249,7 @@ static char *emit_extremum(Unit *unit, const F2cExpr *expression, int *supported
         *supported = 0;
         return NULL;
     }
+    comparison_type = f2c_expression_c_type(values[0]);
     for (index = 0U; index < count; ++index) {
         char *code;
         if (values[index] == NULL || values[index]->rank != 0U) {
@@ -262,13 +264,26 @@ static char *emit_extremum(Unit *unit, const F2cExpr *expression, int *supported
             return NULL;
         }
         if (index == 0U) {
-            f2c_buffer_printf(&result, "((%s)(%s))", type, code);
+            f2c_buffer_printf(&result, "((%s)(%s))", comparison_type, code);
         } else {
             char *previous = f2c_buffer_take(&result);
-            f2c_buffer_printf(&result, "%s(%s, ((%s)(%s)))", macro, previous, type, code);
+            f2c_buffer_printf(&result, "%s(%s, ((%s)(%s)))", macro, previous, comparison_type,
+                              code);
             free(previous);
         }
         free(code);
+    }
+    if (expression->type != values[0]->type ||
+        expression_kind(expression) != expression_kind(values[0])) {
+        char *selected = f2c_buffer_take(&result);
+        if (expression->type == TYPE_INTEGER &&
+            (values[0]->type == TYPE_REAL || values[0]->type == TYPE_DOUBLE)) {
+            f2c_buffer_printf(&result, "((%s)f2c_int_integer((double)(%s), %d))", result_type,
+                              selected, expression_kind(expression));
+        } else {
+            f2c_buffer_printf(&result, "((%s)(%s))", result_type, selected);
+        }
+        free(selected);
     }
     return f2c_buffer_take(&result);
 }
