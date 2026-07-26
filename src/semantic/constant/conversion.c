@@ -42,6 +42,7 @@ int f2c_constant_evaluate_conversion_integer(F2cConstantEvaluation *evaluation,
                                              const F2cExpr *expression, int64_t *value,
                                              size_t depth) {
     const F2cExpr *source;
+    F2cComplexConstant complex_value;
     int64_t integer;
     double real;
     double minimum;
@@ -60,8 +61,16 @@ int f2c_constant_evaluate_conversion_integer(F2cConstantEvaluation *evaluation,
         *value = integer;
         return 1;
     }
-    if ((source->type != TYPE_REAL && source->type != TYPE_DOUBLE) ||
-        !f2c_constant_evaluate_real(evaluation, source, &real, depth + 1U) || !isfinite(real))
+    if (source->type == TYPE_COMPLEX || source->type == TYPE_DOUBLE_COMPLEX) {
+        if (!f2c_constant_evaluate_complex(evaluation, source, &complex_value, depth + 1U))
+            return 0;
+        real = complex_value.real;
+    } else {
+        if ((source->type != TYPE_REAL && source->type != TYPE_DOUBLE) ||
+            !f2c_constant_evaluate_real(evaluation, source, &real, depth + 1U))
+            return 0;
+    }
+    if (!isfinite(real))
         return 0;
     real = trunc(real);
     if (real < minimum || real >= limit)
@@ -73,24 +82,35 @@ int f2c_constant_evaluate_conversion_integer(F2cConstantEvaluation *evaluation,
 int f2c_constant_evaluate_conversion_real(F2cConstantEvaluation *evaluation,
                                           const F2cExpr *expression, double *value, size_t depth) {
     const F2cExpr *source;
+    F2cComplexConstant complex_value;
     int64_t integer;
     double real;
     const int kind = expression_kind(expression);
     if (expression == NULL || expression->rank != 0U ||
-        (expression->intrinsic != F2C_INTRINSIC_REAL &&
+        (expression->intrinsic != F2C_INTRINSIC_AIMAG &&
+         expression->intrinsic != F2C_INTRINSIC_REAL &&
          expression->intrinsic != F2C_INTRINSIC_DBLE) ||
         (kind != 4 && kind != 8))
         return 0;
-    source = argument(expression, "a", 0U);
+    source = argument(expression, expression->intrinsic == F2C_INTRINSIC_AIMAG ? "z" : "a", 0U);
     if (source == NULL)
         return 0;
-    if (source->type == TYPE_INTEGER) {
+    if (expression->intrinsic == F2C_INTRINSIC_AIMAG) {
+        if ((source->type != TYPE_COMPLEX && source->type != TYPE_DOUBLE_COMPLEX) ||
+            !f2c_constant_evaluate_complex(evaluation, source, &complex_value, depth + 1U))
+            return 0;
+        real = complex_value.imaginary;
+    } else if (source->type == TYPE_INTEGER) {
         if (!f2c_constant_evaluate_integer(evaluation, source, &integer, depth + 1U))
             return 0;
         real = (double)integer;
     } else if (source->type == TYPE_REAL || source->type == TYPE_DOUBLE) {
         if (!f2c_constant_evaluate_real(evaluation, source, &real, depth + 1U))
             return 0;
+    } else if (source->type == TYPE_COMPLEX || source->type == TYPE_DOUBLE_COMPLEX) {
+        if (!f2c_constant_evaluate_complex(evaluation, source, &complex_value, depth + 1U))
+            return 0;
+        real = complex_value.real;
     } else {
         return 0;
     }
