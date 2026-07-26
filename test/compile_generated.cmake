@@ -124,6 +124,7 @@ foreach(
        assumed_size_inquiry
        array_section_bounds_once
        bit_intrinsics
+       mathematical_conversion_intrinsics
        numeric_operation_intrinsics
        numeric_operation_derived_ownership
        real_representation_intrinsics
