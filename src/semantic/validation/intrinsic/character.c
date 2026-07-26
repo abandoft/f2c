@@ -25,6 +25,14 @@ static const char *display_name(F2cIntrinsicId intrinsic) {
         return "LEN";
     case F2C_INTRINSIC_LEN_TRIM:
         return "LEN_TRIM";
+    case F2C_INTRINSIC_LGE:
+        return "LGE";
+    case F2C_INTRINSIC_LGT:
+        return "LGT";
+    case F2C_INTRINSIC_LLE:
+        return "LLE";
+    case F2C_INTRINSIC_LLT:
+        return "LLT";
     case F2C_INTRINSIC_REPEAT:
         return "REPEAT";
     case F2C_INTRINSIC_SCAN:
@@ -52,8 +60,8 @@ static const char *display_name(F2cIntrinsicId intrinsic) {
 }
 
 static void require_type(Context *context, size_t line, const char *statement_text,
-                         const char *intrinsic, const char *argument_name,
-                         const F2cExpr *argument, Type type) {
+                         const char *intrinsic, const char *argument_name, const F2cExpr *argument,
+                         Type type) {
     if (argument != NULL && argument->type != type)
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, argument), 1,
@@ -177,8 +185,7 @@ static void validate_kind(Context *context, Unit *unit, size_t line, const char 
     if (kind->type != TYPE_INTEGER || kind->rank != 0U ||
         !f2c_expression_is_initialization_constant(kind) ||
         !f2c_evaluate_integer_constant(unit, kind, &value) ||
-        (character_kind ? value != 1
-                        : (value != 1 && value != 2 && value != 4 && value != 8)))
+        (character_kind ? value != 1 : (value != 1 && value != 2 && value != 4 && value != 8)))
         f2c_diagnostic_at(
             context, line, f2c_validation_expression_start_column(statement_text, kind), 1,
             character_kind
@@ -192,10 +199,9 @@ static void validate_character_kind(Context *context, size_t line, const char *s
                                     const F2cExpr *argument) {
     if (argument != NULL && argument->type == TYPE_CHARACTER &&
         argument->type_kind != f2c_default_kind(TYPE_CHARACTER))
-        f2c_diagnostic_at(context, line,
-                          f2c_validation_expression_start_column(statement_text, argument), 1,
-                          "%s argument %s uses an unsupported CHARACTER kind", intrinsic,
-                          argument_name);
+        f2c_diagnostic_at(
+            context, line, f2c_validation_expression_start_column(statement_text, argument), 1,
+            "%s argument %s uses an unsupported CHARACTER kind", intrinsic, argument_name);
 }
 
 void f2c_validation_character_intrinsic(Context *context, Unit *unit, size_t line,
@@ -205,6 +211,7 @@ void f2c_validation_character_intrinsic(Context *context, Unit *unit, size_t lin
     static const char *const character_code[] = {"c", "kind"};
     static const char *const search[] = {"string", "substring", "back", "kind"};
     static const char *const length[] = {"string", "kind"};
+    static const char *const lexical[] = {"string_a", "string_b"};
     static const char *const repetition[] = {"string", "ncopies"};
     static const char *const set_search[] = {"string", "set", "back", "kind"};
     const char *const *names = string;
@@ -240,6 +247,14 @@ void f2c_validation_character_intrinsic(Context *context, Unit *unit, size_t lin
         names = length;
         name_count = 2U;
         break;
+    case F2C_INTRINSIC_LGE:
+    case F2C_INTRINSIC_LGT:
+    case F2C_INTRINSIC_LLE:
+    case F2C_INTRINSIC_LLT:
+        names = lexical;
+        name_count = 2U;
+        required_count = 2U;
+        break;
     case F2C_INTRINSIC_REPEAT:
         names = repetition;
         name_count = 2U;
@@ -259,18 +274,32 @@ void f2c_validation_character_intrinsic(Context *context, Unit *unit, size_t lin
         return;
     }
     intrinsic = display_name(expression->intrinsic);
-    bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, intrinsic, expression->children, expression->child_count,
-        names, name_count, required_count);
+    bound = f2c_validation_bind_intrinsic_arguments(context, line, statement_text, intrinsic,
+                                                    expression->children, expression->child_count,
+                                                    names, name_count, required_count);
     primary = bound.values[0];
+    if (expression->intrinsic == F2C_INTRINSIC_LGE || expression->intrinsic == F2C_INTRINSIC_LGT ||
+        expression->intrinsic == F2C_INTRINSIC_LLE || expression->intrinsic == F2C_INTRINSIC_LLT) {
+        secondary = bound.values[1];
+        require_type(context, line, statement_text, intrinsic, "STRING_A", primary, TYPE_CHARACTER);
+        require_type(context, line, statement_text, intrinsic, "STRING_B", secondary,
+                     TYPE_CHARACTER);
+        validate_character_kind(context, line, statement_text, intrinsic, "STRING_A", primary);
+        validate_character_kind(context, line, statement_text, intrinsic, "STRING_B", secondary);
+        if (primary != NULL && secondary != NULL && primary->type == TYPE_CHARACTER &&
+            secondary->type == TYPE_CHARACTER && primary->type_kind != secondary->type_kind)
+            f2c_diagnostic_at(context, line,
+                              f2c_validation_expression_start_column(statement_text, secondary), 1,
+                              "%s CHARACTER arguments must have the same kind", intrinsic);
+        return;
+    }
     if (expression->intrinsic == F2C_INTRINSIC_ACHAR ||
         expression->intrinsic == F2C_INTRINSIC_CHAR) {
         require_type(context, line, statement_text, intrinsic, "I", primary, TYPE_INTEGER);
         kind = bound.values[1];
         validate_kind(context, unit, line, statement_text, intrinsic, kind, 1);
-        if (expression->intrinsic == F2C_INTRINSIC_CHAR && primary != NULL &&
-            primary->rank == 0U && f2c_evaluate_integer_constant(unit, primary, &value) &&
-            (value < 0 || value > 255))
+        if (expression->intrinsic == F2C_INTRINSIC_CHAR && primary != NULL && primary->rank == 0U &&
+            f2c_evaluate_integer_constant(unit, primary, &value) && (value < 0 || value > 255))
             f2c_diagnostic_at(context, line,
                               f2c_validation_expression_start_column(statement_text, primary), 1,
                               "CHAR argument I must be between 0 and 255 for default CHARACTER");
@@ -306,11 +335,11 @@ void f2c_validation_character_intrinsic(Context *context, Unit *unit, size_t lin
         back = bound.values[2];
         kind = bound.values[3];
         require_type(context, line, statement_text, intrinsic,
-                     expression->intrinsic == F2C_INTRINSIC_INDEX ? "SUBSTRING" : "SET",
-                     secondary, TYPE_CHARACTER);
-        validate_character_kind(
-            context, line, statement_text, intrinsic,
-            expression->intrinsic == F2C_INTRINSIC_INDEX ? "SUBSTRING" : "SET", secondary);
+                     expression->intrinsic == F2C_INTRINSIC_INDEX ? "SUBSTRING" : "SET", secondary,
+                     TYPE_CHARACTER);
+        validate_character_kind(context, line, statement_text, intrinsic,
+                                expression->intrinsic == F2C_INTRINSIC_INDEX ? "SUBSTRING" : "SET",
+                                secondary);
         if (primary != NULL && secondary != NULL && primary->type == TYPE_CHARACTER &&
             secondary->type == TYPE_CHARACTER && primary->type_kind != secondary->type_kind)
             f2c_diagnostic_at(context, line,
@@ -327,8 +356,7 @@ void f2c_validation_character_intrinsic(Context *context, Unit *unit, size_t lin
     }
     if (expression->intrinsic == F2C_INTRINSIC_REPEAT) {
         secondary = bound.values[1];
-        require_type(context, line, statement_text, intrinsic, "NCOPIES", secondary,
-                     TYPE_INTEGER);
+        require_type(context, line, statement_text, intrinsic, "NCOPIES", secondary, TYPE_INTEGER);
         if (primary != NULL && primary->rank != 0U)
             f2c_diagnostic_at(context, line,
                               f2c_validation_expression_start_column(statement_text, primary), 1,
