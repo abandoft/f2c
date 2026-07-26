@@ -4,6 +4,8 @@ program character_intrinsics
   character(len=4) :: values(2), adjusted(2)
   integer :: positions(2), lengths(2)
   integer(8) :: wide
+  logical :: lexical(2)
+  logical, parameter :: padded_equal = lge(string_a='A', string_b='A ')
 
   text = '  AB  '
   if (adjustl(text) /= 'AB    ') error stop 1
@@ -29,6 +31,10 @@ program character_intrinsics
   if (len(values) /= 4) error stop 16
   wide = index('ABCABC', 'ABC', back=.true., kind=8)
   if (wide /= 4_8) error stop 17
+  if (.not. padded_equal .or. .not. lgt('B', 'A') .or. &
+      .not. lle('A ', 'A') .or. .not. llt('A', 'B')) error stop 18
+  lexical = llt(values, 'Z')
+  if (.not. all(lexical)) error stop 19
 
   print '(A,1X,A,1X,I0)', 'CHARACTER', trim(adjustl(text)), wide
 end program character_intrinsics
