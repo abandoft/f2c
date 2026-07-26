@@ -812,8 +812,10 @@ static void test_typed_integer_and_nested_call_expressions(void) {
                     "integer exponentiation retains INTEGER result type");
     expect_contains(result.code, "F2C_ABS((-((*n))))",
                     "integer ABS resolves through the kind-preserving C generic");
-    expect_contains(result.code, "&(double){dnrm2(",
-                    "nested DOUBLE function result uses a DOUBLE temporary");
+    expect_contains(result.code, "double f2c_ordered_argument_",
+                    "nested DOUBLE function results use typed ordered temporaries");
+    expect_contains(result.code, "dlapy2(&f2c_ordered_argument_",
+                    "nested DOUBLE function results are passed through ordered storage");
     f2c_result_free(&result);
 }
 
