@@ -239,6 +239,10 @@ int f2c_constant_evaluate_real(F2cConstantEvaluation *evaluation, const F2cExpr 
         return 0;
     }
     if (expression->kind == F2C_EXPR_CALL && expression->text != NULL) {
+        if (f2c_constant_evaluate_conversion_real(evaluation, expression, value, depth))
+            return 1;
+        if (f2c_constant_evaluate_mathematical_real(evaluation, expression, value, depth))
+            return 1;
         if (f2c_constant_evaluate_numeric_real(evaluation, expression, value, depth))
             return 1;
         if (evaluate_model_value(expression, value) ||
