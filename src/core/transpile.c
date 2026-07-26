@@ -30,6 +30,7 @@ typedef struct F2cRequiredFeatures {
     int time_intrinsic;
     int bit_intrinsic;
     int character_intrinsic;
+    int conversion_intrinsic;
     int numeric_model_intrinsic;
     int numeric_operation_intrinsic;
     int real_representation_intrinsic;
@@ -44,10 +45,14 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
         features->complex_values = 1;
     if (expression->kind != F2C_EXPR_CALL || expression->text == NULL)
         return;
+    if (expression->symbol != NULL && expression->symbol->external_declared)
+        return;
     if (f2c_intrinsic_is_bit(expression->intrinsic))
         features->bit_intrinsic = 1;
     if (f2c_intrinsic_is_character(expression->intrinsic))
         features->character_intrinsic = 1;
+    if (f2c_intrinsic_is_conversion(expression->intrinsic))
+        features->conversion_intrinsic = 1;
     if (f2c_intrinsic_is_numeric_model(expression->intrinsic))
         features->numeric_model_intrinsic = 1;
     if (f2c_intrinsic_is_numeric_operation(expression->intrinsic))
@@ -257,6 +262,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
         const int needs_time_intrinsic = features.time_intrinsic;
         const int needs_bit_intrinsic = features.bit_intrinsic;
         const int needs_character_intrinsic = features.character_intrinsic;
+        const int needs_conversion_intrinsic = features.conversion_intrinsic;
         const int needs_numeric_model_intrinsic = features.numeric_model_intrinsic;
         const int needs_numeric_operation_intrinsic = features.numeric_operation_intrinsic;
         const int needs_real_representation_intrinsic = features.real_representation_intrinsic;
@@ -302,6 +308,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             f2c_emit_bit_intrinsic_support(&context.output);
         if (needs_character_intrinsic)
             f2c_emit_character_intrinsic_support(&context.output);
+        if (needs_conversion_intrinsic)
+            f2c_emit_numeric_conversion_support(&context.output);
         if (needs_numeric_model_intrinsic || needs_real_representation_intrinsic)
             f2c_emit_numeric_model_contract(&context.output);
         if (needs_numeric_model_intrinsic)
@@ -739,32 +747,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                 "copysign(isinf(bi) ? 1.0 : 0.0, bi); return f2c_make_z(0.0 * (ar * br + ai * "
                 "bi), 0.0 * (ai * br - ar * bi)); } return f2c_make_z(NAN, NAN); }\n");
         }
-        if (needs_max) {
-            f2c_buffer_append(
-                &context.output,
-                "static inline F2C_UNUSED float f2c_fortran_smax(float a, float b) { return "
-                "isnan(a) || isnan(b) ? a + b : (a > b ? a : b); }\n"
-                "static inline F2C_UNUSED double f2c_fortran_dmax(double a, double b) { return "
-                "isnan(a) || isnan(b) ? a + b : (a > b ? a : b); }\n"
-                "static inline F2C_UNUSED int32_t f2c_fortran_imax(int32_t a, int32_t b) { "
-                "return a > b ? a : b; }\n"
-                "#define F2C_FORTRAN_MAX(a, b) _Generic(((a) + (b)), float: "
-                "f2c_fortran_smax, double: f2c_fortran_dmax, default: "
-                "f2c_fortran_imax)((a), (b))\n");
-        }
-        if (needs_min) {
-            f2c_buffer_append(
-                &context.output,
-                "static inline F2C_UNUSED float f2c_fortran_smin(float a, float b) { return "
-                "isnan(a) || isnan(b) ? a + b : (a < b ? a : b); }\n"
-                "static inline F2C_UNUSED double f2c_fortran_dmin(double a, double b) { return "
-                "isnan(a) || isnan(b) ? a + b : (a < b ? a : b); }\n"
-                "static inline F2C_UNUSED int32_t f2c_fortran_imin(int32_t a, int32_t b) { "
-                "return a < b ? a : b; }\n"
-                "#define F2C_FORTRAN_MIN(a, b) _Generic(((a) + (b)), float: "
-                "f2c_fortran_smin, double: f2c_fortran_dmin, default: "
-                "f2c_fortran_imin)((a), (b))\n");
-        }
+        f2c_emit_extremum_support(&context.output, needs_min, needs_max);
         if (needs_maxloc) {
             f2c_buffer_append(
                 &context.output,

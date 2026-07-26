@@ -5,6 +5,8 @@
 
 void f2c_emit_bit_intrinsic_support(Buffer *output);
 void f2c_emit_character_intrinsic_support(Buffer *output);
+void f2c_emit_extremum_support(Buffer *output, int needs_minimum, int needs_maximum);
+void f2c_emit_numeric_conversion_support(Buffer *output);
 void f2c_emit_numeric_model_contract(Buffer *output);
 void f2c_emit_numeric_model_support(Buffer *output);
 void f2c_emit_numeric_operation_support(Buffer *output);
