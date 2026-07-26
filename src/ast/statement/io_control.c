@@ -1,3 +1,4 @@
+#include "ast/internal.h"
 #include "ast/statement/private.h"
 
 #include <stdlib.h>
@@ -81,14 +82,10 @@ static F2cExpr *parse_namelist_name(F2cTokenRange range) {
     F2cExpr *expression;
     if (range.count != 1U || range.tokens[0].kind != F2C_TOKEN_IDENTIFIER)
         return NULL;
-    expression = (F2cExpr *)calloc(1U, sizeof(*expression));
+    expression = f2c_expr_new(F2C_EXPR_NAME, TYPE_UNKNOWN, NULL, 0U);
     if (expression == NULL)
         return NULL;
-    expression->kind = F2C_EXPR_NAME;
-    expression->type = TYPE_UNKNOWN;
     expression->value_category = F2C_VALUE_INVALID;
-    expression->shape.kind = F2C_SHAPE_SCALAR;
-    expression->parse_error_offset = SIZE_MAX;
     expression->span = range_span(range);
     expression->text = f2c_token_text(&range.tokens[0]);
     expression->source = f2c_token_range_text(range);
