@@ -1,3 +1,15 @@
+## 1.24.0
+
+- 完善复数初始化常量求值，覆盖 kind=4/8、参数引用、混合数值算术、缩放除法、幂运算及全部已支持的复数数学 intrinsic。
+- 支持 `CMPLX`、`CONJG`、`AIMAG`、`REAL`、`DBLE`、`INT` 和 `ABS` 在复数常量表达式中组合，并为模块、声明、`DATA` 与 `COMMON` 生成可移植的静态 C17 初始化器。
+- 在生成代码前拒绝复数除零和复数零 `LOG`，避免在文件作用域产生运行时复数库调用。
+- 为 `LOGICAL(L, KIND)` 增加 typed IR、kind 校验、常量折叠、elemental 数组语义和规范化 C17 转换。
+- 支持 `LGE`、`LGT`、`LLE` 和 `LLT` 的关键字参数、空白补齐词法比较、常量折叠及 elemental 降级。
+- 完善 `MAX0`、`MIN0`、`AMAX0`、`AMIN0`、`MAX1`、`MIN1`、`AMAX1`、`AMIN1`、`DMAX1` 和 `DMIN1` 的精确参数与结果类型契约。
+- 修正旧式 extrema specific 的转换顺序，始终先按源类型选择结果，再执行受检的目标类型转换。
+- 集中管理整数常量字面量生成，并扩展标量数学和转换表达式的静态折叠。
+- 扩展严格 C17、sanitizer 和原生 Fortran 差分覆盖，并将字符 intrinsic 差分纳入默认 CTest 门禁。
+
 ## 1.23.0
 
 - 为核心数学和数值转换 intrinsic 增加独立 typed IR、规范关键字关联、type/kind/rank 校验及 elemental 降级。
