@@ -246,6 +246,7 @@ set(
     src/semantic/constant.c
     src/semantic/constant/bit.c
     src/semantic/constant/character.c
+    src/semantic/constant/complex.c
     src/semantic/constant/conversion.c
     src/semantic/constant/mathematical.c
     src/semantic/constant/model.c

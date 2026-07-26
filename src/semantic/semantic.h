@@ -16,6 +16,8 @@ int f2c_expression_is_whole_assumed_size(const F2cExpr *expression);
 int f2c_named_kind_constant(const char *name, int64_t *value);
 int f2c_evaluate_integer_constant(Unit *unit, const F2cExpr *expression, int64_t *value);
 int f2c_evaluate_real_constant(Unit *unit, const F2cExpr *expression, double *value);
+int f2c_evaluate_complex_constant(Unit *unit, const F2cExpr *expression, double *real,
+                                  double *imaginary);
 int f2c_evaluate_integer_syntax(Unit *unit, F2cTokenRange syntax, int64_t *value);
 int f2c_expression_is_initialization_constant(const F2cExpr *expression);
 int f2c_integer_iteration_count(int64_t first, int64_t last, int64_t step, uint64_t *count);

@@ -13,11 +13,18 @@ typedef struct F2cConstantEvaluation {
     size_t steps;
 } F2cConstantEvaluation;
 
+typedef struct F2cComplexConstant {
+    double real;
+    double imaginary;
+} F2cComplexConstant;
+
 int f2c_constant_consume_step(F2cConstantEvaluation *evaluation, size_t depth);
 int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
                                   int64_t *value, size_t depth);
 int f2c_constant_evaluate_real(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
                                double *value, size_t depth);
+int f2c_constant_evaluate_complex(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
+                                  F2cComplexConstant *value, size_t depth);
 int f2c_constant_evaluate_numeric_integer(F2cConstantEvaluation *evaluation,
                                           const F2cExpr *expression, int64_t *value, size_t depth);
 int f2c_constant_evaluate_numeric_real(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
