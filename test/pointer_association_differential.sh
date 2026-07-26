@@ -44,8 +44,11 @@ for fixture in pointer_section derived_pointer_component; do
         -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
         -fno-sanitize-recover=all "$case_work/generated.c" -lm \
         -o "$case_work/generated-sanitized"
-    "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror $native_warning_options \
-        -J"$case_work" -I"$case_work" "$source" -o "$case_work/native"
+    (
+        cd "$case_work"
+        "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror $native_warning_options \
+            -J. -I. "$source" -o native
+    )
 
     "$case_work/generated" >"$case_work/generated.out"
     "$case_work/generated-sanitized" >"$case_work/generated-sanitized.out"
