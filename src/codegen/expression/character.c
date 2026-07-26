@@ -1,5 +1,6 @@
 #include "codegen/expression/private.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 
 typedef struct F2cCharacterArgument {
@@ -199,12 +200,52 @@ static char *emit_search(Unit *unit, const F2cExpr *expression, int *supported) 
     return result;
 }
 
+static const char *lexical_operator(F2cIntrinsicId intrinsic) {
+    switch (intrinsic) {
+    case F2C_INTRINSIC_LGE:
+        return ">=";
+    case F2C_INTRINSIC_LGT:
+        return ">";
+    case F2C_INTRINSIC_LLE:
+        return "<=";
+    case F2C_INTRINSIC_LLT:
+        return "<";
+    case F2C_INTRINSIC_NONE:
+    default:
+        return NULL;
+    }
+}
+
+static char *emit_lexical_comparison(Unit *unit, const F2cExpr *expression, int *supported) {
+    F2cCharacterArgument left = {0};
+    F2cCharacterArgument right = {0};
+    const char *comparison = lexical_operator(expression->intrinsic);
+    Buffer result = {0};
+    if (comparison == NULL ||
+        !emit_character_argument(unit, expression, "string_a", 0U, &left, supported) ||
+        !emit_character_argument(unit, expression, "string_b", 1U, &right, supported)) {
+        free_character_argument(&left);
+        free_character_argument(&right);
+        *supported = 0;
+        return NULL;
+    }
+    f2c_buffer_printf(&result, "(f2c_character_compare(%s, (size_t)(%s), %s, (size_t)(%s)) %s 0)",
+                      left.pointer, left.length, right.pointer, right.length, comparison);
+    free_character_argument(&left);
+    free_character_argument(&right);
+    return f2c_buffer_take(&result);
+}
+
 char *f2c_expression_character_intrinsic(Unit *unit, const F2cExpr *expression, int *supported) {
+    int64_t constant;
     if (unit == NULL || expression == NULL || supported == NULL) {
         if (supported != NULL)
             *supported = 0;
         return NULL;
     }
+    if (expression->rank == 0U && expression->type == TYPE_LOGICAL &&
+        f2c_evaluate_integer_constant(unit, expression, &constant))
+        return f2c_strdup(constant != 0 ? "true" : "false");
     switch (expression->intrinsic) {
     case F2C_INTRINSIC_ACHAR:
     case F2C_INTRINSIC_CHAR:
@@ -224,6 +265,11 @@ char *f2c_expression_character_intrinsic(Unit *unit, const F2cExpr *expression, 
         return emit_length(unit, expression, 0, supported);
     case F2C_INTRINSIC_LEN_TRIM:
         return emit_length(unit, expression, 1, supported);
+    case F2C_INTRINSIC_LGE:
+    case F2C_INTRINSIC_LGT:
+    case F2C_INTRINSIC_LLE:
+    case F2C_INTRINSIC_LLT:
+        return emit_lexical_comparison(unit, expression, supported);
     case F2C_INTRINSIC_REPEAT:
         return emit_repeat(unit, expression, supported);
     case F2C_INTRINSIC_TRIM:
