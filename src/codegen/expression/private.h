@@ -26,6 +26,8 @@ char *f2c_expression_wrap_managed_call(const F2cExpr *expression, int allocatabl
                                        Buffer *setup, Buffer *cleanup, char *call, int *supported);
 char *f2c_expression_bit_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_character_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
+char *f2c_expression_conversion_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
+char *f2c_expression_mathematical_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_numeric_model_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_numeric_operation_intrinsic(Unit *unit, const F2cExpr *expression,
                                                  int *supported);
