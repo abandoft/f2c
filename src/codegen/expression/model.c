@@ -1,17 +1,9 @@
 #include "codegen/expression/private.h"
 
+#include "codegen/literal/integer.h"
 #include "semantic/numeric_model.h"
 
 #include <stdlib.h>
-
-static char *integer_constant(int64_t value) {
-    Buffer result = {0};
-    if (value < 0)
-        f2c_buffer_printf(&result, "-INT32_C(%lld)", (long long)-value);
-    else
-        f2c_buffer_printf(&result, "INT32_C(%lld)", (long long)value);
-    return f2c_buffer_take(&result);
-}
 
 static const char *real_model_constant(F2cIntrinsicId intrinsic, int kind) {
     if (kind == 4) {
@@ -61,7 +53,7 @@ static char *model_inquiry(const F2cExpr *expression, int *supported) {
     }
     kind = argument->type_kind != 0 ? argument->type_kind : f2c_default_kind(argument->type);
     if (expression->intrinsic == F2C_INTRINSIC_KIND)
-        return integer_constant(kind);
+        return f2c_integer_constant_literal(kind, 4);
     model = f2c_numeric_model(argument->type, kind);
     if (model == NULL) {
         *supported = 0;
@@ -106,7 +98,7 @@ static char *model_inquiry(const F2cExpr *expression, int *supported) {
         *supported = 0;
         return NULL;
     }
-    return integer_constant(value);
+    return f2c_integer_constant_literal(value, 4);
 }
 
 static char *selected_int_kind(Unit *unit, const F2cExpr *expression, int *supported) {
@@ -170,7 +162,7 @@ char *f2c_expression_numeric_model_intrinsic(Unit *unit, const F2cExpr *expressi
     if ((expression->intrinsic == F2C_INTRINSIC_SELECTED_INT_KIND ||
          expression->intrinsic == F2C_INTRINSIC_SELECTED_REAL_KIND) &&
         f2c_evaluate_integer_constant(unit, expression, &constant))
-        return integer_constant(constant);
+        return f2c_integer_constant_literal(constant, 4);
     if (expression->intrinsic == F2C_INTRINSIC_SELECTED_INT_KIND)
         return selected_int_kind(unit, expression, supported);
     if (expression->intrinsic == F2C_INTRINSIC_SELECTED_REAL_KIND)

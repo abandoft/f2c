@@ -1,17 +1,9 @@
 #include "codegen/expression/private.h"
 
+#include "codegen/literal/integer.h"
 #include "codegen/literal/real.h"
 
 #include <stdlib.h>
-
-static char *integer_constant(int64_t value) {
-    Buffer result = {0};
-    if (value < 0)
-        f2c_buffer_printf(&result, "-INT32_C(%lld)", (long long)-value);
-    else
-        f2c_buffer_printf(&result, "INT32_C(%lld)", (long long)value);
-    return f2c_buffer_take(&result);
-}
 
 static const char *operation_name(F2cIntrinsicId intrinsic) {
     switch (intrinsic) {
@@ -65,7 +57,7 @@ char *f2c_expression_real_representation_intrinsic(Unit *unit, const F2cExpr *ex
     if (expression->rank == 0U) {
         if (expression->intrinsic == F2C_INTRINSIC_EXPONENT &&
             f2c_evaluate_integer_constant(unit, expression, &integer_value))
-            return integer_constant(integer_value);
+            return f2c_integer_constant_literal(integer_value, 4);
         if (expression->intrinsic != F2C_INTRINSIC_EXPONENT &&
             f2c_evaluate_real_constant(unit, expression, &real_value)) {
             char *constant = f2c_real_constant_literal(real_value, kind);

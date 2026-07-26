@@ -1,8 +1,8 @@
 #include "codegen/expression/private.h"
 
+#include "codegen/literal/integer.h"
 #include "codegen/literal/real.h"
 
-#include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -10,37 +10,6 @@ static int expression_kind(const F2cExpr *expression) {
     return expression != NULL && expression->type_kind != 0
                ? expression->type_kind
                : f2c_default_kind(expression != NULL ? expression->type : TYPE_UNKNOWN);
-}
-
-static const char *integer_prefix(int kind) {
-    switch (kind) {
-    case 1:
-        return "INT8_C";
-    case 2:
-        return "INT16_C";
-    case 4:
-        return "INT32_C";
-    case 8:
-        return "INT64_C";
-    default:
-        return NULL;
-    }
-}
-
-static char *integer_constant(int64_t value, int kind) {
-    const char *prefix = integer_prefix(kind);
-    Buffer result = {0};
-    if (prefix == NULL)
-        return NULL;
-    if ((kind == 1 && value == INT8_MIN) || (kind == 2 && value == INT16_MIN) ||
-        (kind == 4 && value == INT32_MIN) || (kind == 8 && value == INT64_MIN)) {
-        f2c_buffer_printf(&result, "INT%d_MIN", kind * 8);
-    } else if (value < 0) {
-        f2c_buffer_printf(&result, "-%s(%lld)", prefix, (long long)-value);
-    } else {
-        f2c_buffer_printf(&result, "%s(%lld)", prefix, (long long)value);
-    }
-    return f2c_buffer_take(&result);
 }
 
 static const F2cExpr *argument(const F2cExpr *expression, const char *name, size_t position) {
@@ -93,7 +62,7 @@ static char *emit_rounding_integer(Unit *unit, const F2cExpr *expression, int *s
     const int kind = expression_kind(expression);
     char *source = emit_argument(unit, expression, "a", 0U, supported);
     Buffer result = {0};
-    if (!*supported || source == NULL || integer_prefix(kind) == NULL) {
+    if (!*supported || source == NULL || (kind != 1 && kind != 2 && kind != 4 && kind != 8)) {
         free(source);
         *supported = 0;
         return NULL;
@@ -237,7 +206,7 @@ char *f2c_expression_numeric_operation_intrinsic(Unit *unit, const F2cExpr *expr
         f2c_evaluate_integer_constant(unit, expression, &integer_value)) {
         if (expression->type == TYPE_LOGICAL)
             return f2c_strdup(integer_value != 0 ? "true" : "false");
-        constant = integer_constant(integer_value, expression_kind(expression));
+        constant = f2c_integer_constant_literal(integer_value, expression_kind(expression));
         if (constant != NULL)
             return constant;
     }
