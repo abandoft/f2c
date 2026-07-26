@@ -129,10 +129,23 @@ static void validate_constant_domain(Context *context, Unit *unit, size_t line,
                                      const char *statement_text, F2cIntrinsicId intrinsic,
                                      const F2cExpr *argument) {
     double value;
+    double imaginary;
     const char *requirement = NULL;
-    if (argument == NULL || !is_real(argument->type) || argument->rank != 0U ||
-        !f2c_expression_is_initialization_constant(argument) ||
-        !f2c_evaluate_real_constant(unit, argument, &value) || isnan(value))
+    if (argument == NULL || argument->rank != 0U ||
+        !f2c_expression_is_initialization_constant(argument))
+        return;
+    if (is_complex(argument->type)) {
+        if (intrinsic != F2C_INTRINSIC_LOG ||
+            !f2c_evaluate_complex_constant(unit, argument, &value, &imaginary) || value != 0.0 ||
+            imaginary != 0.0)
+            return;
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, argument), 1,
+                          "LOG argument X must be nonzero");
+        return;
+    }
+    if (!is_real(argument->type) || !f2c_evaluate_real_constant(unit, argument, &value) ||
+        isnan(value))
         return;
     if ((intrinsic == F2C_INTRINSIC_ACOS || intrinsic == F2C_INTRINSIC_ASIN) && fabs(value) > 1.0)
         requirement = "magnitude no greater than one";
