@@ -136,7 +136,11 @@
   指数 kind，并生成精确十六进制静态常量。数学与数值转换 intrinsic 的标量初始化常量求值已覆盖
   支持的实数数学函数、`ABS/MAX/MIN/DPROD` 以及 `INT/REAL/DBLE`，包含结果 kind 舍入和转换范围
   检查；`ISO_FORTRAN_ENV` 的整数/实数 kind 常量及其局部参数别名也已进入同一求值路径。复数
-  常量表达式尚未建立统一的实部/虚部值模型。仍需补齐其余规格 intrinsic 和所有允许出现位置。
+  初始化常量现已建立独立实部/虚部值模型，覆盖 kind=4/8 舍入、参数引用、字面量、正负号、
+  混合数值算术、缩放除法、整数及一般数值幂、`CMPLX/CONJG`、全部已支持复数数学 intrinsic，
+  以及 `AIMAG/REAL/DBLE/INT/ABS` 分量结果；模块、声明、`DATA/COMMON` 静态初始化会生成可移植
+  C17 组件常量，非法零除和复数零 `LOG` 会在生成前拒绝。仍需补齐其余规格 intrinsic 和所有
+  允许出现位置。
   字符常量
   求值现已覆盖 `ACHAR/ADJUSTL/ADJUSTR/CHAR/IACHAR`、
   `ICHAR/INDEX/LEN/LEN_TRIM/REPEAT/SCAN/TRIM/VERIFY`、连接、参数引用、嵌入 NUL、空串、反向搜索
@@ -344,8 +348,10 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   类型化路径。`CMPLX` 的默认 kind、`REAL(COMPLEX)` 的分量 kind、`MAX/MIN` 同 type/kind 约束、
   `INT` 截断及越界保护均按标准处理，显式同名 `EXTERNAL` 不会被误降级为内建函数。标量、关键字
   重排、elemental 数组、窄/宽整数、复数数学函数、严格 C17、ASan/UBSan 与原生 Fortran 差分已经
-  进入测试和数值验证 CI。旧式跨类型 `MAX/MIN` specific 名称、完整复数初始化常量求值及剩余 F90
-  intrinsic 仍需完成。`RANDOM_NUMBER` 与 `RANDOM_SEED` 已按 intrinsic subroutine 建模，覆盖
+  进入测试和数值验证 CI。复数初始化常量进一步覆盖参数递归、算术/幂、转换及全部已支持的复数
+  数学函数，并通过模块静态 C17 初始化和原生 Fortran 逐值差分验证。旧式跨类型 `MAX/MIN`
+  specific 名称及剩余 F90 intrinsic 仍需完成。`RANDOM_NUMBER` 与 `RANDOM_SEED` 已按 intrinsic
+  subroutine 建模，覆盖
   REAL 标量、任意 rank 数组及非连续段、`SIZE/PUT/GET`、无参重置、种子状态往返和线程局部状态；
   数组实参使用统一
   描述符临时量及写回路径，严格 C17、ASan/UBSan 与原生 Fortran 属性差分已进入数值验证 CI。
