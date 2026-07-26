@@ -110,7 +110,8 @@ void f2c_emit_project_modules(Context *context) {
                                     : context->lines.items[module->begin].number;
             size_t dimension;
             char *initializer =
-                symbol->data_initializer || symbol->data_element_initializers != NULL
+                symbol->data_initializer || symbol->data_element_initializers != NULL ||
+                        symbol->type == TYPE_COMPLEX || symbol->type == TYPE_DOUBLE_COMPLEX
                     ? f2c_unit_static_storage_initializer(module, symbol)
                 : symbol->initializer_expression != NULL
                     ? f2c_emit_typed_expression(module, symbol->initializer_expression)
