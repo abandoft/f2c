@@ -133,7 +133,11 @@
   kind 选择器；查询实参不会被求值。实数表示 intrinsic
   `EXPONENT/FRACTION/NEAREST/RRSPACING/SCALE/SET_EXPONENT/SPACING` 已进入 typed IR 和常量
   求值器，覆盖 binary32/binary64、零、signed zero、subnormal、非有限值、关键字关联和支持的整数
-  指数 kind，并生成精确十六进制静态常量。仍需补齐其余规格 intrinsic 和所有允许出现位置。字符常量
+  指数 kind，并生成精确十六进制静态常量。数学与数值转换 intrinsic 的标量初始化常量求值已覆盖
+  支持的实数数学函数、`ABS/MAX/MIN/DPROD` 以及 `INT/REAL/DBLE`，包含结果 kind 舍入和转换范围
+  检查；`ISO_FORTRAN_ENV` 的整数/实数 kind 常量及其局部参数别名也已进入同一求值路径。复数
+  常量表达式尚未建立统一的实部/虚部值模型。仍需补齐其余规格 intrinsic 和所有允许出现位置。
+  字符常量
   求值现已覆盖 `ACHAR/ADJUSTL/ADJUSTR/CHAR/IACHAR`、
   `ICHAR/INDEX/LEN/LEN_TRIM/REPEAT/SCAN/TRIM/VERIFY`、连接、参数引用、嵌入 NUL、空串、反向搜索
   和结果 kind 范围，并可直接生成 CHARACTER 声明初始化器。
@@ -332,8 +336,18 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   `EXPONENT/FRACTION/NEAREST/RRSPACING/SCALE/SET_EXPONENT/SPACING` 已覆盖类型化参数关联、
   elemental rank/shape、binary32/binary64 结果 kind、常量折叠和边界语义；运行时降级仅使用 libc/libm，
   对超出 C `int` 范围的整数指数执行显式保护，并由严格 C17、ASan/UBSan 与原生 Fortran 逐值差分
-  验证。`RANDOM_NUMBER` 与 `RANDOM_SEED` 已按 intrinsic subroutine 建模，覆盖 REAL 标量、任意 rank
-  数组及非连续段、`SIZE/PUT/GET`、无参重置、种子状态往返和线程局部状态；数组实参使用统一
+  验证。数学 intrinsic
+  `ABS/ACOS/ASIN/ATAN/ATAN2/COS/COSH/EXP/LOG/LOG10/MAX/MIN/SIN/SINH/SQRT/TAN/TANH`
+  以及 `DPROD`，数值转换 intrinsic `AIMAG/CMPLX/CONJG/DBLE/INT/REAL` 现已拥有独立 typed ID、
+  关键字关联、type/kind/rank 契约、常量折叠和 libc/libm C17 降级；标准 F77/F90 的
+  `IABS/CABS/DABS`、`ALOG/ALOG10`、复数数学 specific 名称和双精度 specific 名称也复用同一
+  类型化路径。`CMPLX` 的默认 kind、`REAL(COMPLEX)` 的分量 kind、`MAX/MIN` 同 type/kind 约束、
+  `INT` 截断及越界保护均按标准处理，显式同名 `EXTERNAL` 不会被误降级为内建函数。标量、关键字
+  重排、elemental 数组、窄/宽整数、复数数学函数、严格 C17、ASan/UBSan 与原生 Fortran 差分已经
+  进入测试和数值验证 CI。旧式跨类型 `MAX/MIN` specific 名称、完整复数初始化常量求值及剩余 F90
+  intrinsic 仍需完成。`RANDOM_NUMBER` 与 `RANDOM_SEED` 已按 intrinsic subroutine 建模，覆盖
+  REAL 标量、任意 rank 数组及非连续段、`SIZE/PUT/GET`、无参重置、种子状态往返和线程局部状态；
+  数组实参使用统一
   描述符临时量及写回路径，严格 C17、ASan/UBSan 与原生 Fortran 属性差分已进入数值验证 CI。
   `DATE_AND_TIME`、`SYSTEM_CLOCK` 和 `CPU_TIME` 现也使用结构化 intrinsic subroutine IR：字符结果
   支持短目标截断和子串，日期值数组支持 kind 2/4/8、仿射数组段及第 9 项以后保持，系统时钟按
