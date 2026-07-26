@@ -31,6 +31,8 @@ static const char *display_name(F2cIntrinsicId intrinsic) {
         return "DBLE";
     case F2C_INTRINSIC_INT:
         return "INT";
+    case F2C_INTRINSIC_LOGICAL:
+        return "LOGICAL";
     case F2C_INTRINSIC_REAL:
         return "REAL";
     case F2C_INTRINSIC_NONE:
@@ -53,6 +55,22 @@ static void require_supported_numeric(Context *context, size_t line, const char 
                           f2c_validation_expression_start_column(statement_text, argument), 1,
                           "%s argument %s uses unsupported %s kind %d", intrinsic, argument_name,
                           f2c_validation_type_name(argument->type), expression_kind(argument));
+    }
+}
+
+static void require_supported_logical(Context *context, size_t line, const char *statement_text,
+                                      const char *intrinsic, const F2cExpr *argument) {
+    const int kind = expression_kind(argument);
+    if (argument == NULL)
+        return;
+    if (argument->type != TYPE_LOGICAL) {
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, argument), 1,
+                          "%s argument L must be LOGICAL", intrinsic);
+    } else if (kind != 1 && kind != 2 && kind != 4 && kind != 8) {
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, argument), 1,
+                          "%s argument L uses unsupported LOGICAL kind %d", intrinsic, kind);
     }
 }
 
@@ -131,6 +149,10 @@ static void resolve_result(F2cExpr *expression, const F2cExpr *source, int selec
         expression->type = TYPE_INTEGER;
         expression->type_kind = selected_kind != 0 ? selected_kind : 4;
         break;
+    case F2C_INTRINSIC_LOGICAL:
+        expression->type = TYPE_LOGICAL;
+        expression->type_kind = selected_kind != 0 ? selected_kind : 4;
+        break;
     case F2C_INTRINSIC_REAL:
         expression->type_kind = selected_kind != 0 ? selected_kind
                                 : source != NULL && is_complex(source->type)
@@ -148,13 +170,19 @@ static void validate_single_source(Context *context, Unit *unit, size_t line,
                                    const char *statement_text, F2cExpr *expression) {
     static const char *const complex_arguments[] = {"z"};
     static const char *const conversion_arguments[] = {"a", "kind"};
+    static const char *const logical_arguments[] = {"l", "kind"};
     const int complex_operation = expression->intrinsic == F2C_INTRINSIC_AIMAG ||
                                   expression->intrinsic == F2C_INTRINSIC_CONJG;
+    const int logical_operation = expression->intrinsic == F2C_INTRINSIC_LOGICAL;
     const int has_kind =
         (expression->intrinsic == F2C_INTRINSIC_INT ||
-         expression->intrinsic == F2C_INTRINSIC_REAL) &&
-        (strcmp(expression->text, "int") == 0 || strcmp(expression->text, "real") == 0);
-    const char *const *names = complex_operation ? complex_arguments : conversion_arguments;
+         expression->intrinsic == F2C_INTRINSIC_REAL ||
+         expression->intrinsic == F2C_INTRINSIC_LOGICAL) &&
+        (strcmp(expression->text, "int") == 0 || strcmp(expression->text, "real") == 0 ||
+         strcmp(expression->text, "logical") == 0);
+    const char *const *names = complex_operation   ? complex_arguments
+                               : logical_operation ? logical_arguments
+                                                   : conversion_arguments;
     const size_t name_count = complex_operation ? 1U : has_kind ? 2U : 1U;
     const char *intrinsic = display_name(expression->intrinsic);
     const F2cBoundIntrinsicArguments bound = f2c_validation_bind_intrinsic_arguments(
@@ -170,12 +198,16 @@ static void validate_single_source(Context *context, Unit *unit, size_t line,
         else
             require_supported_numeric(context, line, statement_text, intrinsic, "Z",
                                       bound.values[0]);
+    } else if (logical_operation) {
+        require_supported_logical(context, line, statement_text, intrinsic, bound.values[0]);
     } else {
         require_supported_numeric(context, line, statement_text, intrinsic, "A", bound.values[0]);
     }
     if (has_kind)
         (void)validate_kind(context, unit, line, statement_text, intrinsic, bound.values[1],
-                            expression->intrinsic == F2C_INTRINSIC_INT, &selected_kind);
+                            expression->intrinsic == F2C_INTRINSIC_INT ||
+                                expression->intrinsic == F2C_INTRINSIC_LOGICAL,
+                            &selected_kind);
     validate_specific_source(context, line, statement_text, expression, bound.values[0]);
     resolve_result(expression, bound.values[0], selected_kind);
 }
