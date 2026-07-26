@@ -711,11 +711,14 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                     1, "statement functions do not accept keyword arguments");
         }
     } else if (expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
-               f2c_is_intrinsic_name(expression->text)) {
+               f2c_is_intrinsic_name(expression->text) &&
+               (expression->symbol == NULL || !expression->symbol->external_declared)) {
         const F2cIntrinsicSignature *signature = f2c_find_intrinsic(expression->text);
         validate_intrinsic_arity(context, line, statement_text, expression);
         f2c_validation_bit_intrinsic(context, unit, line, statement_text, expression);
         f2c_validation_character_intrinsic(context, unit, line, statement_text, expression);
+        f2c_validation_conversion_intrinsic(context, unit, line, statement_text, expression);
+        f2c_validation_mathematical_intrinsic(context, unit, line, statement_text, expression);
         f2c_validation_numeric_model_intrinsic(context, line, statement_text, expression);
         f2c_validation_numeric_operation_intrinsic(context, unit, line, statement_text, expression);
         f2c_validation_real_representation_intrinsic(context, unit, line, statement_text,
