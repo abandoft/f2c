@@ -103,23 +103,87 @@ static void test_procedure_pointer_capture_diagnostic(void) {
     f2c_result_free(&result);
 }
 
-static void test_dynamic_descriptor_capture_diagnostic(void) {
+static void test_dynamic_descriptor_capture_lowering(void) {
     static const char source[] = "program host_allocatable\n"
                                  "  implicit none(type, external)\n"
-                                 "  integer, allocatable :: values(:)\n"
-                                 "  allocate(values(1))\n"
-                                 "  call assign_value()\n"
+                                 "  integer, allocatable :: values(:), output(:)\n"
+                                 "  integer :: count\n"
+                                 "  allocate(values(-1:1))\n"
+                                 "  call resize()\n"
+                                 "  count = combine(resize_and_count(), resize_and_count()) + "
+                                 "resize_and_count()\n"
+                                 "  output = make_values()\n"
                                  "contains\n"
-                                 "  subroutine assign_value()\n"
-                                 "    values(1) = 42\n"
-                                 "  end subroutine assign_value\n"
+                                 "  subroutine resize()\n"
+                                 "    deallocate(values)\n"
+                                 "    allocate(values(2:3))\n"
+                                 "    values = [4, 5]\n"
+                                 "  end subroutine resize\n"
+                                 "  integer function resize_and_count() result(answer)\n"
+                                 "    deallocate(values)\n"
+                                 "    allocate(values(4:6))\n"
+                                 "    values = [7, 8, 9]\n"
+                                 "    answer = size(values)\n"
+                                 "  end function resize_and_count\n"
+                                 "  integer function combine(first, second) result(answer)\n"
+                                 "    integer, intent(in) :: first, second\n"
+                                 "    answer = first + second\n"
+                                 "  end function combine\n"
+                                 "  function make_values() result(answer)\n"
+                                 "    integer, allocatable :: answer(:)\n"
+                                 "    values = values + 1\n"
+                                 "    allocate(answer(2))\n"
+                                 "    answer = [10, 11]\n"
+                                 "  end function make_values\n"
                                  "end program host_allocatable\n";
     F2cResult result = transpile(source, "host-allocatable.f90");
-    expect(result.code == NULL && result.error_count != 0U,
-           "an unsupported local dynamic-descriptor capture is rejected before code generation");
-    expect_contains(result.diagnostics,
-                    "host association of local dynamic descriptor 'values' is not yet supported",
-                    "the allocatable capture diagnostic names the unsupported entity");
+    expect(result.error_count == 0U && result.code != NULL,
+           "a local allocatable completes dynamic host-capture lowering");
+    expect_contains(result.code, "f2c_descriptor f2c_host_call_descriptor_0 = {",
+                    "a statement call materializes a scoped host descriptor");
+    expect_contains(result.code, "host_allocatable__resize(&f2c_host_call_descriptor_0);",
+                    "the internal subroutine receives the scoped descriptor");
+    expect_contains(result.code, "values = (int32_t *)f2c_host_call_descriptor_0.data;",
+                    "the statement bridge writes reallocated storage back to the host");
+    expect_contains(result.code, "f2c_expression_result_",
+                    "a function result is materialized before descriptor writeback");
+    expect_contains(result.code, "f2c_ordered_value_",
+                    "multiple side-effecting function references are explicitly sequenced");
+    expect_contains(result.code, "f2c_ordered_argument_",
+                    "side-effecting function arguments are materialized in source order");
+    expect_contains(result.code, "f2c_expression_descriptor_result_",
+                    "managed allocatable function results have descriptor result storage");
+    f2c_result_free(&result);
+}
+
+static void test_dynamic_character_and_pointer_capture_lowering(void) {
+    static const char source[] = "program host_dynamic_objects\n"
+                                 "  implicit none(type, external)\n"
+                                 "  integer, target :: first(2), second(3)\n"
+                                 "  integer, pointer :: view(:)\n"
+                                 "  character(:), allocatable :: text\n"
+                                 "  view => first\n"
+                                 "  text = 'old'\n"
+                                 "  call replace()\n"
+                                 "contains\n"
+                                 "  subroutine replace()\n"
+                                 "    view => second\n"
+                                 "    deallocate(text)\n"
+                                 "    allocate(character(len=6) :: text)\n"
+                                 "    text = 'modern'\n"
+                                 "  end subroutine replace\n"
+                                 "end program host_dynamic_objects\n";
+    F2cResult result = transpile(source, "host-dynamic-objects.f90");
+    expect(result.error_count == 0U && result.code != NULL,
+           "pointer and deferred CHARACTER host entities complete descriptor lowering");
+    expect_contains(result.code, ".deallocatable = view_deallocatable",
+                    "pointer allocation provenance enters the capture descriptor");
+    expect_contains(result.code, "view_stride_1 = f2c_host_call_descriptor_",
+                    "pointer association stride metadata is written back");
+    expect_contains(result.code, "f2c_char_len_text = f2c_host_call_descriptor_",
+                    "deferred CHARACTER length is written back");
+    expect(result.code == NULL || strstr(result.code, ".lower = {}") == NULL,
+           "rank-zero descriptor bridges remain strict C17");
     f2c_result_free(&result);
 }
 
@@ -155,7 +219,8 @@ int main(void) {
     test_scalar_capture_lowering();
     test_automatic_array_portability();
     test_procedure_pointer_capture_diagnostic();
-    test_dynamic_descriptor_capture_diagnostic();
+    test_dynamic_descriptor_capture_lowering();
+    test_dynamic_character_and_pointer_capture_lowering();
     test_capturing_procedure_value_diagnostic();
     if (failures != 0) {
         fprintf(stderr, "%d host-association test(s) failed\n", failures);
