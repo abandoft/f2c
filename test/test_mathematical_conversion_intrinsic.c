@@ -54,6 +54,12 @@ static void test_mathematical_contracts(void) {
                       "alog requires a REAL(kind=4) first argument");
     expect_diagnostic("  integer :: first, second\n", "max(a1=first, mystery=second)",
                       "MAX has no argument named 'mystery'");
+    expect_diagnostic("  real :: first, second\n", "max0(first, second)",
+                      "MAX0 argument A1 must be INTEGER(kind=4)");
+    expect_diagnostic("  integer :: first, second\n", "max1(first, second)",
+                      "MAX1 argument A1 must be REAL(kind=4)");
+    expect_diagnostic("  real :: first, second\n", "dmin1(first, second)",
+                      "DMIN1 argument A1 must be DOUBLE PRECISION(kind=8)");
     expect_diagnostic("", "sqrt(-1.0)", "SQRT argument X must be greater than or equal to zero");
     expect_diagnostic("", "log(0.0)", "LOG argument X must be greater than zero");
     expect_diagnostic("", "log((0.0,0.0))", "LOG argument X must be nonzero");
@@ -79,6 +85,11 @@ static void test_conversion_contracts(void) {
                       "idint requires a DOUBLE PRECISION(kind=8) argument");
     expect_diagnostic("  integer :: value\n", "sngl(value)",
                       "sngl requires a DOUBLE PRECISION(kind=8) argument");
+    expect_diagnostic("  integer :: value\n", "logical(value)",
+                      "LOGICAL argument L must be LOGICAL");
+    expect_diagnostic("  logical :: value\n", "logical(value, kind=3)",
+                      "LOGICAL argument KIND must be a supported scalar INTEGER initialization "
+                      "constant (1, 2, 4, or 8)");
 }
 
 static void test_typed_lowering(void) {
@@ -93,12 +104,16 @@ static void test_typed_lowering(void) {
         "  double precision, intent(inout) :: r8\n"
         "  complex, intent(inout) :: c4\n"
         "  double complex, intent(inout) :: c8\n"
+        "  logical(kind=1) :: l1\n"
+        "  logical(kind=8) :: l8\n"
         "  integer, parameter :: folded_integer = int(3.75) + max(2, 4)\n"
         "  real, parameter :: folded_real = sqrt(4.0) + real(2)\n"
         "  i1 = int(r4, kind=1)\n"
         "  i2 = int(a=r8, kind=2)\n"
         "  i4 = int(c4)\n"
         "  i8 = int(kind=8, a=c8)\n"
+        "  l1 = logical(l=.true., kind=1)\n"
+        "  l8 = logical(.not. l1, kind=8)\n"
         "  r4 = real(i8) + sngl(r8)\n"
         "  r8 = real(a=c4, kind=8) + dble(c8)\n"
         "  c4 = cmplx(kind=4, y=r4, x=i4)\n"
@@ -108,6 +123,9 @@ static void test_typed_lowering(void) {
         "  r4 = r4 + sin(r4) + sinh(r4) + sqrt(r4) + tan(r4) + tanh(r4)\n"
         "  r4 = r4 + alog(r4) + alog10(r4)\n"
         "  r8 = atan2(y=r8, x=1.0d0) + max(r8, 1.0d0) + min(r8, 2.0d0) + dprod(r4, r4)\n"
+        "  i4 = max1(r4, 2.5)\n"
+        "  r4 = amax0(i4, 2) + amin1(r4, 3.0)\n"
+        "  r8 = dmax1(r8, 1.0d0) + dmin1(r8, 2.0d0)\n"
         "  c4 = conjg(c4) + acos(c4) + asin(c4) + atan(c4) + cos(c4) + exp(c4)\n"
         "  c4 = c4 + log(c4) + sin(c4) + sqrt(c4) + tan(c4) + tanh(c4)\n"
         "  c4 = c4 + ccos(c4) + cexp(c4) + clog(c4) + csin(c4) + csqrt(c4)\n"
@@ -134,24 +152,34 @@ static void test_typed_lowering(void) {
     expect(result.code != NULL && strstr(result.code, "f2c_fortran_i8max") != NULL &&
                strstr(result.code, "f2c_fortran_i64min") != NULL,
            "MAX and MIN retain narrow and wide INTEGER kinds");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_int_integer((double)(F2C_FORTRAN_MAX(((float)") != NULL &&
+               strstr(result.code, "F2C_FORTRAN_MAX(((int32_t)") != NULL,
+           "legacy extrema compare in their source type before exact result conversion");
     f2c_result_free(&result);
 }
 
 static void test_elemental_lowering(void) {
-    static const char source[] = "subroutine mathematical_elemental(values, wide, converted)\n"
-                                 "  implicit none\n"
-                                 "  real, intent(inout) :: values(4)\n"
-                                 "  double precision, intent(in) :: wide(4)\n"
-                                 "  integer(kind=8), intent(out) :: converted(4)\n"
-                                 "  values = sin(values) + sqrt(abs(values))\n"
-                                 "  converted = int(wide, kind=8)\n"
-                                 "end subroutine mathematical_elemental\n";
+    static const char source[] =
+        "subroutine mathematical_elemental(values, wide, converted, masks)\n"
+        "  implicit none\n"
+        "  real, intent(inout) :: values(4)\n"
+        "  double precision, intent(in) :: wide(4)\n"
+        "  integer(kind=8), intent(out) :: converted(4)\n"
+        "  logical, intent(in) :: masks(4)\n"
+        "  logical(kind=1) :: compact(4)\n"
+        "  values = sin(values) + sqrt(abs(values))\n"
+        "  converted = int(wide, kind=8)\n"
+        "  compact = logical(masks, kind=1)\n"
+        "  values = amax1(values, -2.0)\n"
+        "end subroutine mathematical_elemental\n";
     F2cOptions options = {"mathematical_elemental.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
     expect(result.code != NULL && result.error_count == 0U,
            "mathematical and conversion intrinsics remain elemental in typed IR");
     expect(result.code != NULL && strstr(result.code, "sinf(values[") != NULL &&
-               strstr(result.code, "f2c_int_integer((double)(wide[") != NULL,
+               strstr(result.code, "f2c_int_integer((double)(wide[") != NULL &&
+               strstr(result.code, "compact[") != NULL,
            "array intrinsic calls scalarize with kind-preserving lowering");
     f2c_result_free(&result);
 }

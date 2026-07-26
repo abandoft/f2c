@@ -37,14 +37,22 @@ program mathematical_conversion_intrinsics
   integer(kind=4) :: i4
   integer(kind=8) :: i8
   integer(kind=8) :: converted(4)
+  logical :: flags(4)
+  logical(kind=1) :: compact_flags(4)
+  logical(kind=8) :: wide_flag
   real :: r4, values(4)
   double precision :: r8, wide(4)
   complex(kind=working_kind) :: c4
   complex(kind=wide_kind) :: c8
   integer, parameter :: folded_integer = int(3.75) + max(a2=4, a1=2)
   real, parameter :: folded_real = sqrt(4.0) + real(2)
+  integer, parameter :: folded_legacy_integer = max1(3.75, -2.25)
+  real, parameter :: folded_legacy_real = amax0(7, -3)
+  logical(kind=1), parameter :: folded_logical = logical(l=.true., kind=1)
 
-  if (folded_integer /= 7 .or. folded_real /= 4.0) error stop 1
+  if (folded_integer /= 7 .or. folded_real /= 4.0 .or. &
+      folded_legacy_integer /= 3 .or. folded_legacy_real /= 7.0 .or. &
+      .not. folded_logical) error stop 1
 
   i1 = int(-12.75, kind=1)
   i2 = int(a=300.75d0, kind=2)
@@ -118,6 +126,18 @@ program mathematical_conversion_intrinsics
   i4 = max(a2=9, a1=7)
   i8 = min(5000000000_8, 6000000000_8)
   if (i1 /= 100_1 .or. i2 /= -20000_2 .or. i4 /= 9 .or. i8 /= 5000000000_8) error stop 26
+  i4 = max1(-3.75, 2.25)
+  r4 = amax0(-3, 7) + amin1(4.5, -2.5)
+  r8 = dmax1(-3.0d0, 7.0d0) + dmin1(4.5d0, -2.5d0)
+  if (i4 /= 2 .or. r4 /= 4.5 .or. r8 /= 4.5d0) error stop 51
+
+  flags = [.true., .false., .true., .false.]
+  compact_flags = logical(flags, kind=1)
+  wide_flag = logical(l=.true., kind=8)
+  if ((compact_flags(1) .neqv. flags(1)) .or. &
+      (compact_flags(2) .neqv. flags(2)) .or. &
+      (compact_flags(3) .neqv. flags(3)) .or. &
+      (compact_flags(4) .neqv. flags(4)) .or. .not. wide_flag) error stop 52
 
   values = [-4.0, -1.0, 0.25, 9.0]
   values = sin(values) + sqrt(abs(values))
@@ -126,6 +146,9 @@ program mathematical_conversion_intrinsics
   wide = [-3.75d0, 0.0d0, 4.99d0, 5000000000.25d0]
   converted = int(wide, kind=8)
   if (any(converted /= [-3_8, 0_8, 4_8, 5000000000_8])) error stop 28
+  values = [-4.0, -1.0, 0.25, 9.0]
+  values = amax1(values, -2.0)
+  if (values(1) /= -2.0 .or. values(4) <= -2.0) error stop 53
 
   print '(A)', 'MATHEMATICAL-CONVERSION-PASS'
 
