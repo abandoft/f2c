@@ -65,13 +65,8 @@ static char *static_numeric_initializer(Unit *unit, Type target_type, const F2cE
     }
     if (target_type != TYPE_COMPLEX && target_type != TYPE_DOUBLE_COMPLEX)
         return NULL;
-    if (expression->kind == F2C_EXPR_COMPLEX_LITERAL && expression->child_count == 2U) {
-        if (!f2c_evaluate_real_constant(unit, expression->children[0], &real_value) ||
-            !f2c_evaluate_real_constant(unit, expression->children[1], &imaginary_value))
-            return NULL;
-    } else if (!f2c_evaluate_real_constant(unit, expression, &real_value)) {
+    if (!f2c_evaluate_complex_constant(unit, expression, &real_value, &imaginary_value))
         return NULL;
-    }
     f2c_buffer_printf(&initializer, "%s((%s)(%a), (%s)(%a))",
                       target_type == TYPE_DOUBLE_COMPLEX ? "F2C_COMPLEX_DOUBLE_INITIALIZER"
                                                          : "F2C_COMPLEX_FLOAT_INITIALIZER",
