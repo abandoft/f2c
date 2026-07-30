@@ -184,27 +184,6 @@ static const F2cStatement *find_format_statement(const Unit *unit, const char *l
     return NULL;
 }
 
-static int statement_assigns_format_label(const Unit *unit, const F2cStatement *statement,
-                                          const char *name) {
-    if (statement == NULL || name == NULL)
-        return 0;
-    if (statement->kind == F2C_STMT_ASSIGN_LABEL && statement->name != NULL &&
-        strcmp(statement->name, name) == 0 && statement->label_count == 1U &&
-        find_format_statement(unit, statement->labels[0]) != NULL)
-        return 1;
-    return statement_assigns_format_label(unit, statement->nested, name);
-}
-
-static int unit_assigns_format_label(const Unit *unit, const char *name) {
-    size_t index;
-    if (unit == NULL || name == NULL)
-        return 0;
-    for (index = 0U; index < unit->statement_count; ++index)
-        if (statement_assigns_format_label(unit, &unit->statements[index], name))
-            return 1;
-    return 0;
-}
-
 static F2cSourceSpan format_error_span(const F2cIoControl *control) {
     F2cSourceSpan span = control->format_span;
     if (span.begin.line != 0U && span.begin.line == span.end.line) {
@@ -326,8 +305,11 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
             (void)bind_constant_format(context, unit, statement, control);
             return;
         }
-        if (scalar_type(value, TYPE_INTEGER) && value->kind == F2C_EXPR_NAME && value->definable &&
-            unit_assigns_format_label(unit, value->text)) {
+        if (scalar_type(value, TYPE_INTEGER) && value->kind == F2C_EXPR_NAME && value->definable) {
+            if (value->type_kind != f2c_default_kind(TYPE_INTEGER))
+                f2c_diagnostic_at(context, statement->line, column, 1,
+                                  "%s assigned FORMAT variable must have default INTEGER kind",
+                                  statement_name);
             return;
         }
         if (scalar_type(value, TYPE_INTEGER)) {
@@ -793,6 +775,7 @@ void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *sta
                 continue;
             }
         }
+        control->kind = semantic_kind;
         if (seen[semantic_kind]) {
             f2c_diagnostic_at(
                 context, statement->line,
