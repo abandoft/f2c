@@ -876,7 +876,7 @@ static void test_lapack_f90_semantics(void) {
                     "LA_CONSTANTS aliases import with the correct precision");
     expect_contains(result.code, "((float)(0.0f))",
                     "imported zero constant is folded with its declared precision");
-    expect_contains(result.code, "F2C_MAXIMUM_LOCATION((&work[",
+    expect_contains(result.code, "F2C_MAXIMUM_LOCATION_MASK(",
                     "MAXLOC array sections lower to a typed strided C17 reduction");
     expect_contains(result.code, "float *F2C_RESTRICT sum",
                     "a declared array shadows an intrinsic with the same name");

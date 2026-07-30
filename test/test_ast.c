@@ -519,7 +519,8 @@ static void test_keyword_and_section_emission(void) {
     code = f2c_emit_expression_ast(&unit, expression, &supported);
     expect(expression != NULL && error_at == NULL,
            "array-section reduction parses through the typed AST path");
-    expect(supported && code != NULL && strstr(code, "F2C_MAXIMUM_LOCATION((&work[") != NULL,
+    expect(supported && code != NULL && strstr(code, "F2C_MAXIMUM_LOCATION_MASK(") != NULL &&
+               strstr(code, "(&work[") != NULL && strstr(code, "f2c_inquiry_size") != NULL,
            "MAXLOC section emits a strided pointer view and explicit extent");
     free(code);
     f2c_expr_free(expression);
