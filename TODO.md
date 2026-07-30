@@ -128,8 +128,11 @@
   `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/FINDLOC/TRANSPOSE/MATMUL` 及数组值归约现均使用
   typed intrinsic ID 和同一动态 shape 临时量引擎；嵌套结果可出现在其他变换、elemental 表达式、
   标量归约和假定形状过程实参中，并保留逐维 extent、CHARACTER 元素长度、派生类型深拷贝所有权
-  和单次求值。不同数值 kind 的通用隐式提升、更多非 designator 派生类型数组函数结果和全部动态
-  CHARACTER/派生类型可选参数组合仍需纳入同一流程。
+  和单次求值。显式形状、`ALLOCATABLE` 和 `POINTER` 数组函数结果也已进入同一 typed shape 与
+  描述符流程，可用于数组赋值、嵌套 elemental/归约表达式、函数实参和直接 `CALL` 实参；数值、
+  CHARACTER 及含可分配组件的派生类型结果按值类别执行所有权转移或深复制，并只调用一次函数。
+  不同数值 kind 的通用隐式提升、需要在块 `IF/ELSE IF`、`DO WHILE` 等控制边界跨语句保存的数组
+  函数结果临时量，以及全部动态 CHARACTER/派生类型可选参数组合仍需纳入同一流程。
 - [ ] 将参数、kind、字符长度、数组边界和初始化中的规格表达式全部纳入溢出安全的常量求值器，
   补齐标准允许的 inquiry/specification intrinsic。`SIZE/SHAPE/LBOUND/UBOUND` 现已建立 typed
   rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级。数值模型 inquiry
@@ -183,9 +186,12 @@
   含可分配组件的派生类型，并按 `INTENT` 管理复制和所有权。假定长度 CHARACTER 数组从描述符
   绑定元素长度；向量下标用于 `INTENT(OUT/INOUT)` 会在语义阶段硬失败。函数表达式现会在普通及
   类型绑定函数调用中，为传给非指针 `CONTIGUOUS` 假定形状哑实参的非连续仿射数值和 CHARACTER
-  数组段建立连续临时量，并按 `INTENT` 回写；边界表达式只求值一次。函数表达式中的向量下标、数组
-  构造器、嵌套数组表达式、含动态组件的派生类型临时量及数组/可分配函数结果仍需统一。局部、模块及
-  哑实参数组指针现保存动态 lower/extent/stride，支持与完整目标、标量
+  数组段建立连续临时量，并按 `INTENT` 回写；边界表达式只求值一次。显式形状、可分配和指针数组
+  函数结果现统一返回带 type/kind/rank、逐维 extent/stride、字符长度和释放来源的描述符；调用端会
+  验证契约，并对拥有型结果转移存储，对非拥有型指针视图按真实正负 stride 建立连续深复制。结果可
+  嵌套在 elemental/归约表达式、普通函数调用和直接 `CALL` 中，派生类型动态组件会正确 clone、
+  销毁旧目标并释放临时量；显式接口同时比较结果 shape、字符长度及 `ALLOCATABLE/POINTER` 属性。
+  局部、模块及哑实参数组指针现保存动态 lower/extent/stride，支持与完整目标、标量
   数组元素以及由标量下标和 triplet 组成的任意 rank 仿射数组段关联；正负非单位步长、降秩、
   指针再次切片和跨过程关联回写均使用同一描述符路径。切片边界与步长各只求值一次，数组引用、
   inquiry 和归约会消费真实动态 stride；`INTENT(OUT)` 在过程入口清除地址及全部 shape 元数据。
@@ -210,9 +216,9 @@
   `LBOUND` 保留最后维声明下界，`SIZE/UBOUND` 仅允许查询小于 rank 的维度，动态 `DIM` 在运行时
   执行同一边界检查；`SHAPE`、整数组表达式/I/O、最后维省略段上界及向 assumed-shape 哑实参传递会
   在生成前硬失败。最后维显式封闭的连续多维段可用于 inquiry 和归约，严格 C17、sanitizer 与
-  gfortran 差分覆盖非默认下界、动态 `DIM`、元素访问和段元素顺序。尚未完成函数表达式中含动态
-  组件的派生类型连续临时量、数组/可分配函数结果、从具有 `TARGET` 属性的父对象继承目标资格的
-  非指针派生组件、向量下标 `ASSOCIATED` 约束及 FINAL 的完整逐维 shape，故本任务保持未关闭。
+  gfortran 差分覆盖非默认下界、动态 `DIM`、元素访问和段元素顺序。尚未完成从具有 `TARGET`
+  属性的父对象继承目标资格的非指针派生组件、向量下标 `ASSOCIATED` 约束、FINAL 的完整逐维
+  shape，以及所有控制语句表达式中的动态数组临时量生命周期，故本任务保持未关闭。
 - [ ] 把字符长度、逐维 shape、`VALUE`、`OPTIONAL`、`INTENT`、别名限制和嵌套过程签名纳入
   项目级接口兼容检查。
 - [x] 过程接口参数类型、kind、rank、intent、可选性、动态属性及嵌套过程元数据均使用原子扩容的
@@ -389,8 +395,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   会在生成前失败。嵌套变换结果可继续作为其他变换、elemental 表达式、标量归约和假定形状实参，
   数值、LOGICAL、COMPLEX、CHARACTER 和零大小动态结果均由严格 C17 与 gfortran 差分覆盖。
   含可分配组件的派生类型嵌套 `PACK/CSHIFT/UNPACK` 由独立 ASan/UBSan 所有权测试验证深拷贝和
-  逆序销毁；向量下标及用户 ELEMENTAL 派生类型结果继续使用同一所有权模型。仍需完成更多
-  非 designator 派生类型数组函数结果，以及全部动态 CHARACTER/派生类型可选参数组合，故本任务
+  逆序销毁；向量下标、用户 ELEMENTAL 派生类型结果及非 elemental 派生类型数组函数结果继续使用
+  同一所有权模型。仍需完成全部动态 CHARACTER/派生类型可选参数组合及定义相等组合，故本任务
   未关闭。
 - [ ] 对后续标准已经实现的 `FINDLOC` 等 intrinsic 逐项声明版本，并补齐字符、派生类型定义相等、
   `DIM/MASK/BACK/KIND` 的全部合法组合。
@@ -558,7 +564,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   `semantic/constant/`、`semantic/validation/intrinsic/`、`codegen/expression/` 和
   `core/generated/`，未恢复通用调用生成器中的名称分派。
   transformational intrinsic 的结果分配、元素复制、动态 extent 提交和派生类型销毁已从总控
-  emitter 拆入 `codegen/transform/result.c`，主变换文件保持在 800 行以内。
+  emitter 拆入 `codegen/transform/result.c`；数组函数结果的 ABI 判定和调用端物化分别位于
+  `codegen/result.c` 与 `codegen/array/function.c`，主变换和过程调用文件继续满足规模门禁。
 - [x] 将 `src/internal/f2c.h` 从 730 行全局定义缩减为轻量跨域聚合头；基础设施、token、type、
   expression IR、statement IR、symbol/model、context、semantic 与 codegen 分别使用私有头文件。
 - [x] 用 `F2cCompilationPhase`、`F2cUnitPhase` 和 `F2cIrState` 明确 source → token/syntax AST →
@@ -597,7 +604,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 
 - [ ] 按 lexer、preprocessor、parser、AST、语义、常量折叠、intrinsic、I/O、生命周期、IR 和
   emitter 建立独立单元测试，并保留项目级端到端测试。preprocessor 已从超大端到端测试拆为独立
-  测试目标；数值模型契约及其 intrinsic 语义也已有独立测试目标，其他模块仍需继续拆分。
+  测试目标；数值模型契约、对应 intrinsic 语义及数组函数结果 ABI/所有权也已有独立测试目标，
+  其他模块仍需继续拆分。
 - [ ] 建立完整负向语料库，断言错误码、源码范围、恢复位置和输出抑制；禁止只匹配易变英文文本。
 - [ ] 增加行/分支覆盖率门禁和历史趋势，分别统计转译器、生成辅助代码和数值脚本。
 - [ ] 当 `F2C_BUILD_TESTING=ON` 时，数值脚本所需 Python 应成为明确依赖或由独立选项控制；不能
