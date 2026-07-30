@@ -265,6 +265,8 @@ set(
     src/semantic/constant/numeric.c
     src/semantic/constant/private.h
     src/semantic/constant/real.c
+    src/semantic/data_flow.h
+    src/semantic/data_flow/bitset.c
     src/semantic/host.c
     src/semantic/implicit.c
     src/semantic/implicit/declaration.c
