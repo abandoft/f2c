@@ -1,3 +1,13 @@
+## 1.25.0
+
+- Added unified typed IR, argument association, and type/kind/rank/shape contracts for `ALL`, `ANY`, `COUNT`, `DOT_PRODUCT`, `MAXLOC`, `MAXVAL`, `MINLOC`, `MINVAL`, `PRODUCT`, and `SUM`.
+- Completed `DIM` and scalar/array `MASK` semantics for numeric, logical, and complex reductions, including dynamic dimensions, every supported rank, and allocatable array results.
+- Completed `BACK`, `KIND`, dimensional-result, and global-coordinate-vector semantics for `MAXLOC` and `MINLOC`.
+- Added mixed numeric kind, left-complex-argument conjugation, and mixed LOGICAL kind support for `DOT_PRODUCT`.
+- Correctly handled noncontiguous and reversed sections, zero-sized dimensions, empty-set identities, and zero-length array views.
+- Integrated array-valued reductions into the shared temporary pipeline so they can be nested in elemental expressions and other reductions while preserving dynamic shape and single evaluation.
+- Corrected statement classification when declaration keywords are used as variable names while preserving initialized type declarations without `::`.
+
 ## 1.24.0
 
 - Completed complex initialization-constant evaluation across kind 4 and 8, parameter references, mixed numeric arithmetic, scaled division, exponentiation, and every supported complex mathematical intrinsic.

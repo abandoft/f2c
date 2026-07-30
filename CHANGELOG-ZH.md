@@ -1,3 +1,13 @@
+## 1.25.0
+
+- 为 `ALL`、`ANY`、`COUNT`、`DOT_PRODUCT`、`MAXLOC`、`MAXVAL`、`MINLOC`、`MINVAL`、`PRODUCT` 和 `SUM` 建立统一的 typed IR、参数关联及 type/kind/rank/shape 契约。
+- 完善数值、逻辑和复数归约的 `DIM` 与标量/数组 `MASK` 语义，支持动态维度、任意已支持 rank 及可分配数组结果。
+- 完善 `MAXLOC` 与 `MINLOC` 的 `BACK`、`KIND`、逐维结果和全局坐标向量语义。
+- 支持混合数值 kind、复数左实参共轭及不同 LOGICAL kind 的 `DOT_PRODUCT`。
+- 正确处理非连续及反向数组段、零大小维度、空集单位元和零长度数组视图。
+- 将数组值归约纳入统一临时量流程，使其可嵌套在 elemental 表达式及另一归约中，并保留动态 shape 和单次求值语义。
+- 修正声明关键字作为变量名时的语句分类，同时保留不带 `::` 的初始化类型声明。
+
 ## 1.24.0
 
 - 完善复数初始化常量求值，覆盖 kind=4/8、参数引用、混合数值算术、缩放除法、幂运算及全部已支持的复数数学 intrinsic。
