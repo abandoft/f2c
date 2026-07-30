@@ -41,6 +41,7 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
                               char **stride, int *supported);
 char *f2c_expression_relation_reduction(Unit *unit, const F2cExpr *expression, int *supported,
                                         int *matched);
+char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_statement_function(Unit *unit, const F2cExpr *expression, int *supported);
 
 #endif

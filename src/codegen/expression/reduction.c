@@ -31,12 +31,12 @@ static int relation_code(const char *operator_text) {
     return -1;
 }
 
-static int reduction_code(const char *name) {
-    if (name != NULL && strcmp(name, "any") == 0)
+static int reduction_code(F2cIntrinsicId intrinsic) {
+    if (intrinsic == F2C_INTRINSIC_ANY)
         return 0;
-    if (name != NULL && strcmp(name, "all") == 0)
+    if (intrinsic == F2C_INTRINSIC_ALL)
         return 1;
-    if (name != NULL && strcmp(name, "count") == 0)
+    if (intrinsic == F2C_INTRINSIC_COUNT)
         return 2;
     return -1;
 }
@@ -186,7 +186,7 @@ char *f2c_expression_relation_reduction(Unit *unit, const F2cExpr *expression, i
     int relation;
     int reduction;
     *matched = 0;
-    reduction = expression != NULL ? reduction_code(expression->text) : -1;
+    reduction = expression != NULL ? reduction_code(expression->intrinsic) : -1;
     if (reduction < 0 || expression->child_count != 1U)
         return NULL;
     array = reduction_argument_value(expression->children[0]);
@@ -228,6 +228,150 @@ unsupported:
     free(right_pointer);
     free(right_count);
     free(right_stride);
+    free(result.data);
+    *supported = 0;
+    return NULL;
+}
+
+static const char *reduction_macro(F2cIntrinsicId intrinsic) {
+    switch (intrinsic) {
+    case F2C_INTRINSIC_ALL:
+        return "f2c_all_l";
+    case F2C_INTRINSIC_ANY:
+        return "f2c_any_l";
+    case F2C_INTRINSIC_COUNT:
+        return "f2c_count_l";
+    case F2C_INTRINSIC_MAXLOC:
+        return "F2C_MAXIMUM_LOCATION";
+    case F2C_INTRINSIC_MAXVAL:
+        return "F2C_MAXIMUM";
+    case F2C_INTRINSIC_MINLOC:
+        return "F2C_MINIMUM_LOCATION";
+    case F2C_INTRINSIC_MINVAL:
+        return "F2C_MINIMUM";
+    case F2C_INTRINSIC_PRODUCT:
+        return "F2C_PRODUCT";
+    case F2C_INTRINSIC_SUM:
+        return "F2C_SUM";
+    case F2C_INTRINSIC_NONE:
+    case F2C_INTRINSIC_DOT_PRODUCT:
+    default:
+        return NULL;
+    }
+}
+
+static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) {
+    const F2cExpr *left_array =
+        f2c_intrinsic_argument(expression->children, expression->child_count, "vector_a", 0U);
+    const F2cExpr *right_array =
+        f2c_intrinsic_argument(expression->children, expression->child_count, "vector_b", 1U);
+    char *left_pointer = NULL;
+    char *left_count = NULL;
+    char *left_stride = NULL;
+    char *right_pointer = NULL;
+    char *right_count = NULL;
+    char *right_stride = NULL;
+    Buffer result = {0};
+    if (!f2c_expression_array_view(unit, left_array, &left_pointer, &left_count, &left_stride,
+                                   supported) ||
+        !f2c_expression_array_view(unit, right_array, &right_pointer, &right_count, &right_stride,
+                                   supported)) {
+        goto unsupported;
+    }
+    f2c_buffer_printf(&result,
+                      "((%s) == (%s) ? %s(%s, %s, %s, %s, %s) : "
+                      "(abort(), (%s)0))",
+                      left_count, right_count,
+                      expression->type == TYPE_LOGICAL ? "F2C_LOGICAL_DOT" : "F2C_DOT",
+                      left_pointer, left_stride, right_pointer, right_stride, left_count,
+                      f2c_expression_c_type(expression));
+    free(left_pointer);
+    free(left_count);
+    free(left_stride);
+    free(right_pointer);
+    free(right_count);
+    free(right_stride);
+    return f2c_buffer_take(&result);
+
+unsupported:
+    free(left_pointer);
+    free(left_count);
+    free(left_stride);
+    free(right_pointer);
+    free(right_count);
+    free(right_stride);
+    free(result.data);
+    *supported = 0;
+    return NULL;
+}
+
+char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, int *supported) {
+    const int logical = expression != NULL &&
+                        (expression->intrinsic == F2C_INTRINSIC_ALL ||
+                         expression->intrinsic == F2C_INTRINSIC_ANY ||
+                         expression->intrinsic == F2C_INTRINSIC_COUNT);
+    const F2cExpr *array;
+    const F2cExpr *dimension;
+    const F2cExpr *mask;
+    const F2cExpr *kind;
+    const F2cExpr *back;
+    const char *macro;
+    char *pointer = NULL;
+    char *count = NULL;
+    char *stride = NULL;
+    char *dimension_code = NULL;
+    Buffer result = {0};
+    if (expression == NULL || !f2c_intrinsic_is_reduction(expression->intrinsic)) {
+        *supported = 0;
+        return NULL;
+    }
+    if (expression->intrinsic == F2C_INTRINSIC_DOT_PRODUCT)
+        return dot_product(unit, expression, supported);
+    if (expression->rank != 0U) {
+        *supported = 0;
+        return NULL;
+    }
+    array = f2c_intrinsic_argument(expression->children, expression->child_count,
+                                   logical ? "mask" : "array", 0U);
+    dimension =
+        f2c_intrinsic_argument(expression->children, expression->child_count, "dim", 1U);
+    mask = logical ? NULL
+                   : f2c_intrinsic_argument(expression->children, expression->child_count, "mask",
+                                            2U);
+    kind = expression->intrinsic == F2C_INTRINSIC_COUNT
+               ? f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 2U)
+               : NULL;
+    back = expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
+                   expression->intrinsic == F2C_INTRINSIC_MINLOC
+               ? f2c_intrinsic_argument(expression->children, expression->child_count, "back", 4U)
+               : NULL;
+    (void)kind;
+    if (mask != NULL || back != NULL)
+        goto unsupported;
+    macro = reduction_macro(expression->intrinsic);
+    if (macro == NULL ||
+        !f2c_expression_array_view(unit, array, &pointer, &count, &stride, supported))
+        goto unsupported;
+    if (dimension != NULL)
+        dimension_code = f2c_expression_emit(unit, dimension, supported);
+    if (!*supported || (dimension != NULL && dimension_code == NULL))
+        goto unsupported;
+    if (dimension_code != NULL)
+        f2c_buffer_printf(&result, "((%s) == 1 ? ", dimension_code);
+    f2c_buffer_printf(&result, "%s(%s, %s, %s)", macro, pointer, count, stride);
+    if (dimension_code != NULL)
+        f2c_buffer_printf(&result, " : (abort(), (%s)0))", f2c_expression_c_type(expression));
+    free(pointer);
+    free(count);
+    free(stride);
+    free(dimension_code);
+    return f2c_buffer_take(&result);
+
+unsupported:
+    free(pointer);
+    free(count);
+    free(stride);
+    free(dimension_code);
     free(result.data);
     *supported = 0;
     return NULL;

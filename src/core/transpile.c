@@ -62,21 +62,19 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
     name = expression->text;
     if (strcmp(name, "transfer") == 0)
         features->transfer = 1;
-    else if (strcmp(name, "maxloc") == 0) {
+    else if (expression->intrinsic == F2C_INTRINSIC_MAXLOC) {
         features->maxloc = 1;
         features->reduction = 1;
-    } else if (strcmp(name, "maxval") == 0) {
+    } else if (expression->intrinsic == F2C_INTRINSIC_MAXVAL) {
         features->maxval = 1;
         features->reduction = 1;
-    } else if (strcmp(name, "sum") == 0 || strcmp(name, "product") == 0 ||
-               strcmp(name, "count") == 0 || strcmp(name, "any") == 0 || strcmp(name, "all") == 0 ||
-               strcmp(name, "dot_product") == 0 || strcmp(name, "minval") == 0 ||
-               strcmp(name, "minloc") == 0)
+    } else if (f2c_intrinsic_is_reduction(expression->intrinsic)) {
         features->reduction = 1;
-    else if (strcmp(name, "min") == 0)
+    } else if (expression->intrinsic == F2C_INTRINSIC_MIN) {
         features->min = 1;
-    else if (strcmp(name, "max") == 0)
+    } else if (expression->intrinsic == F2C_INTRINSIC_MAX) {
         features->max = 1;
+    }
 }
 
 static void collect_statement_features(F2cStatement *statement, F2cRequiredFeatures *features) {
