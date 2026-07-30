@@ -24,6 +24,17 @@ static int array_inquiry_call(const F2cExpr *expression) {
             strcmp(expression->text, "ubound") == 0);
 }
 
+static int transfer_mold_argument(const F2cExpr *call, size_t child) {
+    const F2cExpr *argument;
+    if (call == NULL || call->kind != F2C_EXPR_CALL || call->text == NULL ||
+        strcmp(call->text, "transfer") != 0 || child >= call->child_count)
+        return 0;
+    argument = call->children[child];
+    if (argument != NULL && argument->kind == F2C_EXPR_KEYWORD_ARGUMENT)
+        return argument->text != NULL && strcmp(argument->text, "mold") == 0;
+    return child == 1U;
+}
+
 int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_t identifier,
                                           const char *role, size_t *temporary, Buffer *prelude,
                                           int depth, int root) {
@@ -278,11 +289,14 @@ int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *ex
     if (array_inquiry_call(expression))
         return 1;
     if (expression->kind != F2C_EXPR_ARRAY_CONSTRUCTOR) {
-        for (child = 0U; child < expression->child_count; ++child)
+        for (child = 0U; child < expression->child_count; ++child) {
+            if (transfer_mold_argument(expression, child))
+                continue;
             if (!f2c_array_materialize_constructors(context, unit, expression->children[child],
                                                     identifier, role, temporary, prelude, cleanup,
                                                     depth))
                 return 0;
+        }
     }
     if (!f2c_array_materialize_function_result(unit, expression, identifier, role, temporary,
                                                prelude, cleanup, depth))
