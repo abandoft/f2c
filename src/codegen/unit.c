@@ -284,7 +284,8 @@ static void emit_declarations(Context *context, Unit *unit) {
                                    symbol->name);
                 }
             } else {
-                initializer = symbol->type == TYPE_COMPLEX || symbol->type == TYPE_DOUBLE_COMPLEX
+                initializer = symbol->rank != 0U || symbol->type == TYPE_COMPLEX ||
+                                      symbol->type == TYPE_DOUBLE_COMPLEX
                                   ? f2c_unit_static_storage_initializer(unit, symbol)
                                   : f2c_emit_typed_expression(unit, symbol->initializer_expression);
             }
