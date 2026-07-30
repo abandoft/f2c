@@ -445,10 +445,13 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   都在语义阶段绑定目标并保存离开 BLOCK 所需的逆序清理计划，emitter 不再根据源码行重新推断
   目标或扫描 `ASSIGN` 语句。正向、负向、严格 C17、sanitizer 和 gfortran 执行回归已进入测试。
 - [ ] 将 `RETURN`、`STOP`、`CYCLE`、`EXIT`、交替返回及异常 I/O 边整合为完整过程级 CFG，补齐
-  可达性、基本块、赋值标签数据流和每条边的生命周期证明。当前显式转移和异常 I/O 已有语义阶段
-  清理计划，普通与交替 `RETURN` 走统一单元清理，`CYCLE/EXIT` 已绑定具体 DO；交替返回调用的
-  每个 `*label` 已纳入标签图、结构化构造入口检查和逐边作用域清理。当前仍不是完整 CFG，裸赋值
-  `GOTO` 的目标集合仍按全单元 `ASSIGN` 来源保守解析，可达性与基本块数据流尚未建立。
+  基本块和每条边的生命周期证明。当前已建立过程级语句 CFG，显式记录顺序、标签分支、循环回边/
+  退出和 I/O 异常边并计算可达性；普通与交替 `RETURN` 走统一单元清理，`CYCLE/EXIT` 已绑定具体
+  DO，交替返回调用的每个 `*label` 已纳入结构化构造入口检查和逐边作用域清理。赋值标签变量现以
+  CFG 不动点求解实际到达定义，覆盖分支合流、循环回边、不可达定义、普通整数重定义、输出定义、
+  允许标签列表和多个标签变量之间的候选边迭代收敛；裸赋值 `GOTO` 与已赋值 FORMAT 均只保存真正
+  可达的语义目标，不再扫描全单元 `ASSIGN`。仍需形成显式基本块，将表达式临时量、普通 def-use、
+  隐式错误边和全部终结时机纳入统一所有权数据流，因此本项保持未关闭。
 - [ ] 对任何离开作用域的边执行正确的临时量释放、可分配对象清理和派生对象终结；异常 I/O 分支
   也必须走同一生命周期模型。当前正常 BLOCK 结束、`RETURN`、`CYCLE/EXIT`、所有标签分支及
   `ERR/END/EOR` 会复用 typed cleanup plan，覆盖 BLOCK 内可分配对象和标量/数组派生对象；仍需把
@@ -483,11 +486,12 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [x] `PRINT`、`READ` 和 `WRITE` 的显式格式共用 canonical token → FORMAT AST → typed IR →
   formatted item emitter；常量字符、标签和 F77 已赋值 FORMAT 均在编译期生成只读 C17 指令表，
   不再扫描源码行或在运行时重新解析常量文本。真正的运行时 CHARACTER 格式使用同一描述符接口的
-  有界动态解析路径。嵌套组、无限组、冒号、空数据列表、literal、定位/比例/符号/空白/小数/舍入
-  控制和 DT 元数据均有结构化节点；运行帧、DT iotype/v-list 和动态 literal 不再有 32、128、1,024
-  等固定截断。40 层静态/动态嵌套、1,100 字节 literal、40 项 DT v-list、严格生成 C17 和 gfortran
-  逐字节差分均已进入测试，固定 Reference LAPACK 3,535 文件、DGESV、INSTALL 和 52,512 项 RFP
-  差分在本轮实现上重新通过。
+  有界动态解析路径。位置式 `READ/WRITE/PRINT` 控制项会在 typed IR 中规范化为明确语义类型；
+  已赋值 FORMAT 与赋值 `GOTO` 共用过程 CFG 到达定义，只生成实际可达且有效的 FORMAT 指令表
+  选择。嵌套组、无限组、冒号、空数据列表、literal、定位/比例/符号/空白/小数/舍入控制和 DT
+  元数据均有结构化节点；运行帧、DT iotype/v-list 和动态 literal 不再有 32、128、1,024 等固定
+  截断。40 层静态/动态嵌套、1,100 字节 literal、40 项 DT v-list、严格生成 C17 和 gfortran
+  逐字节差分均已进入测试。
 - [ ] 补齐 `I/B/O/Z/F/E/EN/ES/D/G/L/A` 的宽度、精度、指数位数、舍入、符号、比例因子和
   星号溢出规则，并逐字段对比不同原生编译器。当前原生差分矩阵已覆盖整数基数、`F/E/D/G`、
   符号、比例、小数点/小数逗号、定位、嵌套、动态和标签格式；`E/D` 的 0P 规范化、三位指数省略
@@ -534,16 +538,15 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 
 ### P0-NUM-01 BLAS/LAPACK 数值等价
 
-- [ ] 解释并消除固定审计基线中的未配对或超打印精度差异。当前统一审计记录为 5,807,798 条
-  并集记录，其中 5,806,718 条双边配对，生成端和原生端各有 540 条独有记录；992,357 条有限
+- [ ] 解释并消除固定审计基线中的未配对或超打印精度差异。当前统一审计记录为 5,807,941 条
+  并集记录，其中 5,806,692 条双边配对，生成端独有 566 条、原生端独有 683 条；1,541,232 条有限
   数值差异超过双方打印舍入误差。它们不等同于官方阈值失败，但也不能宣称逐项数值等价。
 - [ ] 为 NaN、无穷、signed zero、MIN/MAX、复数和浮点收缩建立书面语义策略；逐项证明差异是
   标准允许、原生编译器差异或转译错误，并为每个例外保留机器可审计理由。
 - [ ] 在 GCC、Clang、MSVC/clang-cl 生成端及 gfortran、LLVM Flang、可用商业 Fortran 编译器
   上运行完整或分层 BLAS/LAPACK 正确性矩阵，不能只认证单一 Ubuntu/gfortran 组合。
 - [ ] 将数值清单中的套件数、记录数、配对数和摘要作为单一机器可读来源，README/TODO/CI 不得
-  手工复制出互相矛盾的统计值。README 中旧的 5,807,941 条统计已纠正为当前审计值 5,807,798，
-  但仍需改为由清单自动生成并在 CI 核对。
+  手工复制出互相矛盾的统计值；仍需改为由清单自动生成并在 CI 核对。
 
 ### P0-PERF-01 性能闭环
 
@@ -574,6 +577,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   transformational intrinsic 的结果分配、元素复制、动态 extent 提交和派生类型销毁已从总控
   emitter 拆入 `codegen/transform/result.c`；数组函数结果的 ABI 判定和调用端物化分别位于
   `codegen/result.c` 与 `codegen/array/function.c`，主变换和过程调用文件继续满足规模门禁。
+  过程 CFG 构建、赋值标签到达定义和逐边生命周期计划分别位于 `semantic/control_flow.c`、
+  `semantic/validation/assigned_label.c` 与 `semantic/validation/lifetime.c`，未重新堆入通用语句
+  验证或代码生成文件。
 - [x] 将 `src/internal/f2c.h` 从 730 行全局定义缩减为轻量跨域聚合头；基础设施、token、type、
   expression IR、statement IR、symbol/model、context、semantic 与 codegen 分别使用私有头文件。
 - [x] 用 `F2cCompilationPhase`、`F2cUnitPhase` 和 `F2cIrState` 明确 source → token/syntax AST →
