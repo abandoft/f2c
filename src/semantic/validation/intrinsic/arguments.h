@@ -3,15 +3,16 @@
 
 #include "internal/f2c.h"
 
-#define F2C_INTRINSIC_ARGUMENT_LIMIT 5U
+#define F2C_INTRINSIC_ARGUMENT_LIMIT 6U
 
 typedef struct F2cBoundIntrinsicArguments {
     const F2cExpr *values[F2C_INTRINSIC_ARGUMENT_LIMIT];
 } F2cBoundIntrinsicArguments;
 
-F2cBoundIntrinsicArguments f2c_validation_bind_intrinsic_arguments(
-    Context *context, size_t line, const char *statement_text, const char *intrinsic_name,
-    F2cExpr *const *arguments, size_t argument_count, const char *const *names,
-    size_t name_count, size_t required_count);
+F2cBoundIntrinsicArguments
+f2c_validation_bind_intrinsic_arguments(Context *context, size_t line, const char *statement_text,
+                                        const char *intrinsic_name, F2cExpr *const *arguments,
+                                        size_t argument_count, const char *const *names,
+                                        size_t name_count, size_t required_count);
 
 #endif

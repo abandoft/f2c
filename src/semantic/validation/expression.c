@@ -200,60 +200,6 @@ static void validate_assumed_size_operands(Context *context, size_t line,
     }
 }
 
-static void validate_matrix_intrinsic(Context *context, size_t line, const char *statement_text,
-                                      const F2cExpr *expression) {
-    const int transpose = expression->intrinsic == F2C_INTRINSIC_TRANSPOSE;
-    const F2cExpr *left = inquiry_argument(expression, transpose ? "matrix" : "matrix_a", 0U);
-    const F2cExpr *right = transpose ? NULL : inquiry_argument(expression, "matrix_b", 1U);
-    size_t argument;
-    for (argument = 0U; argument < expression->child_count; ++argument) {
-        const F2cExpr *actual = expression->children[argument];
-        if (actual == NULL || actual->kind != F2C_EXPR_KEYWORD_ARGUMENT || actual->text == NULL)
-            continue;
-        if ((transpose && strcmp(actual->text, "matrix") != 0) ||
-            (!transpose && strcmp(actual->text, "matrix_a") != 0 &&
-             strcmp(actual->text, "matrix_b") != 0))
-            f2c_diagnostic_at(context, line,
-                              f2c_validation_expression_start_column(statement_text, actual), 1,
-                              "%s has no argument named '%s'", expression->text, actual->text);
-    }
-    if (transpose) {
-        if (left == NULL || left->rank != 2U)
-            f2c_diagnostic_at(context, line,
-                              f2c_validation_expression_start_column(statement_text, left), 1,
-                              "TRANSPOSE requires a rank-two array argument");
-        return;
-    }
-    if (left == NULL || left->rank < 1U || left->rank > 2U)
-        f2c_diagnostic_at(context, line,
-                          f2c_validation_expression_start_column(statement_text, left), 1,
-                          "MATMUL MATRIX_A must have rank one or two");
-    if (right == NULL || right->rank < 1U || right->rank > 2U)
-        f2c_diagnostic_at(context, line,
-                          f2c_validation_expression_start_column(statement_text, right), 1,
-                          "MATMUL MATRIX_B must have rank one or two");
-    if (left == NULL || right == NULL)
-        return;
-    if (left->rank == 1U && right->rank == 1U)
-        f2c_diagnostic_at(context, line,
-                          f2c_validation_expression_start_column(statement_text, expression), 1,
-                          "MATMUL does not accept two rank-one operands; use DOT_PRODUCT");
-    if (!((left->type == TYPE_LOGICAL && right->type == TYPE_LOGICAL) ||
-          (f2c_type_is_numeric(left->type) && f2c_type_is_numeric(right->type))))
-        f2c_diagnostic_at(context, line,
-                          f2c_validation_expression_start_column(statement_text, expression), 1,
-                          "MATMUL operands must both be numeric or both be LOGICAL");
-    if (left->rank >= 1U && left->rank <= 2U && right->rank >= 1U && right->rank <= 2U &&
-        left->shape.dimensions[left->rank - 1U].extent_known &&
-        right->shape.dimensions[0].extent_known &&
-        left->shape.dimensions[left->rank - 1U].extent != right->shape.dimensions[0].extent)
-        f2c_diagnostic_at(context, line,
-                          f2c_validation_expression_start_column(statement_text, expression), 1,
-                          "MATMUL inner extents are not conformable (%llu and %llu)",
-                          (unsigned long long)left->shape.dimensions[left->rank - 1U].extent,
-                          (unsigned long long)right->shape.dimensions[0].extent);
-}
-
 static void validate_array_inquiry(Context *context, Unit *unit, size_t line,
                                    const char *statement_text, const F2cExpr *expression) {
     const int shape = expression->text != NULL && strcmp(expression->text, "shape") == 0;
@@ -724,12 +670,10 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
         f2c_validation_real_representation_intrinsic(context, unit, line, statement_text,
                                                      expression);
         f2c_validation_reduction_intrinsic(context, unit, line, statement_text, expression);
+        f2c_validation_transform_intrinsic(context, unit, line, statement_text, expression);
         if (strcmp(expression->text, "size") == 0 || strcmp(expression->text, "shape") == 0 ||
             strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0)
             validate_array_inquiry(context, unit, line, statement_text, expression);
-        if (expression->intrinsic == F2C_INTRINSIC_TRANSPOSE ||
-            expression->intrinsic == F2C_INTRINSIC_MATMUL)
-            validate_matrix_intrinsic(context, line, statement_text, expression);
         if (signature != NULL && signature->rank_rule == F2C_INTRINSIC_RANK_ELEMENTAL) {
             const F2cExpr *array_argument = NULL;
             for (i = 0U; i < expression->child_count; ++i) {

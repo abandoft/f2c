@@ -292,6 +292,7 @@ set(
     src/semantic/validation/intrinsic/reduction.c
     src/semantic/validation/intrinsic/representation.c
     src/semantic/validation/intrinsic/time.c
+    src/semantic/validation/intrinsic/transform.c
     src/semantic/validation/lifetime.c
     src/semantic/validation/private.h
     src/semantic/validation/procedure.c
@@ -567,6 +568,14 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_reduction_intrinsic_tests test/test_reduction_intrinsic.c)
     f2c_configure_test_target(f2c_reduction_intrinsic_tests)
     add_test(NAME reduction_intrinsic_semantics COMMAND f2c_reduction_intrinsic_tests)
+
+    add_executable(f2c_transform_intrinsic_tests test/test_transform_intrinsic.c)
+    target_include_directories(
+        f2c_transform_intrinsic_tests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    f2c_configure_internal_test_target(f2c_transform_intrinsic_tests)
+    add_test(NAME transform_intrinsic_semantics COMMAND f2c_transform_intrinsic_tests)
 
     add_executable(f2c_random_intrinsic_tests test/test_random_intrinsic.c)
     f2c_configure_test_target(f2c_random_intrinsic_tests)
