@@ -1,3 +1,14 @@
+## 1.30.0
+
+- Expanded the procedure-level CFG with dedicated procedure-exit, image-termination, and loop-latch nodes plus distinct `RETURN`, `STOP`, alternate-return, and I/O `END/EOR/ERR` edges.
+- Added bidirectional predecessor/successor connectivity and maximal basic blocks, preserving complete linear statement sequences instead of splitting them into single-statement blocks.
+- Corrected true and false paths for conditional `CYCLE` and `EXIT` in single-line IF statements and added per-loop latch chains for nested legacy DO loops with a shared terminal label.
+- Modeled unhandled I/O termination explicitly without incorrectly applying ordinary scope finalization to `STOP`, `ERROR STOP`, or other image-termination paths.
+- Added a reusable, bounded bitset worklist data-flow solver with edge filtering, loop fixed points, branch joins, and flag-only domains.
+- Migrated reaching-definition analysis for assigned labels and assigned FORMAT variables to the shared data-flow infrastructure while preserving feasible-edge refinement across multiple label variables.
+- Bound every scope-cleanup plan to verified CFG source and target nodes, and made code generation reject cleanup plans lacking control-flow proof.
+- Added strict C17, ASan/UBSan, and native Fortran differential regression coverage for CFG connectivity, basic blocks, data-flow boundaries, and BLOCK finalization across control transfers.
+
 ## 1.29.0
 
 - Added a procedure-level control-flow graph with explicit fallthrough, labeled branch, loop back/exit, and I/O error edges plus reachability analysis.
