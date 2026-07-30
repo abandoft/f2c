@@ -167,10 +167,38 @@ static void test_mixed_and_complex_lowering(void) {
     f2c_result_free(&result);
 }
 
+static void test_mask_back_and_kind_lowering(void) {
+    static const char source[] =
+        "subroutine masked_reductions(values, selected, total, first, last, compact_count)\n"
+        "  implicit none\n"
+        "  integer, intent(in) :: values(4)\n"
+        "  logical(kind=1), intent(in) :: selected(4)\n"
+        "  integer, intent(out) :: total, first, last\n"
+        "  integer(kind=1), intent(out) :: compact_count\n"
+        "  total = sum(values, mask=selected) + product(values, mask=.false.)\n"
+        "  first = maxloc(values, dim=1, mask=selected)\n"
+        "  last = maxloc(array=values, dim=1, mask=selected, back=.true.)\n"
+        "  compact_count = count(mask=selected, kind=1)\n"
+        "end subroutine masked_reductions\n";
+    F2cOptions options = {"masked_reductions.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "MASK, BACK, and KIND reduction arguments lower to C17");
+    expect(result.code != NULL && strstr(result.code, "F2C_SUM_MASK") != NULL &&
+               strstr(result.code, "F2C_PRODUCT_MASK") != NULL &&
+               strstr(result.code, "F2C_MAXIMUM_LOCATION_MASK") != NULL,
+           "masked value and location reductions use the filtered helper family");
+    expect(result.code != NULL && strstr(result.code, "sizeof(*(selected))") != NULL &&
+               strstr(result.code, "f2c_reduction_integer_result") != NULL,
+           "logical mask kind and requested integer result kind remain explicit");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_argument_contracts();
     test_dot_product_contracts();
     test_typed_scalar_lowering();
     test_mixed_and_complex_lowering();
+    test_mask_back_and_kind_lowering();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

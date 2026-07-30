@@ -1,5 +1,7 @@
 #include "codegen/expression/private.h"
 
+#include "codegen/array/private.h"
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -260,6 +262,53 @@ static const char *reduction_macro(F2cIntrinsicId intrinsic) {
     }
 }
 
+static const char *masked_reduction_macro(F2cIntrinsicId intrinsic) {
+    switch (intrinsic) {
+    case F2C_INTRINSIC_MAXLOC:
+        return "F2C_MAXIMUM_LOCATION_MASK";
+    case F2C_INTRINSIC_MAXVAL:
+        return "F2C_MAXIMUM_MASK";
+    case F2C_INTRINSIC_MINLOC:
+        return "F2C_MINIMUM_LOCATION_MASK";
+    case F2C_INTRINSIC_MINVAL:
+        return "F2C_MINIMUM_MASK";
+    case F2C_INTRINSIC_PRODUCT:
+        return "F2C_PRODUCT_MASK";
+    case F2C_INTRINSIC_SUM:
+        return "F2C_SUM_MASK";
+    case F2C_INTRINSIC_NONE:
+    case F2C_INTRINSIC_ALL:
+    case F2C_INTRINSIC_ANY:
+    case F2C_INTRINSIC_COUNT:
+    case F2C_INTRINSIC_DOT_PRODUCT:
+    default:
+        return NULL;
+    }
+}
+
+static char *reduction_conformance(Unit *unit, const F2cExpr *array, const F2cExpr *mask,
+                                   const char *array_count, const char *mask_count) {
+    Buffer result = {0};
+    size_t dimension;
+    f2c_buffer_printf(&result, "((%s) == (%s)", array_count, mask_count);
+    for (dimension = 0U; dimension < array->rank; ++dimension) {
+        char *array_extent = f2c_array_expression_extent(unit, array, dimension);
+        char *mask_extent = f2c_array_expression_extent(unit, mask, dimension);
+        if (array_extent == NULL || mask_extent == NULL) {
+            free(array_extent);
+            free(mask_extent);
+            free(result.data);
+            return NULL;
+        }
+        f2c_buffer_printf(&result, " && ((size_t)(%s) == (size_t)(%s))", array_extent,
+                          mask_extent);
+        free(array_extent);
+        free(mask_extent);
+    }
+    f2c_buffer_append(&result, ")");
+    return f2c_buffer_take(&result);
+}
+
 static const char *reduction_type_code(const F2cExpr *expression) {
     const int kind = expression != NULL && expression->type_kind != 0
                          ? expression->type_kind
@@ -392,10 +441,22 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
     const F2cExpr *kind;
     const F2cExpr *back;
     const char *macro;
+    const int integer_result =
+        expression != NULL &&
+        (expression->intrinsic == F2C_INTRINSIC_COUNT ||
+         expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
+         expression->intrinsic == F2C_INTRINSIC_MINLOC);
     char *pointer = NULL;
     char *count = NULL;
     char *stride = NULL;
     char *dimension_code = NULL;
+    char *mask_pointer = NULL;
+    char *mask_count = NULL;
+    char *mask_stride = NULL;
+    char *mask_size = NULL;
+    char *mask_scalar = NULL;
+    char *conformance = NULL;
+    char *back_code = NULL;
     Buffer result = {0};
     if (expression == NULL || !f2c_intrinsic_is_reduction(expression->intrinsic)) {
         *supported = 0;
@@ -422,29 +483,81 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
                ? f2c_intrinsic_argument(expression->children, expression->child_count, "back", 4U)
                : NULL;
     (void)kind;
-    if (mask != NULL || back != NULL)
-        goto unsupported;
-    macro = reduction_macro(expression->intrinsic);
+    macro = logical ? reduction_macro(expression->intrinsic)
+                    : masked_reduction_macro(expression->intrinsic);
     if (macro == NULL ||
         !f2c_expression_array_view(unit, array, &pointer, &count, &stride, supported))
         goto unsupported;
+    if (mask == NULL || mask->rank == 0U) {
+        mask_pointer = f2c_strdup("NULL");
+        mask_count = f2c_strdup(count);
+        mask_stride = f2c_strdup("0");
+        mask_size = f2c_strdup("1U");
+        mask_scalar =
+            mask != NULL ? f2c_expression_emit(unit, mask, supported) : f2c_strdup("true");
+    } else {
+        if (!f2c_expression_array_view(unit, mask, &mask_pointer, &mask_count, &mask_stride,
+                                       supported))
+            goto unsupported;
+        {
+            Buffer size = {0};
+            f2c_buffer_printf(&size, "sizeof(*(%s))", mask_pointer);
+            mask_size = f2c_buffer_take(&size);
+        }
+        mask_scalar = f2c_strdup("true");
+        conformance = reduction_conformance(unit, array, mask, count, mask_count);
+    }
+    back_code =
+        back != NULL ? f2c_expression_emit(unit, back, supported) : f2c_strdup("false");
     if (dimension != NULL)
         dimension_code = f2c_expression_emit(unit, dimension, supported);
-    if (!*supported || (dimension != NULL && dimension_code == NULL))
+    if (!*supported || mask_pointer == NULL || mask_count == NULL || mask_stride == NULL ||
+        mask_size == NULL || mask_scalar == NULL || back_code == NULL ||
+        (mask != NULL && mask->rank != 0U && conformance == NULL) ||
+        (dimension != NULL && dimension_code == NULL))
         goto unsupported;
-    if (dimension_code != NULL)
-        f2c_buffer_printf(&result, "((%s) == 1 ? ", dimension_code);
-    if (logical)
+    if (dimension_code != NULL || conformance != NULL) {
+        f2c_buffer_append(&result, "((");
+        if (dimension_code != NULL)
+            f2c_buffer_printf(&result, "(%s) == 1", dimension_code);
+        if (dimension_code != NULL && conformance != NULL)
+            f2c_buffer_append(&result, " && ");
+        if (conformance != NULL)
+            f2c_buffer_append(&result, conformance);
+        f2c_buffer_append(&result, ") ? ");
+    }
+    if (integer_result)
+        f2c_buffer_printf(&result, "((%s)f2c_reduction_integer_result((int64_t)(",
+                          f2c_expression_c_type(expression));
+    if (logical) {
         f2c_buffer_printf(&result, "%s((const void *)(%s), sizeof(*(%s)), %s, %s)", macro, pointer,
                           pointer, count, stride);
-    else
-        f2c_buffer_printf(&result, "%s(%s, %s, %s)", macro, pointer, count, stride);
-    if (dimension_code != NULL)
+    } else {
+        f2c_buffer_printf(&result, "%s(%s, %s, %s, (const void *)(%s), %s, %s, (%s)",
+                          macro, pointer, count, stride, mask_pointer, mask_size, mask_stride,
+                          mask_scalar);
+        if (expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
+            expression->intrinsic == F2C_INTRINSIC_MINLOC)
+            f2c_buffer_printf(&result, ", (%s)", back_code);
+        f2c_buffer_append(&result, ")");
+    }
+    if (integer_result)
+        f2c_buffer_printf(&result, "), %d))",
+                          expression->type_kind != 0 ? expression->type_kind
+                                                     : f2c_default_kind(TYPE_INTEGER));
+    if (dimension_code != NULL || conformance != NULL)
         f2c_buffer_printf(&result, " : (abort(), (%s)0))", f2c_expression_c_type(expression));
     free(pointer);
     free(count);
     free(stride);
     free(dimension_code);
+    free(mask_pointer);
+    free(mask_count);
+    free(mask_stride);
+    free(mask_size);
+    free(mask_scalar);
+    free(conformance);
+    free(back_code);
     return f2c_buffer_take(&result);
 
 unsupported:
@@ -452,6 +565,13 @@ unsupported:
     free(count);
     free(stride);
     free(dimension_code);
+    free(mask_pointer);
+    free(mask_count);
+    free(mask_stride);
+    free(mask_size);
+    free(mask_scalar);
+    free(conformance);
+    free(back_code);
     free(result.data);
     *supported = 0;
     return NULL;
