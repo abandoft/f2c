@@ -955,6 +955,9 @@ int f2c_emit_transform_assignment(Context *context, Unit *unit, const F2cExpr *l
     if (context == NULL || unit == NULL || target == NULL || right == NULL ||
         right->kind != F2C_EXPR_CALL || name == NULL)
         return 0;
+    if (f2c_intrinsic_is_reduction(right->intrinsic) &&
+        right->intrinsic != F2C_INTRINSIC_DOT_PRODUCT && right->rank != 0U)
+        return f2c_transform_emit_reduction(context, unit, target, right, line, depth);
     if (strcmp(name, "reshape") != 0 && strcmp(name, "pack") != 0 && strcmp(name, "unpack") != 0 &&
         strcmp(name, "spread") != 0 && strcmp(name, "cshift") != 0 &&
         strcmp(name, "eoshift") != 0 && strcmp(name, "findloc") != 0 &&

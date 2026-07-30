@@ -41,6 +41,8 @@ int f2c_transform_emit_inquiry(Context *context, Unit *unit, const F2cExpr *left
                                const F2cExpr *call, size_t line, int depth);
 int f2c_transform_emit_findloc(Context *context, Unit *unit, Symbol *target, const F2cExpr *call,
                                size_t line, int depth);
+int f2c_transform_emit_reduction(Context *context, Unit *unit, Symbol *target, const F2cExpr *call,
+                                 size_t line, int depth);
 int f2c_transform_emit_matrix(Context *context, Unit *unit, Symbol *target, const F2cExpr *call,
                               size_t line, int depth);
 
