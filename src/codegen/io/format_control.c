@@ -83,33 +83,24 @@ static int append_assigned_format(Unit *unit, AssignedFormats *formats, const ch
     return 1;
 }
 
-static int collect_assigned_formats(Unit *unit, const F2cStatement *statement, const char *name,
-                                    size_t line, AssignedFormats *formats) {
-    if (statement == NULL)
-        return 1;
-    if (statement->kind == F2C_STMT_ASSIGN_LABEL && statement->name != NULL &&
-        strcmp(statement->name, name) == 0 && statement->label_count == 1U &&
-        !append_assigned_format(unit, formats, statement->labels[0], line))
-        return 0;
-    return collect_assigned_formats(unit, statement->nested, name, line, formats);
-}
-
 static int emit_assigned_format_selection(Context *context, Unit *unit,
                                           const F2cStatement *io_statement,
-                                          const F2cExpr *format_expression, int depth) {
+                                          const F2cIoControl *format_control, int depth) {
     AssignedFormats formats = {0};
+    const F2cExpr *format_expression;
     char *selector = NULL;
     size_t index;
     int result = 0;
-    if (format_expression == NULL || format_expression->text == NULL)
+    if (format_control == NULL || !format_control->assigned_labels_resolved ||
+        format_control->value == NULL)
         return 0;
-    for (index = 0U; index < unit->statement_count; ++index) {
-        if (!collect_assigned_formats(unit, &unit->statements[index], format_expression->text,
-                                      io_statement->line, &formats))
+    format_expression = format_control->value;
+    for (index = 0U; index < format_control->resolved_label_count; ++index)
+        if (!append_assigned_format(unit, &formats, format_control->resolved_labels[index],
+                                    io_statement->line))
             goto cleanup;
-    }
     selector = f2c_io_emit_required_expression(unit, format_expression);
-    if (selector == NULL || formats.count == 0U)
+    if (selector == NULL)
         goto cleanup;
     for (index = 0U; index < formats.count; ++index)
         if (!f2c_io_emit_format_program(context, formats.items[index].format,
@@ -191,7 +182,7 @@ int f2c_io_emit_formatted_transfer(Context *context, Unit *unit, const F2cStatem
         }
     }
     if (assigned_format &&
-        !emit_assigned_format_selection(context, unit, statement, format_control->value, depth)) {
+        !emit_assigned_format_selection(context, unit, statement, format_control, depth)) {
         f2c_diagnostic(context, statement->line, 1,
                        "assigned FORMAT variable has no resolvable FORMAT label");
         goto cleanup;
