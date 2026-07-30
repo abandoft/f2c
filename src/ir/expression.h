@@ -44,6 +44,7 @@ struct F2cExpr {
     char *lowered_c;
     char *lowered_extent_c;
     char *lowered_character_length_c;
+    int lowered_array_temporary;
     size_t source_offset;
     size_t source_length;
     size_t parse_error_offset;

@@ -20,6 +20,7 @@ static F2cExpr *clone_expression(const F2cExpr *source) {
     clone->lowered_c = NULL;
     clone->lowered_extent_c = NULL;
     clone->lowered_character_length_c = NULL;
+    clone->lowered_array_temporary = 0;
     clone->children = NULL;
     clone->child_count = 0U;
     clone->child_capacity = 0U;
