@@ -445,17 +445,23 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   都在语义阶段绑定目标并保存离开 BLOCK 所需的逆序清理计划，emitter 不再根据源码行重新推断
   目标或扫描 `ASSIGN` 语句。正向、负向、严格 C17、sanitizer 和 gfortran 执行回归已进入测试。
 - [ ] 将 `RETURN`、`STOP`、`CYCLE`、`EXIT`、交替返回及异常 I/O 边整合为完整过程级 CFG，补齐
-  基本块和每条边的生命周期证明。当前已建立过程级语句 CFG，显式记录顺序、标签分支、循环回边/
-  退出和 I/O 异常边并计算可达性；普通与交替 `RETURN` 走统一单元清理，`CYCLE/EXIT` 已绑定具体
-  DO，交替返回调用的每个 `*label` 已纳入结构化构造入口检查和逐边作用域清理。赋值标签变量现以
-  CFG 不动点求解实际到达定义，覆盖分支合流、循环回边、不可达定义、普通整数重定义、输出定义、
-  允许标签列表和多个标签变量之间的候选边迭代收敛；裸赋值 `GOTO` 与已赋值 FORMAT 均只保存真正
-  可达的语义目标，不再扫描全单元 `ASSIGN`。仍需形成显式基本块，将表达式临时量、普通 def-use、
-  隐式错误边和全部终结时机纳入统一所有权数据流，因此本项保持未关闭。
+  基本块和每条边的生命周期证明。当前过程级 CFG 已显式记录语句节点、循环 latch、过程正常出口和
+  image termination，区分顺序、标签分支、循环回边/退出、交替返回、`RETURN`、`STOP/ERROR STOP`
+  以及 I/O `END/EOR/ERR` 和未处理错误终止边；节点前驱、后继、可达性和最大基本块均由统一连接阶段
+  构建。共享终止标签的嵌套旧式 DO 会依次经过各自 latch，单行 IF 中的 `CYCLE/EXIT` 同时保留条件
+  假路径。普通与交替 `RETURN` 走统一单元清理，`CYCLE/EXIT` 已绑定具体 DO，交替返回调用的每个
+  `*label` 已纳入结构化构造入口检查和逐边作用域清理。赋值标签变量使用通用 bitset 工作队列数据流
+  求解实际到达定义，覆盖分支合流、循环回边、不可达定义、普通整数重定义、输出定义、允许标签列表
+  和多个标签变量之间的候选边迭代收敛；裸赋值 `GOTO` 与已赋值 FORMAT 均只保存真正可达的语义
+  目标，不再扫描全单元 `ASSIGN`。仍需将普通变量 def-use、表达式临时量和拥有型函数结果纳入同一
+  数据流域，因此本项保持未关闭。
 - [ ] 对任何离开作用域的边执行正确的临时量释放、可分配对象清理和派生对象终结；异常 I/O 分支
   也必须走同一生命周期模型。当前正常 BLOCK 结束、`RETURN`、`CYCLE/EXIT`、所有标签分支及
-  `ERR/END/EOR` 会复用 typed cleanup plan，覆盖 BLOCK 内可分配对象和标量/数组派生对象；仍需把
-  表达式临时量、函数结果、隐式错误边和后续完整 CFG 的所有边纳入同一所有权数据流后才能关闭。
+  `ERR/END/EOR` 会复用 typed cleanup plan，覆盖 BLOCK 内可分配对象和标量/数组派生对象；每个
+  显式计划都保存并验证 CFG 源节点和目标节点，emitter 会拒绝未经控制流分析的计划。未处理 I/O
+  错误和 `STOP/ERROR STOP` 按 image termination 语义不错误执行普通作用域终结。BLOCK 正常结束、
+  提前返回、循环转移、跨块 GOTO 和 I/O 错误分支已有严格 C17、ASan/UBSan 及原生 Fortran 差分。
+  仍需把表达式临时量和拥有型函数结果纳入统一逐边所有权数据流后才能关闭。
 - [ ] 完成语句级错误恢复，在单个输入中报告多个独立错误，同时保证错误结果不生成半成品 C。
 
 ### P0-IO-01 F90 外部与内部 I/O
@@ -577,9 +583,10 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   transformational intrinsic 的结果分配、元素复制、动态 extent 提交和派生类型销毁已从总控
   emitter 拆入 `codegen/transform/result.c`；数组函数结果的 ABI 判定和调用端物化分别位于
   `codegen/result.c` 与 `codegen/array/function.c`，主变换和过程调用文件继续满足规模门禁。
-  过程 CFG 构建、赋值标签到达定义和逐边生命周期计划分别位于 `semantic/control_flow.c`、
-  `semantic/validation/assigned_label.c` 与 `semantic/validation/lifetime.c`，未重新堆入通用语句
-  验证或代码生成文件。
+  过程 CFG 构建、前驱/基本块连接、通用 bitset 数据流、赋值标签到达定义和逐边生命周期计划分别
+  位于 `semantic/control_flow.c`、`semantic/control_flow/connectivity.c`、
+  `semantic/data_flow/bitset.c`、`semantic/validation/assigned_label.c` 与
+  `semantic/validation/lifetime.c`，未重新堆入通用语句验证或代码生成文件。
 - [x] 将 `src/internal/f2c.h` 从 730 行全局定义缩减为轻量跨域聚合头；基础设施、token、type、
   expression IR、statement IR、symbol/model、context、semantic 与 codegen 分别使用私有头文件。
 - [x] 用 `F2cCompilationPhase`、`F2cUnitPhase` 和 `F2cIrState` 明确 source → token/syntax AST →
