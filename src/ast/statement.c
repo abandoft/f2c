@@ -319,6 +319,9 @@ void f2c_statement_free(F2cStatement *statement) {
         f2c_expr_free(control->value);
         f2c_format_free(control->format);
         free(control->cleanup.symbols);
+        while (control->resolved_label_count != 0U)
+            free(control->resolved_labels[--control->resolved_label_count]);
+        free(control->resolved_labels);
     }
     free(statement->io_controls);
     while (statement->io_item_count != 0U)

@@ -145,6 +145,9 @@ typedef struct F2cIoControl {
     F2cFormatError format_error;
     int asterisk;
     F2cScopeCleanupPlan cleanup;
+    char **resolved_labels;
+    size_t resolved_label_count;
+    int assigned_labels_resolved;
 } F2cIoControl;
 
 typedef struct F2cDataValue {
@@ -225,6 +228,7 @@ struct F2cStatement {
     F2cScopeCleanupPlan *label_cleanups;
     F2cResolvedBranch *resolved_branches;
     size_t resolved_branch_count;
+    int assigned_labels_resolved;
     int block;
     int error_stop;
     int unroll_hint;
