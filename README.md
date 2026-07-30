@@ -168,7 +168,8 @@ The pinned Reference LAPACK corpus currently provides these automated gates:
 - all four INSTALL checks and 52,512 S/D/C/Z RFP checks matched against native Fortran;
 - official BLAS Level 1/2/3, complete S/D/C/Z LIN, and all 80 EIG input suites differentially
   checked against the same pinned native build;
-- exhaustive internal audit artifacts for 100 numerical drivers and 5,807,798 union records;
+- exhaustive internal audit artifacts for 100 numerical drivers, with platform-profiled union
+  counts recorded in the machine-readable manifest;
 - a 71-case generated-C/native-Fortran performance matrix with a per-case 1.05 ratio ceiling.
 
 The exhaustive audit intentionally records finite rounding differences, unmatched internal

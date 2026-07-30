@@ -150,7 +150,7 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
 - 生成 BLAS/LAPACK 静态库执行端到端 `DGESV` 求解；
 - 四项 INSTALL 检查和 52,512 项 S/D/C/Z RFP 检查与原生 Fortran 匹配；
 - 官方 BLAS Level 1/2/3、完整 S/D/C/Z LIN 及全部 80 套 EIG 输入与同一固定原生构建差分；
-- 100 个数值驱动、5,807,798 条并集记录的内部逐项审计产物；
+- 100 个数值驱动的内部逐项审计产物，并由机器可读清单记录各平台 profile 的并集数量；
 - 71 项生成 C/原生 Fortran 性能矩阵，每项比值上限为 1.05。
 
 内部审计会有意保存有限舍入差异、未配对内部记录和 NaN 策略差异。门禁通过表示没有新增生成端
