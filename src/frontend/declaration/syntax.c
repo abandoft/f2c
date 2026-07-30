@@ -10,6 +10,55 @@ static int declaration_token_word(const Line *line, size_t index, const char *wo
            f2c_line_token_equals(line, index, word);
 }
 
+static int declaration_type_starter(const Line *line, size_t start) {
+    static const char *const starters[] = {
+        "integer",   "real", "double", "logical",   "complex",
+        "character", "type", "class",  "procedure",
+    };
+    size_t index;
+    for (index = 0U; index < sizeof(starters) / sizeof(starters[0]); ++index) {
+        if (declaration_token_word(line, start, starters[index]))
+            return 1;
+    }
+    return 0;
+}
+
+static size_t token_after_balanced_selector(const Line *line, size_t start, size_t limit) {
+    size_t depth = 0U;
+    size_t index;
+    if (start >= limit || line->tokens[start].kind != F2C_TOKEN_LEFT_PAREN)
+        return start;
+    for (index = start; index < limit; ++index) {
+        const F2cTokenKind kind = line->tokens[index].kind;
+        if (kind == F2C_TOKEN_LEFT_PAREN)
+            ++depth;
+        else if (kind == F2C_TOKEN_RIGHT_PAREN && --depth == 0U)
+            return index + 1U;
+    }
+    return start;
+}
+
+static int initialized_type_declaration(const Line *line, size_t start, size_t equal_index) {
+    size_t index = start + 1U;
+    if (!declaration_type_starter(line, start))
+        return 0;
+    if (declaration_token_word(line, start, "double") &&
+        (declaration_token_word(line, index, "precision") ||
+         declaration_token_word(line, index, "complex")))
+        ++index;
+    if (index < equal_index && line->tokens[index].kind == F2C_TOKEN_LEFT_PAREN)
+        index = token_after_balanced_selector(line, index, equal_index);
+    if (index < equal_index && line->tokens[index].kind == F2C_TOKEN_OPERATOR &&
+        f2c_token_equals(&line->tokens[index], "*")) {
+        ++index;
+        if (index < equal_index && line->tokens[index].kind == F2C_TOKEN_LEFT_PAREN)
+            index = token_after_balanced_selector(line, index, equal_index);
+        else if (index < equal_index)
+            ++index;
+    }
+    return index < equal_index && line->tokens[index].kind == F2C_TOKEN_IDENTIFIER;
+}
+
 static int starts_with_assignment_designator(const Line *line, size_t start) {
     size_t depth = 0U;
     size_t index;
@@ -19,8 +68,7 @@ static int starts_with_assignment_designator(const Line *line, size_t start) {
         if (token->kind == F2C_TOKEN_LEFT_PAREN || token->kind == F2C_TOKEN_LEFT_BRACKET ||
             token->kind == F2C_TOKEN_ARRAY_BEGIN) {
             ++depth;
-        } else if (token->kind == F2C_TOKEN_RIGHT_PAREN ||
-                   token->kind == F2C_TOKEN_RIGHT_BRACKET ||
+        } else if (token->kind == F2C_TOKEN_RIGHT_PAREN || token->kind == F2C_TOKEN_RIGHT_BRACKET ||
                    token->kind == F2C_TOKEN_ARRAY_END) {
             if (depth != 0U)
                 --depth;
@@ -28,7 +76,9 @@ static int starts_with_assignment_designator(const Line *line, size_t start) {
             saw_double_colon = 1;
         } else if (depth == 0U && token->kind == F2C_TOKEN_OPERATOR &&
                    (f2c_token_equals(token, "=") || f2c_token_equals(token, "=>"))) {
-            return !saw_double_colon;
+            if (saw_double_colon)
+                return 0;
+            return !initialized_type_declaration(line, start, index);
         }
     }
     return 0;

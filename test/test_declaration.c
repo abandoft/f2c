@@ -114,6 +114,28 @@ static void test_attribute_keywords_as_identifiers(void) {
     f2c_result_free(&result);
 }
 
+static void test_initialized_declarations_without_double_colon(void) {
+    static const char source[] =
+        "program initialized_declarations\n"
+        "  implicit none\n"
+        "  integer answer = 42\n"
+        "  real(kind=8) scale = 2.0_8\n"
+        "  character(len=3) values(2) = (/'abc', 'xyz'/)\n"
+        "  if (answer /= 42 .or. scale /= 2.0_8 .or. values(2) /= 'xyz') stop 1\n"
+        "end program initialized_declarations\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code != NULL && result.error_count == 0U,
+           "type declarations may initialize entities without a double colon");
+    expect(result.code != NULL && strstr(result.code, "int32_t answer = 42;") != NULL,
+           "an old-style initialized INTEGER declaration reaches typed IR");
+    expect(result.code != NULL && strstr(result.code, "double scale = 2.0") != NULL,
+           "a selected-kind initialized REAL declaration reaches typed IR");
+    expect(!capture.captured,
+           "initialized declarations without a double colon have no diagnostics");
+    f2c_result_free(&result);
+}
+
 static void test_selected_kind_type_selectors(void) {
     static const char source[] = "program selected_kind_type_selectors\n"
                                  "  implicit none\n"
@@ -218,6 +240,7 @@ int main(void) {
     test_duplicate_shape();
     test_continued_initializer_location();
     test_attribute_keywords_as_identifiers();
+    test_initialized_declarations_without_double_colon();
     test_selected_kind_type_selectors();
     test_contiguous_attribute();
     test_assumed_size_declaration_context();
