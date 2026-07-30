@@ -1,3 +1,13 @@
+## 1.29.0
+
+- Added a procedure-level control-flow graph with explicit fallthrough, labeled branch, loop back/exit, and I/O error edges plus reachability analysis.
+- Replaced whole-unit `ASSIGN` scans with fixed-point reaching-definition analysis across conditional branches, loop back edges, ordinary integer redefinitions, and definable output contexts.
+- Iteratively refined provisional assigned-`GOTO` edges across multiple label variables so definitions reachable only through impossible targets cannot contaminate later control flow.
+- Enforced default-INTEGER label variables, valid executable or FORMAT targets, allowed-label lists, structured-construct entry rules, all-path initialization, and the prohibition on ordinary references to assigned-label values.
+- Applied the same reaching-label analysis to assigned FORMAT variables and normalized positional `READ`, `WRITE`, and `PRINT` controls into explicit typed-IR roles.
+- Emitted only semantically resolved assigned-`GOTO` and assigned-FORMAT targets, deduplicated repeated switch labels, and built per-target scope cleanup without rescanning source statements.
+- Split control-flow construction and assigned-label validation into dedicated semantic modules and added strict C17, sanitizer, and native Fortran differential CI coverage.
+
 ## 1.28.0
 
 - Unified array-valued expression preparation across scalar control statements, preserving typed shape, single evaluation, and ownership cleanup.
