@@ -3,12 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const F2cStatement *statement_body(const F2cStatement *statement) {
-    return statement != NULL && statement->kind == F2C_STMT_LABEL && statement->nested != NULL
-               ? statement->nested
-               : statement;
-}
-
 static int block_scoped_symbol(const Unit *unit, const Symbol *symbol) {
     return symbol->scope_begin_line != 0U && !unit->save_all && !symbol->saved &&
            symbol->initializer == NULL && !symbol->argument && !symbol->module_entity;
@@ -93,52 +87,14 @@ static int prepare_label_plans(Context *context, Unit *unit, F2cStatement *state
     return 1;
 }
 
-static int append_resolved_branch(Context *context, Unit *unit, F2cStatement *statement,
-                                  const char *label, const F2cSourceSpan *span) {
-    F2cResolvedBranch *replacement;
-    F2cResolvedBranch *branch;
-    size_t index;
-    for (index = 0U; index < statement->resolved_branch_count; ++index)
-        if (f2c_statement_labels_equal(statement->resolved_branches[index].label, label))
-            return 1;
-    if (statement->resolved_branch_count == SIZE_MAX / sizeof(*replacement))
-        goto failed;
-    replacement = (F2cResolvedBranch *)realloc(statement->resolved_branches,
-                                               (statement->resolved_branch_count + 1U) *
-                                                   sizeof(*replacement));
-    if (replacement == NULL)
-        goto failed;
-    statement->resolved_branches = replacement;
-    branch = &statement->resolved_branches[statement->resolved_branch_count];
-    memset(branch, 0, sizeof(*branch));
-    branch->label = f2c_strdup(label);
-    if (branch->label == NULL ||
-        !build_label_plan(context, unit, statement, label, span, &branch->cleanup)) {
-        free(branch->label);
-        free(branch->cleanup.symbols);
-        memset(branch, 0, sizeof(*branch));
-        return 0;
-    }
-    ++statement->resolved_branch_count;
-    return 1;
-
-failed:
-    f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &statement->span, 1,
-                             "out of memory while resolving assigned GOTO targets");
-    return 0;
-}
-
 static int prepare_assigned_targets(Context *context, Unit *unit, F2cStatement *statement) {
     size_t index;
-    for (index = 0U; index < unit->statement_count; ++index) {
-        const F2cStatement *assignment = statement_body(&unit->statements[index]);
-        if (assignment == NULL || assignment->kind != F2C_STMT_ASSIGN_LABEL ||
-            assignment->name == NULL || statement->name == NULL ||
-            strcmp(assignment->name, statement->name) != 0 || assignment->label_count != 1U)
-            continue;
-        if (!append_resolved_branch(context, unit, statement, assignment->labels[0],
-                                    assignment->label_spans != NULL ? &assignment->label_spans[0]
-                                                                    : &assignment->span))
+    for (index = 0U; index < statement->resolved_branch_count; ++index) {
+        F2cResolvedBranch *branch = &statement->resolved_branches[index];
+        free(branch->cleanup.symbols);
+        memset(&branch->cleanup, 0, sizeof(branch->cleanup));
+        if (!build_label_plan(context, unit, statement, branch->label, &statement->span,
+                              &branch->cleanup))
             return 0;
     }
     return 1;
@@ -163,7 +119,6 @@ static int prepare_statement_plans(Context *context, Unit *unit, F2cStatement *s
     if (statement == NULL)
         return 1;
     if ((statement->kind == F2C_STMT_ARITHMETIC_IF || statement->kind == F2C_STMT_GOTO ||
-         (statement->kind == F2C_STMT_ASSIGNED_GOTO && statement->label_count != 0U) ||
          (statement->kind == F2C_STMT_CALL && statement->label_count != 0U)) &&
         !prepare_label_plans(context, unit, statement))
         return 0;
@@ -176,7 +131,7 @@ static int prepare_statement_plans(Context *context, Unit *unit, F2cStatement *s
         !build_cleanup_plan(context, unit, statement->line, statement->control_target->line,
                             &statement->transfer_cleanup, &statement->span))
         return 0;
-    if (statement->kind == F2C_STMT_ASSIGNED_GOTO && statement->label_count == 0U &&
+    if (statement->kind == F2C_STMT_ASSIGNED_GOTO &&
         !prepare_assigned_targets(context, unit, statement))
         return 0;
     if (!prepare_io_plans(context, unit, statement))
