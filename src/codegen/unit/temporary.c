@@ -392,6 +392,9 @@ static void emit_expression_temporary(F2cExpr *expression, void *state) {
             f2c_buffer_printf(output, "%s f2c_ordered_value_%zu = {0};\n",
                               f2c_expression_c_type(ordered_operand),
                               expression->ordered_temporary_index);
+        f2c_unit_indent(output, 1);
+        f2c_buffer_printf(output, "(void)f2c_ordered_value_%zu;\n",
+                          expression->ordered_temporary_index);
     }
     if (expression->ordered_argument_temporary_index != SIZE_MAX) {
         f2c_unit_indent(output, 1);
@@ -402,6 +405,9 @@ static void emit_expression_temporary(F2cExpr *expression, void *state) {
             f2c_buffer_printf(output, "%s f2c_ordered_argument_%zu = {0};\n",
                               f2c_expression_c_type(expression),
                               expression->ordered_argument_temporary_index);
+        f2c_unit_indent(output, 1);
+        f2c_buffer_printf(output, "(void)f2c_ordered_argument_%zu;\n",
+                          expression->ordered_argument_temporary_index);
     }
 }
 

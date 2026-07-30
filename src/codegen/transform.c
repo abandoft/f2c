@@ -714,11 +714,14 @@ static int emit_spread(Context *context, Unit *unit, Symbol *target, const F2cEx
     for (dimension = 0U; dimension < result_rank; ++dimension) {
         f2c_buffer_printf(&context->output,
                           "{ size_t coordinate = (output / result_stride) %% "
-                          "f2c_transform_result_extent_%zu; if (f2c_transform_dimension != %zu) "
+                          "(f2c_transform_result_extent_%zu == 0U ? 1U : "
+                          "f2c_transform_result_extent_%zu); "
+                          "if (f2c_transform_dimension != %zu) "
                           "{ source_index += coordinate * source_stride; source_stride *= "
                           "f2c_transform_result_extent_%zu; } result_stride *= "
                           "f2c_transform_result_extent_%zu; } ",
-                          dimension + 1U, dimension + 1U, dimension + 1U, dimension + 1U);
+                          dimension + 1U, dimension + 1U, dimension + 1U, dimension + 1U,
+                          dimension + 1U);
     }
     if (source_rank == 0U)
         append_scalar_store(&context->output, target, "output", source_scalar, source_length);
