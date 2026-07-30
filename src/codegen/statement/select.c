@@ -1,4 +1,6 @@
-#include "internal/f2c.h"
+#include "codegen/statement/private.h"
+
+#include "codegen/array/private.h"
 
 #include <stdlib.h>
 
@@ -107,35 +109,60 @@ static void emit_default_condition(Buffer *output, Unit *unit, const F2cStatemen
 int f2c_emit_select_case_begin(Context *context, Unit *unit, const F2cStatement *statement,
                                int *depth) {
     const size_t identifier = select_identifier(unit, statement);
-    char *selector = f2c_emit_typed_expression(unit, statement->expression);
-    if (selector == NULL)
+    F2cPreparedStatementExpression selector;
+    if (!f2c_prepare_statement_expression(context, unit, statement, statement->expression, "select",
+                                          statement->line, *depth + 1, &selector))
         return 0;
     indent(&context->output, *depth);
     f2c_buffer_append(&context->output, "{\n");
     ++*depth;
+    f2c_buffer_append(&context->output, selector.prelude.data != NULL ? selector.prelude.data : "");
     indent(&context->output, *depth);
     if (statement->expression->type == TYPE_CHARACTER) {
-        char *pointer = f2c_character_source_pointer(unit, statement->expression, selector);
-        char *length = f2c_character_length_expression(unit, statement->expression);
+        char *pointer = f2c_character_source_pointer(unit, selector.expression, selector.code);
+        char *length = f2c_character_length_expression(unit, selector.expression);
         if (pointer == NULL || length == NULL) {
-            free(selector);
             free(pointer);
             free(length);
+            f2c_release_statement_expression(&selector);
             return 0;
         }
-        f2c_buffer_printf(&context->output, "const char *const f2c_select_case_pointer_%zu = %s;\n",
-                          identifier, pointer);
-        indent(&context->output, *depth);
-        f2c_buffer_printf(&context->output,
-                          "const size_t f2c_select_case_length_%zu = (size_t)(%s);\n", identifier,
-                          length);
+        if (selector.materialized) {
+            f2c_buffer_printf(&context->output,
+                              "const size_t f2c_select_case_length_%zu = (size_t)(%s);\n",
+                              identifier, length);
+            indent(&context->output, *depth);
+            f2c_buffer_printf(
+                &context->output,
+                "char *const f2c_select_case_pointer_%zu = (char *)malloc("
+                "f2c_select_case_length_%zu == 0U ? 1U : f2c_select_case_length_%zu);\n",
+                identifier, identifier, identifier);
+            indent(&context->output, *depth);
+            f2c_buffer_printf(&context->output,
+                              "if (f2c_select_case_pointer_%zu == NULL) abort();\n", identifier);
+            indent(&context->output, *depth);
+            f2c_buffer_printf(&context->output,
+                              "if (f2c_select_case_length_%zu != 0U) "
+                              "memmove(f2c_select_case_pointer_%zu, %s, "
+                              "f2c_select_case_length_%zu);\n",
+                              identifier, identifier, pointer, identifier);
+        } else {
+            f2c_buffer_printf(&context->output,
+                              "const char *const f2c_select_case_pointer_%zu = %s;\n", identifier,
+                              pointer);
+            indent(&context->output, *depth);
+            f2c_buffer_printf(&context->output,
+                              "const size_t f2c_select_case_length_%zu = (size_t)(%s);\n",
+                              identifier, length);
+        }
         free(pointer);
         free(length);
     } else {
         f2c_buffer_printf(&context->output, "const %s f2c_select_case_value_%zu = (%s);\n",
-                          f2c_expression_c_type(statement->expression), identifier, selector);
+                          f2c_expression_c_type(statement->expression), identifier, selector.code);
     }
-    free(selector);
+    f2c_buffer_append(&context->output, selector.cleanup.data != NULL ? selector.cleanup.data : "");
+    f2c_release_statement_expression(&selector);
     return 1;
 }
 
@@ -161,7 +188,8 @@ int f2c_emit_case_begin(Context *context, Unit *unit, const F2cStatement *statem
     return 1;
 }
 
-int f2c_emit_select_case_end(Context *context, const F2cStatement *statement, int *depth) {
+int f2c_emit_select_case_end(Context *context, Unit *unit, const F2cStatement *statement,
+                             int *depth) {
     const F2cStatement *select = statement->construct_owner;
     if (select == NULL || select->kind != F2C_STMT_SELECT_CASE)
         return 0;
@@ -170,6 +198,12 @@ int f2c_emit_select_case_end(Context *context, const F2cStatement *statement, in
             --*depth;
         indent(&context->output, *depth);
         f2c_buffer_append(&context->output, "}\n");
+    }
+    if (select->expression != NULL && select->expression->type == TYPE_CHARACTER &&
+        f2c_array_contains_unmaterialized_value(select->expression)) {
+        indent(&context->output, *depth);
+        f2c_buffer_printf(&context->output, "free(f2c_select_case_pointer_%zu);\n",
+                          select_identifier(unit, select));
     }
     if (*depth > 1)
         --*depth;

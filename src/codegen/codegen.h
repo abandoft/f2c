@@ -80,7 +80,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
 int f2c_emit_select_case_begin(Context *context, Unit *unit, const F2cStatement *statement,
                                int *depth);
 int f2c_emit_case_begin(Context *context, Unit *unit, const F2cStatement *statement, int *depth);
-int f2c_emit_select_case_end(Context *context, const F2cStatement *statement, int *depth);
+int f2c_emit_select_case_end(Context *context, Unit *unit, const F2cStatement *statement,
+                             int *depth);
 int f2c_emit_type_guard(Context *context, Unit *unit, const F2cStatement *statement, size_t line,
                         int *depth);
 int f2c_emit_where_begin(Context *context, Unit *unit, const F2cStatement *statement, int *depth);

@@ -21,17 +21,27 @@ static void emit_condition(Buffer *output, const char *condition) {
 static int emit_inline_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                  Line *source_line, int depth);
 
-char *f2c_emit_statement_expression(Context *context, Unit *unit, const F2cExpr *expression,
-                                    size_t line) {
-    int supported = 0;
-    char *result = f2c_emit_expression_ast(unit, expression, &supported);
-    if (!supported || result == NULL) {
-        free(result);
-        f2c_diagnostic(context, line, 1,
-                       "code generation does not support this typed statement expression");
-        return f2c_strdup("0 /* unsupported typed statement expression */");
-    }
-    return result;
+static void emit_materialized_scalar(Context *context,
+                                     const F2cPreparedStatementExpression *prepared,
+                                     const char *name, const char *c_type, int depth) {
+    indent(&context->output, depth);
+    f2c_buffer_printf(&context->output, "%s %s;\n", c_type, name);
+    indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "{\n");
+    f2c_buffer_append(&context->output,
+                      prepared->prelude.data != NULL ? prepared->prelude.data : "");
+    indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output, "%s = (%s)(%s);\n", name, c_type, prepared->code);
+    f2c_buffer_append(&context->output,
+                      prepared->cleanup.data != NULL ? prepared->cleanup.data : "");
+    indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+}
+
+static void emit_condition_value(Context *context, const F2cPreparedStatementExpression *prepared,
+                                 size_t identifier, int depth, Buffer *name) {
+    f2c_buffer_printf(name, "f2c_condition_%zu", identifier);
+    emit_materialized_scalar(context, prepared, name->data, "bool", depth);
 }
 
 int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *statement,
@@ -68,7 +78,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                 return 0;
         }
     } else if (statement->kind == F2C_STMT_END_SELECT) {
-        if (!f2c_emit_select_case_end(context, statement, depth)) {
+        if (!f2c_emit_select_case_end(context, unit, statement, depth)) {
             if (*depth > 1)
                 --*depth;
             indent(&context->output, *depth);
@@ -110,28 +120,53 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             return 0;
         }
     } else if (statement->kind == F2C_STMT_END_IF) {
+        size_t wrappers = f2c_if_materialized_else_wrappers(unit, statement);
         if (*depth > 1)
             --*depth;
         indent(&context->output, *depth);
         f2c_buffer_append(&context->output, "}\n");
+        while (wrappers-- != 0U) {
+            if (*depth > 1)
+                --*depth;
+            indent(&context->output, *depth);
+            f2c_buffer_append(&context->output, "}\n");
+        }
     } else if (statement->kind == F2C_STMT_END_DO) {
         if (!f2c_emit_do_end(context, unit, statement->construct_owner, source_line->number, depth))
             return 0;
     } else if (statement->kind == F2C_STMT_ELSE_IF) {
-        char *condition;
+        F2cPreparedStatementExpression condition;
         if (statement->expression == NULL) {
             f2c_diagnostic(context, source_line->number, 1, "malformed ELSE IF statement");
+        } else if (!f2c_prepare_statement_expression(context, unit, statement,
+                                                     statement->expression, "condition",
+                                                     source_line->number, *depth + 1, &condition)) {
+            return 0;
+        } else if (condition.materialized) {
+            Buffer name = {0};
+            const size_t identifier = f2c_statement_unit_index(unit, statement);
+            if (*depth > 1)
+                --*depth;
+            indent(&context->output, *depth);
+            f2c_buffer_append(&context->output, "} else {\n");
+            ++*depth;
+            emit_condition_value(context, &condition, identifier, *depth, &name);
+            indent(&context->output, *depth);
+            f2c_buffer_append(&context->output, "if ");
+            emit_condition(&context->output, name.data);
+            f2c_buffer_append(&context->output, " {\n");
+            ++*depth;
+            free(name.data);
+            f2c_release_statement_expression(&condition);
         } else {
-            condition = f2c_emit_statement_expression(context, unit, statement->expression,
-                                                      source_line->number);
             if (*depth > 1)
                 --*depth;
             indent(&context->output, *depth);
             f2c_buffer_append(&context->output, "} else if ");
-            emit_condition(&context->output, condition);
+            emit_condition(&context->output, condition.code);
             f2c_buffer_append(&context->output, " {\n");
             ++*depth;
-            free(condition);
+            f2c_release_statement_expression(&condition);
         }
     } else if (statement->kind == F2C_STMT_ELSE) {
         if (*depth > 1)
@@ -146,21 +181,31 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
              statement->expression->type != TYPE_DOUBLE)) {
             f2c_diagnostic(context, source_line->number, 1, "malformed arithmetic IF statement");
         } else {
-            char *value = f2c_emit_statement_expression(context, unit, statement->expression,
-                                                        source_line->number);
+            F2cPreparedStatementExpression value;
+            const size_t identifier = f2c_statement_unit_index(unit, statement);
+            if (!f2c_prepare_statement_expression(context, unit, statement, statement->expression,
+                                                  "arithmetic_if", source_line->number, *depth + 1,
+                                                  &value))
+                return 0;
             indent(&context->output, *depth);
             f2c_buffer_append(&context->output, "{\n");
+            f2c_buffer_append(&context->output,
+                              value.prelude.data != NULL ? value.prelude.data : "");
             indent(&context->output, *depth + 1);
-            f2c_buffer_printf(&context->output, "%s f2c_arithmetic_if_value = %s;\n",
-                              f2c_expression_c_type(statement->expression), value);
+            f2c_buffer_printf(&context->output, "%s f2c_arithmetic_if_value_%zu = %s;\n",
+                              f2c_expression_c_type(statement->expression), identifier, value.code);
+            f2c_buffer_append(&context->output,
+                              value.cleanup.data != NULL ? value.cleanup.data : "");
             indent(&context->output, *depth + 1);
-            f2c_buffer_append(&context->output, "if (f2c_arithmetic_if_value < 0) {\n");
+            f2c_buffer_printf(&context->output, "if (f2c_arithmetic_if_value_%zu < 0) {\n",
+                              identifier);
             f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->label_cleanups[0],
                                         *depth + 2);
             indent(&context->output, *depth + 2);
             f2c_buffer_printf(&context->output, "goto f2c_label_%s; }\n", statement->labels[0]);
             indent(&context->output, *depth + 1);
-            f2c_buffer_append(&context->output, "if (f2c_arithmetic_if_value == 0) {\n");
+            f2c_buffer_printf(&context->output, "if (f2c_arithmetic_if_value_%zu == 0) {\n",
+                              identifier);
             f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->label_cleanups[1],
                                         *depth + 2);
             indent(&context->output, *depth + 2);
@@ -171,23 +216,32 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             f2c_buffer_printf(&context->output, "goto f2c_label_%s;\n", statement->labels[2]);
             indent(&context->output, *depth);
             f2c_buffer_append(&context->output, "}\n");
-            free(value);
+            f2c_release_statement_expression(&value);
         }
     } else if (statement->kind == F2C_STMT_IF) {
         if (statement->expression == NULL) {
             f2c_diagnostic(context, source_line->number, 1, "malformed IF statement");
         } else {
-            char *condition = f2c_emit_statement_expression(context, unit, statement->expression,
-                                                            source_line->number);
+            F2cPreparedStatementExpression condition;
+            Buffer name = {0};
+            const size_t identifier = f2c_statement_unit_index(unit, statement);
+            if (!f2c_prepare_statement_expression(context, unit, statement, statement->expression,
+                                                  "condition", source_line->number, *depth + 1,
+                                                  &condition))
+                return 0;
+            if (condition.materialized)
+                emit_condition_value(context, &condition, identifier, *depth, &name);
             indent(&context->output, *depth);
             if (statement->block) {
                 f2c_buffer_append(&context->output, "if ");
-                emit_condition(&context->output, condition);
+                emit_condition(&context->output,
+                               condition.materialized ? name.data : condition.code);
                 f2c_buffer_append(&context->output, " {\n");
                 ++*depth;
             } else {
                 f2c_buffer_append(&context->output, "if ");
-                emit_condition(&context->output, condition);
+                emit_condition(&context->output,
+                               condition.materialized ? name.data : condition.code);
                 f2c_buffer_append(&context->output, " {\n");
                 if (statement->nested != NULL)
                     (void)emit_inline_statement(context, unit, statement->nested, source_line,
@@ -195,7 +249,8 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                 indent(&context->output, *depth);
                 f2c_buffer_append(&context->output, "}\n");
             }
-            free(condition);
+            free(name.data);
+            f2c_release_statement_expression(&condition);
         }
     } else if (statement->kind == F2C_STMT_DO_WHILE || statement->kind == F2C_STMT_DO) {
         if (!f2c_emit_do_begin(context, unit, statement, source_line->number, depth))
@@ -302,17 +357,28 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
     } else if (statement->kind == F2C_STMT_RETURN) {
         if (statement->expression != NULL && unit->kind == UNIT_SUBROUTINE &&
             unit->alternate_return_count != 0U) {
-            char *selector = f2c_emit_statement_expression(context, unit, statement->expression,
-                                                           source_line->number);
+            F2cPreparedStatementExpression selector;
+            const size_t identifier = f2c_statement_unit_index(unit, statement);
+            if (!f2c_prepare_statement_expression(context, unit, statement, statement->expression,
+                                                  "return", source_line->number, *depth + 1,
+                                                  &selector))
+                return 0;
             indent(&context->output, *depth);
+            f2c_buffer_append(&context->output, "{\n");
+            f2c_buffer_append(&context->output,
+                              selector.prelude.data != NULL ? selector.prelude.data : "");
+            indent(&context->output, *depth + 1);
             f2c_buffer_printf(&context->output,
-                              "{ const int32_t f2c_alternate_return = (int32_t)(%s);\n", selector);
+                              "const int32_t f2c_alternate_return_%zu = (int32_t)(%s);\n",
+                              identifier, selector.code);
+            f2c_buffer_append(&context->output,
+                              selector.cleanup.data != NULL ? selector.cleanup.data : "");
             f2c_emit_unit_cleanup(&context->output, unit, *depth + 1);
             indent(&context->output, *depth + 1);
-            f2c_buffer_append(&context->output, "return f2c_alternate_return;\n");
+            f2c_buffer_printf(&context->output, "return f2c_alternate_return_%zu;\n", identifier);
             indent(&context->output, *depth);
             f2c_buffer_append(&context->output, "}\n");
-            free(selector);
+            f2c_release_statement_expression(&selector);
         } else {
             f2c_emit_unit_cleanup(&context->output, unit, *depth);
             indent(&context->output, *depth);
@@ -326,60 +392,76 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                     : (unit->kind == UNIT_PROGRAM ? "return 0;\n" : "return;\n"));
         }
     } else if (statement->kind == F2C_STMT_STOP) {
-        int supported = 1;
-        char *code = statement->expression != NULL
-                         ? f2c_emit_expression_ast(unit, statement->expression, &supported)
-                         : NULL;
-        char *character_pointer = NULL;
-        char *character_length = NULL;
-        if (statement->expression != NULL && (!supported || code == NULL)) {
-            free(code);
-            f2c_diagnostic(context, source_line->number, 1,
-                           "internal compiler error: typed STOP code cannot be emitted");
-            return 0;
-        }
-        if (statement->expression != NULL && statement->expression->type == TYPE_CHARACTER) {
-            character_pointer = f2c_character_source_pointer(unit, statement->expression, code);
-            character_length = f2c_character_length_expression(unit, statement->expression);
-            if (character_pointer == NULL || character_length == NULL) {
-                free(code);
+        if (statement->expression != NULL) {
+            F2cPreparedStatementExpression code;
+            const size_t identifier = f2c_statement_unit_index(unit, statement);
+            char *character_pointer = NULL;
+            char *character_length = NULL;
+            if (!f2c_prepare_statement_expression(context, unit, statement, statement->expression,
+                                                  "stop", source_line->number, *depth + 1, &code))
+                return 0;
+            if (statement->expression->type == TYPE_CHARACTER) {
+                character_pointer = f2c_character_source_pointer(unit, code.expression, code.code);
+                character_length = f2c_character_length_expression(unit, code.expression);
+            }
+            if (statement->expression->type == TYPE_CHARACTER &&
+                (character_pointer == NULL || character_length == NULL)) {
                 free(character_pointer);
                 free(character_length);
+                f2c_release_statement_expression(&code);
                 f2c_diagnostic(context, source_line->number, 1,
                                "internal compiler error: CHARACTER STOP code cannot be emitted");
                 return 0;
             }
             indent(&context->output, *depth);
-            f2c_buffer_printf(&context->output,
-                              "{ const char *f2c_stop_text = %s; "
-                              "const size_t f2c_stop_length = (size_t)(%s);\n",
-                              character_pointer, character_length);
+            f2c_buffer_append(&context->output, "{\n");
+            f2c_buffer_append(&context->output, code.prelude.data != NULL ? code.prelude.data : "");
+            if (statement->expression->type == TYPE_CHARACTER) {
+                indent(&context->output, *depth + 1);
+                f2c_buffer_printf(&context->output, "const char *const f2c_stop_text_%zu = %s;\n",
+                                  identifier, character_pointer);
+                indent(&context->output, *depth + 1);
+                f2c_buffer_printf(&context->output,
+                                  "const size_t f2c_stop_length_%zu = (size_t)(%s);\n", identifier,
+                                  character_length);
+                indent(&context->output, *depth + 1);
+                f2c_buffer_printf(&context->output,
+                                  "fputs(\"%s \", stderr); "
+                                  "if (f2c_stop_length_%zu != 0U) "
+                                  "(void)fwrite(f2c_stop_text_%zu, 1U, f2c_stop_length_%zu, "
+                                  "stderr); "
+                                  "fputc('\\n', stderr);\n",
+                                  statement->error_stop ? "ERROR STOP" : "STOP", identifier,
+                                  identifier, identifier);
+            } else {
+                indent(&context->output, *depth + 1);
+                f2c_buffer_printf(&context->output, "const int f2c_stop_code_%zu = (int)(%s);\n",
+                                  identifier, code.code);
+            }
+            f2c_buffer_append(&context->output, code.cleanup.data != NULL ? code.cleanup.data : "");
             indent(&context->output, *depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "fputs(\"%s \", stderr); "
-                              "if (f2c_stop_length != 0U) "
-                              "(void)fwrite(f2c_stop_text, 1U, f2c_stop_length, stderr); "
-                              "fputc('\\n', stderr);\n",
-                              statement->error_stop ? "ERROR STOP" : "STOP");
-            indent(&context->output, *depth + 1);
-            f2c_buffer_append(
-                &context->output,
-                unit->kind == UNIT_PROGRAM
-                    ? (statement->error_stop ? "return EXIT_FAILURE;\n" : "return EXIT_SUCCESS;\n")
-                    : (statement->error_stop ? "exit(EXIT_FAILURE);\n" : "exit(EXIT_SUCCESS);\n"));
+            if (statement->expression->type == TYPE_CHARACTER) {
+                f2c_buffer_append(&context->output,
+                                  unit->kind == UNIT_PROGRAM
+                                      ? (statement->error_stop ? "return EXIT_FAILURE;\n"
+                                                               : "return EXIT_SUCCESS;\n")
+                                      : (statement->error_stop ? "exit(EXIT_FAILURE);\n"
+                                                               : "exit(EXIT_SUCCESS);\n"));
+            } else {
+                f2c_buffer_printf(&context->output,
+                                  unit->kind == UNIT_PROGRAM ? "return f2c_stop_code_%zu;\n"
+                                                             : "exit(f2c_stop_code_%zu);\n",
+                                  identifier);
+            }
             indent(&context->output, *depth);
             f2c_buffer_append(&context->output, "}\n");
-            free(code);
             free(character_pointer);
             free(character_length);
+            f2c_release_statement_expression(&code);
             return 1;
         }
         indent(&context->output, *depth);
-        if (supported && code != NULL)
-            f2c_buffer_printf(
-                &context->output,
-                unit->kind == UNIT_PROGRAM ? "return (int)(%s);\n" : "exit((int)(%s));\n", code);
-        else if (statement->error_stop)
+        if (statement->error_stop)
             f2c_buffer_append(&context->output, unit->kind == UNIT_PROGRAM
                                                     ? "return EXIT_FAILURE;\n"
                                                     : "exit(EXIT_FAILURE);\n");
@@ -387,7 +469,6 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             f2c_buffer_append(&context->output, unit->kind == UNIT_PROGRAM
                                                     ? "return EXIT_SUCCESS;\n"
                                                     : "exit(EXIT_SUCCESS);\n");
-        free(code);
     } else if (statement->kind == F2C_STMT_CYCLE) {
         const F2cStatement *target = statement->control_target;
         if (target == NULL) {
@@ -433,22 +514,38 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
     } else if (statement->kind == F2C_STMT_GOTO) {
         if (statement->label_count != 0U && statement->expression != NULL) {
             size_t i;
-            char *selector = f2c_emit_statement_expression(context, unit, statement->expression,
-                                                           source_line->number);
+            F2cPreparedStatementExpression selector;
+            const size_t identifier = f2c_statement_unit_index(unit, statement);
+            if (!f2c_prepare_statement_expression(context, unit, statement, statement->expression,
+                                                  "goto", source_line->number, *depth + 1,
+                                                  &selector))
+                return 0;
             indent(&context->output, *depth);
-            f2c_buffer_printf(&context->output, "switch ((int32_t)(%s)) {\n", selector);
+            f2c_buffer_append(&context->output, "{\n");
+            f2c_buffer_append(&context->output,
+                              selector.prelude.data != NULL ? selector.prelude.data : "");
+            indent(&context->output, *depth + 1);
+            f2c_buffer_printf(&context->output,
+                              "const int32_t f2c_goto_selector_%zu = (int32_t)(%s);\n", identifier,
+                              selector.code);
+            f2c_buffer_append(&context->output,
+                              selector.cleanup.data != NULL ? selector.cleanup.data : "");
+            indent(&context->output, *depth + 1);
+            f2c_buffer_printf(&context->output, "switch (f2c_goto_selector_%zu) {\n", identifier);
             for (i = 0U; i < statement->label_count; ++i) {
-                indent(&context->output, *depth + 1);
+                indent(&context->output, *depth + 2);
                 f2c_buffer_printf(&context->output, "case %zu: {\n", i + 1U);
                 f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->label_cleanups[i],
-                                            *depth + 2);
-                indent(&context->output, *depth + 2);
+                                            *depth + 3);
+                indent(&context->output, *depth + 3);
                 f2c_buffer_printf(&context->output, "goto f2c_label_%s; }\n",
                                   f2c_trim(statement->labels[i]));
             }
+            indent(&context->output, *depth + 1);
+            f2c_buffer_append(&context->output, "}\n");
             indent(&context->output, *depth);
             f2c_buffer_append(&context->output, "}\n");
-            free(selector);
+            f2c_release_statement_expression(&selector);
         } else if (statement->name != NULL && statement->name[0] != '\0') {
             f2c_emit_scope_cleanup_plan(&context->output, unit, &statement->transfer_cleanup,
                                         *depth);

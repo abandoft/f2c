@@ -52,7 +52,7 @@ static void test_complete_lowering(void) {
                     "case 1:", "the first alternate-return selector is represented explicitly");
     expect_contains(result.code, "goto f2c_label_10;",
                     "the selected alternate return branches to its canonical target label");
-    expect_contains(result.code, "return f2c_alternate_return;",
+    expect_contains(result.code, "return f2c_alternate_return_",
                     "RETURN expression evaluates to the procedure selector");
     f2c_result_free(&result);
 }
