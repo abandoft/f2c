@@ -98,6 +98,8 @@ jobs:
         run: sh test/iolength_differential.sh build/numerical/f2c
       - name: Differential-test transformational intrinsics
         run: sh test/transform_differential.sh build/numerical/f2c
+      - name: Audit nested derived transform ownership
+        run: sh test/transform_ownership.sh build/numerical/f2c
       - name: Differential-test file control I/O
         run: sh test/file_control_differential.sh build/numerical/f2c
       - name: Differential-test record I/O

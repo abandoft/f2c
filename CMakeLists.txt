@@ -715,6 +715,15 @@ if(F2C_BUILD_TESTING)
                     ${CMAKE_CURRENT_SOURCE_DIR}/test/array_section_conformance_guard.sh
                     $<TARGET_FILE:f2c>
             )
+            add_test(
+                NAME nested_transform_derived_ownership
+                COMMAND
+                    ${CMAKE_COMMAND} -E env
+                    CC=${CMAKE_C_COMPILER}
+                    ${F2C_SH_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/test/transform_ownership.sh
+                    $<TARGET_FILE:f2c>
+            )
             find_program(F2C_GFORTRAN_EXECUTABLE gfortran)
             if(F2C_GFORTRAN_EXECUTABLE)
                 add_test(
