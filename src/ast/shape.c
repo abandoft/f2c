@@ -131,6 +131,37 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
     int64_t dimension_value;
     size_t result_dimension;
     size_t source_dimension;
+    if (f2c_intrinsic_is_reduction(expression->intrinsic)) {
+        const int logical_reduction = expression->intrinsic == F2C_INTRINSIC_ALL ||
+                                      expression->intrinsic == F2C_INTRINSIC_ANY ||
+                                      expression->intrinsic == F2C_INTRINSIC_COUNT;
+        const int location = expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
+                             expression->intrinsic == F2C_INTRINSIC_MINLOC;
+        source = f2c_ast_intrinsic_argument(expression, logical_reduction ? "mask" : "array", 0U);
+        dimension = expression->intrinsic == F2C_INTRINSIC_DOT_PRODUCT
+                        ? NULL
+                        : f2c_ast_intrinsic_argument(expression, "dim", 1U);
+        f2c_ast_set_expression_shape(expression, expression->rank, F2C_SHAPE_EXPRESSION);
+        if (source == NULL || expression->intrinsic == F2C_INTRINSIC_DOT_PRODUCT)
+            return;
+        if (dimension == NULL) {
+            if (location && expression->rank == 1U) {
+                expression->shape.dimensions[0].extent_known = 1;
+                expression->shape.dimensions[0].extent = source->rank;
+            }
+            return;
+        }
+        if (!f2c_evaluate_integer_constant(parser->unit, dimension, &dimension_value) ||
+            dimension_value < 1 || (uint64_t)dimension_value > source->rank)
+            return;
+        result_dimension = 0U;
+        for (source_dimension = 0U; source_dimension < source->rank; ++source_dimension) {
+            if (source_dimension + 1U != (size_t)dimension_value)
+                expression->shape.dimensions[result_dimension++] =
+                    source->shape.dimensions[source_dimension];
+        }
+        return;
+    }
     if (strcmp(name, "shape") == 0 || strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0) {
         source = f2c_ast_intrinsic_argument(expression,
                                             strcmp(name, "shape") == 0 ? "source" : "array", 0U);

@@ -57,6 +57,15 @@ static const F2cExpr *typed_intrinsic_primary(const F2cExpr *expression,
     case F2C_INTRINSIC_MIN:
         keyword = "a1";
         break;
+    case F2C_INTRINSIC_DOT_PRODUCT:
+        keyword = "vector_a";
+        break;
+    case F2C_INTRINSIC_MAXVAL:
+    case F2C_INTRINSIC_MINVAL:
+    case F2C_INTRINSIC_PRODUCT:
+    case F2C_INTRINSIC_SUM:
+        keyword = "array";
+        break;
     case F2C_INTRINSIC_NONE:
     default:
         break;
@@ -91,6 +100,12 @@ static void resolve_intrinsic_type(F2cExpr *expression, const F2cIntrinsicSignat
                 expression->type = primary->type;
             }
         }
+    }
+    if (signature != NULL && f2c_intrinsic_is_reduction(signature->id) &&
+        signature->type_rule == F2C_INTRINSIC_TYPE_FIRST) {
+        const F2cExpr *array = typed_intrinsic_primary(expression, signature);
+        if (array != NULL)
+            expression->type = array->type;
     }
     if (signature != NULL && f2c_intrinsic_is_real_representation(signature->id)) {
         const F2cExpr *model =
@@ -180,7 +195,8 @@ static void resolve_intrinsic_shape(AstParser *parser, F2cExpr *expression) {
     if (strcmp(expression->text, "pack") == 0 || strcmp(expression->text, "unpack") == 0 ||
         strcmp(expression->text, "reshape") == 0 || strcmp(expression->text, "spread") == 0 ||
         strcmp(expression->text, "findloc") == 0 || strcmp(expression->text, "shape") == 0 ||
-        strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0)
+        strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0 ||
+        f2c_intrinsic_is_reduction(expression->intrinsic))
         f2c_ast_set_transform_intrinsic_shape(parser, expression);
 }
 

@@ -30,6 +30,11 @@
     {name, minimum, maximum, type, F2C_INTRINSIC_RANK_ELEMENTAL, id, kind}
 #define TYPED_SCALAR(name, minimum, maximum, type, id, kind)                                       \
     {name, minimum, maximum, type, F2C_INTRINSIC_RANK_SCALAR, id, kind}
+#define TYPED_REDUCTION(name, minimum, maximum, type, id, kind)                                    \
+    {name, minimum, maximum, type, F2C_INTRINSIC_RANK_REDUCTION, id, kind}
+#define TYPED_LOCATION(name, minimum, maximum, id)                                                 \
+    {name, minimum, maximum, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_RANK_LOCATION, id,          \
+     F2C_INTRINSIC_KIND_OPTIONAL}
 
 static const F2cIntrinsicSignature intrinsic_signatures[] = {
     TYPED_ELEMENTAL("abs", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE, F2C_INTRINSIC_ABS,
@@ -76,8 +81,10 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                  F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("btest", 2U, 2U, F2C_INTRINSIC_TYPE_LOGICAL, F2C_INTRINSIC_BTEST,
                     F2C_INTRINSIC_KIND_DEFAULT),
-    SCALAR("all", 1U, 2U, F2C_INTRINSIC_TYPE_LOGICAL),
-    SCALAR("any", 1U, 2U, F2C_INTRINSIC_TYPE_LOGICAL),
+    TYPED_REDUCTION("all", 1U, 2U, F2C_INTRINSIC_TYPE_LOGICAL, F2C_INTRINSIC_ALL,
+                    F2C_INTRINSIC_KIND_DEFAULT),
+    TYPED_REDUCTION("any", 1U, 2U, F2C_INTRINSIC_TYPE_LOGICAL, F2C_INTRINSIC_ANY,
+                    F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_ELEMENTAL("cabs", 1U, 1U, F2C_INTRINSIC_TYPE_REAL, F2C_INTRINSIC_ABS,
                     F2C_INTRINSIC_KIND_DEFAULT),
     ELEMENTAL("cabs1", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE),
@@ -100,7 +107,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_ELEMENTAL("csqrt", 1U, 1U, F2C_INTRINSIC_TYPE_COMPLEX, F2C_INTRINSIC_SQRT,
                     F2C_INTRINSIC_KIND_DEFAULT),
-    SCALAR("count", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER),
+    TYPED_REDUCTION("count", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_COUNT,
+                    F2C_INTRINSIC_KIND_OPTIONAL),
     FIRST_RANK("cshift", 2U, 3U, F2C_INTRINSIC_TYPE_FIRST),
     TYPED_ELEMENTAL("conjg", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_CONJG,
                     F2C_INTRINSIC_KIND_FIRST),
@@ -156,7 +164,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_ELEMENTAL("dprod", 2U, 2U, F2C_INTRINSIC_TYPE_DOUBLE, F2C_INTRINSIC_DPROD,
                     F2C_INTRINSIC_KIND_DEFAULT),
-    SCALAR("dot_product", 2U, 2U, F2C_INTRINSIC_TYPE_COMMON),
+    TYPED_SCALAR("dot_product", 2U, 2U, F2C_INTRINSIC_TYPE_COMMON,
+                 F2C_INTRINSIC_DOT_PRODUCT, F2C_INTRINSIC_KIND_COMMON),
     TYPED_ELEMENTAL("dsign", 2U, 2U, F2C_INTRINSIC_TYPE_DOUBLE, F2C_INTRINSIC_SIGN,
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("dsin", 1U, 1U, F2C_INTRINSIC_TYPE_DOUBLE, F2C_INTRINSIC_SIN,
@@ -252,8 +261,9 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_SCALAR("maxexponent", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_MAXEXPONENT,
                  F2C_INTRINSIC_KIND_DEFAULT),
-    SCALAR("maxloc", 1U, 5U, F2C_INTRINSIC_TYPE_INTEGER),
-    SCALAR("maxval", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_LOCATION("maxloc", 1U, 5U, F2C_INTRINSIC_MAXLOC),
+    TYPED_REDUCTION("maxval", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_MAXVAL,
+                    F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("merge", 3U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_MERGE,
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("min", 2U, 64U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_MIN,
@@ -264,8 +274,9 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_SCALAR("minexponent", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_MINEXPONENT,
                  F2C_INTRINSIC_KIND_DEFAULT),
-    SCALAR("minloc", 1U, 5U, F2C_INTRINSIC_TYPE_INTEGER),
-    SCALAR("minval", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_LOCATION("minloc", 1U, 5U, F2C_INTRINSIC_MINLOC),
+    TYPED_REDUCTION("minval", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_MINVAL,
+                    F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("mod", 2U, 2U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_MOD,
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("modulo", 2U, 2U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_MODULO,
@@ -282,7 +293,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
     SCALAR("present", 1U, 1U, F2C_INTRINSIC_TYPE_LOGICAL),
     TYPED_SCALAR("precision", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_PRECISION,
                  F2C_INTRINSIC_KIND_DEFAULT),
-    SCALAR("product", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_REDUCTION("product", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_PRODUCT,
+                    F2C_INTRINSIC_KIND_FIRST),
     SCALAR("pack", 2U, 3U, F2C_INTRINSIC_TYPE_FIRST),
     TYPED_SCALAR("radix", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_RADIX,
                  F2C_INTRINSIC_KIND_DEFAULT),
@@ -320,7 +332,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_FIRST),
     SCALAR("spread", 3U, 3U, F2C_INTRINSIC_TYPE_FIRST),
     SCALAR("size", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER),
-    SCALAR("sum", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_REDUCTION("sum", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_SUM,
+                    F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("tan", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_TAN,
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("tanh", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_TANH,
@@ -343,6 +356,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
 #undef SCALAR
 #undef FIRST_RANK
 #undef TYPED_ELEMENTAL
+#undef TYPED_LOCATION
+#undef TYPED_REDUCTION
 #undef TYPED_SCALAR
 
 static const F2cExpr *argument_value(const F2cExpr *argument) {
@@ -562,6 +577,25 @@ int f2c_intrinsic_is_real_representation(F2cIntrinsicId intrinsic) {
     }
 }
 
+int f2c_intrinsic_is_reduction(F2cIntrinsicId intrinsic) {
+    switch (intrinsic) {
+    case F2C_INTRINSIC_ALL:
+    case F2C_INTRINSIC_ANY:
+    case F2C_INTRINSIC_COUNT:
+    case F2C_INTRINSIC_DOT_PRODUCT:
+    case F2C_INTRINSIC_MAXLOC:
+    case F2C_INTRINSIC_MAXVAL:
+    case F2C_INTRINSIC_MINLOC:
+    case F2C_INTRINSIC_MINVAL:
+    case F2C_INTRINSIC_PRODUCT:
+    case F2C_INTRINSIC_SUM:
+        return 1;
+    case F2C_INTRINSIC_NONE:
+    default:
+        return 0;
+    }
+}
+
 static Type absolute_result(Type type) {
     if (type == TYPE_DOUBLE_COMPLEX)
         return TYPE_DOUBLE;
@@ -683,13 +717,23 @@ size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, s
                    ? (size_t)shape->shape.dimensions[0].extent
                    : 0U;
     }
-    if (strcmp(name, "findloc") == 0 || strcmp(name, "maxloc") == 0 ||
-        strcmp(name, "minloc") == 0) {
+    if (strcmp(name, "findloc") == 0) {
         const F2cExpr *array = count != 0U ? argument_value(arguments[0]) : NULL;
-        const size_t dim_position = strcmp(name, "findloc") == 0 ? 2U : 1U;
-        const int has_dimension =
-            f2c_intrinsic_argument(arguments, count, "dim", dim_position) != NULL;
+        const int has_dimension = f2c_intrinsic_argument(arguments, count, "dim", 2U) != NULL;
         return has_dimension ? (array != NULL && array->rank != 0U ? array->rank - 1U : 0U) : 1U;
+    }
+    if (signature->rank_rule == F2C_INTRINSIC_RANK_REDUCTION ||
+        signature->rank_rule == F2C_INTRINSIC_RANK_LOCATION) {
+        const char *source_name =
+            signature->id == F2C_INTRINSIC_ALL || signature->id == F2C_INTRINSIC_ANY ||
+                    signature->id == F2C_INTRINSIC_COUNT
+                ? "mask"
+                : "array";
+        const F2cExpr *array = f2c_intrinsic_argument(arguments, count, source_name, 0U);
+        const F2cExpr *dimension = f2c_intrinsic_argument(arguments, count, "dim", 1U);
+        if (signature->rank_rule == F2C_INTRINSIC_RANK_LOCATION && dimension == NULL)
+            return 1U;
+        return dimension != NULL && array != NULL && array->rank != 0U ? array->rank - 1U : 0U;
     }
     if (signature->rank_rule == F2C_INTRINSIC_RANK_SCALAR)
         return 0U;
@@ -723,6 +767,11 @@ static const char *kind_source_name(const F2cIntrinsicSignature *signature) {
         return "x";
     if (signature->id == F2C_INTRINSIC_MERGE)
         return "tsource";
+    if (signature->id == F2C_INTRINSIC_DOT_PRODUCT)
+        return "vector_a";
+    if (signature->id == F2C_INTRINSIC_MAXVAL || signature->id == F2C_INTRINSIC_MINVAL ||
+        signature->id == F2C_INTRINSIC_PRODUCT || signature->id == F2C_INTRINSIC_SUM)
+        return "array";
     if (signature->id == F2C_INTRINSIC_ADJUSTL || signature->id == F2C_INTRINSIC_ADJUSTR ||
         signature->id == F2C_INTRINSIC_REPEAT || signature->id == F2C_INTRINSIC_TRIM)
         return "string";
@@ -738,6 +787,8 @@ static const char *kind_source_name(const F2cIntrinsicSignature *signature) {
 int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size_t count) {
     const F2cIntrinsicSignature *signature = f2c_find_intrinsic(name);
     const F2cExpr *first;
+    size_t argument;
+    int kind;
     if (signature == NULL)
         return 0;
     if (signature->kind_rule == F2C_INTRINSIC_KIND_DEFAULT)
@@ -745,6 +796,15 @@ int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size
     if (signature->kind_rule == F2C_INTRINSIC_KIND_OPTIONAL)
         return f2c_default_kind(
             signature->type_rule == F2C_INTRINSIC_TYPE_CHARACTER ? TYPE_CHARACTER : TYPE_INTEGER);
+    if (signature->kind_rule == F2C_INTRINSIC_KIND_COMMON) {
+        kind = f2c_default_kind(f2c_resolve_intrinsic_type(name, NULL, 0U));
+        for (argument = 0U; argument < count; ++argument) {
+            const F2cExpr *value = argument_value(arguments[argument]);
+            if (value != NULL && f2c_type_is_numeric(value->type) && value->type_kind > kind)
+                kind = value->type_kind;
+        }
+        return kind;
+    }
     first = f2c_intrinsic_argument(arguments, count, kind_source_name(signature), 0U);
     return first != NULL
                ? (first->type_kind != 0 ? first->type_kind : f2c_default_kind(first->type))
