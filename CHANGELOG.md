@@ -1,3 +1,14 @@
+## 1.28.0
+
+- Unified array-valued expression preparation across scalar control statements, preserving typed shape, single evaluation, and ownership cleanup.
+- Supported explicit-shape, allocatable, pointer, `CHARACTER`, and nested transformational array results in block and single-line `IF`, short-circuited `ELSE IF`, and arithmetic IF selectors.
+- Reevaluated materialized `DO WHILE` conditions on every iteration while evaluating counted-DO start, limit, and step expressions exactly once before loop entry.
+- Added owned temporary lowering for array-dependent `SELECT CASE`, computed `GOTO`, alternate `RETURN`, and `STOP` selectors, releasing values before branch or termination transfer.
+- Preserved nonowning pointer result storage and cleaned owned derived or character results at their exact scalar-consumption boundary.
+- Corrected imported array-function rank and shape invariants so nested `RESHAPE` and other transformational expressions retain their typed result dimensions.
+- Split statement-expression materialization and lifetime planning into a dedicated code-generation module.
+- Added strict C17, ASan/UBSan, short-circuit, side-effect-counting, and native Fortran differential coverage for control-expression lifetimes.
+
 ## 1.27.0
 
 - Unified the descriptor ABI for explicit-shape, allocatable, and pointer array function results, preserving type, kind, rank, shape, character length, strides, and allocation provenance.
