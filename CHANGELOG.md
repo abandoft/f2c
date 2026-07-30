@@ -1,3 +1,14 @@
+## 1.26.0
+
+- Added unified typed intrinsic identities and shape dispatch for `RESHAPE`, `PACK`, `UNPACK`, `SPREAD`, `CSHIFT`, `EOSHIFT`, `FINDLOC`, `TRANSPOSE`, and `MATMUL`.
+- Supported transformational results nested in other transforms, elemental array expressions, scalar reductions, and assumed-shape procedure arguments.
+- Unified per-dimension extents, `CHARACTER` element lengths, and derived-type deep-copy ownership for dynamic array temporaries while preserving single evaluation of control expressions.
+- Completed keyword binding and type/kind/rank/shape diagnostics for nine transformational intrinsics, rejecting negative extents, invalid `DIM`, nonconformable arguments, and invalid `ORDER` before C generation.
+- Correctly handled zero-sized nested results without static division-by-zero diagnostics in generated C and corrected array declaration initializers to strict C17 form.
+- Added native Fortran differential coverage for numeric, logical, character, dynamic zero-sized, and nested reduction combinations.
+- Added ASan/UBSan ownership coverage for nested transforms of derived values with allocatable components, including deep copies, finalization, and release.
+- Split transform result allocation, element copying, shape commit, and destruction into a dedicated module to reduce core emitter complexity.
+
 ## 1.25.0
 
 - Added unified typed IR, argument association, and type/kind/rank/shape contracts for `ALL`, `ANY`, `COUNT`, `DOT_PRODUCT`, `MAXLOC`, `MAXVAL`, `MINLOC`, `MINVAL`, `PRODUCT`, and `SUM`.

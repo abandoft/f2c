@@ -1,3 +1,14 @@
+## 1.26.0
+
+- 为 `RESHAPE`、`PACK`、`UNPACK`、`SPREAD`、`CSHIFT`、`EOSHIFT`、`FINDLOC`、`TRANSPOSE` 和 `MATMUL` 建立统一的 typed intrinsic 身份与 shape 分派。
+- 支持变换结果嵌套在其他变换、elemental 数组表达式、标量归约和假定形状过程实参中。
+- 统一动态数组临时量的逐维 extent、CHARACTER 元素长度及派生类型深拷贝所有权，并保证控制表达式只求值一次。
+- 完善九类变换 intrinsic 的关键字绑定及 type/kind/rank/shape 语义诊断，在生成 C 前拒绝负 extent、非法 `DIM`、不合形实参和错误 `ORDER`。
+- 正确处理零大小嵌套结果，避免生成 C 中的静态除零诊断，并修正数组声明初始化器的严格 C17 形式。
+- 增加数值、逻辑、字符、动态零大小及嵌套归约的原生 Fortran 差分测试。
+- 增加含可分配组件派生类型的嵌套变换所有权测试，并在 ASan/UBSan 下验证深拷贝、终结和释放。
+- 按职责拆分变换结果分配、元素复制、shape 提交和销毁逻辑，降低核心 emitter 的复杂度。
+
 ## 1.25.0
 
 - 为 `ALL`、`ANY`、`COUNT`、`DOT_PRODUCT`、`MAXLOC`、`MAXVAL`、`MINLOC`、`MINVAL`、`PRODUCT` 和 `SUM` 建立统一的 typed IR、参数关联及 type/kind/rank/shape 契约。
