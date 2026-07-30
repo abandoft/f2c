@@ -61,8 +61,8 @@ char *f2c_unit_static_storage_initializer(Unit *unit, const Symbol *symbol);
 void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth);
 void f2c_emit_block_scope_begin(Buffer *output, Unit *unit, size_t line, int depth);
 void f2c_emit_block_scope_end(Buffer *output, Unit *unit, size_t line, int depth);
-void f2c_emit_scope_cleanup_plan(Buffer *output, Unit *unit, const F2cScopeCleanupPlan *plan,
-                                 int depth);
+int f2c_emit_scope_cleanup_plan(Buffer *output, Unit *unit, const F2cScopeCleanupPlan *plan,
+                                int depth);
 void f2c_emit_call(Buffer *output, Unit *unit, const char *name,
                    F2cExpr *const *argument_expressions, size_t count, int depth);
 void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
