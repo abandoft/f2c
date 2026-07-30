@@ -757,6 +757,16 @@ if(F2C_BUILD_TESTING)
                         $<TARGET_FILE:f2c>
                 )
                 add_test(
+                    NAME reduction_intrinsic_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/reduction_intrinsic_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
+                add_test(
                     NAME character_intrinsic_differential
                     COMMAND
                         ${CMAKE_COMMAND} -E env
