@@ -27,6 +27,9 @@ int f2c_transform_materialize_array(Context *context, Unit *unit, TransformArray
 void f2c_transform_emit_array_cleanup(Context *context, const TransformArray *array, int depth);
 void f2c_transform_append_array_store(Buffer *output, const Symbol *target, const char *destination,
                                       const TransformArray *source, const char *source_index);
+void f2c_transform_append_scalar_store(Buffer *output, const Symbol *target,
+                                       const char *destination, const char *source,
+                                       const char *source_length);
 void f2c_transform_emit_result_count(Context *context, size_t rank, int depth);
 void f2c_transform_emit_result_allocation(Context *context, Unit *unit, const Symbol *target,
                                           const F2cExpr *element_source, int depth);

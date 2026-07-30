@@ -163,6 +163,7 @@ set(
     src/codegen/transform/inquiry.c
     src/codegen/transform/matrix.c
     src/codegen/transform/reduction.c
+    src/codegen/transform/result.c
     src/codegen/transform/private.h
     src/codegen/transform/view.c
     src/codegen/type/derived.c
