@@ -253,6 +253,8 @@ set(
     src/semantic/character.c
     src/semantic/control_flow.c
     src/semantic/control_flow.h
+    src/semantic/control_flow/connectivity.c
+    src/semantic/control_flow/private.h
     src/semantic/constant.c
     src/semantic/constant/bit.c
     src/semantic/constant/character.c

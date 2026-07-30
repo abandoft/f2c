@@ -1,9 +1,16 @@
-#include "semantic/control_flow.h"
+#include "semantic/control_flow/private.h"
 
 #include "ir/statement.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+typedef struct F2cLoopFlow {
+    const F2cStatement *opener;
+    size_t opener_index;
+    size_t end_index;
+    size_t latch_index;
+} F2cLoopFlow;
 
 static const F2cStatement *statement_body(const F2cStatement *statement) {
     return statement != NULL && statement->kind == F2C_STMT_LABEL && statement->nested != NULL
@@ -31,7 +38,7 @@ static int append_edge(F2cControlFlowGraph *graph, size_t source, size_t target,
     size_t index;
     size_t capacity;
     if (graph == NULL || source >= graph->node_count || target >= graph->node_count)
-        return 1;
+        return 0;
     node = &graph->nodes[source];
     for (index = 0U; index < node->successor_count; ++index) {
         if (node->successors[index].target == target && node->successors[index].kind == kind)
@@ -65,7 +72,7 @@ static void remove_fallthrough_edges(F2cControlFlowGraph *graph, size_t source) 
     node->successor_count = write_index;
 }
 
-static int is_terminal_transfer(const F2cStatement *statement) {
+static int is_unconditional_terminal_transfer(const F2cStatement *statement) {
     const F2cStatement *body = statement_body(statement);
     if (body == NULL)
         return 0;
@@ -95,13 +102,17 @@ static int append_statement_label_edges(const Unit *unit, F2cControlFlowGraph *g
                                    F2C_CFG_EDGE_BRANCH))
                 return 0;
     } else if (statement->kind == F2C_STMT_GOTO || statement->kind == F2C_STMT_ARITHMETIC_IF ||
-               statement->kind == F2C_STMT_ASSIGNED_GOTO ||
-               (statement->kind == F2C_STMT_CALL && statement->label_count != 0U)) {
+               statement->kind == F2C_STMT_ASSIGNED_GOTO) {
         for (label = 0U; label < statement->label_count; ++label)
             if (!append_label_edge(unit, graph, source, statement->labels[label],
                                    F2C_CFG_EDGE_BRANCH))
                 return 0;
     }
+    if (statement->kind == F2C_STMT_CALL && statement->label_count != 0U)
+        for (label = 0U; label < statement->label_count; ++label)
+            if (!append_label_edge(unit, graph, source, statement->labels[label],
+                                   F2C_CFG_EDGE_ALTERNATE_RETURN))
+                return 0;
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
         statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
         statement->kind == F2C_STMT_BACKSPACE || statement->kind == F2C_STMT_ENDFILE ||
@@ -112,12 +123,68 @@ static int append_statement_label_edges(const Unit *unit, F2cControlFlowGraph *g
                  control->kind == F2C_IO_CONTROL_ERR) &&
                 control->value != NULL && control->value->text != NULL &&
                 !append_label_edge(unit, graph, source, control->value->text,
-                                   F2C_CFG_EDGE_IO_ERROR))
+                                   control->kind == F2C_IO_CONTROL_END   ? F2C_CFG_EDGE_IO_END
+                                   : control->kind == F2C_IO_CONTROL_EOR ? F2C_CFG_EDGE_IO_EOR
+                                                                         : F2C_CFG_EDGE_IO_ERROR))
                 return 0;
         }
     }
     return statement->nested == NULL ||
            append_statement_label_edges(unit, graph, source, statement->nested);
+}
+
+static int statement_has_control(const F2cStatement *statement, F2cIoControlKind kind) {
+    size_t index;
+    if (statement == NULL)
+        return 0;
+    for (index = 0U; index < statement->control_count; ++index)
+        if (statement->io_controls[index].kind == kind)
+            return 1;
+    return 0;
+}
+
+static int io_statement(const F2cStatement *statement) {
+    return statement != NULL &&
+           (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
+            statement->kind == F2C_STMT_PRINT || statement->kind == F2C_STMT_OPEN ||
+            statement->kind == F2C_STMT_REWIND || statement->kind == F2C_STMT_BACKSPACE ||
+            statement->kind == F2C_STMT_ENDFILE || statement->kind == F2C_STMT_INQUIRE ||
+            statement->kind == F2C_STMT_CLOSE);
+}
+
+static int append_implicit_termination_edges(F2cControlFlowGraph *graph, size_t source,
+                                             const F2cStatement *statement) {
+    const int status_handled = statement_has_control(statement, F2C_IO_CONTROL_IOSTAT);
+    if (io_statement(statement) && !status_handled) {
+        if (statement->kind == F2C_STMT_READ &&
+            !statement_has_control(statement, F2C_IO_CONTROL_END) &&
+            !append_edge(graph, source, graph->image_termination, F2C_CFG_EDGE_IO_END))
+            return 0;
+        if (statement->kind == F2C_STMT_READ &&
+            statement_has_control(statement, F2C_IO_CONTROL_ADVANCE) &&
+            !statement_has_control(statement, F2C_IO_CONTROL_EOR) &&
+            !append_edge(graph, source, graph->image_termination, F2C_CFG_EDGE_IO_EOR))
+            return 0;
+        if (!statement_has_control(statement, F2C_IO_CONTROL_ERR) &&
+            !append_edge(graph, source, graph->image_termination, F2C_CFG_EDGE_IO_ERROR))
+            return 0;
+    }
+    return statement == NULL || statement->nested == NULL ||
+           append_implicit_termination_edges(graph, source, statement->nested);
+}
+
+static int append_explicit_termination_edges(F2cControlFlowGraph *graph, size_t source,
+                                             const F2cStatement *statement) {
+    if (statement == NULL)
+        return 1;
+    if (statement->kind == F2C_STMT_RETURN &&
+        !append_edge(graph, source, graph->procedure_exit, F2C_CFG_EDGE_RETURN))
+        return 0;
+    if (statement->kind == F2C_STMT_STOP &&
+        !append_edge(graph, source, graph->image_termination, F2C_CFG_EDGE_STOP))
+        return 0;
+    return statement->nested == NULL ||
+           append_explicit_termination_edges(graph, source, statement->nested);
 }
 
 static int same_symbol(const F2cExpr *left, const F2cExpr *right) {
@@ -164,6 +231,76 @@ static size_t construct_end(const Unit *unit, const F2cStatement *opener) {
                 return index;
     }
     return SIZE_MAX;
+}
+
+static size_t node_after_statement(const F2cControlFlowGraph *graph, size_t statement_index) {
+    return statement_index + 1U < graph->statement_count ? statement_index + 1U
+                                                         : graph->procedure_exit;
+}
+
+static const F2cLoopFlow *find_loop(const F2cLoopFlow *loops, size_t loop_count,
+                                    const F2cStatement *opener) {
+    size_t index;
+    for (index = 0U; index < loop_count; ++index)
+        if (loops[index].opener == opener)
+            return &loops[index];
+    return NULL;
+}
+
+static const F2cLoopFlow *next_outer_shared_loop(const F2cLoopFlow *loops, size_t loop_count,
+                                                 const F2cLoopFlow *loop) {
+    const F2cLoopFlow *outer = NULL;
+    size_t index;
+    for (index = 0U; index < loop_count; ++index) {
+        const F2cLoopFlow *candidate = &loops[index];
+        if (candidate->end_index != loop->end_index ||
+            candidate->opener_index >= loop->opener_index)
+            continue;
+        if (outer == NULL || candidate->opener_index > outer->opener_index)
+            outer = candidate;
+    }
+    return outer;
+}
+
+static const F2cLoopFlow *innermost_ending_loop(const F2cLoopFlow *loops, size_t loop_count,
+                                                size_t end_index) {
+    const F2cLoopFlow *inner = NULL;
+    size_t index;
+    for (index = 0U; index < loop_count; ++index) {
+        const F2cLoopFlow *candidate = &loops[index];
+        if (candidate->end_index != end_index)
+            continue;
+        if (inner == NULL || candidate->opener_index > inner->opener_index)
+            inner = candidate;
+    }
+    return inner;
+}
+
+static int collect_loops(const Unit *unit, F2cLoopFlow **loops_out, size_t *loop_count_out) {
+    F2cLoopFlow *loops;
+    size_t count = 0U;
+    size_t index;
+    if (unit->statement_count > SIZE_MAX / sizeof(*loops))
+        return 0;
+    loops = unit->statement_count != 0U
+                ? (F2cLoopFlow *)calloc(unit->statement_count, sizeof(*loops))
+                : NULL;
+    if (unit->statement_count != 0U && loops == NULL)
+        return 0;
+    for (index = 0U; index < unit->statement_count; ++index) {
+        const F2cStatement *statement = statement_body(&unit->statements[index]);
+        size_t end;
+        if (statement == NULL ||
+            (statement->kind != F2C_STMT_DO && statement->kind != F2C_STMT_DO_WHILE))
+            continue;
+        end = construct_end(unit, statement);
+        if (end == SIZE_MAX)
+            continue;
+        loops[count++] = (F2cLoopFlow){statement, index, end, SIZE_MAX};
+    }
+    *loops_out = loops;
+    *loop_count_out = count;
+    return 1;
 }
 
 static int is_direct_boundary(const F2cStatement *statement, const F2cStatement *owner) {
@@ -260,27 +397,36 @@ static int build_select_edges(const Unit *unit, F2cControlFlowGraph *graph, size
     return 1;
 }
 
-static int build_loop_edges(const Unit *unit, F2cControlFlowGraph *graph, size_t opener_index,
-                            const F2cStatement *opener, size_t end) {
+static int build_loop_edges(F2cControlFlowGraph *graph, const F2cLoopFlow *loops, size_t loop_count,
+                            const F2cLoopFlow *loop) {
+    const F2cStatement *opener = loop->opener;
+    const F2cLoopFlow *outer = next_outer_shared_loop(loops, loop_count, loop);
     const int conditional = opener->kind == F2C_STMT_DO_WHILE || opener->right != NULL;
-    remove_fallthrough_edges(graph, opener_index);
-    if (opener_index + 1U <= end &&
-        !append_edge(graph, opener_index, opener_index + 1U, F2C_CFG_EDGE_BRANCH))
+    const size_t body_target = loop->opener_index + 1U < graph->statement_count
+                                   ? loop->opener_index + 1U
+                                   : loop->latch_index;
+    const size_t exit_target =
+        outer != NULL ? outer->latch_index : node_after_statement(graph, loop->end_index);
+    const F2cLoopFlow *inner = innermost_ending_loop(loops, loop_count, loop->end_index);
+    remove_fallthrough_edges(graph, loop->opener_index);
+    if (!append_edge(graph, loop->opener_index, body_target, F2C_CFG_EDGE_BRANCH))
         return 0;
-    if (conditional && end + 1U < graph->node_count &&
-        !append_edge(graph, opener_index, end + 1U, F2C_CFG_EDGE_LOOP_EXIT))
+    if (conditional && !append_edge(graph, loop->opener_index, exit_target, F2C_CFG_EDGE_LOOP_EXIT))
         return 0;
-    remove_fallthrough_edges(graph, end);
-    if (!append_edge(graph, end, opener_index, F2C_CFG_EDGE_LOOP_BACK))
+    if (!append_edge(graph, loop->latch_index, loop->opener_index, F2C_CFG_EDGE_LOOP_BACK))
         return 0;
-    if (conditional && end + 1U < graph->node_count &&
-        !append_edge(graph, end, end + 1U, F2C_CFG_EDGE_LOOP_EXIT))
+    if (conditional && !append_edge(graph, loop->latch_index, exit_target, F2C_CFG_EDGE_LOOP_EXIT))
         return 0;
-    (void)unit;
+    if (inner == loop) {
+        remove_fallthrough_edges(graph, loop->end_index);
+        if (!append_edge(graph, loop->end_index, loop->latch_index, F2C_CFG_EDGE_FALLTHROUGH))
+            return 0;
+    }
     return 1;
 }
 
-static int build_construct_edges(const Unit *unit, F2cControlFlowGraph *graph) {
+static int build_construct_edges(const Unit *unit, F2cControlFlowGraph *graph,
+                                 const F2cLoopFlow *loops, size_t loop_count) {
     size_t index;
     for (index = 0U; index < unit->statement_count; ++index) {
         const F2cStatement *opener = statement_body(&unit->statements[index]);
@@ -300,37 +446,58 @@ static int build_construct_edges(const Unit *unit, F2cControlFlowGraph *graph) {
         } else if (opener->kind == F2C_STMT_SELECT_CASE || opener->kind == F2C_STMT_SELECT_TYPE) {
             if (!build_select_edges(unit, graph, index, opener, end))
                 return 0;
-        } else if (!build_loop_edges(unit, graph, index, opener, end)) {
-            return 0;
+        } else {
+            const F2cLoopFlow *loop = find_loop(loops, loop_count, opener);
+            if (loop != NULL && !build_loop_edges(graph, loops, loop_count, loop))
+                return 0;
         }
     }
     return 1;
 }
 
-static int build_control_transfer_edges(const Unit *unit, F2cControlFlowGraph *graph) {
-    size_t index;
-    for (index = 0U; index < unit->statement_count; ++index) {
-        const F2cStatement *statement = statement_body(&unit->statements[index]);
-        size_t end;
-        if (statement == NULL ||
-            (statement->kind != F2C_STMT_CYCLE && statement->kind != F2C_STMT_EXIT) ||
-            statement->control_target == NULL)
-            continue;
-        end = construct_end(unit, statement->control_target);
-        remove_fallthrough_edges(graph, index);
-        if (statement->kind == F2C_STMT_CYCLE) {
-            if (end != SIZE_MAX && !append_edge(graph, index, end, F2C_CFG_EDGE_LOOP_BACK))
+static int build_control_transfer_action(F2cControlFlowGraph *graph, const F2cLoopFlow *loops,
+                                         size_t loop_count, size_t source,
+                                         const F2cStatement *statement, int conditional) {
+    const F2cLoopFlow *loop;
+    if (statement == NULL)
+        return 1;
+    if ((statement->kind == F2C_STMT_CYCLE || statement->kind == F2C_STMT_EXIT) &&
+        statement->control_target != NULL) {
+        loop = find_loop(loops, loop_count, statement->control_target);
+        if (loop != NULL) {
+            const F2cLoopFlow *outer = next_outer_shared_loop(loops, loop_count, loop);
+            if (!conditional)
+                remove_fallthrough_edges(graph, source);
+            if (!append_edge(graph, source,
+                             statement->kind == F2C_STMT_CYCLE ? loop->latch_index
+                             : outer != NULL ? outer->latch_index
+                                             : node_after_statement(graph, loop->end_index),
+                             statement->kind == F2C_STMT_CYCLE ? F2C_CFG_EDGE_LOOP_BACK
+                                                               : F2C_CFG_EDGE_LOOP_EXIT))
                 return 0;
-        } else if (end != SIZE_MAX && end + 1U < graph->node_count &&
-                   !append_edge(graph, index, end + 1U, F2C_CFG_EDGE_LOOP_EXIT)) {
-            return 0;
         }
     }
+    if (statement->nested != NULL)
+        return build_control_transfer_action(
+            graph, loops, loop_count, source, statement->nested,
+            conditional || ((statement->kind == F2C_STMT_IF || statement->kind == F2C_STMT_WHERE) &&
+                            !statement->block));
+    return 1;
+}
+
+static int build_control_transfer_edges(const Unit *unit, F2cControlFlowGraph *graph,
+                                        const F2cLoopFlow *loops, size_t loop_count) {
+    size_t index;
+    for (index = 0U; index < unit->statement_count; ++index)
+        if (!build_control_transfer_action(graph, loops, loop_count, index,
+                                           &unit->statements[index], 0))
+            return 0;
     return 1;
 }
 
 static int mark_reachable(F2cControlFlowGraph *graph) {
     size_t *worklist;
+    size_t entry;
     size_t head = 0U;
     size_t tail = 0U;
     if (graph == NULL || graph->node_count == 0U)
@@ -338,8 +505,9 @@ static int mark_reachable(F2cControlFlowGraph *graph) {
     worklist = (size_t *)malloc(graph->node_count * sizeof(*worklist));
     if (worklist == NULL)
         return 0;
-    graph->nodes[0].reachable = 1;
-    worklist[tail++] = 0U;
+    entry = graph->statement_count != 0U ? 0U : graph->procedure_exit;
+    graph->nodes[entry].reachable = 1;
+    worklist[tail++] = entry;
     while (head < tail) {
         const size_t node_index = worklist[head++];
         const F2cControlFlowNode *node = &graph->nodes[node_index];
@@ -357,35 +525,70 @@ static int mark_reachable(F2cControlFlowGraph *graph) {
 }
 
 int f2c_control_flow_build(Context *context, const Unit *unit, F2cControlFlowGraph *graph) {
+    F2cLoopFlow *loops = NULL;
+    size_t loop_count = 0U;
+    size_t total_nodes;
     size_t index;
     if (graph == NULL)
         return 0;
     memset(graph, 0, sizeof(*graph));
-    if (unit == NULL || unit->statement_count == 0U)
+    if (unit == NULL)
         return 1;
-    if (unit->statement_count > SIZE_MAX / sizeof(*graph->nodes))
+    if (!collect_loops(unit, &loops, &loop_count))
         goto failure;
-    graph->nodes = (F2cControlFlowNode *)calloc(unit->statement_count, sizeof(*graph->nodes));
+    if (unit->statement_count > SIZE_MAX - 2U || loop_count > SIZE_MAX - unit->statement_count - 2U)
+        goto failure;
+    total_nodes = unit->statement_count + 2U + loop_count;
+    if (total_nodes > SIZE_MAX / sizeof(*graph->nodes))
+        goto failure;
+    graph->nodes = (F2cControlFlowNode *)calloc(total_nodes, sizeof(*graph->nodes));
     if (graph->nodes == NULL)
         goto failure;
-    graph->node_count = unit->statement_count;
-    for (index = 0U; index + 1U < graph->node_count; ++index) {
-        if (!is_terminal_transfer(&unit->statements[index]) &&
-            !append_edge(graph, index, index + 1U, F2C_CFG_EDGE_FALLTHROUGH))
+    graph->node_count = total_nodes;
+    graph->statement_count = unit->statement_count;
+    graph->procedure_exit = unit->statement_count;
+    graph->image_termination = unit->statement_count + 1U;
+    for (index = 0U; index < graph->statement_count; ++index) {
+        graph->nodes[index].kind = F2C_CFG_NODE_STATEMENT;
+        graph->nodes[index].statement_index = index;
+        graph->nodes[index].block_index = SIZE_MAX;
+    }
+    graph->nodes[graph->procedure_exit].kind = F2C_CFG_NODE_PROCEDURE_EXIT;
+    graph->nodes[graph->procedure_exit].statement_index = SIZE_MAX;
+    graph->nodes[graph->procedure_exit].block_index = SIZE_MAX;
+    graph->nodes[graph->image_termination].kind = F2C_CFG_NODE_IMAGE_TERMINATION;
+    graph->nodes[graph->image_termination].statement_index = SIZE_MAX;
+    graph->nodes[graph->image_termination].block_index = SIZE_MAX;
+    for (index = 0U; index < loop_count; ++index) {
+        loops[index].latch_index = unit->statement_count + 2U + index;
+        graph->nodes[loops[index].latch_index].kind = F2C_CFG_NODE_LOOP_LATCH;
+        graph->nodes[loops[index].latch_index].statement_index = loops[index].opener_index;
+        graph->nodes[loops[index].latch_index].block_index = SIZE_MAX;
+    }
+    for (index = 0U; index < graph->statement_count; ++index) {
+        if (!is_unconditional_terminal_transfer(&unit->statements[index]) &&
+            !append_edge(graph, index, node_after_statement(graph, index),
+                         index + 1U < graph->statement_count ? F2C_CFG_EDGE_FALLTHROUGH
+                                                             : F2C_CFG_EDGE_PROCEDURE_EXIT))
             goto failure;
     }
-    for (index = 0U; index < graph->node_count; ++index) {
+    for (index = 0U; index < graph->statement_count; ++index) {
         if (!append_statement_label_edges(unit, graph, index, &unit->statements[index]) ||
-            !append_bare_assigned_edges(unit, graph, index, &unit->statements[index]))
+            !append_bare_assigned_edges(unit, graph, index, &unit->statements[index]) ||
+            !append_explicit_termination_edges(graph, index, &unit->statements[index]) ||
+            !append_implicit_termination_edges(graph, index, &unit->statements[index]))
             goto failure;
     }
-    if (!build_construct_edges(unit, graph) || !build_control_transfer_edges(unit, graph))
+    if (!build_construct_edges(unit, graph, loops, loop_count) ||
+        !build_control_transfer_edges(unit, graph, loops, loop_count))
         goto failure;
-    if (!mark_reachable(graph))
+    if (!mark_reachable(graph) || !f2c_control_flow_finalize(context, unit, graph))
         goto failure;
+    free(loops);
     return 1;
 
 failure:
+    free(loops);
     f2c_control_flow_free(graph);
     if (context != NULL)
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &unit->header_span, 1,
@@ -397,8 +600,15 @@ void f2c_control_flow_free(F2cControlFlowGraph *graph) {
     size_t index;
     if (graph == NULL)
         return;
-    for (index = 0U; index < graph->node_count; ++index)
+    for (index = 0U; index < graph->node_count; ++index) {
         free(graph->nodes[index].successors);
+        free(graph->nodes[index].predecessors);
+    }
+    for (index = 0U; index < graph->block_count; ++index) {
+        free(graph->blocks[index].successors);
+        free(graph->blocks[index].predecessors);
+    }
+    free(graph->blocks);
     free(graph->nodes);
     memset(graph, 0, sizeof(*graph));
 }
