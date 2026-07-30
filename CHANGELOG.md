@@ -1,3 +1,14 @@
+## 1.27.0
+
+- Unified the descriptor ABI for explicit-shape, allocatable, and pointer array function results, preserving type, kind, rank, shape, character length, strides, and allocation provenance.
+- Supported array function results in array assignments, nested elemental and reduction expressions, ordinary function arguments, and direct `CALL` arguments while preserving single evaluation.
+- Added safe value materialization for noncontiguous and negative-stride pointer function results without releasing nonowning target storage.
+- Completed ownership handling for `CHARACTER` and derived array results with allocatable components, including deep copies, old-target destruction, finalization, and temporary release.
+- Completed direct ownership transfer for allocatable array function results with correct reallocation lower bounds, descriptor validation, and overflow guards.
+- Expanded explicit-interface compatibility checks to validate function result type, kind, shape, character length, and `ALLOCATABLE` or `POINTER` contracts.
+- Corrected module array declaration initializers to emit strict C17 brace initialization.
+- Added independent semantic, strict C17, sanitizer, and native Fortran differential validation for array function results.
+
 ## 1.26.0
 
 - Added unified typed intrinsic identities and shape dispatch for `RESHAPE`, `PACK`, `UNPACK`, `SPREAD`, `CSHIFT`, `EOSHIFT`, `FINDLOC`, `TRANSPOSE`, and `MATMUL`.
