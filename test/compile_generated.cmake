@@ -75,6 +75,7 @@ foreach(
        reduction_intrinsics
        transform_intrinsics
        transform_character_derived
+       nested_transform_intrinsics
        derived_namelist
        dynamic_derived_namelist
        namelist_auto_allocate
