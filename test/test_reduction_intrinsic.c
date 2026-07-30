@@ -164,6 +164,9 @@ static void test_mixed_and_complex_lowering(void) {
                strstr(result.code, "sizeof(*(l1))") != NULL &&
                strstr(result.code, "sizeof(*(l8))") != NULL,
            "mixed numeric and non-default logical vectors retain their element representations");
+    expect(result.code != NULL && strstr(result.code, "(f2c_complex_float)0") == NULL &&
+               strstr(result.code, "(f2c_complex_double)0") == NULL,
+           "complex reduction failure paths use portable structure values");
     f2c_result_free(&result);
 }
 
@@ -225,6 +228,29 @@ static void test_array_result_lowering(void) {
     f2c_result_free(&result);
 }
 
+static void test_portable_complex_storage(void) {
+    static const char source[] =
+        "subroutine portable_complex(values, result)\n"
+        "  implicit none\n"
+        "  complex, intent(in) :: values(2, 2)\n"
+        "  complex, intent(out) :: result(2)\n"
+        "  result = sum(values, dim=1)\n"
+        "  if (dot_product(values(:, 1), values(:, 2)) == (0.0, 0.0)) then\n"
+        "    result = [(1.0, 2.0), (3.0, 4.0)]\n"
+        "  end if\n"
+        "end subroutine portable_complex\n";
+    F2cOptions options = {"portable_complex.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "complex constructors and dimensional reductions produce C17");
+    expect(result.code != NULL && strstr(result.code, "(f2c_complex_float)(") == NULL &&
+               strstr(result.code, "(f2c_complex_double)(") == NULL,
+           "complex values are never emitted through nonstandard structure casts");
+    expect(result.code != NULL && strstr(result.code, "f2c_make_c(0.0f, 0.0f)") != NULL,
+           "complex conformance failures use a type-correct zero value");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_argument_contracts();
     test_dot_product_contracts();
@@ -232,5 +258,6 @@ int main(void) {
     test_mixed_and_complex_lowering();
     test_mask_back_and_kind_lowering();
     test_array_result_lowering();
+    test_portable_complex_storage();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
