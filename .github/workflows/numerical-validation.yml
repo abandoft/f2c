@@ -48,6 +48,8 @@ jobs:
         run: sh test/named_construct_differential.sh build/numerical/f2c
       - name: Differential-test legacy labeled control flow
         run: sh test/legacy_control_differential.sh build/numerical/f2c
+      - name: Differential-test assigned-label control flow and formats
+        run: sh test/assigned_label_differential.sh build/numerical/f2c
       - name: Differential-test alternate-return control flow
         run: sh test/alternate_return_differential.sh build/numerical/f2c
       - name: Differential-test pointer association
