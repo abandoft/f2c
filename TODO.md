@@ -122,9 +122,11 @@
   右值会在 shape 检查前物化且只求值一次，循环 ordinal 使用 `size_t` 并以 `int64_t` 参与有符号
   下标运算；副作用计数已有原生 gfortran 差分。CHARACTER 数组表达式和派生类型仿射数组段现可按
   元素长度或深拷贝所有权快照；返回派生类型的用户 ELEMENTAL 函数结果会在快照后销毁逐元素返回
-  临时值。不同数值 kind 的通用隐式提升、除 `TRANSPOSE` 外的嵌套
-  transformational 结果、带 `DIM/MASK` 的归约和其他非 designator 派生类型数组表达式仍需纳入
-  统一临时量引擎。
+  临时值。数值、LOGICAL 和 COMPLEX 的数组值归约现会携带动态逐维 extent 物化为只求值一次的
+  C17 临时值，可嵌套在 elemental 表达式或另一个归约中，并覆盖动态 `DIM`、标量/数组 `MASK`、
+  `BACK/KIND`、反向段、零 extent 和 rank-2/rank-3 结果。不同数值 kind 的通用隐式提升、除
+  `TRANSPOSE` 和上述归约外的其他嵌套 transformational 结果，以及非 designator 派生类型数组
+  表达式仍需纳入统一临时量引擎。
 - [ ] 将参数、kind、字符长度、数组边界和初始化中的规格表达式全部纳入溢出安全的常量求值器，
   补齐标准允许的 inquiry/specification intrinsic。`SIZE/SHAPE/LBOUND/UBOUND` 现已建立 typed
   rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级。数值模型 inquiry
@@ -365,6 +367,12 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   目标 kind 给出可表示的速率和回绕上限，显式同名 `EXTERNAL` 仍可覆盖内建过程。生成端仅使用
   C17/POSIX 或平台 libc 时间接口，并已通过 AppleClang/GCC 严格编译、ASan/UBSan 和原生 Fortran
   属性差分。
+  `ALL/ANY/COUNT/DOT_PRODUCT/MAXLOC/MAXVAL/MINLOC/MINVAL/PRODUCT/SUM` 已拥有独立 typed ID、
+  参数关联、type/kind/rank/shape 规则和语义验证；`DOT_PRODUCT` 覆盖混合数值 kind、COMPLEX
+  左实参共轭和不同 LOGICAL kind。其余归约覆盖标量或数组 `MASK`、动态或常量 `DIM`、
+  `BACK/KIND`、可分配结果、任意已支持 rank、非连续/反向段、零大小维度和标准空集单位元；
+  数组结果可嵌套在 elemental 表达式及另一归约中。严格 C17、生成端 ASan/UBSan 和原生 gfortran
+  逐结果差分已进入默认 CTest。
   显式 `EXTERNAL` 的同名过程优先于内建函数。其他 F90 intrinsic 尚未全部完成，因此本项保持未关闭。
 - [ ] 让 `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/TRANSPOSE/MATMUL` 等支持任意合法数组
   表达式、所有已支持 kind/rank、零大小数组和非默认下界，而不是只接受具名整数组。上述 intrinsic
