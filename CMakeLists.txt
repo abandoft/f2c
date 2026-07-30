@@ -287,6 +287,7 @@ set(
     src/semantic/validation/intrinsic/model.c
     src/semantic/validation/intrinsic/numeric.c
     src/semantic/validation/intrinsic/random.c
+    src/semantic/validation/intrinsic/reduction.c
     src/semantic/validation/intrinsic/representation.c
     src/semantic/validation/intrinsic/time.c
     src/semantic/validation/lifetime.c
@@ -560,6 +561,10 @@ if(F2C_BUILD_TESTING)
         NAME mathematical_conversion_intrinsic_semantics
         COMMAND f2c_mathematical_conversion_intrinsic_tests
     )
+
+    add_executable(f2c_reduction_intrinsic_tests test/test_reduction_intrinsic.c)
+    f2c_configure_test_target(f2c_reduction_intrinsic_tests)
+    add_test(NAME reduction_intrinsic_semantics COMMAND f2c_reduction_intrinsic_tests)
 
     add_executable(f2c_random_intrinsic_tests test/test_random_intrinsic.c)
     f2c_configure_test_target(f2c_random_intrinsic_tests)
