@@ -5,6 +5,6 @@
 #define F2C_VERSION_MAJOR 1
 #define F2C_VERSION_MINOR 27
 #define F2C_VERSION_PATCH 0
-#define F2C_VERSION_STRING "1.27.0"
+#define F2C_VERSION_STRING "1.28.0"
 
 #endif
