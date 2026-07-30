@@ -80,6 +80,9 @@ typedef struct F2cIoItem {
 typedef struct F2cScopeCleanupPlan {
     Symbol **symbols;
     size_t symbol_count;
+    size_t source_node;
+    size_t target_node;
+    int control_flow_analyzed;
 } F2cScopeCleanupPlan;
 
 typedef struct F2cResolvedBranch {
