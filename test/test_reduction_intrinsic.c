@@ -89,13 +89,16 @@ static void test_dot_product_contracts(void) {
 
 static void test_typed_scalar_lowering(void) {
     static const char source[] =
-        "subroutine reduction_valid(integers, reals, logicals, left, right, outputs)\n"
+        "subroutine reduction_valid(integers, reals, logicals, left, right, outputs, dot_kind)\n"
         "  implicit none\n"
         "  integer, intent(in) :: integers(4)\n"
         "  real, intent(in) :: reals(4)\n"
         "  logical, intent(in) :: logicals(4)\n"
         "  real, intent(in) :: left(4), right(4)\n"
         "  real, intent(out) :: outputs(6)\n"
+        "  integer, intent(out) :: dot_kind\n"
+        "  integer(kind=8) :: wide_integers(4)\n"
+        "  dot_kind = kind(dot_product(wide_integers, reals))\n"
         "  outputs(1) = sum(integers)\n"
         "  outputs(2) = product(array=reals)\n"
         "  outputs(3) = maxval(reals)\n"
@@ -122,6 +125,8 @@ static void test_typed_scalar_lowering(void) {
                strstr(result.code, "F2C_MAXIMUM_LOCATION(") != NULL &&
                strstr(result.code, "F2C_MINIMUM_LOCATION(") != NULL,
            "dot and location reductions lower from their typed intrinsic IDs");
+    expect(result.code != NULL && strstr(result.code, "(*dot_kind) = INT32_C(4)") != NULL,
+           "DOT_PRODUCT derives result kind from the dominant non-integer category");
     f2c_result_free(&result);
 }
 

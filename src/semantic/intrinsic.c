@@ -784,11 +784,38 @@ static const char *kind_source_name(const F2cIntrinsicSignature *signature) {
     return "i";
 }
 
+static int common_intrinsic_kind(const char *name, F2cExpr *const *arguments, size_t count) {
+    Type argument_types[2] = {TYPE_UNKNOWN, TYPE_UNKNOWN};
+    Type result_type;
+    const size_t considered = count < 2U ? count : 2U;
+    size_t argument;
+    int kind;
+    for (argument = 0U; argument < considered; ++argument) {
+        const F2cExpr *value = argument_value(arguments[argument]);
+        argument_types[argument] = value != NULL ? value->type : TYPE_UNKNOWN;
+    }
+    result_type = f2c_resolve_intrinsic_type(name, argument_types, considered);
+    kind = f2c_default_kind(result_type);
+    for (argument = 0U; argument < considered; ++argument) {
+        const F2cExpr *value = argument_value(arguments[argument]);
+        const int contributes =
+            value != NULL &&
+            ((result_type == TYPE_INTEGER && value->type == TYPE_INTEGER) ||
+             (result_type == TYPE_LOGICAL && value->type == TYPE_LOGICAL) ||
+             ((result_type == TYPE_REAL || result_type == TYPE_DOUBLE) &&
+              (value->type == TYPE_REAL || value->type == TYPE_DOUBLE)) ||
+             ((result_type == TYPE_COMPLEX || result_type == TYPE_DOUBLE_COMPLEX) &&
+              (value->type == TYPE_REAL || value->type == TYPE_DOUBLE ||
+               value->type == TYPE_COMPLEX || value->type == TYPE_DOUBLE_COMPLEX)));
+        if (contributes && value->type_kind > kind)
+            kind = value->type_kind;
+    }
+    return kind;
+}
+
 int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size_t count) {
     const F2cIntrinsicSignature *signature = f2c_find_intrinsic(name);
     const F2cExpr *first;
-    size_t argument;
-    int kind;
     if (signature == NULL)
         return 0;
     if (signature->kind_rule == F2C_INTRINSIC_KIND_DEFAULT)
@@ -796,15 +823,8 @@ int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size
     if (signature->kind_rule == F2C_INTRINSIC_KIND_OPTIONAL)
         return f2c_default_kind(
             signature->type_rule == F2C_INTRINSIC_TYPE_CHARACTER ? TYPE_CHARACTER : TYPE_INTEGER);
-    if (signature->kind_rule == F2C_INTRINSIC_KIND_COMMON) {
-        kind = f2c_default_kind(f2c_resolve_intrinsic_type(name, NULL, 0U));
-        for (argument = 0U; argument < count; ++argument) {
-            const F2cExpr *value = argument_value(arguments[argument]);
-            if (value != NULL && f2c_type_is_numeric(value->type) && value->type_kind > kind)
-                kind = value->type_kind;
-        }
-        return kind;
-    }
+    if (signature->kind_rule == F2C_INTRINSIC_KIND_COMMON)
+        return common_intrinsic_kind(name, arguments, count);
     first = f2c_intrinsic_argument(arguments, count, kind_source_name(signature), 0U);
     return first != NULL
                ? (first->type_kind != 0 ? first->type_kind : f2c_default_kind(first->type))
