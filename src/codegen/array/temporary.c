@@ -87,41 +87,62 @@ static int flat_array_constructor(const F2cExpr *expression) {
     return 1;
 }
 
-static int array_reduction_call(const F2cExpr *expression) {
+static int array_transform_call(const F2cExpr *expression) {
     return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->rank != 0U &&
-           f2c_intrinsic_is_reduction(expression->intrinsic) &&
-           expression->intrinsic != F2C_INTRINSIC_DOT_PRODUCT;
+           f2c_intrinsic_is_transformational(expression->intrinsic);
 }
 
-static int contains_array_reduction(const F2cExpr *expression) {
+static int contains_array_transform(const F2cExpr *expression) {
     size_t child;
-    if (array_reduction_call(expression))
+    if (array_transform_call(expression))
         return 1;
     if (expression == NULL)
         return 0;
     for (child = 0U; child < expression->child_count; ++child)
-        if (contains_array_reduction(expression->children[child]))
+        if (contains_array_transform(expression->children[child]))
             return 1;
     return 0;
 }
 
-static int materialize_reduction(Context *context, Unit *unit, F2cExpr *expression,
+static void append_transform_cleanup(Buffer *cleanup, const F2cExpr *expression, int depth) {
+    size_t dimension;
+    f2c_array_indent(cleanup, depth);
+    if (expression->type == TYPE_DERIVED && expression->derived_type != NULL) {
+        f2c_buffer_printf(cleanup,
+                          "f2c_destroy_array_%s(%s, f2c_inquiry_size(%zuU, "
+                          "(const size_t[]){",
+                          expression->derived_type->c_name, expression->lowered_c,
+                          expression->rank);
+        for (dimension = 0U; dimension < expression->rank; ++dimension)
+            f2c_buffer_printf(cleanup, "%s(size_t)%s_extent_%zu", dimension == 0U ? "" : ", ",
+                              expression->lowered_c, dimension + 1U);
+        f2c_buffer_printf(cleanup, "}), %zuU);\n", expression->rank);
+        f2c_array_indent(cleanup, depth);
+    }
+    f2c_buffer_printf(cleanup, "free(%s);\n", expression->lowered_c);
+}
+
+static int materialize_transform(Context *context, Unit *unit, F2cExpr *expression,
                                  size_t identifier, const char *role, size_t *temporary,
                                  Buffer *prelude, Buffer *cleanup, int depth) {
     const size_t output_start = prelude->length;
     const size_t current = (*temporary)++;
+    const size_t previous_errors = context->result.error_count;
     Buffer saved_output = {0};
     Buffer name = {0};
+    F2cExpr left = {0};
     Symbol target;
     size_t dimension;
     int output_state;
     int emitted;
-    if (!array_reduction_call(expression) || expression->lowered_c != NULL)
+    if (!array_transform_call(expression) || expression->lowered_c != NULL)
         return 1;
-    if (!f2c_type_is_numeric(expression->type) && expression->type != TYPE_LOGICAL)
+    if (expression->type == TYPE_UNKNOWN ||
+        (expression->type == TYPE_DERIVED &&
+         (expression->derived_type == NULL || expression->derived_type->c_name == NULL)))
         return 0;
     memset(&target, 0, sizeof(target));
-    f2c_buffer_printf(&name, "f2c_array_%s_reduction_%zu_%zu", role, identifier, current);
+    f2c_buffer_printf(&name, "f2c_array_%s_transform_%zu_%zu", role, identifier, current);
     if (name.data == NULL)
         return 0;
     target.c_name = name.data;
@@ -129,7 +150,15 @@ static int materialize_reduction(Context *context, Unit *unit, F2cExpr *expressi
     target.kind = expression->type_kind;
     target.rank = expression->rank;
     target.allocatable = 1;
+    target.deferred_character = expression->type == TYPE_CHARACTER;
     target.derived_type = expression->derived_type;
+    target.c_type = expression->type == TYPE_DERIVED ? expression->derived_type->c_name : NULL;
+    left.kind = F2C_EXPR_NAME;
+    left.type = expression->type;
+    left.type_kind = expression->type_kind;
+    left.rank = expression->rank;
+    left.symbol = &target;
+    left.derived_type = expression->derived_type;
     output_state = begin_temporary_output(context, prelude, &saved_output);
     if (output_state == 0) {
         free(name.data);
@@ -137,13 +166,17 @@ static int materialize_reduction(Context *context, Unit *unit, F2cExpr *expressi
     }
     f2c_array_indent(&context->output, depth);
     f2c_buffer_printf(&context->output, "%s *%s = NULL;\n", f2c_symbol_c_type(&target), name.data);
+    if (target.deferred_character) {
+        f2c_array_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output, "size_t f2c_char_len_%s = 0U;\n", name.data);
+    }
     for (dimension = 0U; dimension < target.rank; ++dimension) {
         f2c_array_indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "int32_t %s_lower_%zu = 1, %s_extent_%zu = 0;\n",
                           name.data, dimension + 1U, name.data, dimension + 1U);
     }
-    emitted = f2c_transform_emit_reduction(context, unit, &target, expression, identifier, depth);
-    if (!emitted) {
+    emitted = f2c_emit_transform_assignment(context, unit, &left, expression, identifier, depth);
+    if (!emitted || context->result.error_count != previous_errors) {
         rollback_temporary_output(context, output_start);
         end_temporary_output(context, prelude, &saved_output, output_state);
         free(name.data);
@@ -157,8 +190,14 @@ static int materialize_reduction(Context *context, Unit *unit, F2cExpr *expressi
     end_temporary_output(context, prelude, &saved_output, output_state);
     expression->lowered_c = f2c_buffer_take(&name);
     expression->lowered_array_temporary = 1;
-    f2c_array_indent(cleanup, depth);
-    f2c_buffer_printf(cleanup, "free(%s);\n", expression->lowered_c);
+    if (expression->type == TYPE_CHARACTER) {
+        Buffer length = {0};
+        f2c_buffer_printf(&length, "f2c_char_len_%s", expression->lowered_c);
+        expression->lowered_character_length_c = f2c_buffer_take(&length);
+        if (expression->lowered_character_length_c == NULL)
+            return 0;
+    }
+    append_transform_cleanup(cleanup, expression, depth);
     return 1;
 }
 
@@ -180,7 +219,7 @@ int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *ex
                                                     depth))
                 return 0;
     }
-    if (!materialize_reduction(context, unit, expression, identifier, role, temporary, prelude,
+    if (!materialize_transform(context, unit, expression, identifier, role, temporary, prelude,
                                cleanup, depth))
         return 0;
     if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && expression->lowered_c == NULL) {
@@ -285,7 +324,7 @@ int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, c
         right->kind != F2C_EXPR_CALL || right->rank == 0U)
         return 0;
     for (child = 0U; child < right->child_count; ++child)
-        if (contains_array_reduction(right->children[child]))
+        if (contains_array_transform(right->children[child]))
             break;
     if (child == right->child_count)
         return 0;
