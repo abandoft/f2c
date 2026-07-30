@@ -18,6 +18,7 @@ contains
   subroutine finalize_array(objects)
     type(tracked), intent(inout) :: objects(:)
     array_finalized = array_finalized + 10
+    if (size(objects) > 0) objects(1)%value = 0
   end subroutine finalize_array
 
   subroutine normal_blocks()
