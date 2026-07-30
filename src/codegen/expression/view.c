@@ -125,6 +125,18 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
     size_t dimension;
     if (array == NULL || array->rank == 0U)
         return 0;
+    if (array->lowered_array_temporary && array->lowered_c != NULL) {
+        Buffer count_code = {0};
+        *pointer = f2c_strdup(array->lowered_c);
+        f2c_buffer_printf(&count_code, "f2c_inquiry_size(%zuU, (const size_t[]){", array->rank);
+        for (dimension = 0U; dimension < array->rank; ++dimension)
+            f2c_buffer_printf(&count_code, "%s(size_t)%s_extent_%zu", dimension == 0U ? "" : ", ",
+                              array->lowered_c, dimension + 1U);
+        f2c_buffer_append(&count_code, "})");
+        *count = f2c_buffer_take(&count_code);
+        *stride = f2c_strdup("1");
+        return *pointer != NULL && *count != NULL && *stride != NULL;
+    }
     if (array->kind == F2C_EXPR_NAME && array->symbol != NULL) {
         Buffer dynamic_stride = {0};
         *pointer = f2c_strdup(f2c_symbol_c_name(unit, array->symbol));

@@ -40,9 +40,9 @@ int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_
         Buffer name = {0};
         char *code;
         int supported = 0;
-        if (expression->type == TYPE_DERIVED)
+        if (expression->type == TYPE_DERIVED || expression->type == TYPE_CHARACTER)
             return 1;
-        if (expression->type == TYPE_CHARACTER || expression->type == TYPE_UNKNOWN)
+        if (expression->type == TYPE_UNKNOWN)
             return 0;
         code = f2c_emit_expression_ast(unit, expression, &supported);
         if (!supported || code == NULL) {
@@ -89,17 +89,18 @@ static int flat_array_constructor(const F2cExpr *expression) {
 
 static int array_transform_call(const F2cExpr *expression) {
     return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->rank != 0U &&
+           expression->lowered_c == NULL &&
            f2c_intrinsic_is_transformational(expression->intrinsic);
 }
 
-static int contains_array_transform(const F2cExpr *expression) {
+int f2c_array_contains_unmaterialized_transform(const F2cExpr *expression) {
     size_t child;
     if (array_transform_call(expression))
         return 1;
     if (expression == NULL)
         return 0;
     for (child = 0U; child < expression->child_count; ++child)
-        if (contains_array_transform(expression->children[child]))
+        if (f2c_array_contains_unmaterialized_transform(expression->children[child]))
             return 1;
     return 0;
 }
@@ -140,6 +141,9 @@ static int materialize_transform(Context *context, Unit *unit, F2cExpr *expressi
     if (expression->type == TYPE_UNKNOWN ||
         (expression->type == TYPE_DERIVED &&
          (expression->derived_type == NULL || expression->derived_type->c_name == NULL)))
+        return 0;
+    if (!f2c_array_hoist_scalar_subexpressions(unit, expression, identifier, role, temporary,
+                                               prelude, depth, 1))
         return 0;
     memset(&target, 0, sizeof(target));
     f2c_buffer_printf(&name, "f2c_array_%s_transform_%zu_%zu", role, identifier, current);
@@ -324,7 +328,7 @@ int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, c
         right->kind != F2C_EXPR_CALL || right->rank == 0U)
         return 0;
     for (child = 0U; child < right->child_count; ++child)
-        if (contains_array_transform(right->children[child]))
+        if (f2c_array_contains_unmaterialized_transform(right->children[child]))
             break;
     if (child == right->child_count)
         return 0;

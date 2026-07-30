@@ -142,6 +142,55 @@ failed:
     return 0;
 }
 
+static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
+                                           const F2cStatement *statement, size_t line, int depth) {
+    const size_t output_start = context != NULL ? context->output.length : 0U;
+    const size_t previous_errors = context != NULL ? context->result.error_count : 0U;
+    F2cStatement prepared_statement;
+    F2cExpr *prepared_right = NULL;
+    Buffer prelude = {0};
+    Buffer cleanup = {0};
+    size_t temporary = 0U;
+    int emitted = 0;
+    if (context == NULL || unit == NULL || statement == NULL || statement->left == NULL ||
+        statement->right == NULL || statement->left->rank != 0U || statement->right->rank != 0U ||
+        !f2c_array_contains_unmaterialized_transform(statement->right))
+        return 0;
+    prepared_right = f2c_array_clone_expression(statement->right);
+    if (prepared_right == NULL ||
+        !f2c_array_materialize_constructors(context, unit, prepared_right, line, "scalar",
+                                            &temporary, &prelude, &cleanup, depth + 1) ||
+        prelude.length == 0U) {
+        if (context->result.error_count == previous_errors)
+            f2c_diagnostic(context, line, 1,
+                           "scalar expression array temporary could not be materialized");
+        emitted = 1;
+        goto done;
+    }
+    indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "{\n");
+    f2c_buffer_append(&context->output, prelude.data);
+    prepared_statement = *statement;
+    prepared_statement.right = prepared_right;
+    if (!f2c_emit_assignment_statement(context, unit, &prepared_statement, line, depth + 1)) {
+        context->output.length = output_start;
+        if (context->output.data != NULL)
+            context->output.data[output_start] = '\0';
+        emitted = 1;
+        goto done;
+    }
+    f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+    indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+    emitted = 1;
+
+done:
+    f2c_expr_free(prepared_right);
+    free(prelude.data);
+    free(cleanup.data);
+    return emitted;
+}
+
 int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                   size_t line, int depth) {
     Symbol *left_symbol = statement->left != NULL ? statement->left->symbol : NULL;
@@ -176,6 +225,8 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
                                             depth) ||
         f2c_emit_whole_array_assignment(context, unit, statement->left, statement->right, line,
                                         depth))
+        return 1;
+    if (emit_prepared_scalar_assignment(context, unit, statement, line, depth))
         return 1;
     if (statement->left != NULL && statement->right != NULL &&
         statement->left->kind == F2C_EXPR_COMPONENT && statement->left->symbol != NULL &&
