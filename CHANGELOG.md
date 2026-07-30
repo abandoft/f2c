@@ -7,6 +7,7 @@
 - Completed direct ownership transfer for allocatable array function results with correct reallocation lower bounds, descriptor validation, and overflow guards.
 - Expanded explicit-interface compatibility checks to validate function result type, kind, shape, character length, and `ALLOCATABLE` or `POINTER` contracts.
 - Corrected module array declaration initializers to emit strict C17 brace initialization.
+- Preserved `TRANSFER` MOLD as an unevaluated type-and-shape argument, avoiding unused array-constructor temporaries in strict generated C17.
 - Added independent semantic, strict C17, sanitizer, and native Fortran differential validation for array function results.
 
 ## 1.26.0
