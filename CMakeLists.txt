@@ -604,6 +604,10 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_pointer_allocation_tests)
     add_test(NAME pointer_allocation_semantics COMMAND f2c_pointer_allocation_tests)
 
+    add_executable(f2c_function_result_tests test/test_function_result.c)
+    f2c_configure_test_target(f2c_function_result_tests)
+    add_test(NAME function_result_semantics COMMAND f2c_function_result_tests)
+
     add_executable(
         f2c_real_representation_intrinsic_tests
         test/test_real_representation_intrinsic.c
@@ -796,6 +800,16 @@ if(F2C_BUILD_TESTING)
                         FC=${F2C_GFORTRAN_EXECUTABLE}
                         ${F2C_SH_EXECUTABLE}
                         ${CMAKE_CURRENT_SOURCE_DIR}/test/character_intrinsic_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
+                add_test(
+                    NAME function_result_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/function_result_differential.sh
                         $<TARGET_FILE:f2c>
                 )
             endif()

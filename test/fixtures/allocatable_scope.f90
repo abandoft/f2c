@@ -31,8 +31,9 @@ program allocatable_scope
   integer, allocatable :: values(:)
 
   values = make_values(4)
-  if (values(0) /= 2 .or. values(3) /= 5) stop 1
+  if (lbound(values, 1) /= 1) stop 1
+  if (values(1) /= 2 .or. values(4) /= 5) stop 2
 
   call replace_values(values, 3)
-  if (values(-1) /= 9 .or. values(1) /= 11) stop 2
+  if (values(-1) /= 9 .or. values(1) /= 11) stop 3
 end program allocatable_scope
