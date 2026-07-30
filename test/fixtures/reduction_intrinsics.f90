@@ -17,7 +17,7 @@ program reduction_intrinsics
   logical(kind=1) :: matrix_mask(2, 3)
   logical :: all_columns(3), any_rows(2)
   integer, allocatable :: dynamic_sum(:)
-  integer :: selected_dimension
+  integer :: dimension
   integer :: cube(2, 2, 2), cube_sum(2, 2)
   integer :: reversed_columns(3), expression_columns(3), masked_out_columns(3)
   integer :: empty(0, 2), empty_sum(2), empty_product(2), empty_maximum(2), empty_minimum(2)
@@ -79,8 +79,8 @@ program reduction_intrinsics
   first_max_rows = maxloc(matrix, dim=1)
   last_max_rows = maxloc(matrix, dim=1, back=.true.)
   global_max_location = maxloc(matrix)
-  selected_dimension = 2
-  dynamic_sum = sum(matrix, dim=selected_dimension)
+  dimension = 2
+  dynamic_sum = sum(matrix, dim=dimension)
   cube_sum = sum(cube, dim=2)
   reversed_columns = sum(matrix(:, 3:1:-1), dim=1)
   expression_columns = sum(matrix + 1, dim=1)
