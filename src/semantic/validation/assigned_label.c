@@ -1,5 +1,7 @@
 #include "semantic/validation/private.h"
 
+#include "semantic/data_flow.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -15,11 +17,9 @@ typedef struct AssignedLabelCatalog {
     size_t capacity;
 } AssignedLabelCatalog;
 
-typedef struct AssignedLabelState {
-    uint64_t *labels;
-    int may_be_integer_or_undefined;
-    int initialized;
-} AssignedLabelState;
+typedef F2cBitFlowState AssignedLabelState;
+
+#define ASSIGNED_LABEL_INVALID UINT64_C(1)
 
 typedef enum AssignedLabelEffectKind {
     ASSIGNED_LABEL_EFFECT_NONE,
@@ -264,26 +264,27 @@ static AssignedLabelEffect statement_effect(const F2cStatement *statement, const
     return effect;
 }
 
-static void state_copy(uint64_t *target, const uint64_t *source, size_t words) {
-    if (words != 0U)
-        memcpy(target, source, words * sizeof(*target));
-}
+typedef struct AssignedLabelFlow {
+    const Unit *unit;
+    const F2cControlFlowGraph *graph;
+    const F2cExpr *variable;
+    const AssignedLabelCatalog *catalog;
+} AssignedLabelFlow;
 
-static void apply_effect(const AssignedLabelState *input, const AssignedLabelEffect *effect,
-                         uint64_t *output, int *output_invalid, size_t words) {
-    state_copy(output, input->labels, words);
-    *output_invalid = input->may_be_integer_or_undefined;
+static void apply_effect(const AssignedLabelEffect *effect, AssignedLabelState *output,
+                         size_t words) {
     if (effect->kind == ASSIGNED_LABEL_EFFECT_NONE)
         return;
     if (!effect->conditional) {
         if (words != 0U)
-            memset(output, 0, words * sizeof(*output));
-        *output_invalid = effect->kind == ASSIGNED_LABEL_EFFECT_INVALIDATE;
+            memset(output->bits, 0, words * sizeof(*output->bits));
+        output->flags =
+            effect->kind == ASSIGNED_LABEL_EFFECT_INVALIDATE ? ASSIGNED_LABEL_INVALID : 0U;
     }
     if (effect->kind == ASSIGNED_LABEL_EFFECT_DEFINE && effect->definition != SIZE_MAX)
-        output[effect->definition / 64U] |= UINT64_C(1) << (effect->definition % 64U);
+        output->bits[effect->definition / 64U] |= UINT64_C(1) << (effect->definition % 64U);
     else if (effect->kind == ASSIGNED_LABEL_EFFECT_INVALIDATE)
-        *output_invalid = 1;
+        output->flags |= ASSIGNED_LABEL_INVALID;
 }
 
 static int output_has_definition(const uint64_t *output, size_t definition) {
@@ -306,86 +307,51 @@ static int successor_is_feasible(const Unit *unit, const F2cControlFlowEdge *edg
     return definition != SIZE_MAX && output_has_definition(output, definition);
 }
 
-static int merge_state(AssignedLabelState *target, const uint64_t *labels, int invalid,
-                       size_t words) {
-    size_t word;
-    int changed = !target->initialized;
-    if (!target->initialized) {
-        target->initialized = 1;
-        target->may_be_integer_or_undefined = invalid;
-        state_copy(target->labels, labels, words);
-        return 1;
-    }
-    if (invalid && !target->may_be_integer_or_undefined) {
-        target->may_be_integer_or_undefined = 1;
-        changed = 1;
-    }
-    for (word = 0U; word < words; ++word) {
-        const uint64_t merged = target->labels[word] | labels[word];
-        if (merged != target->labels[word]) {
-            target->labels[word] = merged;
-            changed = 1;
-        }
-    }
-    return changed;
+static int assigned_label_transfer(void *user, size_t node, const F2cBitFlowState *input,
+                                   F2cBitFlowState *output) {
+    const AssignedLabelFlow *flow = (const AssignedLabelFlow *)user;
+    const F2cControlFlowNode *flow_node = &flow->graph->nodes[node];
+    const F2cStatement *statement = flow_node->kind == F2C_CFG_NODE_STATEMENT &&
+                                            flow_node->statement_index < flow->unit->statement_count
+                                        ? &flow->unit->statements[flow_node->statement_index]
+                                        : NULL;
+    AssignedLabelEffect effect = {ASSIGNED_LABEL_EFFECT_NONE, SIZE_MAX, 0};
+    (void)input;
+    if (statement != NULL)
+        effect = statement_effect(statement, flow->variable, flow->catalog);
+    apply_effect(&effect, output, (flow->catalog->count + 63U) / 64U);
+    return 1;
+}
+
+static int assigned_label_edge_filter(void *user, size_t source, const F2cControlFlowEdge *edge,
+                                      const F2cBitFlowState *output) {
+    const AssignedLabelFlow *flow = (const AssignedLabelFlow *)user;
+    const F2cControlFlowNode *node = &flow->graph->nodes[source];
+    const F2cStatement *statement =
+        node->kind == F2C_CFG_NODE_STATEMENT && node->statement_index < flow->unit->statement_count
+            ? &flow->unit->statements[node->statement_index]
+            : NULL;
+    const F2cStatement *assigned_goto =
+        statement != NULL ? assigned_goto_for_variable(statement, flow->variable) : NULL;
+    return successor_is_feasible(flow->unit, edge, assigned_goto, flow->catalog, output->bits);
 }
 
 static int solve_states(const Unit *unit, const F2cControlFlowGraph *graph, const F2cExpr *variable,
-                        const AssignedLabelCatalog *catalog, AssignedLabelState **states_out,
+                        const AssignedLabelCatalog *catalog, F2cBitFlowResult *result,
                         size_t *words_out) {
-    AssignedLabelState *states;
-    uint64_t *storage;
-    uint64_t *output;
-    size_t words = (catalog->count + 63U) / 64U;
-    size_t index;
-    int changed = 1;
-    if (graph->node_count > SIZE_MAX / sizeof(*states) ||
-        (words != 0U && graph->node_count > SIZE_MAX / words) ||
-        (words != 0U && graph->node_count * words > SIZE_MAX / sizeof(*storage)))
+    AssignedLabelFlow flow = {unit, graph, variable, catalog};
+    const size_t words = (catalog->count + 63U) / 64U;
+    const size_t entry = graph->statement_count != 0U ? 0U : graph->procedure_exit;
+    if (!f2c_bit_flow_solve(graph, entry, words, NULL, ASSIGNED_LABEL_INVALID,
+                            assigned_label_transfer, assigned_label_edge_filter, &flow, result))
         return 0;
-    states = (AssignedLabelState *)calloc(graph->node_count, sizeof(*states));
-    storage = words != 0U ? (uint64_t *)calloc(graph->node_count * words, sizeof(*storage)) : NULL;
-    output = words != 0U ? (uint64_t *)calloc(words, sizeof(*output)) : NULL;
-    if (states == NULL || (words != 0U && (storage == NULL || output == NULL))) {
-        free(states);
-        free(storage);
-        free(output);
-        return 0;
-    }
-    for (index = 0U; index < graph->node_count; ++index)
-        states[index].labels = words != 0U ? storage + index * words : NULL;
-    states[0].initialized = 1;
-    states[0].may_be_integer_or_undefined = 1;
-    while (changed) {
-        changed = 0;
-        for (index = 0U; index < graph->node_count; ++index) {
-            const F2cControlFlowNode *node = &graph->nodes[index];
-            const F2cStatement *assigned_goto;
-            AssignedLabelEffect effect;
-            int output_invalid;
-            size_t edge;
-            if (!states[index].initialized || !node->reachable)
-                continue;
-            effect = statement_effect(&unit->statements[index], variable, catalog);
-            apply_effect(&states[index], &effect, output, &output_invalid, words);
-            assigned_goto = assigned_goto_for_variable(&unit->statements[index], variable);
-            for (edge = 0U; edge < node->successor_count; ++edge)
-                if (successor_is_feasible(unit, &node->successors[edge], assigned_goto, catalog,
-                                          output) &&
-                    merge_state(&states[node->successors[edge].target], output, output_invalid,
-                                words))
-                    changed = 1;
-        }
-    }
-    free(output);
-    *states_out = states;
     *words_out = words;
     return 1;
 }
 
 static int state_has_label(const AssignedLabelState *state, size_t definition) {
     return state->initialized &&
-           (state->labels[definition / 64U] & (UINT64_C(1) << (definition % 64U))) != 0U;
+           (state->bits[definition / 64U] & (UINT64_C(1) << (definition % 64U))) != 0U;
 }
 
 static void clear_resolved_branches(F2cStatement *statement) {
@@ -470,7 +436,7 @@ static int resolve_goto(Context *context, F2cStatement *statement,
     int success = 1;
     clear_resolved_branches(statement);
     statement->assigned_labels_resolved = 1;
-    if (diagnose && reachable && state->may_be_integer_or_undefined) {
+    if (diagnose && reachable && (state->flags & ASSIGNED_LABEL_INVALID) != 0U) {
         f2c_diagnostic_span_code(
             context, F2C_DIAGNOSTIC_SEMANTIC, &statement->span, 1,
             "assigned GOTO variable '%s' is not defined with a statement label on every "
@@ -511,7 +477,7 @@ static int resolve_format(Context *context, const F2cStatement *statement, F2cIo
     int success = 1;
     clear_resolved_formats(control);
     control->assigned_labels_resolved = 1;
-    if (diagnose && reachable && state->may_be_integer_or_undefined) {
+    if (diagnose && reachable && (state->flags & ASSIGNED_LABEL_INVALID) != 0U) {
         f2c_diagnostic_span_code(
             context, F2C_DIAGNOSTIC_SEMANTIC, &control->span, 1,
             "%s assigned FORMAT variable '%s' is not defined with a statement label on every "
@@ -667,7 +633,7 @@ static int state_has_any_label(const AssignedLabelState *state, size_t words) {
     if (state == NULL || !state->initialized)
         return 0;
     for (word = 0U; word < words; ++word)
-        if (state->labels[word] != 0U)
+        if (state->bits[word] != 0U)
             return 1;
     return 0;
 }
@@ -745,21 +711,22 @@ static int analyze_variables(Context *context, Unit *unit, const F2cControlFlowG
     for (variable_index = 0U; variable_index < variables->count; ++variable_index) {
         const F2cExpr *variable = variables->items[variable_index];
         AssignedLabelCatalog catalog;
-        AssignedLabelState *states = NULL;
+        F2cBitFlowResult flow = {0};
+        AssignedLabelState *states;
         size_t words = 0U;
         if (!build_catalog(unit, variable, &catalog) ||
-            !solve_states(unit, graph, variable, &catalog, &states, &words)) {
+            !solve_states(unit, graph, variable, &catalog, &flow, &words)) {
             free(catalog.items);
-            free(states);
+            f2c_bit_flow_free(&flow);
             return 0;
         }
+        states = flow.states;
         for (index = 0U; index < unit->statement_count; ++index) {
             F2cStatement *statement = &unit->statements[index];
             const int reachable = graph->nodes[index].reachable && states[index].initialized;
             if (!resolve_statement_uses(context, statement, variable, &catalog, &states[index],
                                         reachable, diagnose)) {
-                free(states != NULL && graph->node_count != 0U ? states[0].labels : NULL);
-                free(states);
+                f2c_bit_flow_free(&flow);
                 free(catalog.items);
                 return 0;
             }
@@ -772,8 +739,7 @@ static int analyze_variables(Context *context, Unit *unit, const F2cControlFlowG
                     variable->text != NULL ? variable->text : "<unknown>");
             }
         }
-        free(states != NULL && graph->node_count != 0U ? states[0].labels : NULL);
-        free(states);
+        f2c_bit_flow_free(&flow);
         free(catalog.items);
     }
     return 1;
@@ -782,13 +748,17 @@ static int analyze_variables(Context *context, Unit *unit, const F2cControlFlowG
 static int control_flow_graphs_equal(const F2cControlFlowGraph *left,
                                      const F2cControlFlowGraph *right) {
     size_t node;
-    if (left->node_count != right->node_count)
+    if (left->node_count != right->node_count || left->statement_count != right->statement_count ||
+        left->procedure_exit != right->procedure_exit ||
+        left->image_termination != right->image_termination)
         return 0;
     for (node = 0U; node < left->node_count; ++node) {
         const F2cControlFlowNode *left_node = &left->nodes[node];
         const F2cControlFlowNode *right_node = &right->nodes[node];
         size_t edge;
-        if (left_node->reachable != right_node->reachable ||
+        if (left_node->kind != right_node->kind ||
+            left_node->statement_index != right_node->statement_index ||
+            left_node->reachable != right_node->reachable ||
             left_node->successor_count != right_node->successor_count)
             return 0;
         for (edge = 0U; edge < left_node->successor_count; ++edge)
