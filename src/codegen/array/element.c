@@ -291,6 +291,29 @@ static F2cExpr *transpose_element(Unit *unit, const F2cExpr *expression,
     return f2c_array_element_expression(unit, source, 2U, source_ordinals);
 }
 
+static F2cExpr *lowered_array_temporary_element(const F2cExpr *expression, size_t rank,
+                                                const char *const *ordinals) {
+    Buffer code = {0};
+    F2cExpr *element;
+    size_t dimension;
+    size_t factor;
+    if (expression == NULL || expression->lowered_c == NULL || expression->rank != rank)
+        return NULL;
+    f2c_buffer_printf(&code, "((%s)[", expression->lowered_c);
+    for (dimension = 0U; dimension < rank; ++dimension) {
+        f2c_buffer_printf(&code, "%s((size_t)(%s))", dimension == 0U ? "" : " + ",
+                          ordinals[dimension]);
+        for (factor = 0U; factor < dimension; ++factor)
+            f2c_buffer_printf(&code, " * (size_t)%s_extent_%zu", expression->lowered_c,
+                              factor + 1U);
+    }
+    f2c_buffer_append(&code, "])");
+    element = lowered_expression(f2c_buffer_take(&code), expression->type, expression->type_kind);
+    if (element != NULL)
+        element->derived_type = expression->derived_type;
+    return element;
+}
+
 F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, size_t rank,
                                       const char *const *ordinals) {
     const F2cIntrinsicSignature *intrinsic;
@@ -300,6 +323,8 @@ F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, siz
         return clone_exact(expression);
     if (expression->rank != rank)
         return NULL;
+    if (expression->lowered_array_temporary)
+        return lowered_array_temporary_element(expression, rank, ordinals);
     if (expression->kind == F2C_EXPR_NAME)
         return whole_array_element(unit, expression, rank, ordinals);
     if (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U) {
@@ -396,6 +421,11 @@ char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t 
     char literal[32];
     if (expression == NULL || dimension >= expression->rank)
         return NULL;
+    if (expression->lowered_array_temporary && expression->lowered_c != NULL) {
+        Buffer extent = {0};
+        f2c_buffer_printf(&extent, "%s_extent_%zu", expression->lowered_c, dimension + 1U);
+        return f2c_buffer_take(&extent);
+    }
     if (expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
         strcmp(expression->text, "transpose") == 0 && expression->child_count == 1U &&
         expression->rank == 2U) {

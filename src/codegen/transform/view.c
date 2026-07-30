@@ -69,7 +69,22 @@ int f2c_transform_array_view(Unit *unit, const F2cExpr *expression, TransformArr
     array->derived_type = expression->derived_type;
     if (expression->type == TYPE_CHARACTER)
         array->element_length = f2c_character_length_expression(unit, expression);
-    if (expression->kind == F2C_EXPR_NAME && expression->symbol != NULL) {
+    if (expression->lowered_array_temporary && expression->lowered_c != NULL) {
+        Buffer count = {0};
+        array->pointer = f2c_strdup(expression->lowered_c);
+        for (dimension = 0U; dimension < array->rank; ++dimension) {
+            Buffer extent = {0};
+            f2c_buffer_printf(&extent, "(size_t)%s_extent_%zu", expression->lowered_c,
+                              dimension + 1U);
+            array->extents[dimension] = f2c_buffer_take(&extent);
+        }
+        f2c_buffer_printf(&count, "f2c_inquiry_size(%zuU, (const size_t[]){", array->rank);
+        for (dimension = 0U; dimension < array->rank; ++dimension)
+            f2c_buffer_printf(&count, "%s%s", dimension == 0U ? "" : ", ",
+                              array->extents[dimension]);
+        f2c_buffer_append(&count, "})");
+        array->count = f2c_buffer_take(&count);
+    } else if (expression->kind == F2C_EXPR_NAME && expression->symbol != NULL) {
         array->symbol = expression->symbol;
         if (!expression->symbol->argument || !f2c_symbol_uses_descriptor(expression->symbol))
             array->pointer = f2c_strdup(f2c_symbol_c_name(unit, expression->symbol));
