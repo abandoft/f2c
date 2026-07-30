@@ -251,6 +251,8 @@ set(
     src/ir/statement.h
     src/ir/type.h
     src/semantic/character.c
+    src/semantic/control_flow.c
+    src/semantic/control_flow.h
     src/semantic/constant.c
     src/semantic/constant/bit.c
     src/semantic/constant/character.c
@@ -278,6 +280,7 @@ set(
     src/semantic/type.c
     src/semantic/validation.c
     src/semantic/validation/allocation.c
+    src/semantic/validation/assigned_label.c
     src/semantic/validation/branch.c
     src/semantic/validation/case.c
     src/semantic/validation/construct.c
@@ -613,6 +616,10 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_control_expression_tests)
     add_test(NAME control_expression_semantics COMMAND f2c_control_expression_tests)
 
+    add_executable(f2c_control_flow_tests test/test_control_flow.c)
+    f2c_configure_test_target(f2c_control_flow_tests)
+    add_test(NAME control_flow_semantics COMMAND f2c_control_flow_tests)
+
     add_executable(
         f2c_real_representation_intrinsic_tests
         test/test_real_representation_intrinsic.c
@@ -825,6 +832,16 @@ if(F2C_BUILD_TESTING)
                         FC=${F2C_GFORTRAN_EXECUTABLE}
                         ${F2C_SH_EXECUTABLE}
                         ${CMAKE_CURRENT_SOURCE_DIR}/test/control_expression_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
+                add_test(
+                    NAME assigned_label_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/assigned_label_differential.sh
                         $<TARGET_FILE:f2c>
                 )
             endif()
