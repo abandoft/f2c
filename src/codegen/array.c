@@ -654,6 +654,8 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
     if (left == NULL || left->kind != F2C_EXPR_NAME || left_symbol == NULL ||
         left_symbol->rank == 0U)
         return 0;
+    if (f2c_array_emit_prepared_transform_assignment(context, unit, left, right, line, depth))
+        return 1;
     if (f2c_emit_transform_assignment(context, unit, left, right, line, depth))
         return 1;
     if (left_symbol->allocatable && right != NULL && right->kind == F2C_EXPR_CALL &&

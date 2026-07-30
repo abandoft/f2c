@@ -14,6 +14,8 @@ char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t 
 int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *expression,
                                        size_t identifier, const char *role, size_t *temporary,
                                        Buffer *prelude, Buffer *cleanup, int depth);
+int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, const F2cExpr *left,
+                                                 const F2cExpr *right, size_t line, int depth);
 int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_t identifier,
                                           const char *role, size_t *temporary, Buffer *prelude,
                                           int depth, int root);
