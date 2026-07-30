@@ -562,8 +562,29 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             size_t emitted = 0U;
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "switch ((int32_t)(%s)) {\n", selector);
-            if (statement->label_count != 0U) {
+            if (statement->assigned_labels_resolved) {
+                for (i = 0U; i < statement->resolved_branch_count; ++i) {
+                    const F2cResolvedBranch *branch = &statement->resolved_branches[i];
+                    indent(&context->output, *depth + 1);
+                    f2c_buffer_printf(&context->output, "case %s: {\n", branch->label);
+                    f2c_emit_scope_cleanup_plan(&context->output, unit, &branch->cleanup,
+                                                *depth + 2);
+                    indent(&context->output, *depth + 2);
+                    f2c_buffer_printf(&context->output, "goto f2c_label_%s; }\n", branch->label);
+                    ++emitted;
+                }
+            } else if (statement->label_count != 0U) {
                 for (i = 0U; i < statement->label_count; ++i) {
+                    size_t previous;
+                    int duplicate = 0;
+                    for (previous = 0U; previous < i; ++previous)
+                        if (f2c_statement_labels_equal(statement->labels[previous],
+                                                       statement->labels[i])) {
+                            duplicate = 1;
+                            break;
+                        }
+                    if (duplicate)
+                        continue;
                     indent(&context->output, *depth + 1);
                     f2c_buffer_printf(&context->output, "case %s: {\n", statement->labels[i]);
                     f2c_emit_scope_cleanup_plan(&context->output, unit,
@@ -587,7 +608,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             }
             indent(&context->output, *depth);
             f2c_buffer_append(&context->output, "}\n");
-            if (emitted == 0U)
+            if (emitted == 0U && !statement->assigned_labels_resolved)
                 f2c_diagnostic(context, source_line->number, 1,
                                "assigned GOTO has no allowed target labels");
             free(selector);

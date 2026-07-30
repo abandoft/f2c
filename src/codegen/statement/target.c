@@ -28,6 +28,9 @@ static int statement_targets_label(const F2cStatement *statement, const char *la
         for (index = 0U; index < statement->label_count; ++index)
             if (f2c_statement_labels_equal(statement->labels[index], label))
                 return 1;
+        for (index = 0U; index < statement->resolved_branch_count; ++index)
+            if (f2c_statement_labels_equal(statement->resolved_branches[index].label, label))
+                return 1;
     }
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
         statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
