@@ -194,11 +194,43 @@ static void test_mask_back_and_kind_lowering(void) {
     f2c_result_free(&result);
 }
 
+static void test_array_result_lowering(void) {
+    static const char source[] =
+        "subroutine array_reductions(values, mask, dimension, totals, locations, coordinates)\n"
+        "  implicit none\n"
+        "  integer, intent(in) :: values(2, 3)\n"
+        "  logical(kind=1), intent(in) :: mask(2, 3)\n"
+        "  integer, intent(in) :: dimension\n"
+        "  integer, allocatable, intent(out) :: totals(:)\n"
+        "  integer, intent(out) :: locations(3), coordinates(2)\n"
+        "  totals = sum(values + 1, dim=dimension, mask=mask)\n"
+        "  locations = maxloc(values, dim=1, back=.true.)\n"
+        "  coordinates = minloc(values, mask=mask)\n"
+        "end subroutine array_reductions\n";
+    F2cOptions options = {"array_reductions.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "array-valued reductions lower through the transform pipeline");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_transform_reduction_source_values") != NULL &&
+               strstr(result.code, "f2c_reduction_logical_at((const void *)(mask)") != NULL,
+           "array expressions are evaluated once and masks use their typed storage view");
+    expect(result.code != NULL && strstr(result.code, "f2c_transform_dimension") != NULL &&
+               strstr(result.code, "f2c_transform_result_extent_1") != NULL &&
+               strstr(result.code, "f2c_transform_back") != NULL,
+           "runtime DIM, dynamic result shape, and BACK remain explicit");
+    expect(result.code != NULL && strstr(result.code, "free(totals)") != NULL &&
+               strstr(result.code, "totals_extent_1") != NULL,
+           "allocatable reduction results commit their new storage and shape");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_argument_contracts();
     test_dot_product_contracts();
     test_typed_scalar_lowering();
     test_mixed_and_complex_lowering();
     test_mask_back_and_kind_lowering();
+    test_array_result_lowering();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
