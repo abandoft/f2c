@@ -103,6 +103,12 @@ static void test_attribute_keywords_as_identifiers(void) {
     F2cResult result = transpile(source, &capture);
     expect(result.code != NULL && result.error_count == 0U,
            "attribute keywords remain legal identifiers in executable assignments");
+    expect(result.code != NULL && strstr(result.code, "dimension = 1;") != NULL &&
+               strstr(result.code, "external = 2;") != NULL &&
+               strstr(result.code, "parameter = 3;") != NULL &&
+               strstr(result.code, "save = 4;") != NULL &&
+               strstr(result.code, "equivalence = 5;") != NULL,
+           "keyword-named assignments remain executable statements in typed IR");
     expect(!capture.captured,
            "keyword-named variables are classified from token context without diagnostics");
     f2c_result_free(&result);

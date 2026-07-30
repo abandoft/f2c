@@ -10,6 +10,30 @@ static int declaration_token_word(const Line *line, size_t index, const char *wo
            f2c_line_token_equals(line, index, word);
 }
 
+static int starts_with_assignment_designator(const Line *line, size_t start) {
+    size_t depth = 0U;
+    size_t index;
+    int saw_double_colon = 0;
+    for (index = start; index < line->token_count; ++index) {
+        const F2cToken *token = &line->tokens[index];
+        if (token->kind == F2C_TOKEN_LEFT_PAREN || token->kind == F2C_TOKEN_LEFT_BRACKET ||
+            token->kind == F2C_TOKEN_ARRAY_BEGIN) {
+            ++depth;
+        } else if (token->kind == F2C_TOKEN_RIGHT_PAREN ||
+                   token->kind == F2C_TOKEN_RIGHT_BRACKET ||
+                   token->kind == F2C_TOKEN_ARRAY_END) {
+            if (depth != 0U)
+                --depth;
+        } else if (depth == 0U && token->kind == F2C_TOKEN_DOUBLE_COLON) {
+            saw_double_colon = 1;
+        } else if (depth == 0U && token->kind == F2C_TOKEN_OPERATOR &&
+                   (f2c_token_equals(token, "=") || f2c_token_equals(token, "=>"))) {
+            return !saw_double_colon;
+        }
+    }
+    return 0;
+}
+
 int f2c_declaration_tokens(const Line *line) {
     static const char *const starters[] = {
         "integer",   "real",     "double",   "logical",     "complex",  "character", "dimension",
@@ -21,6 +45,8 @@ int f2c_declaration_tokens(const Line *line) {
     if (line == NULL || line->token_count == 0U)
         return 0;
     start = line->token_count > 1U && line->tokens[0].kind == F2C_TOKEN_NUMBER ? 1U : 0U;
+    if (starts_with_assignment_designator(line, start))
+        return 0;
     if (declaration_token_word(line, start, "end") &&
         (declaration_token_word(line, start + 1U, "interface") ||
          declaration_token_word(line, start + 1U, "type")))
