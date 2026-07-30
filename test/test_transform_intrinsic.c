@@ -122,9 +122,32 @@ static void test_nested_lowering(void) {
     f2c_result_free(&result);
 }
 
+static void test_transfer_mold_is_not_materialized(void) {
+    static const char source[] = "program transfer_mold\n"
+                                 "  implicit none\n"
+                                 "  real :: source(4)\n"
+                                 "  source = [1.0, 2.0, 3.0, 4.0]\n"
+                                 "  call consume(transfer(source(1:4), [(0.0, 0.0)], 2))\n"
+                                 "contains\n"
+                                 "  subroutine consume(values)\n"
+                                 "    complex, intent(in) :: values(*)\n"
+                                 "  end subroutine consume\n"
+                                 "end program transfer_mold\n";
+    F2cOptions options = {"transfer_mold.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "TRANSFER array-constructor mold produces typed C17");
+    expect(result.code != NULL && strstr(result.code, "f2c_transfer_") != NULL,
+           "TRANSFER array actual uses owned bit-transfer storage");
+    expect(result.code != NULL && strstr(result.code, "f2c_array_call_constructor_") == NULL,
+           "TRANSFER does not evaluate or materialize its MOLD argument");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_typed_identities();
     test_argument_contracts();
     test_nested_lowering();
+    test_transfer_mold_is_not_materialized();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
