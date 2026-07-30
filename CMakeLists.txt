@@ -817,6 +817,16 @@ if(F2C_BUILD_TESTING)
                         ${CMAKE_CURRENT_SOURCE_DIR}/test/function_result_differential.sh
                         $<TARGET_FILE:f2c>
                 )
+                add_test(
+                    NAME control_expression_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/control_expression_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
             endif()
         endif()
     endif()
