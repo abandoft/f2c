@@ -13,6 +13,20 @@ static const F2cExpr *reduction_argument_value(const F2cExpr *argument) {
                : argument;
 }
 
+static char *reduction_zero_value(const F2cExpr *expression) {
+    Buffer result = {0};
+    if (expression == NULL)
+        return NULL;
+    if (expression->type == TYPE_COMPLEX)
+        return f2c_strdup("f2c_make_c(0.0f, 0.0f)");
+    if (expression->type == TYPE_DOUBLE_COMPLEX)
+        return f2c_strdup("f2c_make_z(0.0, 0.0)");
+    if (expression->type == TYPE_LOGICAL)
+        return f2c_strdup("false");
+    f2c_buffer_printf(&result, "((%s)0)", f2c_expression_c_type(expression));
+    return f2c_buffer_take(&result);
+}
+
 static int relation_code(const char *operator_text) {
     if (operator_text == NULL)
         return -1;
@@ -381,6 +395,7 @@ static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) 
     char *right_pointer = NULL;
     char *right_count = NULL;
     char *right_stride = NULL;
+    char *zero = NULL;
     const char *helper = dot_product_helper(expression);
     Buffer result = {0};
     if (helper == NULL ||
@@ -402,13 +417,15 @@ static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) 
         const char *right_type = reduction_type_code(right_array);
         if (left_type == NULL || right_type == NULL)
             goto unsupported;
+        zero = reduction_zero_value(expression);
+        if (zero == NULL)
+            goto unsupported;
         f2c_buffer_printf(&result,
                           "((%s) == (%s) ? %s((const void *)(%s), %s, %s, "
                           "(const void *)(%s), %s, %s, %s) : "
-                          "(abort(), (%s)0))",
+                          "(abort(), %s))",
                           left_count, right_count, helper, left_pointer, left_type, left_stride,
-                          right_pointer, right_type, right_stride, left_count,
-                          f2c_expression_c_type(expression));
+                          right_pointer, right_type, right_stride, left_count, zero);
     }
     free(left_pointer);
     free(left_count);
@@ -416,6 +433,7 @@ static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) 
     free(right_pointer);
     free(right_count);
     free(right_stride);
+    free(zero);
     return f2c_buffer_take(&result);
 
 unsupported:
@@ -425,6 +443,7 @@ unsupported:
     free(right_pointer);
     free(right_count);
     free(right_stride);
+    free(zero);
     free(result.data);
     *supported = 0;
     return NULL;
@@ -457,6 +476,7 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
     char *mask_scalar = NULL;
     char *conformance = NULL;
     char *back_code = NULL;
+    char *zero = NULL;
     Buffer result = {0};
     if (expression == NULL || !f2c_intrinsic_is_reduction(expression->intrinsic)) {
         *supported = 0;
@@ -545,8 +565,12 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
         f2c_buffer_printf(&result, "), %d))",
                           expression->type_kind != 0 ? expression->type_kind
                                                      : f2c_default_kind(TYPE_INTEGER));
-    if (dimension_code != NULL || conformance != NULL)
-        f2c_buffer_printf(&result, " : (abort(), (%s)0))", f2c_expression_c_type(expression));
+    if (dimension_code != NULL || conformance != NULL) {
+        zero = reduction_zero_value(expression);
+        if (zero == NULL)
+            goto unsupported;
+        f2c_buffer_printf(&result, " : (abort(), %s))", zero);
+    }
     free(pointer);
     free(count);
     free(stride);
@@ -558,6 +582,7 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
     free(mask_scalar);
     free(conformance);
     free(back_code);
+    free(zero);
     return f2c_buffer_take(&result);
 
 unsupported:
@@ -572,6 +597,7 @@ unsupported:
     free(mask_scalar);
     free(conformance);
     free(back_code);
+    free(zero);
     free(result.data);
     *supported = 0;
     return NULL;

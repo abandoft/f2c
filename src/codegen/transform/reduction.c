@@ -73,9 +73,7 @@ static char *result_value(const F2cExpr *call, const Symbol *target, const char 
     converted = f2c_emit_numeric_conversion(value, call->type, target->type);
     if (converted == NULL)
         return NULL;
-    f2c_buffer_printf(&result, "((%s)(%s))", f2c_symbol_c_type(target), converted);
-    free(converted);
-    return f2c_buffer_take(&result);
+    return converted;
 }
 
 static int emit_result_extents(Context *context, size_t source_rank, size_t result_rank,

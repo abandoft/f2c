@@ -239,6 +239,7 @@ static int emit_constructor_scalar(ConstructorEmitter *emitter, const F2cExpr *e
                                    int depth) {
     F2cExpr *substituted = clone_constructor_expression(emitter, expression);
     char *code = substituted != NULL ? f2c_array_emit_expression(emitter->unit, substituted) : NULL;
+    char *converted = NULL;
     Buffer target = {0};
     int result = 0;
     if (substituted == NULL || code == NULL)
@@ -276,14 +277,18 @@ static int emit_constructor_scalar(ConstructorEmitter *emitter, const F2cExpr *e
         f2c_array_indent(&emitter->context->output, depth);
         f2c_buffer_printf(&emitter->context->output, "++%s;\n", emitter->index);
     } else {
+        converted = f2c_emit_numeric_conversion(code, substituted->type, emitter->target->type);
+        if (converted == NULL)
+            goto cleanup;
         f2c_array_indent(&emitter->context->output, depth);
-        f2c_buffer_printf(&emitter->context->output, "%s[%s++] = (%s)(%s);\n", emitter->storage,
-                          emitter->index, f2c_symbol_c_type(emitter->target), code);
+        f2c_buffer_printf(&emitter->context->output, "%s[%s++] = %s;\n", emitter->storage,
+                          emitter->index, converted);
     }
     result = 1;
 
 cleanup:
     free(f2c_buffer_take(&target));
+    free(converted);
     free(code);
     f2c_expr_free(substituted);
     return result;
