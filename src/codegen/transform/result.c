@@ -10,13 +10,8 @@ void f2c_transform_emit_result_count(Context *context, size_t rank, int depth) {
     for (dimension = 0U; dimension < rank; ++dimension) {
         f2c_transform_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
-                          "if (f2c_transform_result_extent_%zu != 0U && "
-                          "f2c_transform_result_count > SIZE_MAX / "
-                          "f2c_transform_result_extent_%zu) abort();\n",
-                          dimension + 1U, dimension + 1U);
-        f2c_transform_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output,
-                          "f2c_transform_result_count *= f2c_transform_result_extent_%zu;\n",
+                          "f2c_transform_result_count = f2c_size_multiply_checked("
+                          "f2c_transform_result_count, f2c_transform_result_extent_%zu);\n",
                           dimension + 1U);
     }
 }

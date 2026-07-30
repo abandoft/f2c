@@ -660,7 +660,11 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                   "int32_t: f2c_abs_i32, int64_t: f2c_abs_i64, float: fabsf, double: fabs, "
                   "long double: fabsl, default: fabs)((x))\n");
         f2c_buffer_append(&context.output, "#define F2C_MAX(a, b) ((a) > (b) ? (a) : (b))\n"
-                                           "#define F2C_MIN(a, b) ((a) < (b) ? (a) : (b))\n");
+                                           "#define F2C_MIN(a, b) ((a) < (b) ? (a) : (b))\n"
+                                           "static inline F2C_UNUSED size_t "
+                                           "f2c_size_multiply_checked(size_t left, size_t right) "
+                                           "{ if (left != 0U && right > SIZE_MAX / left) abort(); "
+                                           "return left * right; }\n");
         if (needs_complex) {
             f2c_buffer_append(
                 &context.output,

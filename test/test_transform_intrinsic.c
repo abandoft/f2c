@@ -114,6 +114,11 @@ static void test_nested_lowering(void) {
     expect(result.code != NULL && strstr(result.code, "_extent_1") != NULL &&
                strstr(result.code, "f2c_inquiry_size") != NULL,
            "nested temporaries retain dynamic typed shape metadata");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_transform_result_count = "
+                                   "f2c_size_multiply_checked(") != NULL &&
+               strstr(result.code, "SIZE_MAX / f2c_transform_result_extent_") == NULL,
+           "transform extents use the portable checked multiplication helper");
     f2c_result_free(&result);
 }
 
