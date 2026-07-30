@@ -20,6 +20,8 @@ program reduction_intrinsics
   integer :: dimension
   integer :: cube(2, 2, 2), cube_sum(2, 2)
   integer :: reversed_columns(3), expression_columns(3), masked_out_columns(3)
+  integer :: nested_columns(3), nested_cube(2, 2)
+  integer :: nested_reduction(2)
   integer :: empty(0, 2), empty_sum(2), empty_product(2), empty_maximum(2), empty_minimum(2)
   logical :: empty_flags(0, 2), empty_all(2), empty_any(2)
   integer :: empty_count(2)
@@ -93,6 +95,9 @@ program reduction_intrinsics
   empty_any = any(empty_flags, dim=1)
   empty_count = count(empty_flags, dim=1)
   complex_columns = sum(complex_matrix, dim=1)
+  nested_columns = sum(matrix, dim=1) + 10
+  nested_cube = 2 * sum(cube, dim=2)
+  nested_reduction = sum(sum(cube, dim=2), dim=2)
   if (any(sum_columns /= [3, 7, 11])) stop 29
   if (any(sum_rows /= [9, 12])) stop 30
   if (any(max_columns /= [1, 4, 6])) stop 31
@@ -116,5 +121,9 @@ program reduction_intrinsics
   if (any(empty_minimum /= [huge(0), huge(0)])) stop 47
   if (.not. all(empty_all) .or. any(empty_any) .or. any(empty_count /= [0, 0])) stop 48
   if (any(complex_columns /= [(4.0, 6.0), (12.0, 14.0)])) stop 49
+  if (any(nested_columns /= [13, 17, 21])) stop 50
+  if (nested_cube(1, 1) /= 8 .or. nested_cube(2, 1) /= 12 .or. &
+      nested_cube(1, 2) /= 24 .or. nested_cube(2, 2) /= 28) stop 51
+  if (any(nested_reduction /= [16, 20])) stop 52
   print '(A)', 'reduction intrinsic differential passed'
 end program reduction_intrinsics
