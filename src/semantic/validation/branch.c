@@ -7,6 +7,7 @@ typedef struct BranchTarget {
     const char *label;
     size_t index;
     int branchable;
+    int format;
 } BranchTarget;
 
 typedef struct ConstructRange {
@@ -182,11 +183,18 @@ static void validate_assignment_label(Context *context, const BranchTarget *targ
     if (statement->label_count != 1U)
         return;
     target = find_target(targets, target_count, statement->labels[0]);
-    if (target == NULL)
+    if (target == NULL) {
         f2c_diagnostic_span_code(
             context, F2C_DIAGNOSTIC_SEMANTIC,
             statement->label_spans != NULL ? &statement->label_spans[0] : &statement->span, 1,
             "ASSIGN label %s is not defined in this program unit", statement->labels[0]);
+    } else if (!target->branchable && !target->format) {
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_SEMANTIC,
+            statement->label_spans != NULL ? &statement->label_spans[0] : &statement->span, 1,
+            "ASSIGN label %s does not identify an executable branch target or FORMAT statement",
+            statement->labels[0]);
+    }
 }
 
 static void validate_statement_branches(Context *context, const Unit *unit,
@@ -220,26 +228,6 @@ static void validate_statement_branches(Context *context, const Unit *unit,
                                    statement->label_spans != NULL ? &statement->label_spans[label]
                                                                   : &statement->span,
                                    "alternate return target");
-    } else if (statement->kind == F2C_STMT_ASSIGNED_GOTO && statement->name != NULL) {
-        size_t assignment;
-        size_t found = 0U;
-        for (assignment = 0U; assignment < unit->statement_count; ++assignment) {
-            const F2cStatement *candidate = statement_body(&unit->statements[assignment]);
-            if (candidate == NULL || candidate->kind != F2C_STMT_ASSIGN_LABEL ||
-                candidate->name == NULL || strcmp(candidate->name, statement->name) != 0 ||
-                candidate->label_count != 1U)
-                continue;
-            ++found;
-            validate_branch_target(context, targets, target_count, ranges, range_count,
-                                   source_index, candidate->labels[0],
-                                   candidate->label_spans != NULL ? &candidate->label_spans[0]
-                                                                  : &statement->span,
-                                   "assigned GOTO target");
-        }
-        if (found == 0U)
-            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &statement->span, 1,
-                                     "assigned GOTO variable '%s' has no ASSIGN label source",
-                                     statement->name);
     }
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
         statement->kind == F2C_STMT_OPEN || statement->kind == F2C_STMT_REWIND ||
@@ -260,7 +248,26 @@ static void validate_statement_branches(Context *context, const Unit *unit,
                                     statement->nested, source_index);
 }
 
+static void validate_resolved_assigned_branches(Context *context, const BranchTarget *targets,
+                                                size_t target_count, const ConstructRange *ranges,
+                                                size_t range_count, const F2cStatement *statement,
+                                                size_t source_index) {
+    size_t branch;
+    if (statement == NULL)
+        return;
+    if (statement->kind == F2C_STMT_ASSIGNED_GOTO && statement->label_count == 0U) {
+        for (branch = 0U; branch < statement->resolved_branch_count; ++branch)
+            validate_branch_target(context, targets, target_count, ranges, range_count,
+                                   source_index, statement->resolved_branches[branch].label,
+                                   &statement->span, "assigned GOTO target");
+    }
+    if (statement->nested != NULL)
+        validate_resolved_assigned_branches(context, targets, target_count, ranges, range_count,
+                                            statement->nested, source_index);
+}
+
 void f2c_validation_branches(Context *context, Unit *unit) {
+    F2cControlFlowGraph graph;
     BranchTarget *targets;
     ConstructRange *ranges;
     size_t target_count = 0U;
@@ -299,7 +306,8 @@ void f2c_validation_branches(Context *context, Unit *unit) {
                 }
             }
             targets[target_count++] = (BranchTarget){
-                root->name, index, root->kind == F2C_STMT_LABEL && is_branchable(body)};
+                root->name, index, root->kind == F2C_STMT_LABEL && is_branchable(body),
+                root->kind == F2C_STMT_FORMAT};
         }
         if (root->terminal_loop_count != 0U) {
             size_t loop;
@@ -322,6 +330,13 @@ void f2c_validation_branches(Context *context, Unit *unit) {
     for (index = 0U; index < unit->statement_count; ++index)
         validate_statement_branches(context, unit, targets, target_count, ranges, range_count,
                                     &unit->statements[index], index);
+    if (f2c_control_flow_build(context, unit, &graph)) {
+        f2c_validation_assigned_labels(context, unit, &graph);
+        for (index = 0U; index < unit->statement_count; ++index)
+            validate_resolved_assigned_branches(context, targets, target_count, ranges, range_count,
+                                                &unit->statements[index], index);
+        f2c_control_flow_free(&graph);
+    }
     free(targets);
     free(ranges);
 }
