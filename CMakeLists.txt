@@ -624,6 +624,22 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_control_flow_tests)
     add_test(NAME control_flow_semantics COMMAND f2c_control_flow_tests)
 
+    add_executable(f2c_control_flow_graph_tests test/test_control_flow_graph.c)
+    f2c_configure_internal_test_target(f2c_control_flow_graph_tests)
+    target_include_directories(
+        f2c_control_flow_graph_tests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    add_test(NAME control_flow_graph COMMAND f2c_control_flow_graph_tests)
+
+    add_executable(f2c_data_flow_tests test/test_data_flow.c)
+    f2c_configure_internal_test_target(f2c_data_flow_tests)
+    target_include_directories(
+        f2c_data_flow_tests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    add_test(NAME data_flow_worklist COMMAND f2c_data_flow_tests)
+
     add_executable(
         f2c_real_representation_intrinsic_tests
         test/test_real_representation_intrinsic.c
