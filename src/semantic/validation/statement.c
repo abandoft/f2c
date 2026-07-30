@@ -248,6 +248,12 @@ static void validate_control_flow_statement(Context *context, Unit *unit,
                               1, "%s target must be a definable scalar INTEGER object",
                               statement->kind == F2C_STMT_ASSIGN_LABEL ? "ASSIGN"
                                                                        : "assigned GOTO");
+        } else if (expression != NULL && expression->type_kind != f2c_default_kind(TYPE_INTEGER)) {
+            f2c_diagnostic_at(context, statement->line,
+                              f2c_validation_expression_start_column(statement->text, expression),
+                              1, "%s target must have default INTEGER kind",
+                              statement->kind == F2C_STMT_ASSIGN_LABEL ? "ASSIGN"
+                                                                       : "assigned GOTO");
         }
     }
 }
