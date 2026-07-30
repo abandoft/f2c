@@ -121,7 +121,7 @@ static void test_typed_scalar_lowering(void) {
                strstr(result.code, "f2c_all_l(") != NULL &&
                strstr(result.code, "f2c_any_l(") != NULL,
            "logical reductions select the typed helper family");
-    expect(result.code != NULL && strstr(result.code, "F2C_DOT(") != NULL &&
+    expect(result.code != NULL && strstr(result.code, "f2c_dot_f(") != NULL &&
                strstr(result.code, "F2C_MAXIMUM_LOCATION(") != NULL &&
                strstr(result.code, "F2C_MINIMUM_LOCATION(") != NULL,
            "dot and location reductions lower from their typed intrinsic IDs");
@@ -130,9 +130,47 @@ static void test_typed_scalar_lowering(void) {
     f2c_result_free(&result);
 }
 
+static void test_mixed_and_complex_lowering(void) {
+    static const char source[] =
+        "subroutine mixed_reductions(c4, c8, i8, r4, l1, l8, c_result, z_result, r_result, "
+        "l_result)\n"
+        "  implicit none\n"
+        "  complex, intent(in) :: c4(3)\n"
+        "  double complex, intent(in) :: c8(3)\n"
+        "  integer(kind=8), intent(in) :: i8(3)\n"
+        "  real, intent(in) :: r4(3)\n"
+        "  logical(kind=1), intent(in) :: l1(3)\n"
+        "  logical(kind=8), intent(in) :: l8(3)\n"
+        "  complex, intent(out) :: c_result\n"
+        "  double complex, intent(out) :: z_result\n"
+        "  real, intent(out) :: r_result\n"
+        "  logical(kind=8), intent(out) :: l_result\n"
+        "  c_result = sum(c4) + product(c4) + dot_product(c4, r4)\n"
+        "  z_result = sum(c8) + product(c8) + dot_product(c4, c8)\n"
+        "  r_result = dot_product(i8, r4)\n"
+        "  l_result = dot_product(l1, l8)\n"
+        "end subroutine mixed_reductions\n";
+    F2cOptions options = {"mixed_reductions.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "mixed-kind and complex reductions produce portable C17");
+    expect(result.code != NULL && strstr(result.code, "f2c_sum_c") != NULL &&
+               strstr(result.code, "f2c_product_z") != NULL &&
+               strstr(result.code, "f2c_dot_c") != NULL &&
+               strstr(result.code, "f2c_dot_z") != NULL,
+           "complex SUM, PRODUCT, and DOT_PRODUCT use kind-specific helpers");
+    expect(result.code != NULL && strstr(result.code, "f2c_dot_f") != NULL &&
+               strstr(result.code, "f2c_dot_l") != NULL &&
+               strstr(result.code, "sizeof(*(l1))") != NULL &&
+               strstr(result.code, "sizeof(*(l8))") != NULL,
+           "mixed numeric and non-default logical vectors retain their element representations");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_argument_contracts();
     test_dot_product_contracts();
     test_typed_scalar_lowering();
+    test_mixed_and_complex_lowering();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -260,6 +260,67 @@ static const char *reduction_macro(F2cIntrinsicId intrinsic) {
     }
 }
 
+static const char *reduction_type_code(const F2cExpr *expression) {
+    const int kind = expression != NULL && expression->type_kind != 0
+                         ? expression->type_kind
+                         : f2c_default_kind(expression != NULL ? expression->type : TYPE_UNKNOWN);
+    if (expression == NULL)
+        return NULL;
+    switch (expression->type) {
+    case TYPE_INTEGER:
+        return kind == 1   ? "F2C_REDUCTION_I8"
+               : kind == 2 ? "F2C_REDUCTION_I16"
+               : kind == 4 ? "F2C_REDUCTION_I32"
+               : kind == 8 ? "F2C_REDUCTION_I64"
+                           : NULL;
+    case TYPE_REAL:
+        return "F2C_REDUCTION_F";
+    case TYPE_DOUBLE:
+        return "F2C_REDUCTION_D";
+    case TYPE_COMPLEX:
+        return "F2C_REDUCTION_C";
+    case TYPE_DOUBLE_COMPLEX:
+        return "F2C_REDUCTION_Z";
+    case TYPE_UNKNOWN:
+    case TYPE_LOGICAL:
+    case TYPE_CHARACTER:
+    case TYPE_DERIVED:
+    default:
+        return NULL;
+    }
+}
+
+static const char *dot_product_helper(const F2cExpr *expression) {
+    const int kind = expression != NULL && expression->type_kind != 0
+                         ? expression->type_kind
+                         : f2c_default_kind(expression != NULL ? expression->type : TYPE_UNKNOWN);
+    if (expression == NULL)
+        return NULL;
+    switch (expression->type) {
+    case TYPE_INTEGER:
+        return kind == 1   ? "f2c_dot_i8"
+               : kind == 2 ? "f2c_dot_i16"
+               : kind == 4 ? "f2c_dot_i32"
+               : kind == 8 ? "f2c_dot_i64"
+                           : NULL;
+    case TYPE_REAL:
+        return "f2c_dot_f";
+    case TYPE_DOUBLE:
+        return "f2c_dot_d";
+    case TYPE_COMPLEX:
+        return "f2c_dot_c";
+    case TYPE_DOUBLE_COMPLEX:
+        return "f2c_dot_z";
+    case TYPE_LOGICAL:
+        return "f2c_dot_l";
+    case TYPE_UNKNOWN:
+    case TYPE_CHARACTER:
+    case TYPE_DERIVED:
+    default:
+        return NULL;
+    }
+}
+
 static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) {
     const F2cExpr *left_array =
         f2c_intrinsic_argument(expression->children, expression->child_count, "vector_a", 0U);
@@ -271,20 +332,35 @@ static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) 
     char *right_pointer = NULL;
     char *right_count = NULL;
     char *right_stride = NULL;
+    const char *helper = dot_product_helper(expression);
     Buffer result = {0};
-    if (!f2c_expression_array_view(unit, left_array, &left_pointer, &left_count, &left_stride,
+    if (helper == NULL ||
+        !f2c_expression_array_view(unit, left_array, &left_pointer, &left_count, &left_stride,
                                    supported) ||
         !f2c_expression_array_view(unit, right_array, &right_pointer, &right_count, &right_stride,
                                    supported)) {
         goto unsupported;
     }
-    f2c_buffer_printf(&result,
-                      "((%s) == (%s) ? %s(%s, %s, %s, %s, %s) : "
-                      "(abort(), (%s)0))",
-                      left_count, right_count,
-                      expression->type == TYPE_LOGICAL ? "F2C_LOGICAL_DOT" : "F2C_DOT",
-                      left_pointer, left_stride, right_pointer, right_stride, left_count,
-                      f2c_expression_c_type(expression));
+    if (expression->type == TYPE_LOGICAL) {
+        f2c_buffer_printf(&result,
+                          "((%s) == (%s) ? %s((const void *)(%s), sizeof(*(%s)), %s, "
+                          "(const void *)(%s), sizeof(*(%s)), %s, %s) : "
+                          "(abort(), false))",
+                          left_count, right_count, helper, left_pointer, left_pointer, left_stride,
+                          right_pointer, right_pointer, right_stride, left_count);
+    } else {
+        const char *left_type = reduction_type_code(left_array);
+        const char *right_type = reduction_type_code(right_array);
+        if (left_type == NULL || right_type == NULL)
+            goto unsupported;
+        f2c_buffer_printf(&result,
+                          "((%s) == (%s) ? %s((const void *)(%s), %s, %s, "
+                          "(const void *)(%s), %s, %s, %s) : "
+                          "(abort(), (%s)0))",
+                          left_count, right_count, helper, left_pointer, left_type, left_stride,
+                          right_pointer, right_type, right_stride, left_count,
+                          f2c_expression_c_type(expression));
+    }
     free(left_pointer);
     free(left_count);
     free(left_stride);
@@ -358,7 +434,11 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
         goto unsupported;
     if (dimension_code != NULL)
         f2c_buffer_printf(&result, "((%s) == 1 ? ", dimension_code);
-    f2c_buffer_printf(&result, "%s(%s, %s, %s)", macro, pointer, count, stride);
+    if (logical)
+        f2c_buffer_printf(&result, "%s((const void *)(%s), sizeof(*(%s)), %s, %s)", macro, pointer,
+                          pointer, count, stride);
+    else
+        f2c_buffer_printf(&result, "%s(%s, %s, %s)", macro, pointer, count, stride);
     if (dimension_code != NULL)
         f2c_buffer_printf(&result, " : (abort(), (%s)0))", f2c_expression_c_type(expression));
     free(pointer);
