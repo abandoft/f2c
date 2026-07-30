@@ -162,7 +162,8 @@ static void resolve_intrinsic_shape(AstParser *parser, F2cExpr *expression) {
     f2c_ast_set_expression_shape(expression, expression->rank, F2C_SHAPE_EXPRESSION);
     if (expression->rank != 0U) {
         for (argument = 0U; argument < expression->child_count; ++argument) {
-            if (expression->children[argument]->rank == expression->rank) {
+            if (expression->children[argument]->rank == expression->rank &&
+                expression->children[argument]->shape.rank == expression->rank) {
                 f2c_ast_copy_expression_shape(expression, &expression->children[argument]->shape);
                 break;
             }

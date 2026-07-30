@@ -188,7 +188,8 @@ static F2cExpr *parse_postfix(AstParser *parser, const F2cToken *name_token) {
         if (symbol->external_result_rank != 0U) {
             expression->rank = symbol->external_result_rank;
             expression->shape = symbol->shape;
-            if (expression->shape.kind == F2C_SHAPE_UNKNOWN)
+            if (expression->shape.kind == F2C_SHAPE_UNKNOWN ||
+                expression->shape.rank != symbol->external_result_rank)
                 f2c_ast_set_expression_shape(expression, symbol->external_result_rank,
                                              symbol->external_result_allocatable
                                                  ? F2C_SHAPE_DEFERRED

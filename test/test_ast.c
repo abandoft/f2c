@@ -193,6 +193,27 @@ static void test_kind_shape_and_value_category(void) {
     f2c_expr_free(symbols[0].dimensions[0].upper_expression);
 }
 
+static void test_array_function_result_shape_in_transform(void) {
+    Symbol function;
+    Unit unit;
+    F2cExpr *expression;
+    const char *error_at = NULL;
+    memset(&unit, 0, sizeof(unit));
+    add_symbol(&function, 0U, "values", TYPE_INTEGER, 0U, 1);
+    function.external_result_rank = 1U;
+    function.external_result_allocatable = 1;
+    unit.symbols = &function;
+    unit.symbol_count = 1U;
+
+    expression = f2c_parse_expression_ast(&unit, "reshape(values(), [3])", &error_at);
+    expect(expression != NULL && error_at == NULL &&
+               expression->intrinsic == F2C_INTRINSIC_RESHAPE && expression->rank == 1U &&
+               expression->shape.rank == 1U && expression->shape.dimensions[0].extent_known &&
+               expression->shape.dimensions[0].extent == 3U,
+           "transform shape inference preserves an imported array function result rank");
+    f2c_expr_free(expression);
+}
+
 static void test_typed_numeric_tree(void) {
     Symbol symbols[3];
     Unit unit;
@@ -767,6 +788,7 @@ static void test_component_section_rank(void) {
 
 int main(void) {
     test_kind_shape_and_value_category();
+    test_array_function_result_shape_in_transform();
     test_typed_numeric_tree();
     test_defined_operator_tree();
     test_array_section();
