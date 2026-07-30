@@ -2,6 +2,7 @@
 #define F2C_SEMANTIC_VALIDATION_PRIVATE_H
 
 #include "internal/f2c.h"
+#include "semantic/control_flow.h"
 
 const char *f2c_validation_unit_line(const Context *context, const Unit *unit, size_t line);
 size_t f2c_validation_expression_column(const char *statement_text, const F2cExpr *expression);
@@ -79,6 +80,7 @@ void f2c_validation_data_statement(Context *context, Unit *unit, F2cStatement *s
 void f2c_validation_select_case_constructs(Context *context, Unit *unit);
 void f2c_validation_bind_constructs(Context *context, Unit *unit);
 void f2c_validation_branches(Context *context, Unit *unit);
+void f2c_validation_assigned_labels(Context *context, Unit *unit, F2cControlFlowGraph *graph);
 void f2c_validation_lifetimes(Context *context, Unit *unit);
 void f2c_validation_where_statement(Context *context, const F2cStatement *statement);
 
