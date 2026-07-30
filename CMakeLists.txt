@@ -156,6 +156,7 @@ set(
     src/codegen/statement/select.c
     src/codegen/statement/private.h
     src/codegen/statement/random.c
+    src/codegen/statement/temporary.c
     src/codegen/statement/time.c
     src/codegen/statement/target.c
     src/codegen/statement/type_select.c
