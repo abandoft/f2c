@@ -314,9 +314,8 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
         if (left->children[dimension]->kind != F2C_EXPR_ARRAY_SECTION &&
             left->children[dimension]->rank == 0U)
             continue;
-        if (section_count == F2C_MAX_RANK ||
-            (extents[section_count] =
-                 f2c_array_expression_extent(unit, left, section_count)) == NULL)
+        if (section_count == F2C_MAX_RANK || (extents[section_count] = f2c_array_expression_extent(
+                                                  unit, left, section_count)) == NULL)
             goto cleanup;
         ++section_count;
     }
@@ -659,16 +658,23 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
     if (f2c_emit_transform_assignment(context, unit, left, right, line, depth))
         return 1;
     if (left_symbol->allocatable && right != NULL && right->kind == F2C_EXPR_CALL &&
-        right->symbol != NULL && right->symbol->external_result_allocatable) {
+        f2c_expression_has_allocatable_result(right) &&
+        (left_symbol->type != TYPE_CHARACTER || left_symbol->deferred_character)) {
         char *result = f2c_array_emit_expression(unit, right);
         const char *name = f2c_symbol_c_name(unit, left_symbol);
+        char *old_count =
+            left_symbol->type == TYPE_DERIVED ? f2c_symbol_element_count(unit, left_symbol) : NULL;
         size_t dimension;
-        if (result == NULL || right->symbol->external_result_rank != left_symbol->rank ||
-            right->type != left_symbol->type || right->type_kind != left_symbol->kind) {
+        if (result == NULL || right->rank != left_symbol->rank ||
+            right->type != left_symbol->type || right->type_kind != left_symbol->kind ||
+            (left_symbol->type == TYPE_DERIVED &&
+             (right->derived_type == NULL || right->derived_type != left_symbol->derived_type)) ||
+            (left_symbol->type == TYPE_DERIVED && old_count == NULL)) {
             free(result);
+            free(old_count);
             f2c_diagnostic(context, line, 1,
                            "allocatable function-result assignment requires matching type, kind, "
-                           "and rank");
+                           "rank, and derived type");
             return 1;
         }
         f2c_array_indent(&context->output, depth);
@@ -676,10 +682,26 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
         f2c_array_indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output, "f2c_descriptor f2c_function_result = %s;\n", result);
         f2c_array_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output,
-                          "if (f2c_function_result.rank != %zuU || "
-                          "f2c_function_result.element_size != sizeof(%s)) abort();\n",
-                          left_symbol->rank, f2c_symbol_c_type(left_symbol));
+        f2c_buffer_printf(
+            &context->output,
+            "if (!f2c_descriptor_bridge_valid(&f2c_function_result, %zuU, sizeof(%s)) || "
+            "!f2c_function_result.deallocatable || "
+            "!f2c_descriptor_is_contiguous(%zuU, (const size_t[]){",
+            left_symbol->rank, f2c_symbol_c_type(left_symbol), left_symbol->rank);
+        for (dimension = 0U; dimension < left_symbol->rank; ++dimension)
+            f2c_buffer_printf(&context->output, "%s(size_t)f2c_function_result.extent[%zu]",
+                              dimension == 0U ? "" : ", ", dimension);
+        f2c_buffer_append(&context->output, "}, f2c_function_result.stride)) abort();\n");
+        f2c_array_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output,
+                          "if (f2c_descriptor_element_count(&f2c_function_result) != 0U && "
+                          "f2c_function_result.data == NULL) abort();\n");
+        if (left_symbol->type == TYPE_DERIVED) {
+            f2c_array_indent(&context->output, depth + 1);
+            f2c_buffer_printf(
+                &context->output, "if (%s != NULL) f2c_destroy_array_%s(%s, (size_t)(%s), %zuU);\n",
+                name, left_symbol->derived_type->c_name, name, old_count, left_symbol->rank);
+        }
         f2c_array_indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output, "free(%s);\n", name);
         f2c_array_indent(&context->output, depth + 1);
@@ -699,9 +721,7 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
                               "f2c_function_result.extent[%zu] > INT32_MAX) abort();\n",
                               dimension, dimension, dimension, dimension);
             f2c_array_indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "%s_lower_%zu = (int32_t)f2c_function_result.lower[%zu];\n", name,
-                              dimension + 1U, dimension);
+            f2c_buffer_printf(&context->output, "%s_lower_%zu = 1;\n", name, dimension + 1U);
             f2c_array_indent(&context->output, depth + 1);
             f2c_buffer_printf(&context->output,
                               "%s_extent_%zu = (int32_t)f2c_function_result.extent[%zu];\n", name,
@@ -710,6 +730,7 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
         free(result);
+        free(old_count);
         return 1;
     }
     if (f2c_emit_allocatable_array_assignment(context, unit, left, right, depth))

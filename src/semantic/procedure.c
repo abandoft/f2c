@@ -23,6 +23,9 @@ static Symbol *function_result(Unit *procedure) {
                : NULL;
 }
 
+static int same_character_length(const Symbol *left, const Symbol *right);
+static int same_shape_contract(const Symbol *left, const Symbol *right);
+
 static int same_function_result_type(const Unit *left, const Unit *right) {
     Symbol *left_result;
     Symbol *right_result;
@@ -30,11 +33,15 @@ static int same_function_result_type(const Unit *left, const Unit *right) {
         return 1;
     if (left->return_type != right->return_type || left->return_kind != right->return_kind)
         return 0;
-    if (left->return_type != TYPE_DERIVED)
-        return 1;
     left_result = function_result((Unit *)left);
     right_result = function_result((Unit *)right);
-    return left_result != NULL && right_result != NULL &&
+    if (left_result == NULL || right_result == NULL ||
+        !same_shape_contract(left_result, right_result) ||
+        left_result->allocatable != right_result->allocatable ||
+        left_result->pointer != right_result->pointer ||
+        !same_character_length(left_result, right_result))
+        return 0;
+    return left->return_type != TYPE_DERIVED ||
            left_result->derived_type == right_result->derived_type;
 }
 
@@ -149,10 +156,9 @@ static void validate_interface_definition(Context *context, Unit *caller, const 
     }
     if (interface->kind == UNIT_FUNCTION && !same_function_result_type(interface, definition)) {
         f2c_diagnostic(context, line, 1,
-                       "explicit interface for function '%s' has return type '%s' but the "
-                       "project definition has '%s'",
-                       visible_name, f2c_c_type(interface->return_type),
-                       f2c_c_type(definition->return_type));
+                       "explicit interface for function '%s' has an incompatible result type, "
+                       "kind, shape, length, ALLOCATABLE, or POINTER contract",
+                       visible_name);
     }
     if (!same_dummy_layout(interface, definition)) {
         f2c_diagnostic(context, line, 1,

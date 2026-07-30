@@ -39,6 +39,7 @@ struct Symbol {
     int external_subroutine;
     size_t external_alternate_return_count;
     int external_result_allocatable;
+    int external_result_pointer;
     size_t external_result_rank;
     int external_signature_observed;
     int external_signature_explicit;

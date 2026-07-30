@@ -84,6 +84,7 @@ set(
     src/codegen/array/component.c
     src/codegen/array/constructor.c
     src/codegen/array/element.c
+    src/codegen/array/function.c
     src/codegen/array/inquiry.c
     src/codegen/array/private.h
     src/codegen/array/temporary.c
@@ -146,6 +147,7 @@ set(
     src/codegen/lowering.c
     src/codegen/module.c
     src/codegen/ownership.c
+    src/codegen/result.c
     src/codegen/statement.c
     src/codegen/statement/assignment.c
     src/codegen/statement/bit.c

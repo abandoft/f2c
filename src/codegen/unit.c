@@ -102,20 +102,33 @@ static void emit_declarations(Context *context, Unit *unit) {
     }
     {
         Symbol *result = f2c_unit_function_result(unit);
-        if (result != NULL && result->allocatable) {
+        if (result != NULL && f2c_unit_has_descriptor_result(unit)) {
             size_t dimension;
             const char *name = f2c_symbol_c_name(unit, result);
-            f2c_unit_indent(output, 1);
-            f2c_buffer_printf(output, "%s *%s = NULL;\n", f2c_symbol_c_type(result), name);
-            if (result->deferred_character) {
+            if (f2c_symbol_is_automatic_array(unit, result)) {
+                f2c_unit_emit_automatic_array_declaration(output, unit, result, 1);
+            } else {
                 f2c_unit_indent(output, 1);
-                f2c_buffer_printf(output, "size_t f2c_char_len_%s = 0U;\n", name);
-            }
-            for (dimension = 0U; dimension < result->rank; ++dimension) {
-                f2c_unit_indent(output, 1);
-                f2c_buffer_printf(output, "int32_t %s_lower_%zu = 1;\n", name, dimension + 1U);
-                f2c_unit_indent(output, 1);
-                f2c_buffer_printf(output, "int32_t %s_extent_%zu = 0;\n", name, dimension + 1U);
+                f2c_buffer_printf(output, "%s *%s = NULL;\n", f2c_symbol_c_type(result), name);
+                if (result->pointer) {
+                    f2c_unit_indent(output, 1);
+                    f2c_buffer_printf(output, "bool %s_deallocatable = false;\n", name);
+                }
+                if (result->deferred_character) {
+                    f2c_unit_indent(output, 1);
+                    f2c_buffer_printf(output, "size_t f2c_char_len_%s = 0U;\n", name);
+                }
+                for (dimension = 0U; dimension < result->rank; ++dimension) {
+                    f2c_unit_indent(output, 1);
+                    f2c_buffer_printf(output, "int32_t %s_lower_%zu = 1;\n", name, dimension + 1U);
+                    f2c_unit_indent(output, 1);
+                    f2c_buffer_printf(output, "int32_t %s_extent_%zu = 0;\n", name, dimension + 1U);
+                    if (result->pointer) {
+                        f2c_unit_indent(output, 1);
+                        f2c_buffer_printf(output, "ptrdiff_t %s_stride_%zu = 0;\n", name,
+                                          dimension + 1U);
+                    }
+                }
             }
             f2c_unit_indent(output, 1);
             f2c_buffer_append(output, "f2c_descriptor f2c_result_descriptor = {0};\n");
@@ -383,7 +396,7 @@ static void emit_declarations(Context *context, Unit *unit) {
         free(count);
     }
     if (unit->kind == UNIT_FUNCTION && unit->return_type != TYPE_CHARACTER &&
-        !f2c_unit_has_allocatable_result(unit)) {
+        !f2c_unit_has_descriptor_result(unit)) {
         f2c_unit_indent(output, 1);
         Symbol *result = f2c_unit_function_result(unit);
         f2c_buffer_printf(output, "%s f2c_result = {0};\n", f2c_unit_function_return_type(unit));
@@ -548,7 +561,7 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
         if (!f2c_unit_statement_is_function_definition(unit, i))
             f2c_visit_statement_expressions(&unit->statements[i], emit_character_temporary_cleanup,
                                             &emitter);
-    if (function_result != NULL && function_result->allocatable) {
+    if (function_result != NULL && f2c_unit_has_descriptor_result(unit)) {
         const char *name = f2c_symbol_c_name(unit, function_result);
         size_t dimension;
         char *character_length = function_result->type == TYPE_CHARACTER
@@ -556,6 +569,12 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
                                      : NULL;
         f2c_unit_indent(output, depth);
         f2c_buffer_printf(output, "f2c_result_descriptor.data = %s;\n", name);
+        f2c_unit_indent(output, depth);
+        if (function_result->pointer)
+            f2c_buffer_printf(output, "f2c_result_descriptor.deallocatable = %s_deallocatable;\n",
+                              name);
+        else
+            f2c_buffer_append(output, "f2c_result_descriptor.deallocatable = true;\n");
         f2c_unit_indent(output, depth);
         f2c_buffer_printf(output, "f2c_result_descriptor.element_size = sizeof(%s);\n",
                           f2c_symbol_c_type(function_result));
@@ -565,14 +584,21 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
         f2c_buffer_printf(output, "f2c_result_descriptor.character_length = (size_t)(%s);\n",
                           character_length != NULL ? character_length : "0U");
         for (dimension = 0U; dimension < function_result->rank; ++dimension) {
+            char *lower = function_result->allocatable || function_result->pointer
+                              ? f2c_symbol_dimension_lower(unit, function_result, dimension)
+                              : f2c_strdup("1");
+            char *extent = f2c_symbol_dimension_extent(unit, function_result, dimension);
             f2c_unit_indent(output, depth);
-            f2c_buffer_printf(output, "f2c_result_descriptor.lower[%zu] = %s_lower_%zu;\n",
-                              dimension, name, dimension + 1U);
+            f2c_buffer_printf(output, "f2c_result_descriptor.lower[%zu] = %s;\n", dimension,
+                              lower != NULL ? lower : "1");
             f2c_unit_indent(output, depth);
-            f2c_buffer_printf(output, "f2c_result_descriptor.extent[%zu] = %s_extent_%zu;\n",
-                              dimension, name, dimension + 1U);
+            f2c_buffer_printf(output, "f2c_result_descriptor.extent[%zu] = (int64_t)(%s);\n",
+                              dimension, extent != NULL ? extent : "0");
             f2c_unit_indent(output, depth);
-            if (dimension == 0U)
+            if (function_result->pointer)
+                f2c_buffer_printf(output, "f2c_result_descriptor.stride[%zu] = %s_stride_%zu;\n",
+                                  dimension, name, dimension + 1U);
+            else if (dimension == 0U)
                 f2c_buffer_append(output, "f2c_result_descriptor.stride[0] = 1;\n");
             else
                 f2c_buffer_printf(
@@ -581,6 +607,8 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
                     "f2c_result_descriptor.stride[%zu], "
                     "(size_t)f2c_result_descriptor.extent[%zu]);\n",
                     dimension, dimension - 1U, dimension - 1U);
+            free(lower);
+            free(extent);
         }
         free(character_length);
     }
@@ -695,7 +723,7 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
 static void emit_unused_suppression(Buffer *output, Unit *unit) {
     size_t i;
     if (unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER &&
-        !f2c_unit_has_allocatable_result(unit)) {
+        !f2c_unit_has_descriptor_result(unit)) {
         f2c_unit_indent(output, 1);
         f2c_buffer_append(output, "(void)f2c_result;\n");
         f2c_unit_indent(output, 1);
@@ -789,7 +817,7 @@ static int needs_stable_procedure_boundary(const Unit *unit) {
 static void emit_wrapper_arguments(Buffer *output, Unit *unit) {
     const int character_result = unit->kind == UNIT_FUNCTION &&
                                  unit->return_type == TYPE_CHARACTER &&
-                                 !f2c_unit_has_allocatable_result(unit);
+                                 !f2c_unit_has_descriptor_result(unit);
     size_t i;
     int emitted = 0;
     if (character_result) {
@@ -821,7 +849,7 @@ static void emit_wrapper_arguments(Buffer *output, Unit *unit) {
 
 static void emit_restricted_wrapper(Buffer *output, Unit *unit, const char *body_name) {
     const int returns_value =
-        f2c_unit_has_allocatable_result(unit) ||
+        f2c_unit_has_descriptor_result(unit) ||
         (unit->kind == UNIT_FUNCTION && unit->return_type != TYPE_CHARACTER) ||
         (unit->kind == UNIT_SUBROUTINE && unit->alternate_return_count != 0U);
     f2c_buffer_append(output, "static ");
@@ -889,7 +917,7 @@ void f2c_emit_unit(Context *context, Unit *unit) {
         f2c_buffer_append(&context->output, "    return 0;\n");
     } else if (unit->kind == UNIT_SUBROUTINE && unit->alternate_return_count != 0U) {
         f2c_buffer_append(&context->output, "    return 0;\n");
-    } else if (f2c_unit_has_allocatable_result(unit)) {
+    } else if (f2c_unit_has_descriptor_result(unit)) {
         f2c_buffer_append(&context->output, "    return f2c_result_descriptor;\n");
     } else if (unit->kind == UNIT_FUNCTION && unit->return_type != TYPE_CHARACTER) {
         f2c_buffer_append(&context->output, "    return f2c_result;\n");

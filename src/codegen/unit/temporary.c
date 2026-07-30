@@ -4,21 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int call_has_allocatable_result(const F2cExpr *expression) {
-    const Unit *procedure = expression != NULL ? expression->resolved_procedure : NULL;
-    const Symbol *result = procedure != NULL && procedure->result_name != NULL
-                               ? f2c_find_symbol((Unit *)procedure, procedure->result_name)
-                               : NULL;
-    return (result != NULL && result->allocatable) ||
-           (expression != NULL && expression->symbol != NULL &&
-            expression->symbol->external_result_allocatable);
-}
-
 int f2c_unit_expression_is_character_temporary(const F2cExpr *expression) {
     const int function_call = expression != NULL && expression->kind == F2C_EXPR_CALL &&
                               expression->type == TYPE_CHARACTER && expression->text != NULL &&
                               !f2c_is_intrinsic_name(expression->text) &&
-                              !call_has_allocatable_result(expression);
+                              !f2c_expression_has_descriptor_result(expression);
     const int intrinsic_call = expression != NULL && expression->kind == F2C_EXPR_CALL &&
                                (expression->intrinsic == F2C_INTRINSIC_ADJUSTL ||
                                 expression->intrinsic == F2C_INTRINSIC_ADJUSTR ||
@@ -198,19 +188,21 @@ static int call_has_managed_lifecycle(const F2cExpr *expression) {
 }
 
 static int materialized_call_result(const F2cExpr *expression) {
-    return call_has_managed_lifecycle(expression) && !call_has_allocatable_result(expression) &&
-           expression->rank == 0U && expression->type != TYPE_UNKNOWN &&
-           expression->type != TYPE_CHARACTER && expression->type != TYPE_DERIVED;
+    return call_has_managed_lifecycle(expression) &&
+           !f2c_expression_has_descriptor_result(expression) && expression->rank == 0U &&
+           expression->type != TYPE_UNKNOWN && expression->type != TYPE_CHARACTER &&
+           expression->type != TYPE_DERIVED;
 }
 
 static int materialized_derived_call_result(const F2cExpr *expression) {
-    return call_has_managed_lifecycle(expression) && !call_has_allocatable_result(expression) &&
-           expression->rank == 0U && expression->type == TYPE_DERIVED &&
-           expression->derived_type != NULL;
+    return call_has_managed_lifecycle(expression) &&
+           !f2c_expression_has_descriptor_result(expression) && expression->rank == 0U &&
+           expression->type == TYPE_DERIVED && expression->derived_type != NULL;
 }
 
 static int materialized_descriptor_call_result(const F2cExpr *expression) {
-    return call_has_managed_lifecycle(expression) && call_has_allocatable_result(expression);
+    return call_has_managed_lifecycle(expression) &&
+           f2c_expression_has_descriptor_result(expression);
 }
 
 static const F2cExpr *ordered_binary_operand(const F2cExpr *expression) {
@@ -226,7 +218,7 @@ static const F2cExpr *ordered_binary_operand(const F2cExpr *expression) {
 
 static int can_materialize_ordered_operand(const F2cExpr *operand) {
     return operand != NULL && operand->rank == 0U && operand->type != TYPE_UNKNOWN &&
-           operand->type != TYPE_DERIVED && !call_has_allocatable_result(operand);
+           operand->type != TYPE_DERIVED && !f2c_expression_has_descriptor_result(operand);
 }
 
 static int call_uses_argument_values(const F2cExpr *expression) {

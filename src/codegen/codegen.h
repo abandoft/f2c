@@ -6,6 +6,10 @@
 void f2c_emit_supported_modules(Context *context);
 void f2c_emit_project_modules(Context *context);
 void f2c_emit_derived_types(Context *context);
+int f2c_unit_has_descriptor_result(const Unit *unit);
+int f2c_procedure_has_descriptor_result(const Symbol *procedure);
+int f2c_expression_has_allocatable_result(const F2cExpr *expression);
+int f2c_expression_has_descriptor_result(const F2cExpr *expression);
 void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, const char *name);
 size_t f2c_host_capture_local_descriptor_count(Unit *caller, const Unit *procedure);
 int f2c_host_capture_has_descriptor_lifecycle(Unit *caller, const Unit *procedure);
@@ -59,7 +63,6 @@ void f2c_emit_block_scope_begin(Buffer *output, Unit *unit, size_t line, int dep
 void f2c_emit_block_scope_end(Buffer *output, Unit *unit, size_t line, int depth);
 void f2c_emit_scope_cleanup_plan(Buffer *output, Unit *unit, const F2cScopeCleanupPlan *plan,
                                  int depth);
-int f2c_unit_has_allocatable_result(Unit *unit);
 void f2c_emit_call(Buffer *output, Unit *unit, const char *name,
                    F2cExpr *const *argument_expressions, size_t count, int depth);
 void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
@@ -95,6 +98,9 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
                                     const F2cExpr *right, size_t line, int depth);
 int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStatement *statement,
                                   int depth);
+int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
+                                 const Symbol *callee, F2cExpr *const *arguments, size_t count,
+                                 const F2cStatement *alternate_call, size_t line, int depth);
 int f2c_emit_transform_assignment(Context *context, Unit *unit, const F2cExpr *left,
                                   const F2cExpr *right, size_t line, int depth);
 int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement *statement,

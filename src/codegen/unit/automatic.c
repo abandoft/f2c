@@ -5,6 +5,10 @@
 #include <string.h>
 
 static int automatic_array_candidate(const Unit *unit, const Symbol *symbol) {
+    const int function_result =
+        unit != NULL && symbol != NULL && f2c_unit_function_result((Unit *)unit) == symbol;
+    if (function_result)
+        return symbol->rank != 0U && !symbol->allocatable && !symbol->pointer;
     return unit != NULL && symbol != NULL && symbol->rank != 0U && !symbol->argument &&
            !symbol->parameter && !symbol->external && !symbol->module_entity &&
            !symbol->host_associated && symbol->common_block == NULL &&
@@ -12,25 +16,28 @@ static int automatic_array_candidate(const Unit *unit, const Symbol *symbol) {
            !symbol->statement_function && !symbol->allocatable && !symbol->pointer &&
            !symbol->automatic_character && !unit->save_all && !symbol->saved &&
            symbol->initializer == NULL && symbol->data_element_initializers == NULL &&
-           !(unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
-             strcmp(symbol->name, unit->result_name) == 0);
+           symbol->scope_begin_line == 0U;
 }
 
 int f2c_symbol_is_automatic_array(Unit *unit, const Symbol *symbol) {
     size_t dimension;
     int64_t value;
+    const int function_result =
+        unit != NULL && symbol != NULL && f2c_unit_function_result(unit) == symbol;
     if (!automatic_array_candidate(unit, symbol))
         return 0;
     for (dimension = 0U; dimension < symbol->rank; ++dimension) {
         const Dimension *shape = &symbol->dimensions[dimension];
         if (shape->kind != F2C_DIMENSION_EXPLICIT || shape->upper_expression == NULL)
             return 0;
+        if (function_result)
+            continue;
         if (shape->lower_expression == NULL ||
             !f2c_evaluate_integer_constant(unit, shape->lower_expression, &value) ||
             !f2c_evaluate_integer_constant(unit, shape->upper_expression, &value))
             return 1;
     }
-    return 0;
+    return function_result;
 }
 
 static void emit_metadata_declarations(Buffer *output, Unit *unit, Symbol *symbol, int depth) {

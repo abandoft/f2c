@@ -10,6 +10,39 @@ static const F2cExpr *actual_value(const F2cExpr *actual) {
                : actual;
 }
 
+static char *emit_lowered_descriptor_actual(Unit *unit, const F2cExpr *actual) {
+    Buffer result = {0};
+    char *character_length = NULL;
+    size_t dimension;
+    if (actual == NULL || !actual->lowered_array_temporary || actual->lowered_c == NULL ||
+        actual->rank == 0U)
+        return NULL;
+    if (actual->type == TYPE_CHARACTER)
+        character_length = f2c_character_length_expression(unit, actual);
+    f2c_buffer_printf(&result,
+                      "(&(f2c_descriptor){.data = %s, .deallocatable = false, "
+                      ".element_size = sizeof(%s), .rank = %zuU, .lower = {",
+                      actual->lowered_c, f2c_expression_c_type(actual), actual->rank);
+    for (dimension = 0U; dimension < actual->rank; ++dimension)
+        f2c_buffer_printf(&result, "%sINT64_C(1)", dimension == 0U ? "" : ", ");
+    f2c_buffer_append(&result, "}, .extent = {");
+    for (dimension = 0U; dimension < actual->rank; ++dimension)
+        f2c_buffer_printf(&result, "%s(int64_t)%s_extent_%zu", dimension == 0U ? "" : ", ",
+                          actual->lowered_c, dimension + 1U);
+    f2c_buffer_append(&result, "}, .stride = {");
+    for (dimension = 0U; dimension < actual->rank; ++dimension) {
+        size_t prior;
+        f2c_buffer_printf(&result, "%s(ptrdiff_t)1", dimension == 0U ? "" : ", ");
+        for (prior = 0U; prior < dimension; ++prior)
+            f2c_buffer_printf(&result, " * (ptrdiff_t)%s_extent_%zu", actual->lowered_c,
+                              prior + 1U);
+    }
+    f2c_buffer_printf(&result, "}, .character_length = (size_t)(%s)})",
+                      character_length != NULL ? character_length : "0U");
+    free(character_length);
+    return f2c_buffer_take(&result);
+}
+
 static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supported) {
     Buffer result = {0};
     char *character_length = NULL;
@@ -19,6 +52,8 @@ static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supp
     actual = actual_value(actual);
     if (actual != NULL && actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
+    if (actual != NULL && actual->lowered_array_temporary)
+        return emit_lowered_descriptor_actual(unit, actual);
     if (actual == NULL || actual->symbol == NULL || !f2c_descriptor_view(unit, actual, &view)) {
         *supported = 0;
         return NULL;
@@ -89,7 +124,7 @@ char *f2c_expression_descriptor_actual(Buffer *setup, Buffer *cleanup, Unit *uni
     return f2c_buffer_take(&result);
 }
 
-char *f2c_expression_wrap_managed_call(const F2cExpr *expression, int allocatable_result,
+char *f2c_expression_wrap_managed_call(const F2cExpr *expression, int descriptor_result,
                                        Buffer *setup, Buffer *cleanup, char *call, int *supported) {
     Buffer result = {0};
     if (setup->data == NULL)
@@ -111,13 +146,13 @@ char *f2c_expression_wrap_managed_call(const F2cExpr *expression, int allocatabl
         return f2c_buffer_take(&result);
     }
     if (expression->type == TYPE_UNKNOWN ||
-        (allocatable_result && expression->temporary_index == SIZE_MAX) ||
-        (!allocatable_result && expression->type == TYPE_DERIVED &&
+        (descriptor_result && expression->temporary_index == SIZE_MAX) ||
+        (!descriptor_result && expression->type == TYPE_DERIVED &&
          (expression->rank != 0U || expression->derived_type == NULL ||
           expression->statement_temporary_index == SIZE_MAX)) ||
-        (!allocatable_result && expression->type != TYPE_DERIVED &&
+        (!descriptor_result && expression->type != TYPE_DERIVED &&
          expression->temporary_index == SIZE_MAX) ||
-        (!allocatable_result && expression->rank != 0U)) {
+        (!descriptor_result && expression->rank != 0U)) {
         free(call);
         free(setup->data);
         free(cleanup->data);
@@ -126,7 +161,7 @@ char *f2c_expression_wrap_managed_call(const F2cExpr *expression, int allocatabl
         *supported = 0;
         return NULL;
     }
-    if (allocatable_result)
+    if (descriptor_result)
         f2c_buffer_printf(&result,
                           "f2c_expression_descriptor_result_%zu = (%s), %s"
                           "f2c_expression_descriptor_result_%zu)",

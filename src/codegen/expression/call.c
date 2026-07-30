@@ -106,9 +106,8 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
                                            callee_expression->child_count != 0U
                                        ? callee_expression->children[0]
                                        : NULL;
-    const int allocatable_result = procedure != NULL && !procedure->external_subroutine &&
-                                   procedure->external_result_allocatable;
-    const int character_result = procedure != NULL && !allocatable_result &&
+    const int descriptor_result = f2c_procedure_has_descriptor_result(procedure);
+    const int character_result = procedure != NULL && !descriptor_result &&
                                  !procedure->external_subroutine &&
                                  procedure->type == TYPE_CHARACTER;
     Buffer result = {0};
@@ -135,7 +134,7 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
         }
     }
     if (derived_actual_count != 0U &&
-        (allocatable_result ||
+        (descriptor_result ||
          (expression->type == TYPE_DERIVED ? expression->statement_temporary_index == SIZE_MAX
                                            : expression->temporary_index == SIZE_MAX) ||
          expression->rank != 0U || expression->type == TYPE_UNKNOWN)) {
@@ -271,7 +270,7 @@ static char *emit_type_bound_call(Unit *unit, const F2cExpr *expression, int *su
     {
         char *call = f2c_buffer_take(&result);
         free(callee);
-        return f2c_expression_wrap_managed_call(expression, allocatable_result, &call_setup,
+        return f2c_expression_wrap_managed_call(expression, descriptor_result, &call_setup,
                                                 &call_cleanup, call, supported);
     }
 }
@@ -293,18 +292,12 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
                        expression->symbol->procedure_interface->internal
                    ? expression->symbol->procedure_interface
                    : NULL);
-    const Symbol *resolved_result = resolved != NULL && resolved->result_name != NULL
-                                        ? f2c_find_symbol((Unit *)resolved, resolved->result_name)
-                                        : NULL;
     const char *callee =
         resolved != NULL && resolved->name != NULL
             ? resolved->name
             : (expression->symbol != NULL ? f2c_symbol_c_name(unit, expression->symbol)
                                           : expression->text);
-    const int allocatable_result =
-        resolved_result != NULL
-            ? resolved_result->allocatable
-            : (expression->symbol != NULL && expression->symbol->external_result_allocatable);
+    const int descriptor_result = f2c_expression_has_descriptor_result(expression);
     const int intrinsic_call =
         expression->text != NULL && f2c_is_intrinsic_name(expression->text) &&
         (expression->symbol == NULL || !expression->symbol->external_declared);
@@ -481,7 +474,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
     if (derived_actual_count != 0U &&
         ((expression->type == TYPE_DERIVED ? expression->statement_temporary_index == SIZE_MAX
                                            : expression->temporary_index == SIZE_MAX) ||
-         expression->rank != 0U || expression->type == TYPE_UNKNOWN || allocatable_result)) {
+         expression->rank != 0U || expression->type == TYPE_UNKNOWN || descriptor_result)) {
         f2c_expression_free_arguments(arguments, types, expression->child_count);
         *supported = 0;
         return NULL;
@@ -494,7 +487,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
                           expression->statement_temporary_index);
     else if (derived_actual_count != 0U && expression->type != TYPE_CHARACTER)
         f2c_buffer_printf(&result, "(f2c_expression_result_%zu = ", expression->temporary_index);
-    if (expression->type == TYPE_CHARACTER && !allocatable_result) {
+    if (expression->type == TYPE_CHARACTER && !descriptor_result) {
         char *result_length;
         if (expression->temporary_index == SIZE_MAX) {
             f2c_expression_free_arguments(arguments, types, expression->child_count);
@@ -568,7 +561,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         }
         f2c_buffer_printf(
             &result, "%s%s",
-            i == 0U && (expression->type != TYPE_CHARACTER || allocatable_result) ? "" : ", ",
+            i == 0U && (expression->type != TYPE_CHARACTER || descriptor_result) ? "" : ", ",
             actual);
         free(actual);
     }
@@ -578,7 +571,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         !f2c_emit_host_capture_expression_actuals(
             &result, unit, capture_procedure, expression->host_descriptor_temporary_begin,
             expression->child_count != 0U ||
-                (expression->type == TYPE_CHARACTER && !allocatable_result))) {
+                (expression->type == TYPE_CHARACTER && !descriptor_result))) {
         f2c_expression_free_arguments(arguments, types, expression->child_count);
         free(f2c_buffer_take(&result));
         free(call_setup.data);
@@ -616,7 +609,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         *supported = 0;
         return NULL;
     }
-    if (expression->type == TYPE_CHARACTER && !allocatable_result) {
+    if (expression->type == TYPE_CHARACTER && !descriptor_result) {
         char *result_length = f2c_character_length_expression(unit, expression);
         f2c_buffer_printf(&result, "), f2c_character_result_%zu[(size_t)(%s)] = '\\0'",
                           expression->temporary_index,
@@ -643,7 +636,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
             f2c_buffer_printf(&result, ", f2c_expression_result_%zu)", expression->temporary_index);
     }
     f2c_expression_free_arguments(arguments, types, expression->child_count);
-    return f2c_expression_wrap_managed_call(expression, allocatable_result, &call_setup,
+    return f2c_expression_wrap_managed_call(expression, descriptor_result, &call_setup,
                                             &call_cleanup, f2c_buffer_take(&result), supported);
 }
 

@@ -263,16 +263,15 @@ static void emit_dispatch_wrapper(Context *context, F2cDerivedType *dynamic_type
                                   F2cTypeBinding *storage, F2cTypeBinding *effective) {
     Symbol *signature = &storage->procedure;
     Unit *target = find_finalizer(context, effective->target_name);
-    const int allocatable_result =
-        !signature->external_subroutine && signature->external_result_allocatable;
+    const int descriptor_result = f2c_procedure_has_descriptor_result(signature);
     const int character_result =
-        !allocatable_result && !signature->external_subroutine && signature->type == TYPE_CHARACTER;
+        !descriptor_result && !signature->external_subroutine && signature->type == TYPE_CHARACTER;
     size_t parameter;
     if (target == NULL || effective->deferred)
         return;
     f2c_emit_procedure_prototype(&context->output, target);
     f2c_buffer_printf(&context->output, "static %s f2c_dispatch_%s_%s(",
-                      allocatable_result ? "f2c_descriptor"
+                      descriptor_result ? "f2c_descriptor"
                       : signature->external_subroutine || character_result
                           ? "void"
                           : f2c_symbol_c_type(signature),

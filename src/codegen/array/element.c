@@ -299,7 +299,10 @@ static F2cExpr *lowered_array_temporary_element(const F2cExpr *expression, size_
     size_t factor;
     if (expression == NULL || expression->lowered_c == NULL || expression->rank != rank)
         return NULL;
-    f2c_buffer_printf(&code, "((%s)[", expression->lowered_c);
+    if (expression->type == TYPE_CHARACTER && expression->lowered_character_length_c != NULL)
+        f2c_buffer_printf(&code, "(&(%s)[(", expression->lowered_c);
+    else
+        f2c_buffer_printf(&code, "((%s)[", expression->lowered_c);
     for (dimension = 0U; dimension < rank; ++dimension) {
         f2c_buffer_printf(&code, "%s((size_t)(%s))", dimension == 0U ? "" : " + ",
                           ordinals[dimension]);
@@ -307,10 +310,21 @@ static F2cExpr *lowered_array_temporary_element(const F2cExpr *expression, size_
             f2c_buffer_printf(&code, " * (size_t)%s_extent_%zu", expression->lowered_c,
                               factor + 1U);
     }
-    f2c_buffer_append(&code, "])");
+    if (expression->type == TYPE_CHARACTER && expression->lowered_character_length_c != NULL)
+        f2c_buffer_printf(&code, ") * (size_t)(%s)])", expression->lowered_character_length_c);
+    else
+        f2c_buffer_append(&code, "])");
     element = lowered_expression(f2c_buffer_take(&code), expression->type, expression->type_kind);
     if (element != NULL)
         element->derived_type = expression->derived_type;
+    if (element != NULL && expression->type == TYPE_CHARACTER &&
+        expression->lowered_character_length_c != NULL) {
+        element->lowered_character_length_c = f2c_strdup(expression->lowered_character_length_c);
+        if (element->lowered_character_length_c == NULL) {
+            f2c_expr_free(element);
+            return NULL;
+        }
+    }
     return element;
 }
 
@@ -403,8 +417,8 @@ static const F2cExpr *shape_carrier(const F2cExpr *expression, size_t rank) {
     size_t child;
     if (expression == NULL)
         return NULL;
-    if ((expression->kind == F2C_EXPR_NAME || expression->kind == F2C_EXPR_ARRAY_REFERENCE ||
-         expression->kind == F2C_EXPR_COMPONENT ||
+    if ((expression->lowered_array_temporary || expression->kind == F2C_EXPR_NAME ||
+         expression->kind == F2C_EXPR_ARRAY_REFERENCE || expression->kind == F2C_EXPR_COMPONENT ||
          expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) &&
         expression->rank == rank)
         return expression;
@@ -441,6 +455,11 @@ char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t 
     carrier = shape_carrier(expression, expression->rank);
     if (carrier == NULL)
         return NULL;
+    if (carrier->lowered_array_temporary && carrier->lowered_c != NULL) {
+        Buffer extent = {0};
+        f2c_buffer_printf(&extent, "%s_extent_%zu", carrier->lowered_c, dimension + 1U);
+        return f2c_buffer_take(&extent);
+    }
     if (dimension == 0U && carrier->lowered_extent_c != NULL)
         return f2c_strdup(carrier->lowered_extent_c);
     if (carrier->kind == F2C_EXPR_NAME && carrier->symbol != NULL)

@@ -271,27 +271,30 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                             arguments[parameter] = statement->arguments[source++];
                         }
                     }
-                    f2c_emit_call_with_signature(&context->output, unit, callee, procedure,
-                                                 arguments, procedure->external_parameter_count,
-                                                 *depth);
+                    if (!f2c_array_emit_prepared_call(context, unit, callee, procedure, arguments,
+                                                      procedure->external_parameter_count, NULL,
+                                                      source_line->number, *depth))
+                        f2c_diagnostic(context, source_line->number, 1,
+                                       "cannot lower type-bound procedure arguments");
                 } else {
                     f2c_diagnostic(context, source_line->number, 1,
                                    "out of memory lowering type-bound call");
                 }
                 free(arguments);
             } else {
-                f2c_emit_call_with_signature(&context->output, unit, callee, procedure,
-                                             statement->arguments, statement->item_count, *depth);
+                if (!f2c_array_emit_prepared_call(context, unit, callee, procedure,
+                                                  statement->arguments, statement->item_count, NULL,
+                                                  source_line->number, *depth))
+                    f2c_diagnostic(context, source_line->number, 1,
+                                   "cannot lower procedure-pointer arguments");
             }
             free(callee);
         } else {
-            if (statement->label_count != 0U)
-                f2c_emit_alternate_return_call(&context->output, unit, statement->name, NULL,
-                                               statement->arguments, statement->item_count,
-                                               statement, *depth);
-            else
-                f2c_emit_call(&context->output, unit, statement->name, statement->arguments,
-                              statement->item_count, *depth);
+            if (!f2c_array_emit_prepared_call(context, unit, statement->name, NULL,
+                                              statement->arguments, statement->item_count,
+                                              statement->label_count != 0U ? statement : NULL,
+                                              source_line->number, *depth))
+                f2c_diagnostic(context, source_line->number, 1, "cannot lower procedure arguments");
         }
     } else if (statement->kind == F2C_STMT_MOVE_ALLOC) {
         if (!f2c_emit_move_alloc_statement(context, unit, statement, *depth))
@@ -315,7 +318,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             indent(&context->output, *depth);
             f2c_buffer_append(
                 &context->output,
-                f2c_unit_has_allocatable_result(unit) ? "return f2c_result_descriptor;\n"
+                f2c_unit_has_descriptor_result(unit) ? "return f2c_result_descriptor;\n"
                 : unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER ? "return;\n"
                 : unit->kind == UNIT_FUNCTION ? "return f2c_result;\n"
                 : unit->kind == UNIT_SUBROUTINE && unit->alternate_return_count != 0U

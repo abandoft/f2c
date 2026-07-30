@@ -569,6 +569,28 @@ static int resolve_operator(Context *context, Unit *unit, size_t line, const cha
     return handled;
 }
 
+static void refresh_intrinsic_operator_shape(F2cExpr *expression, int operator_handled) {
+    const F2cExpr *carrier = NULL;
+    if (expression == NULL || operator_handled ||
+        (expression->kind != F2C_EXPR_UNARY && expression->kind != F2C_EXPR_BINARY) ||
+        expression->child_count == 0U)
+        return;
+    if (expression->children[0] != NULL && expression->children[0]->rank != 0U)
+        carrier = expression->children[0];
+    if (carrier == NULL && expression->kind == F2C_EXPR_BINARY && expression->child_count == 2U &&
+        expression->children[1] != NULL && expression->children[1]->rank != 0U)
+        carrier = expression->children[1];
+    if (carrier != NULL) {
+        expression->rank = carrier->rank;
+        expression->shape = carrier->shape;
+        expression->shape.kind = F2C_SHAPE_EXPRESSION;
+    } else {
+        expression->rank = 0U;
+        memset(&expression->shape, 0, sizeof(expression->shape));
+        expression->shape.kind = F2C_SHAPE_SCALAR;
+    }
+}
+
 void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                                      const char *statement_text, F2cExpr *expression) {
     size_t i;
@@ -580,6 +602,7 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
         f2c_validation_expression_calls(context, unit, line, statement_text,
                                         expression->children[i]);
     operator_handled = resolve_operator(context, unit, line, statement_text, expression);
+    refresh_intrinsic_operator_shape(expression, operator_handled);
     validate_substring_semantics(context, unit, line, statement_text, expression);
     if (expression->kind == F2C_EXPR_ARRAY_REFERENCE && expression->symbol != NULL) {
         for (i = 0U; i < expression->child_count; ++i) {

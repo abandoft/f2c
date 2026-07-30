@@ -14,7 +14,13 @@ char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t 
 int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *expression,
                                        size_t identifier, const char *role, size_t *temporary,
                                        Buffer *prelude, Buffer *cleanup, int depth);
-int f2c_array_contains_unmaterialized_transform(const F2cExpr *expression);
+int f2c_array_function_result_call(const F2cExpr *expression);
+int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_t identifier,
+                                          const char *role, size_t *temporary, Buffer *prelude,
+                                          Buffer *cleanup, int depth);
+void f2c_array_append_owned_temporary_cleanup(Buffer *cleanup, const F2cExpr *expression,
+                                              int depth);
+int f2c_array_contains_unmaterialized_value(const F2cExpr *expression);
 int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, const F2cExpr *left,
                                                  const F2cExpr *right, size_t line, int depth);
 int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_t identifier,
@@ -29,6 +35,9 @@ int f2c_array_emit_derived_scalar_broadcast(Context *context, Unit *unit, Symbol
                                             int depth);
 int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStatement *statement,
                                   int depth);
+int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
+                                 const Symbol *callee, F2cExpr *const *arguments, size_t count,
+                                 const F2cStatement *alternate_call, size_t line, int depth);
 int f2c_array_emit_numeric_constructor(Context *context, Unit *unit, Symbol *left_symbol,
                                        const F2cExpr *constructor, const char *element_count,
                                        int depth);

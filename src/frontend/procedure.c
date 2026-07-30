@@ -25,7 +25,10 @@ int f2c_copy_function_result_metadata(Symbol *symbol, Unit *signature) {
     symbol->type = signature->kind == UNIT_FUNCTION ? signature->return_type : TYPE_UNKNOWN;
     symbol->kind = signature->kind == UNIT_FUNCTION ? signature->return_kind : 0;
     symbol->external_result_allocatable = result != NULL && result->allocatable;
+    symbol->external_result_pointer = result != NULL && result->pointer;
     symbol->external_result_rank = result != NULL ? result->rank : 0U;
+    if (result != NULL)
+        symbol->shape = result->shape;
     symbol->derived_type = result != NULL ? result->derived_type : NULL;
     if (signature->kind == UNIT_FUNCTION && symbol->type == TYPE_DERIVED) {
         free(symbol->c_type);

@@ -19,6 +19,54 @@ static void free_arguments(F2cExpr **arguments, size_t count) {
     free(arguments);
 }
 
+int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
+                                 const Symbol *callee, F2cExpr *const *arguments, size_t count,
+                                 const F2cStatement *alternate_call, size_t line, int depth) {
+    F2cExpr **prepared = NULL;
+    Buffer prelude = {0};
+    Buffer cleanup = {0};
+    size_t argument;
+    size_t temporary = 0U;
+    int scoped;
+    if (context == NULL || unit == NULL || name == NULL)
+        return 0;
+    prepared = count != 0U ? (F2cExpr **)calloc(count, sizeof(*prepared)) : NULL;
+    if (count != 0U && prepared == NULL)
+        return 0;
+    for (argument = 0U; argument < count; ++argument) {
+        prepared[argument] = f2c_array_clone_expression(arguments[argument]);
+        if (prepared[argument] == NULL ||
+            !f2c_array_materialize_constructors(context, unit, prepared[argument], line, "call",
+                                                &temporary, &prelude, &cleanup, depth + 1)) {
+            free_arguments(prepared, count);
+            free(prelude.data);
+            free(cleanup.data);
+            return 0;
+        }
+    }
+    scoped = prelude.length != 0U || cleanup.length != 0U;
+    if (scoped) {
+        f2c_array_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "{\n");
+        f2c_buffer_append(&context->output, prelude.data != NULL ? prelude.data : "");
+    }
+    if (alternate_call != NULL)
+        f2c_emit_alternate_return_call(&context->output, unit, name, callee, prepared, count,
+                                       alternate_call, depth + (scoped ? 1 : 0));
+    else
+        f2c_emit_call_with_signature(&context->output, unit, name, callee, prepared, count,
+                                     depth + (scoped ? 1 : 0));
+    if (scoped) {
+        f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+        f2c_array_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
+    }
+    free_arguments(prepared, count);
+    free(prelude.data);
+    free(cleanup.data);
+    return 1;
+}
+
 int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStatement *statement,
                                   int depth) {
     const Unit *procedure;

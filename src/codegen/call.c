@@ -494,20 +494,24 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
                                               callee->external_parameter_intents[i], 0U, i, depth,
                                               &view)))
             return 0;
-        if (actual != NULL)
+        if (actual != NULL &&
+            (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i]))
             name = f2c_descriptor_storage_designator(unit, expression);
-        if (actual != NULL && name == NULL)
+        if (actual != NULL &&
+            (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i]) &&
+            name == NULL)
             goto descriptor_failed;
         c_type = f2c_expression_c_type(expression);
         if (expression->type == TYPE_CHARACTER)
             character_length = view.character_length != NULL
                                    ? f2c_strdup(view.character_length)
                                    : f2c_character_length_expression(unit, expression);
-        if (actual != NULL && actual->pointer &&
+        if (callee->external_parameter_pointer[i] && actual != NULL && actual->pointer &&
             (expression->kind == F2C_EXPR_NAME ||
              (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U)))
             f2c_buffer_printf(&deallocatable, "%s_deallocatable", name);
-        else if (actual != NULL && actual->allocatable &&
+        else if (callee->external_parameter_allocatable[i] && actual != NULL &&
+                 actual->allocatable &&
                  (expression->kind == F2C_EXPR_NAME ||
                   (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U)))
             f2c_buffer_printf(&deallocatable, "(%s != NULL)", name);

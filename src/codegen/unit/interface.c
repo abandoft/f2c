@@ -25,20 +25,14 @@ const char *f2c_unit_function_return_type(Unit *unit) {
                : f2c_c_type_kind(unit->return_type, unit->return_kind);
 }
 
-int f2c_unit_has_allocatable_result(Unit *unit) {
-    Symbol *result = f2c_unit_function_result(unit);
-    return result != NULL && result->allocatable;
-}
-
 void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, const char *name) {
     size_t parameter;
-    const int allocatable_result =
-        !procedure->external_subroutine && procedure->external_result_allocatable;
+    const int descriptor_result = f2c_procedure_has_descriptor_result(procedure);
     const int character_result =
-        !allocatable_result && !procedure->external_subroutine && procedure->type == TYPE_CHARACTER;
+        !descriptor_result && !procedure->external_subroutine && procedure->type == TYPE_CHARACTER;
     f2c_buffer_printf(
         output, "%s (*",
-        allocatable_result ? "f2c_descriptor"
+        descriptor_result ? "f2c_descriptor"
         : procedure->external_subroutine && procedure->external_alternate_return_count != 0U
             ? "int32_t"
         : procedure->external_subroutine || character_result ? "void"
@@ -84,16 +78,16 @@ void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, co
 void f2c_unit_emit_named_signature(Buffer *output, Unit *unit, const char *name,
                                    int restricted_arguments) {
     size_t i;
-    const int allocatable_result = f2c_unit_has_allocatable_result(unit);
+    const int descriptor_result = f2c_unit_has_descriptor_result(unit);
     const int character_result =
-        !allocatable_result && unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER;
+        !descriptor_result && unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER;
     if (unit->kind == UNIT_PROGRAM) {
         f2c_buffer_append(output, "int main(void)");
         return;
     }
     f2c_buffer_printf(
         output, "%s %s(",
-        allocatable_result                                                    ? "f2c_descriptor"
+        descriptor_result                                                     ? "f2c_descriptor"
         : unit->kind == UNIT_SUBROUTINE && unit->alternate_return_count != 0U ? "int32_t"
         : unit->kind == UNIT_SUBROUTINE || character_result                   ? "void"
                                                             : f2c_unit_function_return_type(unit),
@@ -180,13 +174,12 @@ static void emit_external_prototypes(Context *context) {
             }
             if (!already_emitted) {
                 size_t parameter;
-                const int allocatable_result =
-                    !symbol->external_subroutine && symbol->external_result_allocatable;
-                const int character_result = !allocatable_result && !symbol->external_subroutine &&
+                const int descriptor_result = f2c_procedure_has_descriptor_result(symbol);
+                const int character_result = !descriptor_result && !symbol->external_subroutine &&
                                              symbol->type == TYPE_CHARACTER;
                 f2c_buffer_printf(
                     &context->output, "extern %s %s(",
-                    allocatable_result ? "f2c_descriptor"
+                    descriptor_result ? "f2c_descriptor"
                     : symbol->external_subroutine && symbol->external_alternate_return_count != 0U
                         ? "int32_t"
                     : symbol->external_subroutine || character_result ? "void"
