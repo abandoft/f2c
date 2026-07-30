@@ -188,6 +188,7 @@ set(
     src/core/generated/private.h
     src/core/generated/representation.c
     src/core/generated/record.c
+    src/core/generated/reduction.c
     src/core/generated/relation.c
     src/core/generated/stream.c
     src/core/generated/time.c

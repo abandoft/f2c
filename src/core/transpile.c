@@ -774,82 +774,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                 "#define F2C_MAXVAL(v, n) _Generic(*(v), float: f2c_smaxval, double: "
                 "f2c_dmaxval)((v), (n))\n");
         }
-        if (needs_reduction) {
-            f2c_buffer_append(
-                &context.output,
-                "#define F2C_DEFINE_REDUCTIONS(s, t, zero, one, low, high) "
-                "static inline F2C_UNUSED t f2c_sum_##s(const t *v, size_t n, ptrdiff_t d) { "
-                "size_t i; t r = (zero); for (i = 0U; i < n; ++i) r = (t)(r + v[(ptrdiff_t)i "
-                "* d]); return r; } "
-                "static inline F2C_UNUSED t f2c_product_##s(const t *v, size_t n, ptrdiff_t d) "
-                "{ size_t i; t r = (one); for (i = 0U; i < n; ++i) r = (t)(r * "
-                "v[(ptrdiff_t)i * d]); return r; } "
-                "static inline F2C_UNUSED t f2c_maxval_##s(const t *v, size_t n, ptrdiff_t d) { "
-                "size_t i; t r = (low); for (i = 0U; i < n; ++i) if (v[(ptrdiff_t)i * d] > r) "
-                "r = v[(ptrdiff_t)i * d]; return r; } "
-                "static inline F2C_UNUSED t f2c_minval_##s(const t *v, size_t n, ptrdiff_t d) { "
-                "size_t i; t r = (high); for (i = 0U; i < n; ++i) if (v[(ptrdiff_t)i * d] < r) "
-                "r = v[(ptrdiff_t)i * d]; return r; } "
-                "static inline F2C_UNUSED int32_t f2c_maxloc_##s(const t *v, size_t n, "
-                "ptrdiff_t d) { size_t i; int32_t p = n != 0U ? 1 : 0; for (i = 1U; i < n; "
-                "++i) if (v[(ptrdiff_t)i * d] > v[(ptrdiff_t)(p - 1) * d]) p = (int32_t)i + "
-                "1; return p; } "
-                "static inline F2C_UNUSED int32_t f2c_minloc_##s(const t *v, size_t n, "
-                "ptrdiff_t d) { size_t i; int32_t p = n != 0U ? 1 : 0; for (i = 1U; i < n; "
-                "++i) if (v[(ptrdiff_t)i * d] < v[(ptrdiff_t)(p - 1) * d]) p = (int32_t)i + "
-                "1; return p; } "
-                "static inline F2C_UNUSED t f2c_dot_##s(const t *a, ptrdiff_t ad, const t *b, "
-                "ptrdiff_t bd, size_t n) { size_t i; t r = (zero); for (i = 0U; i < n; ++i) r "
-                "= (t)(r + a[(ptrdiff_t)i * ad] * b[(ptrdiff_t)i * bd]); return r; }\n"
-                "F2C_DEFINE_REDUCTIONS(i8, int8_t, INT8_C(0), INT8_C(1), INT8_MIN, INT8_MAX)\n"
-                "F2C_DEFINE_REDUCTIONS(i16, int16_t, INT16_C(0), INT16_C(1), INT16_MIN, "
-                "INT16_MAX)\n"
-                "F2C_DEFINE_REDUCTIONS(i32, int32_t, INT32_C(0), INT32_C(1), INT32_MIN, "
-                "INT32_MAX)\n"
-                "F2C_DEFINE_REDUCTIONS(i64, int64_t, INT64_C(0), INT64_C(1), INT64_MIN, "
-                "INT64_MAX)\n"
-                "F2C_DEFINE_REDUCTIONS(f, float, 0.0f, 1.0f, -HUGE_VALF, HUGE_VALF)\n"
-                "F2C_DEFINE_REDUCTIONS(d, double, 0.0, 1.0, -HUGE_VAL, HUGE_VAL)\n"
-                "#undef F2C_DEFINE_REDUCTIONS\n");
-            f2c_buffer_append(
-                &context.output,
-                "static inline F2C_UNUSED int32_t f2c_count_l(const int32_t *v, size_t n, "
-                "ptrdiff_t d) { size_t i; int32_t r = 0; for (i = 0U; i < n; ++i) if "
-                "(v[(ptrdiff_t)i * d]) ++r; return r; }\n"
-                "static inline F2C_UNUSED bool f2c_any_l(const int32_t *v, size_t n, ptrdiff_t d) "
-                "{ size_t i; for (i = 0U; i < n; ++i) if (v[(ptrdiff_t)i * d]) return true; "
-                "return false; }\n"
-                "static inline F2C_UNUSED bool f2c_all_l(const int32_t *v, size_t n, ptrdiff_t d) "
-                "{ size_t i; for (i = 0U; i < n; ++i) if (!v[(ptrdiff_t)i * d]) return false; "
-                "return true; }\n"
-                "static inline F2C_UNUSED bool f2c_dot_l(const int32_t *a, ptrdiff_t ad, const "
-                "int32_t *b, ptrdiff_t bd, size_t n) { size_t i; for (i = 0U; i < n; ++i) if "
-                "(a[(ptrdiff_t)i * ad] && b[(ptrdiff_t)i * bd]) return true; return false; }\n"
-                "#define F2C_SUM(v, n, d) _Generic(*(v), int8_t: f2c_sum_i8, int16_t: "
-                "f2c_sum_i16, int32_t: f2c_sum_i32, int64_t: f2c_sum_i64, float: f2c_sum_f, "
-                "double: f2c_sum_d)((v), (n), (d))\n"
-                "#define F2C_PRODUCT(v, n, d) _Generic(*(v), int8_t: f2c_product_i8, int16_t: "
-                "f2c_product_i16, int32_t: f2c_product_i32, int64_t: f2c_product_i64, float: "
-                "f2c_product_f, double: f2c_product_d)((v), (n), (d))\n"
-                "#define F2C_MAXIMUM(v, n, d) _Generic(*(v), int8_t: f2c_maxval_i8, int16_t: "
-                "f2c_maxval_i16, int32_t: f2c_maxval_i32, int64_t: f2c_maxval_i64, float: "
-                "f2c_maxval_f, double: f2c_maxval_d)((v), (n), (d))\n"
-                "#define F2C_MINIMUM(v, n, d) _Generic(*(v), int8_t: f2c_minval_i8, int16_t: "
-                "f2c_minval_i16, int32_t: f2c_minval_i32, int64_t: f2c_minval_i64, float: "
-                "f2c_minval_f, double: f2c_minval_d)((v), (n), (d))\n"
-                "#define F2C_MAXIMUM_LOCATION(v, n, d) _Generic(*(v), int8_t: f2c_maxloc_i8, "
-                "int16_t: f2c_maxloc_i16, int32_t: f2c_maxloc_i32, int64_t: f2c_maxloc_i64, "
-                "float: f2c_maxloc_f, double: f2c_maxloc_d)((v), (n), (d))\n"
-                "#define F2C_MINIMUM_LOCATION(v, n, d) _Generic(*(v), int8_t: f2c_minloc_i8, "
-                "int16_t: f2c_minloc_i16, int32_t: f2c_minloc_i32, int64_t: f2c_minloc_i64, "
-                "float: f2c_minloc_f, double: f2c_minloc_d)((v), (n), (d))\n"
-                "#define F2C_DOT(a, ad, b, bd, n) _Generic(*(a), int8_t: f2c_dot_i8, int16_t: "
-                "f2c_dot_i16, int32_t: f2c_dot_i32, int64_t: f2c_dot_i64, float: f2c_dot_f, "
-                "double: f2c_dot_d)((a), (ad), (b), (bd), (n))\n"
-                "#define F2C_LOGICAL_DOT(a, ad, b, bd, n) f2c_dot_l((a), (ad), (b), (bd), "
-                "(n))\n");
-            f2c_emit_relation_reduction_support(&context.output, needs_complex);
-        }
+        if (needs_reduction)
+            f2c_emit_reduction_support(&context.output, needs_complex);
         if (needs_random) {
             f2c_buffer_append(
                 &context.output,
