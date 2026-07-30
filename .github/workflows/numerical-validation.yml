@@ -52,6 +52,8 @@ jobs:
         run: sh test/assigned_label_differential.sh build/numerical/f2c
       - name: Differential-test alternate-return control flow
         run: sh test/alternate_return_differential.sh build/numerical/f2c
+      - name: Differential-test block-scope finalization
+        run: sh test/block_finalization_differential.sh build/numerical/f2c
       - name: Differential-test pointer association
         run: sh test/pointer_association_differential.sh build/numerical/f2c
       - name: Differential-test internal-procedure host association
