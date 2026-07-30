@@ -95,9 +95,10 @@ static int contiguous_section_view(Unit *unit, const F2cExpr *array, char **poin
                           extent);
         free(extent);
     }
-    f2c_buffer_printf(&address, "(&%s)", reference);
     f2c_buffer_printf(&count_code, "f2c_inquiry_size(%zuU, (const size_t[]){%s})", array->rank,
                       extent_list.data != NULL ? extent_list.data : "");
+    f2c_buffer_printf(&address, "((%s) == 0U ? (%s *)NULL : (&%s))", count_code.data,
+                      f2c_expression_c_type(array), reference);
     *pointer = f2c_buffer_take(&address);
     *count = f2c_buffer_take(&count_code);
     *stride = f2c_strdup("1");
@@ -250,11 +251,6 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
         free(reference);
         return 0;
     }
-    {
-        Buffer address = {0};
-        f2c_buffer_printf(&address, "(&%s)", reference);
-        *pointer = f2c_buffer_take(&address);
-    }
     f2c_buffer_printf(&extent,
                       "((%s) > 0 ? ((%s) >= (%s) ? (size_t)(((%s) - (%s)) / (%s) + 1) "
                       ": 0U) : ((%s) < 0 ? ((%s) <= (%s) ? "
@@ -262,6 +258,12 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
                       step, upper, lower, upper, lower, step, step, upper, lower, lower, upper,
                       step);
     *count = f2c_buffer_take(&extent);
+    {
+        Buffer address = {0};
+        f2c_buffer_printf(&address, "((%s) == 0U ? (%s *)NULL : (&%s))", *count,
+                          f2c_expression_c_type(array), reference);
+        *pointer = f2c_buffer_take(&address);
+    }
     for (size_t i = 0U; i < dimension; ++i) {
         char *dimension_extent = f2c_descriptor_dimension_extent(unit, array, i);
         if (dimension_extent == NULL) {
