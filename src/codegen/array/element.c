@@ -355,7 +355,7 @@ F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, siz
         expression->kind == F2C_EXPR_KEYWORD_ARGUMENT)
         return elemental_tree(unit, expression, rank, ordinals);
     if (expression->kind == F2C_EXPR_CALL) {
-        if (expression->text != NULL && strcmp(expression->text, "transpose") == 0)
+        if (expression->intrinsic == F2C_INTRINSIC_TRANSPOSE)
             return transpose_element(unit, expression, ordinals);
         if (rank == 1U && expression->text != NULL &&
             (strcmp(expression->text, "shape") == 0 || strcmp(expression->text, "lbound") == 0 ||
@@ -426,9 +426,8 @@ char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t 
         f2c_buffer_printf(&extent, "%s_extent_%zu", expression->lowered_c, dimension + 1U);
         return f2c_buffer_take(&extent);
     }
-    if (expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
-        strcmp(expression->text, "transpose") == 0 && expression->child_count == 1U &&
-        expression->rank == 2U) {
+    if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_TRANSPOSE &&
+        expression->child_count == 1U && expression->rank == 2U) {
         const F2cExpr *source = transform_argument_value(expression->children[0]);
         return source != NULL && source->rank == 2U
                    ? f2c_array_expression_extent(unit, source, 1U - dimension)

@@ -178,20 +178,20 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
         }
         return;
     }
-    if (strcmp(name, "pack") == 0) {
+    if (expression->intrinsic == F2C_INTRINSIC_PACK) {
         const F2cExpr *vector = f2c_ast_intrinsic_argument(expression, "vector", 2U);
         f2c_ast_set_expression_shape(expression, 1U, F2C_SHAPE_EXPRESSION);
         if (vector != NULL && vector->rank == 1U)
             expression->shape.dimensions[0] = vector->shape.dimensions[0];
         return;
     }
-    if (strcmp(name, "unpack") == 0) {
+    if (expression->intrinsic == F2C_INTRINSIC_UNPACK) {
         const F2cExpr *mask = f2c_ast_intrinsic_argument(expression, "mask", 1U);
         if (mask != NULL)
             f2c_ast_copy_expression_shape(expression, &mask->shape);
         return;
     }
-    if (strcmp(name, "reshape") == 0) {
+    if (expression->intrinsic == F2C_INTRINSIC_RESHAPE) {
         shape = f2c_ast_intrinsic_argument(expression, "shape", 1U);
         f2c_ast_set_expression_shape(expression, expression->rank, F2C_SHAPE_EXPRESSION);
         if (shape != NULL && shape->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
@@ -209,7 +209,7 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
         }
         return;
     }
-    if (strcmp(name, "spread") == 0) {
+    if (expression->intrinsic == F2C_INTRINSIC_SPREAD) {
         source = f2c_ast_intrinsic_argument(expression, "source", 0U);
         dimension = f2c_ast_intrinsic_argument(expression, "dim", 1U);
         f2c_ast_set_expression_shape(expression, expression->rank, F2C_SHAPE_EXPRESSION);
@@ -227,7 +227,7 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
         }
         return;
     }
-    if (strcmp(name, "findloc") == 0) {
+    if (expression->intrinsic == F2C_INTRINSIC_FINDLOC) {
         source = f2c_ast_intrinsic_argument(expression, "array", 0U);
         dimension = f2c_ast_intrinsic_argument(expression, "dim", 2U);
         f2c_ast_set_expression_shape(expression, expression->rank, F2C_SHAPE_EXPRESSION);

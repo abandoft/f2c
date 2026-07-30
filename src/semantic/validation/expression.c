@@ -202,7 +202,7 @@ static void validate_assumed_size_operands(Context *context, size_t line,
 
 static void validate_matrix_intrinsic(Context *context, size_t line, const char *statement_text,
                                       const F2cExpr *expression) {
-    const int transpose = expression->text != NULL && strcmp(expression->text, "transpose") == 0;
+    const int transpose = expression->intrinsic == F2C_INTRINSIC_TRANSPOSE;
     const F2cExpr *left = inquiry_argument(expression, transpose ? "matrix" : "matrix_a", 0U);
     const F2cExpr *right = transpose ? NULL : inquiry_argument(expression, "matrix_b", 1U);
     size_t argument;
@@ -727,7 +727,8 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
         if (strcmp(expression->text, "size") == 0 || strcmp(expression->text, "shape") == 0 ||
             strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0)
             validate_array_inquiry(context, unit, line, statement_text, expression);
-        if (strcmp(expression->text, "transpose") == 0 || strcmp(expression->text, "matmul") == 0)
+        if (expression->intrinsic == F2C_INTRINSIC_TRANSPOSE ||
+            expression->intrinsic == F2C_INTRINSIC_MATMUL)
             validate_matrix_intrinsic(context, line, statement_text, expression);
         if (signature != NULL && signature->rank_rule == F2C_INTRINSIC_RANK_ELEMENTAL) {
             const F2cExpr *array_argument = NULL;

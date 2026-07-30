@@ -214,6 +214,11 @@ static char *vector_element(Unit *unit, const F2cExpr *vector, size_t index) {
     const F2cExpr *value = f2c_transform_argument_value(vector);
     if (value == NULL)
         return NULL;
+    if (value->lowered_c != NULL && value->rank == 1U) {
+        Buffer result = {0};
+        f2c_buffer_printf(&result, "%s[%zuU]", value->lowered_c, index);
+        return f2c_buffer_take(&result);
+    }
     if (value->kind == F2C_EXPR_CALL && value->text != NULL && value->rank == 1U &&
         (strcmp(value->text, "shape") == 0 || strcmp(value->text, "lbound") == 0 ||
          strcmp(value->text, "ubound") == 0))
@@ -953,36 +958,36 @@ int f2c_emit_transform_assignment(Context *context, Unit *unit, const F2cExpr *l
     Symbol *target = left != NULL ? left->symbol : NULL;
     const char *name = right != NULL ? right->text : NULL;
     if (context == NULL || unit == NULL || target == NULL || right == NULL ||
-        right->kind != F2C_EXPR_CALL || name == NULL)
+        right->kind != F2C_EXPR_CALL)
         return 0;
     if (f2c_intrinsic_is_reduction(right->intrinsic) &&
         right->intrinsic != F2C_INTRINSIC_DOT_PRODUCT && right->rank != 0U)
         return f2c_transform_emit_reduction(context, unit, target, right, line, depth);
-    if (strcmp(name, "reshape") != 0 && strcmp(name, "pack") != 0 && strcmp(name, "unpack") != 0 &&
-        strcmp(name, "spread") != 0 && strcmp(name, "cshift") != 0 &&
-        strcmp(name, "eoshift") != 0 && strcmp(name, "findloc") != 0 &&
-        strcmp(name, "transpose") != 0 && strcmp(name, "matmul") != 0 &&
-        strcmp(name, "shape") != 0 && strcmp(name, "lbound") != 0 && strcmp(name, "ubound") != 0)
-        return 0;
-    if (strcmp(name, "shape") == 0 || strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0)
+    if (right->intrinsic == F2C_INTRINSIC_NONE && name != NULL &&
+        (strcmp(name, "shape") == 0 || strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0))
         return f2c_transform_emit_inquiry(context, unit, left, right, line, depth);
+    if (!f2c_intrinsic_is_transformational(right->intrinsic))
+        return 0;
     if (!f2c_transform_supported_element_type(target)) {
-        f2c_diagnostic(context, line, 1, "%s result has an unsupported element type", name);
+        f2c_diagnostic(context, line, 1, "%s result has an unsupported element type",
+                       name != NULL ? name : "transformational intrinsic");
         return 1;
     }
-    if (strcmp(name, "transpose") == 0 || strcmp(name, "matmul") == 0)
+    if (right->intrinsic == F2C_INTRINSIC_TRANSPOSE || right->intrinsic == F2C_INTRINSIC_MATMUL)
         return f2c_transform_emit_matrix(context, unit, target, right, line, depth);
-    if (strcmp(name, "reshape") == 0)
+    if (right->intrinsic == F2C_INTRINSIC_RESHAPE)
         return emit_reshape(context, unit, target, right, line, depth);
-    if (strcmp(name, "pack") == 0)
+    if (right->intrinsic == F2C_INTRINSIC_PACK)
         return emit_pack(context, unit, target, right, line, depth);
-    if (strcmp(name, "unpack") == 0)
+    if (right->intrinsic == F2C_INTRINSIC_UNPACK)
         return emit_unpack(context, unit, target, right, line, depth);
-    if (strcmp(name, "spread") == 0)
+    if (right->intrinsic == F2C_INTRINSIC_SPREAD)
         return emit_spread(context, unit, target, right, line, depth);
-    if (strcmp(name, "cshift") == 0)
+    if (right->intrinsic == F2C_INTRINSIC_CSHIFT)
         return emit_shift(context, unit, target, right, line, depth, 0);
-    if (strcmp(name, "eoshift") == 0)
+    if (right->intrinsic == F2C_INTRINSIC_EOSHIFT)
         return emit_shift(context, unit, target, right, line, depth, 1);
-    return f2c_transform_emit_findloc(context, unit, target, right, line, depth);
+    if (right->intrinsic == F2C_INTRINSIC_FINDLOC)
+        return f2c_transform_emit_findloc(context, unit, target, right, line, depth);
+    return 0;
 }

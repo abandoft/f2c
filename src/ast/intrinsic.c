@@ -168,14 +168,14 @@ static void resolve_intrinsic_shape(AstParser *parser, F2cExpr *expression) {
             }
         }
     }
-    if (strcmp(expression->text, "transpose") == 0 && expression->child_count == 1U &&
+    if (expression->intrinsic == F2C_INTRINSIC_TRANSPOSE && expression->child_count == 1U &&
         expression->children[0]->shape.rank == 2U) {
         const F2cShape source_shape = expression->children[0]->shape;
         expression->shape.rank = 2U;
         expression->shape.kind = F2C_SHAPE_EXPRESSION;
         expression->shape.dimensions[0] = source_shape.dimensions[1];
         expression->shape.dimensions[1] = source_shape.dimensions[0];
-    } else if (strcmp(expression->text, "matmul") == 0 && expression->child_count == 2U) {
+    } else if (expression->intrinsic == F2C_INTRINSIC_MATMUL && expression->child_count == 2U) {
         const F2cExpr *left = f2c_ast_intrinsic_argument_value(expression->children[0]);
         const F2cExpr *right = f2c_ast_intrinsic_argument_value(expression->children[1]);
         expression->shape.kind = F2C_SHAPE_EXPRESSION;
@@ -192,10 +192,9 @@ static void resolve_intrinsic_shape(AstParser *parser, F2cExpr *expression) {
                 expression->shape.dimensions[0] = right->shape.dimensions[1];
         }
     }
-    if (strcmp(expression->text, "pack") == 0 || strcmp(expression->text, "unpack") == 0 ||
-        strcmp(expression->text, "reshape") == 0 || strcmp(expression->text, "spread") == 0 ||
-        strcmp(expression->text, "findloc") == 0 || strcmp(expression->text, "shape") == 0 ||
-        strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0 ||
+    if (f2c_intrinsic_is_transformational(expression->intrinsic) ||
+        strcmp(expression->text, "shape") == 0 || strcmp(expression->text, "lbound") == 0 ||
+        strcmp(expression->text, "ubound") == 0 ||
         f2c_intrinsic_is_reduction(expression->intrinsic))
         f2c_ast_set_transform_intrinsic_shape(parser, expression);
 }
@@ -210,7 +209,7 @@ static void resolve_intrinsic_kind(F2cExpr *expression, const F2cIntrinsicSignat
                 expression->derived_type = first_argument->derived_type;
         }
     }
-    if (strcmp(expression->text, "matmul") == 0)
+    if (expression->intrinsic == F2C_INTRINSIC_MATMUL)
         expression->type_kind = matmul_result_kind(expression);
     if (signature != NULL && signature->id == F2C_INTRINSIC_MERGE) {
         const F2cExpr *source =

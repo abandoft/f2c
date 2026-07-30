@@ -30,10 +30,17 @@
     {name, minimum, maximum, type, F2C_INTRINSIC_RANK_ELEMENTAL, id, kind}
 #define TYPED_SCALAR(name, minimum, maximum, type, id, kind)                                       \
     {name, minimum, maximum, type, F2C_INTRINSIC_RANK_SCALAR, id, kind}
+#define TYPED_FIRST_RANK(name, minimum, maximum, type, id, kind)                                   \
+    {name, minimum, maximum, type, F2C_INTRINSIC_RANK_FIRST, id, kind}
 #define TYPED_REDUCTION(name, minimum, maximum, type, id, kind)                                    \
     {name, minimum, maximum, type, F2C_INTRINSIC_RANK_REDUCTION, id, kind}
 #define TYPED_LOCATION(name, minimum, maximum, id)                                                 \
-    {name, minimum, maximum, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_RANK_LOCATION, id,          \
+    {name,                                                                                         \
+     minimum,                                                                                      \
+     maximum,                                                                                      \
+     F2C_INTRINSIC_TYPE_INTEGER,                                                                   \
+     F2C_INTRINSIC_RANK_LOCATION,                                                                  \
+     id,                                                                                           \
      F2C_INTRINSIC_KIND_OPTIONAL}
 
 static const F2cIntrinsicSignature intrinsic_signatures[] = {
@@ -109,7 +116,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_REDUCTION("count", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_COUNT,
                     F2C_INTRINSIC_KIND_OPTIONAL),
-    FIRST_RANK("cshift", 2U, 3U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_FIRST_RANK("cshift", 2U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_CSHIFT,
+                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("conjg", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_CONJG,
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("cos", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_COS,
@@ -164,8 +172,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_ELEMENTAL("dprod", 2U, 2U, F2C_INTRINSIC_TYPE_DOUBLE, F2C_INTRINSIC_DPROD,
                     F2C_INTRINSIC_KIND_DEFAULT),
-    TYPED_SCALAR("dot_product", 2U, 2U, F2C_INTRINSIC_TYPE_COMMON,
-                 F2C_INTRINSIC_DOT_PRODUCT, F2C_INTRINSIC_KIND_COMMON),
+    TYPED_SCALAR("dot_product", 2U, 2U, F2C_INTRINSIC_TYPE_COMMON, F2C_INTRINSIC_DOT_PRODUCT,
+                 F2C_INTRINSIC_KIND_COMMON),
     TYPED_ELEMENTAL("dsign", 2U, 2U, F2C_INTRINSIC_TYPE_DOUBLE, F2C_INTRINSIC_SIGN,
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("dsin", 1U, 1U, F2C_INTRINSIC_TYPE_DOUBLE, F2C_INTRINSIC_SIN,
@@ -188,7 +196,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_ELEMENTAL("floor", 1U, 2U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_FLOOR,
                     F2C_INTRINSIC_KIND_OPTIONAL),
-    SCALAR("findloc", 2U, 6U, F2C_INTRINSIC_TYPE_INTEGER),
+    TYPED_SCALAR("findloc", 2U, 6U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_FINDLOC,
+                 F2C_INTRINSIC_KIND_OPTIONAL),
     TYPED_ELEMENTAL("fraction", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_FRACTION,
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_SCALAR("huge", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_HUGE,
@@ -252,7 +261,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("logical", 1U, 2U, F2C_INTRINSIC_TYPE_LOGICAL, F2C_INTRINSIC_LOGICAL,
                     F2C_INTRINSIC_KIND_OPTIONAL),
-    SCALAR("matmul", 2U, 2U, F2C_INTRINSIC_TYPE_COMMON),
+    TYPED_SCALAR("matmul", 2U, 2U, F2C_INTRINSIC_TYPE_COMMON, F2C_INTRINSIC_MATMUL,
+                 F2C_INTRINSIC_KIND_COMMON),
     TYPED_ELEMENTAL("max", 2U, 64U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_MAX,
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("max0", 2U, 64U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_MAX,
@@ -295,14 +305,16 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                  F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_REDUCTION("product", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_PRODUCT,
                     F2C_INTRINSIC_KIND_FIRST),
-    SCALAR("pack", 2U, 3U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_SCALAR("pack", 2U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_PACK,
+                 F2C_INTRINSIC_KIND_FIRST),
     TYPED_SCALAR("radix", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_RADIX,
                  F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_SCALAR("range", 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_RANGE,
                  F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_ELEMENTAL("real", 1U, 2U, F2C_INTRINSIC_TYPE_REAL, F2C_INTRINSIC_REAL,
                     F2C_INTRINSIC_KIND_OPTIONAL),
-    SCALAR("reshape", 2U, 4U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_SCALAR("reshape", 2U, 4U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_RESHAPE,
+                 F2C_INTRINSIC_KIND_FIRST),
     TYPED_SCALAR("repeat", 2U, 2U, F2C_INTRINSIC_TYPE_CHARACTER, F2C_INTRINSIC_REPEAT,
                  F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("rrspacing", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_RRSPACING,
@@ -330,7 +342,8 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_ELEMENTAL("spacing", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_SPACING,
                     F2C_INTRINSIC_KIND_FIRST),
-    SCALAR("spread", 3U, 3U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_SCALAR("spread", 3U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_SPREAD,
+                 F2C_INTRINSIC_KIND_FIRST),
     SCALAR("size", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER),
     TYPED_REDUCTION("sum", 1U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_SUM,
                     F2C_INTRINSIC_KIND_FIRST),
@@ -340,16 +353,19 @@ static const F2cIntrinsicSignature intrinsic_signatures[] = {
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_SCALAR("tiny", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_TINY,
                  F2C_INTRINSIC_KIND_FIRST),
-    SCALAR("transpose", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_SCALAR("transpose", 1U, 1U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_TRANSPOSE,
+                 F2C_INTRINSIC_KIND_FIRST),
     TYPED_SCALAR("trim", 1U, 1U, F2C_INTRINSIC_TYPE_CHARACTER, F2C_INTRINSIC_TRIM,
                  F2C_INTRINSIC_KIND_FIRST),
     {"transfer", 2U, 3U, F2C_INTRINSIC_TYPE_MOLD, F2C_INTRINSIC_RANK_MOLD, F2C_INTRINSIC_NONE,
      F2C_INTRINSIC_KIND_DEFAULT},
-    SCALAR("unpack", 3U, 3U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_SCALAR("unpack", 3U, 3U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_UNPACK,
+                 F2C_INTRINSIC_KIND_FIRST),
     SCALAR("ubound", 1U, 3U, F2C_INTRINSIC_TYPE_INTEGER),
     TYPED_ELEMENTAL("verify", 2U, 4U, F2C_INTRINSIC_TYPE_INTEGER, F2C_INTRINSIC_VERIFY,
                     F2C_INTRINSIC_KIND_OPTIONAL),
-    FIRST_RANK("eoshift", 2U, 4U, F2C_INTRINSIC_TYPE_FIRST),
+    TYPED_FIRST_RANK("eoshift", 2U, 4U, F2C_INTRINSIC_TYPE_FIRST, F2C_INTRINSIC_EOSHIFT,
+                     F2C_INTRINSIC_KIND_FIRST),
 };
 
 #undef ELEMENTAL
@@ -596,6 +612,34 @@ int f2c_intrinsic_is_reduction(F2cIntrinsicId intrinsic) {
     }
 }
 
+int f2c_intrinsic_is_transformational(F2cIntrinsicId intrinsic) {
+    switch (intrinsic) {
+    case F2C_INTRINSIC_ALL:
+    case F2C_INTRINSIC_ANY:
+    case F2C_INTRINSIC_COUNT:
+    case F2C_INTRINSIC_CSHIFT:
+    case F2C_INTRINSIC_DOT_PRODUCT:
+    case F2C_INTRINSIC_EOSHIFT:
+    case F2C_INTRINSIC_FINDLOC:
+    case F2C_INTRINSIC_MATMUL:
+    case F2C_INTRINSIC_MAXLOC:
+    case F2C_INTRINSIC_MAXVAL:
+    case F2C_INTRINSIC_MINLOC:
+    case F2C_INTRINSIC_MINVAL:
+    case F2C_INTRINSIC_PACK:
+    case F2C_INTRINSIC_PRODUCT:
+    case F2C_INTRINSIC_RESHAPE:
+    case F2C_INTRINSIC_SPREAD:
+    case F2C_INTRINSIC_SUM:
+    case F2C_INTRINSIC_TRANSPOSE:
+    case F2C_INTRINSIC_UNPACK:
+        return 1;
+    case F2C_INTRINSIC_NONE:
+    default:
+        return 0;
+    }
+}
+
 static Type absolute_result(Type type) {
     if (type == TYPE_DOUBLE_COMPLEX)
         return TYPE_DOUBLE;
@@ -682,9 +726,9 @@ size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, s
     size_t i;
     if (signature == NULL)
         return 0U;
-    if (strcmp(name, "transpose") == 0)
+    if (signature->id == F2C_INTRINSIC_TRANSPOSE)
         return 2U;
-    if (strcmp(name, "matmul") == 0) {
+    if (signature->id == F2C_INTRINSIC_MATMUL) {
         const F2cExpr *left = count != 0U ? argument_value(arguments[0]) : NULL;
         const F2cExpr *right = count >= 2U ? argument_value(arguments[1]) : NULL;
         if (left == NULL || right == NULL)
@@ -695,21 +739,21 @@ size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, s
             return 2U;
         return 1U;
     }
-    if (strcmp(name, "pack") == 0)
+    if (signature->id == F2C_INTRINSIC_PACK)
         return 1U;
     if (strcmp(name, "shape") == 0)
         return 1U;
     if (strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0)
         return f2c_intrinsic_argument(arguments, count, "dim", 1U) != NULL ? 0U : 1U;
-    if (strcmp(name, "unpack") == 0) {
+    if (signature->id == F2C_INTRINSIC_UNPACK) {
         const F2cExpr *mask = f2c_intrinsic_argument(arguments, count, "mask", 1U);
         return mask != NULL ? mask->rank : 0U;
     }
-    if (strcmp(name, "spread") == 0) {
+    if (signature->id == F2C_INTRINSIC_SPREAD) {
         const F2cExpr *source = f2c_intrinsic_argument(arguments, count, "source", 0U);
         return source != NULL && source->rank < F2C_MAX_RANK ? source->rank + 1U : 0U;
     }
-    if (strcmp(name, "reshape") == 0) {
+    if (signature->id == F2C_INTRINSIC_RESHAPE) {
         const F2cExpr *shape = f2c_intrinsic_argument(arguments, count, "shape", 1U);
         if (shape != NULL && shape->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
             return shape->child_count <= F2C_MAX_RANK ? shape->child_count : 0U;
@@ -717,18 +761,18 @@ size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, s
                    ? (size_t)shape->shape.dimensions[0].extent
                    : 0U;
     }
-    if (strcmp(name, "findloc") == 0) {
+    if (signature->id == F2C_INTRINSIC_FINDLOC) {
         const F2cExpr *array = count != 0U ? argument_value(arguments[0]) : NULL;
         const int has_dimension = f2c_intrinsic_argument(arguments, count, "dim", 2U) != NULL;
         return has_dimension ? (array != NULL && array->rank != 0U ? array->rank - 1U : 0U) : 1U;
     }
     if (signature->rank_rule == F2C_INTRINSIC_RANK_REDUCTION ||
         signature->rank_rule == F2C_INTRINSIC_RANK_LOCATION) {
-        const char *source_name =
-            signature->id == F2C_INTRINSIC_ALL || signature->id == F2C_INTRINSIC_ANY ||
-                    signature->id == F2C_INTRINSIC_COUNT
-                ? "mask"
-                : "array";
+        const char *source_name = signature->id == F2C_INTRINSIC_ALL ||
+                                          signature->id == F2C_INTRINSIC_ANY ||
+                                          signature->id == F2C_INTRINSIC_COUNT
+                                      ? "mask"
+                                      : "array";
         const F2cExpr *array = f2c_intrinsic_argument(arguments, count, source_name, 0U);
         const F2cExpr *dimension = f2c_intrinsic_argument(arguments, count, "dim", 1U);
         if (signature->rank_rule == F2C_INTRINSIC_RANK_LOCATION && dimension == NULL)
