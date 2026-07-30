@@ -124,9 +124,12 @@
   元素长度或深拷贝所有权快照；返回派生类型的用户 ELEMENTAL 函数结果会在快照后销毁逐元素返回
   临时值。数值、LOGICAL 和 COMPLEX 的数组值归约现会携带动态逐维 extent 物化为只求值一次的
   C17 临时值，可嵌套在 elemental 表达式或另一个归约中，并覆盖动态 `DIM`、标量/数组 `MASK`、
-  `BACK/KIND`、反向段、零 extent 和 rank-2/rank-3 结果。不同数值 kind 的通用隐式提升、除
-  `TRANSPOSE` 和上述归约外的其他嵌套 transformational 结果，以及非 designator 派生类型数组
-  表达式仍需纳入统一临时量引擎。
+  `BACK/KIND`、反向段、零 extent 和 rank-2/rank-3 结果。
+  `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/FINDLOC/TRANSPOSE/MATMUL` 及数组值归约现均使用
+  typed intrinsic ID 和同一动态 shape 临时量引擎；嵌套结果可出现在其他变换、elemental 表达式、
+  标量归约和假定形状过程实参中，并保留逐维 extent、CHARACTER 元素长度、派生类型深拷贝所有权
+  和单次求值。不同数值 kind 的通用隐式提升、更多非 designator 派生类型数组函数结果和全部动态
+  CHARACTER/派生类型可选参数组合仍需纳入同一流程。
 - [ ] 将参数、kind、字符长度、数组边界和初始化中的规格表达式全部纳入溢出安全的常量求值器，
   补齐标准允许的 inquiry/specification intrinsic。`SIZE/SHAPE/LBOUND/UBOUND` 现已建立 typed
   rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级。数值模型 inquiry
@@ -381,10 +384,14 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   数组表达式也只求值一次。`TRANSPOSE` 支持任意可元素化 rank-2 输入，`MATMUL` 覆盖矩阵×矩阵、
   矩阵×向量、向量×矩阵、混合数值 kind 提升及 LOGICAL/COMPLEX 运算，并在语义阶段拒绝非标准
   的向量×向量和静态不合形内维。非连续数组段经假定形状过程转发、可分配及零大小结果、严格
-  C17 执行和 gfortran 差分均已覆盖；嵌套 `TRANSPOSE` 及用户 ELEMENTAL 派生类型结果也已进入
-  同一临时量流程。数值、CHARACTER 和含可分配组件的派生类型向量下标均已通过严格执行与差分，
-  派生类型结果使用深拷贝快照。仍需完成其他嵌套 transformational 结果、更多非 designator
-  派生类型表达式，以及全部 CHARACTER/派生类型可选参数组合，故本任务未关闭。
+  C17 执行和 gfortran 差分均已覆盖。上述变换及 `FINDLOC` 现拥有独立 typed ID、规范关键字绑定
+  及 type/kind/rank/shape 语义检查；无效 `DIM`、负 extent/`NCOPIES`、不合形实参和非法 `ORDER`
+  会在生成前失败。嵌套变换结果可继续作为其他变换、elemental 表达式、标量归约和假定形状实参，
+  数值、LOGICAL、COMPLEX、CHARACTER 和零大小动态结果均由严格 C17 与 gfortran 差分覆盖。
+  含可分配组件的派生类型嵌套 `PACK/CSHIFT/UNPACK` 由独立 ASan/UBSan 所有权测试验证深拷贝和
+  逆序销毁；向量下标及用户 ELEMENTAL 派生类型结果继续使用同一所有权模型。仍需完成更多
+  非 designator 派生类型数组函数结果，以及全部动态 CHARACTER/派生类型可选参数组合，故本任务
+  未关闭。
 - [ ] 对后续标准已经实现的 `FINDLOC` 等 intrinsic 逐项声明版本，并补齐字符、派生类型定义相等、
   `DIM/MASK/BACK/KIND` 的全部合法组合。
 - [ ] 为每个 intrinsic 建立表驱动正向/负向组合测试，并与至少两个原生 Fortran 编译器差分。
@@ -550,6 +557,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   数值模型定义、常量折叠、语义验证、表达式降低和生成端支持也分别位于 `semantic/`、
   `semantic/constant/`、`semantic/validation/intrinsic/`、`codegen/expression/` 和
   `core/generated/`，未恢复通用调用生成器中的名称分派。
+  transformational intrinsic 的结果分配、元素复制、动态 extent 提交和派生类型销毁已从总控
+  emitter 拆入 `codegen/transform/result.c`，主变换文件保持在 800 行以内。
 - [x] 将 `src/internal/f2c.h` 从 730 行全局定义缩减为轻量跨域聚合头；基础设施、token、type、
   expression IR、statement IR、symbol/model、context、semantic 与 codegen 分别使用私有头文件。
 - [x] 用 `F2cCompilationPhase`、`F2cUnitPhase` 和 `F2cIrState` 明确 source → token/syntax AST →
