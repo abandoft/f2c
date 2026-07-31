@@ -457,17 +457,23 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   use/def/live-in/live-out，覆盖完整赋值与部分 designator、过程 `INTENT`、I/O、分配语句、
   DO latch、嵌套动作和 BLOCK 重入对象实例边界；逐边清理计划会证明待销毁符号在目标节点不再
   存活。表达式临时量、连续实参 bridge、host descriptor、求值顺序和 statement function 存储
-  也已在 typed IR 语义阶段分配并绑定所属语句，emitter 会拒绝缺失生命周期证明的 IR。仍需把
-  拥有型数组/函数结果及边特有的所有权转移合并到同一数据流域，因此本项保持未关闭。
+  也已在 typed IR 语义阶段分配并绑定所属语句，emitter 会拒绝缺失生命周期证明的 IR。拥有型
+  数组函数结果、transformational intrinsic 结果、数组构造器及 elemental 数组值现在具有稳定的
+  语义身份、类型/kind/rank、所属语句和终结元数据；统一前向数据流会计算每个 CFG 节点的
+  created/released/live-in/live-out 集合，拒绝重复创建、提前释放和越过语句边界的逃逸。所有现有
+  分支、循环、返回、交替返回及 I/O 异常边均携带逐临时量的释放证明。仍需把标量 CHARACTER/
+  派生临时对象、动态组件的部分转移和资源失败边纳入同一所有权域，因此本项保持未关闭。
 - [ ] 对任何离开作用域的边执行正确的临时量释放、可分配对象清理和派生对象终结；异常 I/O 分支
   也必须走同一生命周期模型。当前正常 BLOCK 结束、`RETURN`、`CYCLE/EXIT`、所有标签分支及
   `ERR/END/EOR` 会复用 typed cleanup plan，覆盖 BLOCK 内可分配对象和标量/数组派生对象；每个
   显式计划都保存并验证 CFG 源节点和目标节点，emitter 会拒绝未经控制流分析的计划。未处理 I/O
   错误和 `STOP/ERROR STOP` 按 image termination 语义不错误执行普通作用域终结。BLOCK 正常结束、
   提前返回、循环转移、跨块 GOTO 和 I/O 错误分支已有严格 C17、ASan/UBSan 及原生 Fortran 差分。
-  普通 BLOCK 对象已经具备逐节点存活性证明，表达式临时量也已有语义阶段的编号、所属语句和
-  完整性门禁；但临时对象的销毁仍以语句内模板为主。仍需把拥有型数组/函数结果、部分 I/O 传输
-  后的异常边和终结动作纳入统一逐边所有权数据流后才能关闭。
+  普通 BLOCK 对象和拥有型数组值均具备逐节点存活性证明。数组清理已从字符串模板迁移为带语义
+  身份的结构化动作，按创建逆序释放并根据语义目录执行派生值终结；缺失、类型不符或重复的动作
+  会在生成前失败。无格式数组 I/O 会在检查 `ERR/END/EOR` 状态并转移控制前提交语句临时量清理。
+  仍需把所有标量 CHARACTER/派生临时对象、资源分配失败和其余生成期失败路径纳入同一逐边模型
+  后才能关闭。
 - [ ] 完成语句级错误恢复，在单个输入中报告多个独立错误，同时保证错误结果不生成半成品 C。
 
 ### P0-IO-01 F90 外部与内部 I/O
@@ -530,8 +536,10 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   解析。普通/字符/派生类型赋值、指针赋值和 `NULLIFY` 已拆入独立 statement emitter，并仅消费
   已绑定的表达式与符号；标签和 I/O 跳转仅消费语义阶段生成的目标及清理计划。表达式临时量、
   statement function 临时存储、函数结果 ABI 和 host capture 生命周期查询已经归属语义层，
-  架构门禁禁止 codegen 回写临时量规划索引。其他 codegen 模块仍存在少量源码字符串识别、
-  生成期语义判断及 `lowered_c` 等瞬态写入，因此本项保持未关闭。
+  架构门禁禁止 codegen 回写临时量规划索引。普通调用与表达式调用现在深复制 typed expression
+  树后再物化求值顺序、数组转换及其他 lowering 状态，原始 IR 不再被临时改写；架构测试禁止恢复
+  保存/回写式 mutation。其他 codegen 模块仍存在少量源码字符串识别、生成期语义判断，且
+  `lowered_c` 等瞬态字段尚未迁移到独立 lowering overlay，因此本项保持未关闭。
 - [ ] 系统审计严格别名、整数溢出、移位、浮点收缩、复数、求值顺序和指针算术，保证生成代码
   不依赖未定义行为或编译器扩展。位操作 intrinsic 已统一使用固定位宽无符号表示和 `memcpy`
   位复制，规避有符号移位、移位量等于位宽及别名未定义行为，并以符号位、完整位宽、零长度和
@@ -591,8 +599,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   transformational intrinsic 的结果分配、元素复制、动态 extent 提交和派生类型销毁已从总控
   emitter 拆入 `codegen/transform/result.c`；数组函数结果的 ABI 判定和调用端物化分别位于
   `semantic/result.c` 与 `codegen/array/function.c`，表达式临时量规划和普通变量存活性分析分别
-  位于 `semantic/temporary.c` 与 `semantic/data_flow/variables.c`，主变换和过程调用文件继续
-  满足规模门禁。
+  位于 `semantic/temporary.c` 与 `semantic/data_flow/variables.c`；拥有型数组值数据流和结构化
+  清理动作分别位于 `semantic/data_flow/temporaries.c` 与 `codegen/array/ownership.c`，主变换和
+  过程调用文件继续满足规模门禁。
   过程 CFG 构建、前驱/基本块连接、通用 bitset 数据流、赋值标签到达定义和逐边生命周期计划分别
   位于 `semantic/control_flow.c`、`semantic/control_flow/connectivity.c`、
   `semantic/data_flow/bitset.c`、`semantic/validation/assigned_label.c` 与
