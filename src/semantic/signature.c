@@ -66,6 +66,10 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
     int *allocatable = NULL;
     int *pointer = NULL;
     int *contiguous = NULL;
+    int *target = NULL;
+    int *value = NULL;
+    int *asynchronous = NULL;
+    int *volatile_parameter = NULL;
     int *descriptor = NULL;
     F2cDerivedType **derived_types = NULL;
     int *polymorphic = NULL;
@@ -83,6 +87,9 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
             count > SIZE_MAX / sizeof(*character_lengths) || count > SIZE_MAX / sizeof(*intents) ||
             count > SIZE_MAX / sizeof(*optional) || count > SIZE_MAX / sizeof(*allocatable) ||
             count > SIZE_MAX / sizeof(*pointer) || count > SIZE_MAX / sizeof(*contiguous) ||
+            count > SIZE_MAX / sizeof(*target) || count > SIZE_MAX / sizeof(*value) ||
+            count > SIZE_MAX / sizeof(*asynchronous) ||
+            count > SIZE_MAX / sizeof(*volatile_parameter) ||
             count > SIZE_MAX / sizeof(*descriptor) || count > SIZE_MAX / sizeof(*derived_types) ||
             count > SIZE_MAX / sizeof(*polymorphic) || count > SIZE_MAX / sizeof(*procedures) ||
             count > SIZE_MAX / sizeof(*constant))
@@ -97,6 +104,10 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
         allocatable = (int *)calloc(count, sizeof(*allocatable));
         pointer = (int *)calloc(count, sizeof(*pointer));
         contiguous = (int *)calloc(count, sizeof(*contiguous));
+        target = (int *)calloc(count, sizeof(*target));
+        value = (int *)calloc(count, sizeof(*value));
+        asynchronous = (int *)calloc(count, sizeof(*asynchronous));
+        volatile_parameter = (int *)calloc(count, sizeof(*volatile_parameter));
         descriptor = (int *)calloc(count, sizeof(*descriptor));
         derived_types = (F2cDerivedType **)calloc(count, sizeof(*derived_types));
         polymorphic = (int *)calloc(count, sizeof(*polymorphic));
@@ -105,6 +116,7 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
         if (types == NULL || kinds == NULL || ranks == NULL || shapes == NULL ||
             character_lengths == NULL || intents == NULL || optional == NULL ||
             allocatable == NULL || pointer == NULL || contiguous == NULL || descriptor == NULL ||
+            target == NULL || value == NULL || asynchronous == NULL || volatile_parameter == NULL ||
             derived_types == NULL || polymorphic == NULL || procedures == NULL || constant == NULL)
             goto failed;
         copy_count =
@@ -121,6 +133,12 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
             memcpy(pointer, symbol->external_parameter_pointer, copy_count * sizeof(*pointer));
             memcpy(contiguous, symbol->external_parameter_contiguous,
                    copy_count * sizeof(*contiguous));
+            memcpy(target, symbol->external_parameter_target, copy_count * sizeof(*target));
+            memcpy(value, symbol->external_parameter_value, copy_count * sizeof(*value));
+            memcpy(asynchronous, symbol->external_parameter_asynchronous,
+                   copy_count * sizeof(*asynchronous));
+            memcpy(volatile_parameter, symbol->external_parameter_volatile,
+                   copy_count * sizeof(*volatile_parameter));
             memcpy(descriptor, symbol->external_parameter_descriptor,
                    copy_count * sizeof(*descriptor));
             memcpy(derived_types, symbol->external_parameter_derived_types,
@@ -153,6 +171,10 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
     free(symbol->external_parameter_allocatable);
     free(symbol->external_parameter_pointer);
     free(symbol->external_parameter_contiguous);
+    free(symbol->external_parameter_target);
+    free(symbol->external_parameter_value);
+    free(symbol->external_parameter_asynchronous);
+    free(symbol->external_parameter_volatile);
     free(symbol->external_parameter_descriptor);
     free(symbol->external_parameter_derived_types);
     free(symbol->external_parameter_polymorphic);
@@ -168,6 +190,10 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
     symbol->external_parameter_allocatable = allocatable;
     symbol->external_parameter_pointer = pointer;
     symbol->external_parameter_contiguous = contiguous;
+    symbol->external_parameter_target = target;
+    symbol->external_parameter_value = value;
+    symbol->external_parameter_asynchronous = asynchronous;
+    symbol->external_parameter_volatile = volatile_parameter;
     symbol->external_parameter_descriptor = descriptor;
     symbol->external_parameter_derived_types = derived_types;
     symbol->external_parameter_polymorphic = polymorphic;
@@ -192,6 +218,10 @@ failed:
     free(allocatable);
     free(pointer);
     free(contiguous);
+    free(target);
+    free(value);
+    free(asynchronous);
+    free(volatile_parameter);
     free(descriptor);
     free(derived_types);
     free(polymorphic);
@@ -225,11 +255,16 @@ int f2c_set_external_parameter_signature(Symbol *symbol, size_t parameter, const
     symbol->external_parameter_allocatable[parameter] = dummy != NULL && dummy->allocatable;
     symbol->external_parameter_pointer[parameter] = dummy != NULL && dummy->pointer;
     symbol->external_parameter_contiguous[parameter] = dummy != NULL && dummy->contiguous;
+    symbol->external_parameter_target[parameter] = dummy != NULL && dummy->target;
+    symbol->external_parameter_value[parameter] = dummy != NULL && dummy->value;
+    symbol->external_parameter_asynchronous[parameter] = dummy != NULL && dummy->asynchronous;
+    symbol->external_parameter_volatile[parameter] = dummy != NULL && dummy->volatile_entity;
     symbol->external_parameter_descriptor[parameter] = f2c_symbol_uses_descriptor(dummy);
     symbol->external_parameter_derived_types[parameter] =
         dummy != NULL ? dummy->derived_type : NULL;
     symbol->external_parameter_polymorphic[parameter] = dummy != NULL && dummy->polymorphic;
-    symbol->external_parameter_const[parameter] = dummy != NULL && dummy->intent == F2C_INTENT_IN;
+    symbol->external_parameter_const[parameter] =
+        dummy != NULL && (dummy->intent == F2C_INTENT_IN || dummy->value);
     symbol->external_parameter_procedures[parameter] =
         dummy != NULL && dummy->external ? (Symbol *)dummy : NULL;
     return 1;
