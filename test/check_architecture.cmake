@@ -44,6 +44,16 @@ foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
             "${RELATIVE_FILE} couples typed source/semantic state to code-generation lowering"
         )
     endif()
+    if(
+        PRODUCTION_FILE MATCHES "/src/codegen/"
+        AND NOT RELATIVE_FILE STREQUAL "src/codegen/lowering/expression.c"
+        AND CONTENT MATCHES "f2c_expr_free[ \t\r\n]*\\("
+    )
+        message(
+            FATAL_ERROR
+            "${RELATIVE_FILE} frees an emitted expression without clearing lowering state"
+        )
+    endif()
     if(CONTENT MATCHES "f2c_parse_expression_ast[ \t\r\n]*\\(")
         if(
             NOT RELATIVE_FILE STREQUAL "src/ast/parser.c"
