@@ -43,6 +43,7 @@ F2cExpr *f2c_expr_new(F2cExprKind kind, Type type, const char *text, size_t leng
     expression->ordered_argument_temporary_index = SIZE_MAX;
     expression->statement_temporary_index = SIZE_MAX;
     expression->statement_nested_temporary_begin = SIZE_MAX;
+    expression->lifetime_statement_index = SIZE_MAX;
     expression->source_offset = SIZE_MAX;
     expression->parse_error_offset = SIZE_MAX;
     expression->tree_depth = 1U;
@@ -147,9 +148,12 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
     clone->has_host_descriptor_lifecycle = expression->has_host_descriptor_lifecycle;
     clone->ordered_temporary_index = expression->ordered_temporary_index;
     clone->ordered_argument_temporary_index = expression->ordered_argument_temporary_index;
+    clone->ordered_argument_materialized = expression->ordered_argument_materialized;
     clone->has_order_sensitive_call = expression->has_order_sensitive_call;
     clone->statement_temporary_index = expression->statement_temporary_index;
     clone->statement_nested_temporary_begin = expression->statement_nested_temporary_begin;
+    clone->lifetime_statement_index = expression->lifetime_statement_index;
+    clone->temporary_lifetime_analyzed = expression->temporary_lifetime_analyzed;
     clone->tree_depth = expression->tree_depth;
     if (!clone_owned_text(clone, expression))
         goto failed;

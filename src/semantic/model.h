@@ -270,6 +270,9 @@ struct Unit {
     size_t equivalence_group_count;
     size_t equivalence_group_capacity;
     F2cVariableFlow variable_flow;
+    size_t expression_temporary_count;
+    size_t statement_function_temporary_count;
+    int expression_lifetimes_analyzed;
     F2cDerivedType *derived_types;
     size_t derived_type_count;
     size_t derived_type_capacity;

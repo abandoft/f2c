@@ -63,6 +63,8 @@ struct F2cExpr {
     int has_order_sensitive_call;
     size_t statement_temporary_index;
     size_t statement_nested_temporary_begin;
+    size_t lifetime_statement_index;
+    int temporary_lifetime_analyzed;
     F2cExpr **children;
     size_t child_count;
     size_t child_capacity;
