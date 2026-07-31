@@ -65,12 +65,16 @@ static F2cIntent definition_intent(const Unit *definition, size_t parameter) {
     if (definition == NULL || parameter >= definition->argument_count)
         return F2C_INTENT_UNSPECIFIED;
     dummy = f2c_find_symbol((Unit *)definition, definition->arguments[parameter]);
-    return dummy != NULL ? dummy->intent : F2C_INTENT_UNSPECIFIED;
+    return dummy != NULL && dummy->value ? F2C_INTENT_IN
+           : dummy != NULL               ? dummy->intent
+                                         : F2C_INTENT_UNSPECIFIED;
 }
 
 static F2cIntent signature_intent(const Symbol *procedure, size_t parameter) {
     return procedure != NULL && parameter < procedure->external_parameter_count
-               ? procedure->external_parameter_intents[parameter]
+               ? procedure->external_parameter_value[parameter]
+                     ? F2C_INTENT_IN
+                     : procedure->external_parameter_intents[parameter]
                : F2C_INTENT_UNSPECIFIED;
 }
 
