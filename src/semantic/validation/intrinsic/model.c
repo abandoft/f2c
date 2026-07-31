@@ -105,26 +105,21 @@ static void validate_integer_scalar(Context *context, size_t line, const char *s
 
 void f2c_validation_numeric_model_intrinsic(Context *context, size_t line,
                                             const char *statement_text, F2cExpr *expression) {
-    static const char *const model[] = {"x"};
-    static const char *const integer_kind[] = {"r"};
-    static const char *const real_kind[] = {"p", "r", "radix"};
     F2cBoundIntrinsicArguments bound;
     const char *name;
     if (expression == NULL || !f2c_intrinsic_is_numeric_model(expression->intrinsic))
         return;
     name = display_name(expression->intrinsic);
     if (expression->intrinsic == F2C_INTRINSIC_SELECTED_INT_KIND) {
-        bound = f2c_validation_bind_intrinsic_arguments(
-            context, line, statement_text, name, expression->children, expression->child_count,
-            integer_kind, 1U, 1U);
+        bound =
+            f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
         validate_integer_scalar(context, line, statement_text, name, "R", bound.values[0]);
         return;
     }
     if (expression->intrinsic == F2C_INTRINSIC_SELECTED_REAL_KIND) {
         size_t argument;
-        bound = f2c_validation_bind_intrinsic_arguments(
-            context, line, statement_text, name, expression->children, expression->child_count,
-            real_kind, 3U, 0U);
+        bound =
+            f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
         if (bound.values[0] == NULL && bound.values[1] == NULL)
             f2c_diagnostic_at(context, line,
                               f2c_validation_expression_start_column(statement_text, expression),
@@ -135,9 +130,7 @@ void f2c_validation_numeric_model_intrinsic(Context *context, size_t line,
                                     bound.values[argument]);
         return;
     }
-    bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, name, expression->children, expression->child_count, model,
-        1U, 1U);
+    bound = f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     validate_model_argument(context, line, statement_text, expression->intrinsic,
                             bound.values[0]);
 }

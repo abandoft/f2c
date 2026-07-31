@@ -180,12 +180,10 @@ static void validate_legacy_specific(Context *context, size_t line, const char *
 
 static void validate_rounding(Context *context, Unit *unit, size_t line, const char *statement_text,
                               F2cExpr *expression) {
-    static const char *const arguments[] = {"a", "kind"};
     const F2cIntrinsicSignature *signature = f2c_find_intrinsic(expression->text);
     const size_t argument_count = signature != NULL && signature->maximum_arguments == 2U ? 2U : 1U;
-    const F2cBoundIntrinsicArguments bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, display_name(expression->intrinsic), expression->children,
-        expression->child_count, arguments, argument_count, 1U);
+    const F2cBoundIntrinsicArguments bound =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     require_real(context, line, statement_text, display_name(expression->intrinsic),
                  bound.values[0]);
     if (argument_count == 2U)
@@ -196,23 +194,19 @@ static void validate_rounding(Context *context, Unit *unit, size_t line, const c
 
 static void validate_binary_numeric(Context *context, Unit *unit, size_t line,
                                     const char *statement_text, F2cExpr *expression) {
-    static const char *const dim_arguments[] = {"x", "y"};
-    static const char *const mod_arguments[] = {"a", "p"};
-    static const char *const sign_arguments[] = {"a", "b"};
-    const char *const *arguments = expression->intrinsic == F2C_INTRINSIC_DIM    ? dim_arguments
-                                   : expression->intrinsic == F2C_INTRINSIC_SIGN ? sign_arguments
-                                                                                 : mod_arguments;
+    const F2cIntrinsicArgumentSchema *schema =
+        f2c_intrinsic_argument_schema(expression->intrinsic);
     const char *name = display_name(expression->intrinsic);
-    const F2cBoundIntrinsicArguments bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, name, expression->children, expression->child_count,
-        arguments, 2U, 2U);
+    const F2cBoundIntrinsicArguments bound =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     int64_t integer_zero;
     double real_zero;
     if (bound.values[0] != NULL && !supported_numeric_type(bound.values[0], 1))
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, bound.values[0]),
                           1, "%s arguments must be INTEGER or REAL with a supported kind", name);
-    require_same_type(context, unit, line, statement_text, name, arguments[1], bound.values[0],
+    require_same_type(context, unit, line, statement_text, name,
+                      schema != NULL ? schema->names[1] : "second argument", bound.values[0],
                       bound.values[1], 0);
     if ((expression->intrinsic == F2C_INTRINSIC_MOD ||
          expression->intrinsic == F2C_INTRINSIC_MODULO) &&
@@ -231,10 +225,8 @@ static void validate_binary_numeric(Context *context, Unit *unit, size_t line,
 
 static void validate_merge(Context *context, Unit *unit, size_t line, const char *statement_text,
                            F2cExpr *expression) {
-    static const char *const arguments[] = {"tsource", "fsource", "mask"};
-    const F2cBoundIntrinsicArguments bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, "MERGE", expression->children, expression->child_count,
-        arguments, 3U, 3U);
+    const F2cBoundIntrinsicArguments bound =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     require_same_type(context, unit, line, statement_text, "MERGE", "FSOURCE", bound.values[0],
                       bound.values[1], 1);
     if (bound.values[2] != NULL && bound.values[2]->type != TYPE_LOGICAL)
