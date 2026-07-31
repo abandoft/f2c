@@ -61,12 +61,7 @@ static Unit *find_explicit_interface(Unit *caller, const Symbol *external) {
 }
 
 static int same_character_length(const Symbol *left, const Symbol *right) {
-    if (left == NULL || right == NULL || left->type != TYPE_CHARACTER ||
-        right->type != TYPE_CHARACTER)
-        return 1;
-    if (left->character_length == NULL || right->character_length == NULL)
-        return left->character_length == right->character_length;
-    return strcmp(left->character_length, right->character_length) == 0;
+    return f2c_character_length_signatures_match(left, right);
 }
 
 static int same_shape_contract(const Symbol *left, const Symbol *right) {

@@ -406,8 +406,7 @@ int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const
           !signature_shape_matches(&expected->shape, expected->external_result_rank, &actual->shape,
                                    actual->external_result_rank) ||
           expected->derived_type != actual->derived_type ||
-          !signature_character_length_matches(expected->type, expected->character_length,
-                                              actual->character_length))) ||
+          !f2c_character_length_signatures_match(expected, actual))) ||
         expected->external_parameter_count != actual->external_parameter_count)
         return 0;
     for (i = 0U; i < expected->external_parameter_count; ++i) {

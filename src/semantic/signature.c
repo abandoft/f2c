@@ -1,7 +1,59 @@
 #include "semantic/semantic.h"
 
+#include <errno.h>
+#include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+int f2c_symbol_character_length_constant(const Symbol *symbol, int64_t *length) {
+    char *end = NULL;
+    long long value;
+    if (symbol == NULL || length == NULL || symbol->type != TYPE_CHARACTER)
+        return 0;
+    if (symbol->character_length_expression != NULL &&
+        f2c_evaluate_integer_constant(NULL, symbol->character_length_expression, length))
+        return 1;
+    if (symbol->character_length_syntax.count != 0U &&
+        f2c_evaluate_integer_syntax(NULL, symbol->character_length_syntax, length))
+        return 1;
+    if (symbol->character_length == NULL)
+        return 0;
+    errno = 0;
+    value = strtoll(symbol->character_length, &end, 10);
+    if (errno != 0 || end == symbol->character_length || *end != '\0')
+        return 0;
+    *length = (int64_t)value;
+    return 1;
+}
+
+int f2c_character_length_signatures_match(const Symbol *left, const Symbol *right) {
+    int64_t left_length;
+    int64_t right_length;
+    if (left == NULL || right == NULL || left->type != TYPE_CHARACTER ||
+        right->type != TYPE_CHARACTER)
+        return 1;
+    if (f2c_symbol_character_length_constant(left, &left_length) &&
+        f2c_symbol_character_length_constant(right, &right_length))
+        return left_length == right_length;
+    if (left->character_length == NULL || right->character_length == NULL)
+        return left->character_length == right->character_length;
+    return strcmp(left->character_length, right->character_length) == 0;
+}
+
+static char *normalized_character_length(const Symbol *symbol) {
+    int64_t length;
+    char text[32];
+    int count;
+    if (symbol == NULL || symbol->type != TYPE_CHARACTER || symbol->character_length == NULL)
+        return NULL;
+    if (!f2c_symbol_character_length_constant(symbol, &length))
+        return f2c_strdup(symbol->character_length);
+    count = snprintf(text, sizeof(text), "%" PRId64, length);
+    if (count <= 0 || (size_t)count >= sizeof(text))
+        return NULL;
+    return f2c_strdup(text);
+}
 
 int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
     Type *types = NULL;
@@ -88,8 +140,9 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count) {
             }
         }
     }
-    for (parameter = 0U; parameter < symbol->external_parameter_capacity; ++parameter)
-        free(symbol->external_parameter_character_lengths[parameter]);
+    if (symbol->external_parameter_character_lengths != NULL)
+        for (parameter = 0U; parameter < symbol->external_parameter_capacity; ++parameter)
+            free(symbol->external_parameter_character_lengths[parameter]);
     free(symbol->external_parameter_types);
     free(symbol->external_parameter_kinds);
     free(symbol->external_parameter_ranks);
@@ -152,7 +205,7 @@ int f2c_set_external_parameter_signature(Symbol *symbol, size_t parameter, const
     if (symbol == NULL || parameter >= symbol->external_parameter_capacity)
         return 0;
     if (dummy != NULL && dummy->type == TYPE_CHARACTER && dummy->character_length != NULL) {
-        character_length = f2c_strdup(dummy->character_length);
+        character_length = normalized_character_length(dummy);
         if (character_length == NULL)
             return 0;
     }

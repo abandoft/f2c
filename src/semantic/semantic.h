@@ -11,6 +11,8 @@ void f2c_resolve_equivalence_storage(Context *context, Unit *unit);
 void f2c_resolve_derived_semantics(Context *context);
 int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count);
 int f2c_set_external_parameter_signature(Symbol *symbol, size_t parameter, const Symbol *dummy);
+int f2c_symbol_character_length_constant(const Symbol *symbol, int64_t *length);
+int f2c_character_length_signatures_match(const Symbol *left, const Symbol *right);
 int f2c_symbol_uses_descriptor(const Symbol *symbol);
 int f2c_symbol_is_assumed_size(const Symbol *symbol);
 int f2c_expression_is_whole_assumed_size(const F2cExpr *expression);
