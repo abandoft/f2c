@@ -147,7 +147,6 @@ set(
     src/codegen/lowering.c
     src/codegen/module.c
     src/codegen/ownership.c
-    src/codegen/result.c
     src/codegen/statement.c
     src/codegen/statement/assignment.c
     src/codegen/statement/bit.c
@@ -279,6 +278,7 @@ set(
     src/semantic/numeric_model.c
     src/semantic/numeric_model.h
     src/semantic/procedure.c
+    src/semantic/result.c
     src/semantic/semantic.h
     src/semantic/signature.c
     src/semantic/storage.c

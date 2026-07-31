@@ -6,13 +6,7 @@
 void f2c_emit_supported_modules(Context *context);
 void f2c_emit_project_modules(Context *context);
 void f2c_emit_derived_types(Context *context);
-int f2c_unit_has_descriptor_result(const Unit *unit);
-int f2c_procedure_has_descriptor_result(const Symbol *procedure);
-int f2c_expression_has_allocatable_result(const F2cExpr *expression);
-int f2c_expression_has_descriptor_result(const F2cExpr *expression);
 void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, const char *name);
-size_t f2c_host_capture_local_descriptor_count(Unit *caller, const Unit *procedure);
-int f2c_host_capture_has_descriptor_lifecycle(Unit *caller, const Unit *procedure);
 int f2c_emit_host_capture_statement_descriptors(Buffer *prelude, Buffer *postlude, Unit *caller,
                                                 const Unit *procedure, int depth);
 int f2c_emit_host_capture_expression_descriptors(Buffer *setup, Buffer *cleanup, Unit *caller,

@@ -13,6 +13,17 @@ int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count);
 int f2c_symbol_uses_descriptor(const Symbol *symbol);
 int f2c_symbol_is_assumed_size(const Symbol *symbol);
 int f2c_expression_is_whole_assumed_size(const F2cExpr *expression);
+int f2c_unit_has_descriptor_result(const Unit *unit);
+int f2c_procedure_has_descriptor_result(const Symbol *procedure);
+int f2c_expression_has_allocatable_result(const F2cExpr *expression);
+int f2c_expression_has_descriptor_result(const F2cExpr *expression);
+int f2c_host_function_result_symbol(const Unit *unit, const Symbol *symbol);
+const Symbol *f2c_host_capture_actual(Unit *caller, const Unit *procedure, size_t capture,
+                                      const Symbol **formal);
+int f2c_host_capture_is_local_descriptor(const Unit *caller, const Symbol *actual);
+int f2c_host_capture_needs_descriptor_lifecycle(const Symbol *actual);
+size_t f2c_host_capture_local_descriptor_count(Unit *caller, const Unit *procedure);
+int f2c_host_capture_has_descriptor_lifecycle(Unit *caller, const Unit *procedure);
 int f2c_named_kind_constant(const char *name, int64_t *value);
 int f2c_evaluate_integer_constant(Unit *unit, const F2cExpr *expression, int64_t *value);
 int f2c_evaluate_real_constant(Unit *unit, const F2cExpr *expression, double *value);
