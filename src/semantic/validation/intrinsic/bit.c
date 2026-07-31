@@ -88,62 +88,24 @@ static void validate_shift(Context *context, Unit *unit, size_t line, const char
 
 void f2c_validation_bit_intrinsic(Context *context, Unit *unit, size_t line,
                                   const char *statement_text, F2cExpr *expression) {
-    static const char *const one[] = {"i"};
-    static const char *const binary[] = {"i", "j"};
-    static const char *const position[] = {"i", "pos"};
-    static const char *const bits[] = {"i", "pos", "len"};
-    static const char *const shift[] = {"i", "shift"};
-    static const char *const circular[] = {"i", "shift", "size"};
+    const F2cIntrinsicArgumentSchema *schema;
     F2cBoundIntrinsicArguments bound;
-    const char *const *names = one;
-    size_t name_count = 1U;
     const F2cExpr *model;
     const char *display_name;
     int width;
     int64_t first;
     int64_t second;
     size_t index;
-    if (expression == NULL || expression->intrinsic == F2C_INTRINSIC_NONE)
+    if (expression == NULL || !f2c_intrinsic_is_bit(expression->intrinsic) ||
+        expression->intrinsic == F2C_INTRINSIC_MVBITS)
         return;
-    switch (expression->intrinsic) {
-    case F2C_INTRINSIC_IAND:
-    case F2C_INTRINSIC_IEOR:
-    case F2C_INTRINSIC_IOR:
-        names = binary;
-        name_count = 2U;
-        break;
-    case F2C_INTRINSIC_BTEST:
-    case F2C_INTRINSIC_IBCLR:
-    case F2C_INTRINSIC_IBSET:
-        names = position;
-        name_count = 2U;
-        break;
-    case F2C_INTRINSIC_IBITS:
-        names = bits;
-        name_count = 3U;
-        break;
-    case F2C_INTRINSIC_ISHFT:
-        names = shift;
-        name_count = 2U;
-        break;
-    case F2C_INTRINSIC_ISHFTC:
-        names = circular;
-        name_count = 3U;
-        break;
-    case F2C_INTRINSIC_BIT_SIZE:
-    case F2C_INTRINSIC_NOT:
-        break;
-    case F2C_INTRINSIC_NONE:
-    case F2C_INTRINSIC_MVBITS:
-    default:
+    schema = f2c_intrinsic_argument_schema(expression->intrinsic);
+    if (schema == NULL)
         return;
-    }
     display_name = intrinsic_display_name(expression->intrinsic);
-    bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, display_name, expression->children, expression->child_count,
-        names, name_count, expression->intrinsic == F2C_INTRINSIC_ISHFTC ? 2U : name_count);
-    for (index = 0U; index < name_count; ++index)
-        require_integer(context, line, statement_text, display_name, names[index],
+    bound = f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
+    for (index = 0U; index < schema->count; ++index)
+        require_integer(context, line, statement_text, display_name, schema->names[index],
                         bound.values[index]);
     model = bound.values[0];
     width = integer_bit_size(model);
@@ -200,7 +162,8 @@ void f2c_validation_bit_intrinsic(Context *context, Unit *unit, size_t line,
 }
 
 void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement) {
-    static const char *const names[] = {"from", "frompos", "len", "to", "topos"};
+    const F2cIntrinsicArgumentSchema *schema =
+        f2c_intrinsic_argument_schema(F2C_INTRINSIC_MVBITS);
     F2cBoundIntrinsicArguments bound;
     const F2cExpr *shape = NULL;
     const F2cExpr *from;
@@ -221,11 +184,12 @@ void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement
     if (statement->item_count != 5U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "MVBITS requires exactly 5 arguments");
-    bound = f2c_validation_bind_intrinsic_arguments(context, statement->line, statement->text,
-                                                    "MVBITS", statement->arguments,
-                                                    statement->item_count, names, 5U, 5U);
+    bound = f2c_validation_bind_registered_intrinsic_arguments(
+        context, statement->line, statement->text, "MVBITS", F2C_INTRINSIC_MVBITS, 5U,
+        statement->arguments, statement->item_count);
     for (argument = 0U; argument < 5U; ++argument)
-        require_integer(context, statement->line, statement->text, "MVBITS", names[argument],
+        require_integer(context, statement->line, statement->text, "MVBITS",
+                        schema->names[argument],
                         bound.values[argument]);
     from = bound.values[0];
     to = bound.values[3];

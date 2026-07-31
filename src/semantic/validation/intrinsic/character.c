@@ -206,17 +206,6 @@ static void validate_character_kind(Context *context, size_t line, const char *s
 
 void f2c_validation_character_intrinsic(Context *context, Unit *unit, size_t line,
                                         const char *statement_text, F2cExpr *expression) {
-    static const char *const code[] = {"i", "kind"};
-    static const char *const string[] = {"string"};
-    static const char *const character_code[] = {"c", "kind"};
-    static const char *const search[] = {"string", "substring", "back", "kind"};
-    static const char *const length[] = {"string", "kind"};
-    static const char *const lexical[] = {"string_a", "string_b"};
-    static const char *const repetition[] = {"string", "ncopies"};
-    static const char *const set_search[] = {"string", "set", "back", "kind"};
-    const char *const *names = string;
-    size_t name_count = 1U;
-    size_t required_count = 1U;
     F2cBoundIntrinsicArguments bound;
     const char *intrinsic;
     const F2cExpr *primary;
@@ -226,57 +215,8 @@ void f2c_validation_character_intrinsic(Context *context, Unit *unit, size_t lin
     int64_t value;
     if (expression == NULL || !f2c_intrinsic_is_character(expression->intrinsic))
         return;
-    switch (expression->intrinsic) {
-    case F2C_INTRINSIC_ACHAR:
-    case F2C_INTRINSIC_CHAR:
-        names = code;
-        name_count = 2U;
-        break;
-    case F2C_INTRINSIC_IACHAR:
-    case F2C_INTRINSIC_ICHAR:
-        names = character_code;
-        name_count = 2U;
-        break;
-    case F2C_INTRINSIC_INDEX:
-        names = search;
-        name_count = 4U;
-        required_count = 2U;
-        break;
-    case F2C_INTRINSIC_LEN:
-    case F2C_INTRINSIC_LEN_TRIM:
-        names = length;
-        name_count = 2U;
-        break;
-    case F2C_INTRINSIC_LGE:
-    case F2C_INTRINSIC_LGT:
-    case F2C_INTRINSIC_LLE:
-    case F2C_INTRINSIC_LLT:
-        names = lexical;
-        name_count = 2U;
-        required_count = 2U;
-        break;
-    case F2C_INTRINSIC_REPEAT:
-        names = repetition;
-        name_count = 2U;
-        required_count = 2U;
-        break;
-    case F2C_INTRINSIC_SCAN:
-    case F2C_INTRINSIC_VERIFY:
-        names = set_search;
-        name_count = 4U;
-        required_count = 2U;
-        break;
-    case F2C_INTRINSIC_ADJUSTL:
-    case F2C_INTRINSIC_ADJUSTR:
-    case F2C_INTRINSIC_TRIM:
-        break;
-    default:
-        return;
-    }
     intrinsic = display_name(expression->intrinsic);
-    bound = f2c_validation_bind_intrinsic_arguments(context, line, statement_text, intrinsic,
-                                                    expression->children, expression->child_count,
-                                                    names, name_count, required_count);
+    bound = f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     primary = bound.values[0];
     if (expression->intrinsic == F2C_INTRINSIC_LGE || expression->intrinsic == F2C_INTRINSIC_LGT ||
         expression->intrinsic == F2C_INTRINSIC_LLE || expression->intrinsic == F2C_INTRINSIC_LLT) {
