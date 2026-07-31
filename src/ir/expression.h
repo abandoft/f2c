@@ -41,10 +41,6 @@ struct F2cExpr {
     F2cSourceSpan parse_error_span;
     char *text;
     char *source;
-    char *lowered_c;
-    char *lowered_extent_c;
-    char *lowered_character_length_c;
-    int lowered_array_temporary;
     size_t source_offset;
     size_t source_length;
     size_t parse_error_offset;
@@ -59,7 +55,6 @@ struct F2cExpr {
     int has_host_descriptor_lifecycle;
     size_t ordered_temporary_index;
     size_t ordered_argument_temporary_index;
-    int ordered_argument_materialized;
     int has_order_sensitive_call;
     size_t statement_temporary_index;
     size_t statement_nested_temporary_begin;

@@ -133,11 +133,6 @@ static F2cExpr *clone_array_reference(Unit *unit, const F2cExpr *expression) {
     *clone = *expression;
     clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
     clone->source = expression->source != NULL ? f2c_strdup(expression->source) : NULL;
-    clone->lowered_c = NULL;
-    clone->lowered_extent_c = NULL;
-    clone->lowered_character_length_c = NULL;
-    clone->lowered_array_temporary = 0;
-    clone->ordered_argument_materialized = 0;
     clone->children = expression->child_count != 0U
                           ? (F2cExpr **)calloc(expression->child_count, sizeof(*clone->children))
                           : NULL;
@@ -182,11 +177,6 @@ static F2cExpr *clone_expression(Unit *unit, const F2cExpr *expression) {
     *clone = *expression;
     clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
     clone->source = expression->source != NULL ? f2c_strdup(expression->source) : NULL;
-    clone->lowered_c = NULL;
-    clone->lowered_extent_c = NULL;
-    clone->lowered_character_length_c = NULL;
-    clone->lowered_array_temporary = 0;
-    clone->ordered_argument_materialized = 0;
     clone->children = expression->child_count != 0U
                           ? (F2cExpr **)calloc(expression->child_count, sizeof(*clone->children))
                           : NULL;

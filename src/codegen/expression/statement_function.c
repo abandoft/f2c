@@ -14,13 +14,8 @@ static F2cExpr *clone_expression(Unit *unit, const F2cExpr *source) {
     if (clone == NULL)
         return NULL;
     *clone = *source;
-    clone->ordered_argument_materialized = 0;
     clone->text = NULL;
     clone->source = NULL;
-    clone->lowered_c = NULL;
-    clone->lowered_extent_c = NULL;
-    clone->lowered_character_length_c = NULL;
-    clone->lowered_array_temporary = 0;
     clone->children = NULL;
     clone->child_count = 0U;
     clone->child_capacity = 0U;

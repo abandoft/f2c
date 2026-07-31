@@ -372,7 +372,6 @@ static void reset_expression_plan(F2cExpr *expression) {
     expression->has_host_descriptor_lifecycle = 0;
     expression->ordered_temporary_index = SIZE_MAX;
     expression->ordered_argument_temporary_index = SIZE_MAX;
-    expression->ordered_argument_materialized = 0;
     expression->has_order_sensitive_call = 0;
     expression->statement_temporary_index = SIZE_MAX;
     expression->statement_nested_temporary_begin = SIZE_MAX;

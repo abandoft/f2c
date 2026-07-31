@@ -149,7 +149,6 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
     clone->has_host_descriptor_lifecycle = expression->has_host_descriptor_lifecycle;
     clone->ordered_temporary_index = expression->ordered_temporary_index;
     clone->ordered_argument_temporary_index = expression->ordered_argument_temporary_index;
-    clone->ordered_argument_materialized = expression->ordered_argument_materialized;
     clone->has_order_sensitive_call = expression->has_order_sensitive_call;
     clone->statement_temporary_index = expression->statement_temporary_index;
     clone->statement_nested_temporary_begin = expression->statement_nested_temporary_begin;
@@ -192,9 +191,6 @@ void f2c_expr_free(F2cExpr *expression) {
     free(expression->children);
     free(expression->text);
     free(expression->source);
-    free(expression->lowered_c);
-    free(expression->lowered_extent_c);
-    free(expression->lowered_character_length_c);
     free(expression);
 }
 

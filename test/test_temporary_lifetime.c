@@ -3,6 +3,7 @@
 #include "codegen/array/private.h"
 #include "codegen/codegen.h"
 #include "codegen/expression/private.h"
+#include "codegen/lowering/private.h"
 #include "internal/context.h"
 #include "ir/statement.h"
 #include "semantic/data_flow.h"
@@ -191,11 +192,7 @@ static void test_owned_array_temporary_flow(void) {
     first.type = TYPE_INTEGER;
     first.type_kind = f2c_default_kind(TYPE_INTEGER);
     first.rank = 1U;
-    first.lowered_c = (char *)"first_owned_array";
-    first.lowered_extent_c = (char *)"2U";
     second = first;
-    second.lowered_c = (char *)"second_owned_array";
-    second.lowered_extent_c = (char *)"3U";
     statement.kind = F2C_STMT_ASSIGNMENT;
     statement.right = &first;
     statement.limit = &second;
@@ -204,6 +201,11 @@ static void test_owned_array_temporary_flow(void) {
     unit.phase = F2C_UNIT_TYPED_IR;
     unit.statements = &statement;
     unit.statement_count = 1U;
+    expect(f2c_lowering_copy_code(&unit, &first, "first_owned_array") &&
+               f2c_lowering_copy_extent(&unit, &first, "2U") &&
+               f2c_lowering_copy_code(&unit, &second, "second_owned_array") &&
+               f2c_lowering_copy_extent(&unit, &second, "3U"),
+           "the test fixture records code-generation ownership state");
     expect(f2c_plan_expression_lifetimes(&context, &unit),
            "semantic planning catalogs owned array expressions");
     expect(unit.owned_temporary_count == 2U && statement.temporary_plan.owned_temporary_count == 2U,
@@ -234,6 +236,7 @@ static void test_owned_array_temporary_flow(void) {
     f2c_temporary_flow_clear(&unit);
     free(unit.owned_temporaries);
     free(statement.temporary_plan.owned_temporaries);
+    f2c_lowering_clear(&context);
     free(context.diagnostics.data);
 }
 
@@ -275,11 +278,13 @@ static void test_expression_call_lowering_is_immutable(void) {
     code = f2c_expression_call(&unit, &outer, &supported);
     expect(supported && code != NULL,
            "an ordered expression call lowers from a private expression clone");
-    expect(inner.lowered_c == NULL && !inner.ordered_argument_materialized,
+    expect(f2c_lowering_code(&unit, &inner) == NULL &&
+               !f2c_lowering_argument_materialized(&unit, &inner),
            "expression lowering leaves the original typed IR unchanged");
     free(code);
     free(unit.owned_temporaries);
     free(statement.temporary_plan.owned_temporaries);
+    f2c_lowering_clear(&context);
     free(context.diagnostics.data);
 }
 
@@ -345,9 +350,10 @@ static void test_statement_call_lowering_is_immutable(void) {
     f2c_emit_call(&output, &unit, "consume_array", arguments, 1U, 0);
     expect(output.data != NULL && strstr(output.data, "f2c_array_conversion_0") != NULL,
            "statement call lowering materializes an array conversion");
-    expect(conversion.lowered_c == NULL,
+    expect(f2c_lowering_code(&unit, &conversion) == NULL,
            "statement call lowering leaves the original typed argument tree unchanged");
     free(output.data);
+    f2c_lowering_clear(&context);
     free(context.diagnostics.data);
 }
 

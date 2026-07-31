@@ -20,11 +20,6 @@ static F2cExpr *clone_shell(Unit *unit, const F2cExpr *expression) {
     *clone = *expression;
     clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
     clone->source = expression->source != NULL ? f2c_strdup(expression->source) : NULL;
-    clone->lowered_c = NULL;
-    clone->lowered_extent_c = NULL;
-    clone->lowered_character_length_c = NULL;
-    clone->lowered_array_temporary = 0;
-    clone->ordered_argument_materialized = 0;
     clone->children = NULL;
     clone->child_count = 0U;
     clone->child_capacity = 0U;
