@@ -8,25 +8,6 @@ int f2c_array_function_result_call(const F2cExpr *expression) {
            f2c_expression_has_descriptor_result(expression);
 }
 
-void f2c_array_append_owned_temporary_cleanup(Buffer *cleanup, const F2cExpr *expression,
-                                              int depth) {
-    size_t dimension;
-    f2c_array_indent(cleanup, depth);
-    if (expression->type == TYPE_DERIVED && expression->derived_type != NULL) {
-        f2c_buffer_printf(cleanup,
-                          "f2c_destroy_array_%s(%s, f2c_inquiry_size(%zuU, "
-                          "(const size_t[]){",
-                          expression->derived_type->c_name, expression->lowered_c,
-                          expression->rank);
-        for (dimension = 0U; dimension < expression->rank; ++dimension)
-            f2c_buffer_printf(cleanup, "%s(size_t)%s_extent_%zu", dimension == 0U ? "" : ", ",
-                              expression->lowered_c, dimension + 1U);
-        f2c_buffer_printf(cleanup, "}), %zuU);\n", expression->rank);
-        f2c_array_indent(cleanup, depth);
-    }
-    f2c_buffer_printf(cleanup, "free(%s);\n", expression->lowered_c);
-}
-
 static void append_shape_validation(Buffer *prelude, const F2cExpr *expression,
                                     const char *descriptor, const char *storage, int depth) {
     size_t dimension;
@@ -129,7 +110,7 @@ static void append_nonowning_copy(Buffer *prelude, const F2cExpr *expression,
 
 int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_t identifier,
                                           const char *role, size_t *temporary, Buffer *prelude,
-                                          Buffer *cleanup, int depth) {
+                                          F2cArrayCleanupList *cleanup, int depth) {
     Buffer storage = {0};
     Buffer descriptor = {0};
     char *call;
@@ -139,10 +120,14 @@ int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_
         expression->rank > F2C_MAX_RANK || expression->type == TYPE_UNKNOWN ||
         (expression->type == TYPE_DERIVED && expression->derived_type == NULL))
         return 0;
+    if (!f2c_array_owned_temporary_valid(unit, expression,
+                                         F2C_OWNED_TEMPORARY_ARRAY_FUNCTION_RESULT))
+        return 0;
     call = f2c_array_emit_expression(unit, expression);
     if (call == NULL)
         return 0;
-    f2c_buffer_printf(&storage, "f2c_array_%s_function_%zu_%zu", role, identifier, (*temporary)++);
+    f2c_buffer_printf(&storage, "f2c_array_%s_function_%zu_%zu", role, identifier,
+                      expression->owned_temporary_index);
     f2c_buffer_printf(&descriptor, "%s_descriptor", storage.data != NULL ? storage.data : "");
     if (storage.data == NULL || descriptor.data == NULL) {
         free(call);
@@ -175,7 +160,11 @@ int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_
             return 0;
         }
     }
-    f2c_array_append_owned_temporary_cleanup(cleanup, expression, depth);
+    if (!f2c_array_cleanup_append(unit, cleanup, expression, depth)) {
+        free(call);
+        free(descriptor.data);
+        return 0;
+    }
     free(call);
     free(descriptor.data);
     return expression->lowered_c != NULL;

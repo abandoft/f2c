@@ -118,9 +118,9 @@ int f2c_array_contains_unmaterialized_value(const F2cExpr *expression) {
 
 static int materialize_transform(Context *context, Unit *unit, F2cExpr *expression,
                                  size_t identifier, const char *role, size_t *temporary,
-                                 Buffer *prelude, Buffer *cleanup, int depth) {
+                                 Buffer *prelude, F2cArrayCleanupList *cleanup, int depth) {
     const size_t output_start = prelude->length;
-    const size_t current = (*temporary)++;
+    const size_t current = expression->owned_temporary_index;
     const size_t previous_errors = context->result.error_count;
     Buffer saved_output = {0};
     Buffer name = {0};
@@ -131,6 +131,9 @@ static int materialize_transform(Context *context, Unit *unit, F2cExpr *expressi
     int emitted;
     if (!array_transform_call(expression) || expression->lowered_c != NULL)
         return 1;
+    if (!f2c_array_owned_temporary_valid(unit, expression,
+                                         F2C_OWNED_TEMPORARY_TRANSFORMATIONAL_RESULT))
+        return 0;
     if (expression->type == TYPE_UNKNOWN ||
         (expression->type == TYPE_DERIVED &&
          (expression->derived_type == NULL || expression->derived_type->c_name == NULL)))
@@ -194,8 +197,7 @@ static int materialize_transform(Context *context, Unit *unit, F2cExpr *expressi
         if (expression->lowered_character_length_c == NULL)
             return 0;
     }
-    f2c_array_append_owned_temporary_cleanup(cleanup, expression, depth);
-    return 1;
+    return f2c_array_cleanup_append(unit, cleanup, expression, depth);
 }
 
 static int scalar_context_requires_elemental_temporary(const F2cExpr *expression,
@@ -207,17 +209,21 @@ static int scalar_context_requires_elemental_temporary(const F2cExpr *expression
 
 static int materialize_elemental_value(Context *context, Unit *unit, F2cExpr *expression,
                                        size_t identifier, const char *role, size_t *temporary,
-                                       Buffer *prelude, Buffer *cleanup, int depth) {
+                                       Buffer *prelude, F2cArrayCleanupList *cleanup, int depth) {
     const size_t output_start = prelude->length;
-    const size_t current = (*temporary)++;
+    const size_t current = expression->owned_temporary_index;
     const size_t previous_errors = context->result.error_count;
     Buffer saved_output = {0};
     Buffer name = {0};
     Symbol target;
     int output_state;
     int emitted;
+    (void)temporary;
     if (!scalar_context_requires_elemental_temporary(expression, role))
         return 1;
+    if (!f2c_array_owned_temporary_valid(unit, expression,
+                                         F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE))
+        return 0;
     if (expression->type == TYPE_UNKNOWN ||
         (expression->type == TYPE_DERIVED &&
          (expression->derived_type == NULL || expression->derived_type->c_name == NULL)))
@@ -273,13 +279,12 @@ static int materialize_elemental_value(Context *context, Unit *unit, F2cExpr *ex
         if (expression->lowered_character_length_c == NULL)
             return 0;
     }
-    f2c_array_append_owned_temporary_cleanup(cleanup, expression, depth);
-    return 1;
+    return f2c_array_cleanup_append(unit, cleanup, expression, depth);
 }
 
 int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *expression,
                                        size_t identifier, const char *role, size_t *temporary,
-                                       Buffer *prelude, Buffer *cleanup, int depth) {
+                                       Buffer *prelude, F2cArrayCleanupList *cleanup, int depth) {
     size_t child;
     if (context == NULL || unit == NULL || temporary == NULL || prelude == NULL ||
         cleanup == NULL || role == NULL)
@@ -313,10 +318,13 @@ int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *ex
         int supported = 0;
         if (expression->rank != 1U || expression->type == TYPE_UNKNOWN)
             return 0;
+        if (!f2c_array_owned_temporary_valid(unit, expression,
+                                             F2C_OWNED_TEMPORARY_ARRAY_CONSTRUCTOR))
+            return 0;
         if (expression->type != TYPE_CHARACTER && expression->type != TYPE_DERIVED &&
             flat_array_constructor(expression)) {
             f2c_buffer_printf(&name, "f2c_array_%s_constructor_%zu_%zu", role, identifier,
-                              (*temporary)++);
+                              expression->owned_temporary_index);
             f2c_array_indent(prelude, depth);
             if (expression->child_count == 0U) {
                 f2c_buffer_printf(prelude, "const %s %s[1] = {0};\n",
@@ -339,7 +347,7 @@ int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *ex
             Buffer capacity = {0};
             Buffer character_length = {0};
             Buffer character_length_set = {0};
-            const size_t current = (*temporary)++;
+            const size_t current = expression->owned_temporary_index;
             f2c_buffer_printf(&name, "f2c_array_%s_constructor_%zu_%zu", role, identifier, current);
             f2c_buffer_printf(&count, "f2c_array_%s_constructor_count_%zu_%zu", role, identifier,
                               current);
@@ -383,14 +391,8 @@ int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *ex
                 (expression->type == TYPE_CHARACTER &&
                  expression->lowered_character_length_c == NULL))
                 return 0;
-            f2c_array_indent(cleanup, depth);
-            if (expression->type == TYPE_DERIVED) {
-                f2c_buffer_printf(cleanup, "f2c_destroy_array_%s(%s, %s, 1U);\n",
-                                  expression->derived_type->c_name, expression->lowered_c,
-                                  expression->lowered_extent_c);
-                f2c_array_indent(cleanup, depth);
-            }
-            f2c_buffer_printf(cleanup, "free(%s);\n", expression->lowered_c);
+            if (!f2c_array_cleanup_append(unit, cleanup, expression, depth))
+                return 0;
         }
     }
     return 1;
@@ -401,7 +403,7 @@ int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, c
     const size_t output_start = context != NULL ? context->output.length : 0U;
     F2cExpr *prepared = NULL;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     size_t temporary = 0U;
     size_t child;
     int emitted = 0;
@@ -432,7 +434,7 @@ int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, c
             context->output.data[output_start] = '\0';
         goto done;
     }
-    f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     emitted = 1;
@@ -440,7 +442,7 @@ int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, c
 done:
     f2c_expr_free(prepared);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     return emitted;
 }
 
