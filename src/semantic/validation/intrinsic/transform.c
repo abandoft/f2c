@@ -73,73 +73,23 @@ static int constant_dimension(Context *context, Unit *unit, size_t line, const c
 
 static F2cBoundIntrinsicArguments bind_arguments(Context *context, size_t line,
                                                  const char *statement_text, F2cExpr *expression) {
-    static const char *const shift_names[] = {"array", "shift", "dim"};
-    static const char *const end_shift_names[] = {"array", "shift", "boundary", "dim"};
-    static const char *const findloc_names[] = {"array", "value", "dim", "mask", "kind", "back"};
-    static const char *const matmul_names[] = {"matrix_a", "matrix_b"};
-    static const char *const pack_names[] = {"array", "mask", "vector"};
-    static const char *const reshape_names[] = {"source", "shape", "pad", "order"};
-    static const char *const spread_names[] = {"source", "dim", "ncopies"};
-    static const char *const transpose_names[] = {"matrix"};
-    static const char *const unpack_names[] = {"vector", "mask", "field"};
-    const char *const *names;
-    size_t count;
-    size_t required;
     switch (expression->intrinsic) {
     case F2C_INTRINSIC_CSHIFT:
-        names = shift_names;
-        count = sizeof(shift_names) / sizeof(shift_names[0]);
-        required = 2U;
-        break;
     case F2C_INTRINSIC_EOSHIFT:
-        names = end_shift_names;
-        count = sizeof(end_shift_names) / sizeof(end_shift_names[0]);
-        required = 2U;
-        break;
     case F2C_INTRINSIC_FINDLOC:
-        names = findloc_names;
-        count = sizeof(findloc_names) / sizeof(findloc_names[0]);
-        required = 2U;
-        break;
     case F2C_INTRINSIC_MATMUL:
-        names = matmul_names;
-        count = sizeof(matmul_names) / sizeof(matmul_names[0]);
-        required = 2U;
-        break;
     case F2C_INTRINSIC_PACK:
-        names = pack_names;
-        count = sizeof(pack_names) / sizeof(pack_names[0]);
-        required = 2U;
-        break;
     case F2C_INTRINSIC_RESHAPE:
-        names = reshape_names;
-        count = sizeof(reshape_names) / sizeof(reshape_names[0]);
-        required = 2U;
-        break;
     case F2C_INTRINSIC_SPREAD:
-        names = spread_names;
-        count = sizeof(spread_names) / sizeof(spread_names[0]);
-        required = 3U;
-        break;
     case F2C_INTRINSIC_TRANSPOSE:
-        names = transpose_names;
-        count = sizeof(transpose_names) / sizeof(transpose_names[0]);
-        required = 1U;
-        break;
     case F2C_INTRINSIC_UNPACK:
-        names = unpack_names;
-        count = sizeof(unpack_names) / sizeof(unpack_names[0]);
-        required = 3U;
-        break;
+        return f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     case F2C_INTRINSIC_NONE:
     default: {
         F2cBoundIntrinsicArguments empty = {{0}};
         return empty;
     }
     }
-    return f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, transform_name(expression->intrinsic), expression->children,
-        expression->child_count, names, count, required);
 }
 
 static void validate_mask(Context *context, size_t line, const char *statement_text,
