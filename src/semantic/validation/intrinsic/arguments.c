@@ -103,7 +103,7 @@ F2cBoundIntrinsicArguments f2c_validation_bind_registered_intrinsic_arguments(
 }
 
 F2cBoundIntrinsicArguments f2c_validation_bind_intrinsic_expression(
-    Context *context, size_t line, const char *statement_text, F2cExpr *expression) {
+    Context *context, size_t line, const char *statement_text, const F2cExpr *expression) {
     const F2cIntrinsicSignature *signature =
         expression != NULL ? f2c_find_intrinsic(expression->text) : NULL;
     const F2cIntrinsicDescriptor *descriptor =

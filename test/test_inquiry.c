@@ -86,7 +86,14 @@ static void test_kind(void) {
 
 static void test_keyword(void) {
     expect_diagnostic("  integer :: values(2)\n", "ubound(values, bogus=1)",
-                      "ubound has no argument named 'bogus'");
+                      "UBOUND has no argument named 'bogus'");
+    expect_diagnostic("  integer, allocatable :: values(:)\n", "allocated(value=values)",
+                      "ALLOCATED has no argument named 'value'");
+    expect_diagnostic("  integer, pointer :: value\n",
+                      "associated(pointer=value, pointer=value)",
+                      "ASSOCIATED argument 'pointer' is specified more than once");
+    expect_diagnostic("  integer :: value\n", "present(value=value)",
+                      "PRESENT has no argument named 'value'");
 }
 
 static void test_assumed_size_constraints(void) {

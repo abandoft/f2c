@@ -13,7 +13,7 @@ F2cBoundIntrinsicArguments f2c_validation_bind_registered_intrinsic_arguments(
     size_t argument_count);
 
 F2cBoundIntrinsicArguments f2c_validation_bind_intrinsic_expression(
-    Context *context, size_t line, const char *statement_text, F2cExpr *expression);
+    Context *context, size_t line, const char *statement_text, const F2cExpr *expression);
 
 F2cBoundIntrinsicArguments f2c_validation_bind_intrinsic_statement(
     Context *context, F2cStatement *statement);

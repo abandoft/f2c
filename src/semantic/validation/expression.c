@@ -1,6 +1,7 @@
 #include "semantic/validation/private.h"
 
 #include "ast/declaration/designator.h"
+#include "semantic/validation/intrinsic/arguments.h"
 
 #include <ctype.h>
 #include <limits.h>
@@ -9,7 +10,9 @@
 
 static void validate_present_intrinsic(Context *context, Unit *unit, size_t line,
                                        const char *statement_text, F2cExpr *expression) {
-    F2cExpr *argument;
+    const F2cBoundIntrinsicArguments arguments =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
+    const F2cExpr *argument;
     Symbol *symbol;
     if (expression->child_count != 1U) {
         f2c_diagnostic_at(context, line,
@@ -17,7 +20,7 @@ static void validate_present_intrinsic(Context *context, Unit *unit, size_t line
                           "PRESENT requires exactly one OPTIONAL dummy argument");
         return;
     }
-    argument = expression->children[0];
+    argument = arguments.values[0];
     symbol = argument != NULL && argument->kind == F2C_EXPR_NAME ? argument->symbol : NULL;
     if (symbol == NULL || !symbol->argument || !symbol->optional) {
         f2c_diagnostic_at(context, line,
@@ -29,7 +32,9 @@ static void validate_present_intrinsic(Context *context, Unit *unit, size_t line
 
 static void validate_allocated_intrinsic(Context *context, size_t line, const char *statement_text,
                                          F2cExpr *expression) {
-    F2cExpr *argument = expression->child_count == 1U ? expression->children[0] : NULL;
+    const F2cBoundIntrinsicArguments arguments =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
+    const F2cExpr *argument = arguments.values[0];
     Symbol *symbol = argument != NULL && (argument->kind == F2C_EXPR_NAME ||
                                           argument->kind == F2C_EXPR_COMPONENT)
                          ? argument->symbol
@@ -72,10 +77,10 @@ static int associated_derived_type_compatible(const Symbol *pointer, const F2cEx
 
 static void validate_associated_intrinsic(Context *context, size_t line, const char *statement_text,
                                           F2cExpr *expression) {
-    F2cExpr *pointer = (F2cExpr *)f2c_intrinsic_argument(expression->children,
-                                                         expression->child_count, "pointer", 0U);
-    F2cExpr *target = (F2cExpr *)f2c_intrinsic_argument(expression->children,
-                                                        expression->child_count, "target", 1U);
+    const F2cBoundIntrinsicArguments arguments =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
+    const F2cExpr *pointer = arguments.values[0];
+    const F2cExpr *target = arguments.values[1];
     Symbol *pointer_symbol =
         pointer != NULL && (pointer->kind == F2C_EXPR_NAME || pointer->kind == F2C_EXPR_COMPONENT)
             ? pointer->symbol
@@ -144,23 +149,6 @@ static void validate_intrinsic_arity(Context *context, size_t line, const char *
     }
 }
 
-static const F2cExpr *inquiry_argument(const F2cExpr *call, const char *keyword, size_t position) {
-    size_t positional = 0U;
-    size_t argument;
-    if (call == NULL)
-        return NULL;
-    for (argument = 0U; argument < call->child_count; ++argument) {
-        const F2cExpr *actual = call->children[argument];
-        if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT) {
-            if (actual->text != NULL && strcmp(actual->text, keyword) == 0)
-                return actual->child_count == 1U ? actual->children[0] : NULL;
-        } else if (positional++ == position) {
-            return actual;
-        }
-    }
-    return NULL;
-}
-
 static int intrinsic_accepts_whole_assumed_size(F2cIntrinsicId intrinsic) {
     return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_ASSUMED_SIZE_INQUIRY);
 }
@@ -192,23 +180,14 @@ static void validate_assumed_size_operands(Context *context, size_t line,
 
 static void validate_array_inquiry(Context *context, Unit *unit, size_t line,
                                    const char *statement_text, const F2cExpr *expression) {
+    const F2cBoundIntrinsicArguments arguments =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     const int shape = expression->intrinsic == F2C_INTRINSIC_SHAPE;
-    const F2cExpr *array = inquiry_argument(expression, shape ? "source" : "array", 0U);
-    const F2cExpr *dimension = shape ? NULL : inquiry_argument(expression, "dim", 1U);
-    const F2cExpr *kind = inquiry_argument(expression, "kind", shape ? 1U : 2U);
+    const F2cExpr *array = arguments.values[0];
+    const F2cExpr *dimension = shape ? NULL : arguments.values[1];
+    const F2cExpr *kind = arguments.values[shape ? 1U : 2U];
     const int assumed_size = f2c_expression_is_whole_assumed_size(array);
     int64_t value;
-    size_t argument;
-    for (argument = 0U; argument < expression->child_count; ++argument) {
-        const F2cExpr *actual = expression->children[argument];
-        if (actual == NULL || actual->kind != F2C_EXPR_KEYWORD_ARGUMENT || actual->text == NULL)
-            continue;
-        if (strcmp(actual->text, shape ? "source" : "array") != 0 &&
-            (!shape && strcmp(actual->text, "dim") != 0) && strcmp(actual->text, "kind") != 0)
-            f2c_diagnostic_at(context, line,
-                              f2c_validation_expression_start_column(statement_text, actual), 1,
-                              "%s has no argument named '%s'", expression->text, actual->text);
-    }
     if (array == NULL || array->rank == 0U)
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, array), 1,
