@@ -115,6 +115,11 @@ if(ROOT_CMAKE MATCHES "modern_f2c" OR ROOT_CMAKE MATCHES "src/cli/main\\.c[ \t\r
 endif()
 
 file(READ "${SOURCE_DIR}/src/semantic/model.h" SEMANTIC_MODEL)
+file(READ "${SOURCE_DIR}/src/semantic/signature.c" PROCEDURE_SIGNATURES)
+file(READ
+     "${SOURCE_DIR}/src/semantic/validation/procedure.c"
+     PROCEDURE_SIGNATURE_VALIDATION
+)
 file(READ "${SOURCE_DIR}/src/ir/expression.h" EXPRESSION_IR)
 file(READ "${SOURCE_DIR}/src/ast/parser.c" EXPRESSION_PARSER)
 file(READ "${SOURCE_DIR}/src/ast/shape.c" EXPRESSION_SHAPE)
@@ -221,6 +226,31 @@ foreach(
 endforeach()
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
+endif()
+if(
+    NOT SEMANTIC_MODEL MATCHES
+        "F2cShape[ \t]*\\*[ \t]*external_parameter_shapes"
+    OR NOT SEMANTIC_MODEL MATCHES
+        "char[ \t]*\\*[ \t]*\\*[ \t]*external_parameter_character_lengths"
+    OR NOT PROCEDURE_SIGNATURES MATCHES
+        "f2c_set_external_parameter_signature[ \t\r\n]*\\("
+    OR NOT INTERFACE_LOWERING MATCHES
+        "f2c_set_external_parameter_signature[ \t\r\n]*\\("
+    OR NOT PROCEDURE_LOWERING MATCHES
+        "f2c_set_external_parameter_signature[ \t\r\n]*\\("
+    OR NOT USE_LOWERING MATCHES
+        "f2c_set_external_parameter_signature[ \t\r\n]*\\("
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES
+        "external_parameter_kinds\\[i\\]"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES
+        "external_parameter_shapes\\[i\\]"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES
+        "external_parameter_character_lengths\\[i\\]"
+)
+    message(
+        FATAL_ERROR
+        "procedure interfaces must retain and validate complete centralized parameter signatures"
+    )
 endif()
 if(
     NOT CALL_LOWERING MATCHES
