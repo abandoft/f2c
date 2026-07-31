@@ -102,8 +102,24 @@ file(READ "${SOURCE_DIR}/src/codegen/unit/temporary.c" TEMPORARY_DECLARATIONS)
 file(READ "${SOURCE_DIR}/src/codegen/array/function.c" ARRAY_FUNCTION_RESULTS)
 file(READ "${SOURCE_DIR}/src/codegen/array/temporary.c" ARRAY_TEMPORARIES)
 file(READ "${SOURCE_DIR}/src/codegen/array/ownership.c" ARRAY_OWNERSHIP)
+file(READ "${SOURCE_DIR}/src/codegen/call.c" CALL_LOWERING)
+file(READ "${SOURCE_DIR}/src/codegen/expression/call.c" EXPRESSION_CALL_LOWERING)
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
+endif()
+if(
+    NOT CALL_LOWERING MATCHES
+        "lowering_arguments\\[i\\][ \t]*=[ \t]*f2c_array_clone_expression[ \t\r\n]*\\(argument_expressions\\[i\\]\\)"
+    OR NOT CALL_LOWERING MATCHES
+        "argument_expressions[ \t]*=[ \t]*lowering_arguments"
+    OR NOT EXPRESSION_CALL_LOWERING MATCHES
+        "lowering_expression[ \t]*=[ \t]*f2c_array_clone_expression[ \t\r\n]*\\(expression\\)"
+    OR EXPRESSION_CALL_LOWERING MATCHES "restore_ordered_arguments"
+)
+    message(
+        FATAL_ERROR
+        "call lowering must mutate private lowering clones rather than the typed expression IR"
+    )
 endif()
 if(
     ARRAY_FUNCTION_RESULTS MATCHES "Buffer[ \t]*\\*cleanup"

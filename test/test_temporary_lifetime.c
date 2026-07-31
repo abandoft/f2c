@@ -2,6 +2,7 @@
 
 #include "codegen/array/private.h"
 #include "codegen/codegen.h"
+#include "codegen/expression/private.h"
 #include "internal/context.h"
 #include "ir/statement.h"
 #include "semantic/data_flow.h"
@@ -236,12 +237,128 @@ static void test_owned_array_temporary_flow(void) {
     free(context.diagnostics.data);
 }
 
+static void test_expression_call_lowering_is_immutable(void) {
+    F2cExpr inner;
+    F2cExpr outer;
+    F2cExpr *children[1];
+    F2cStatement statement;
+    Context context;
+    Unit unit;
+    char *code;
+    int supported = 1;
+    memset(&inner, 0, sizeof(inner));
+    memset(&outer, 0, sizeof(outer));
+    memset(&statement, 0, sizeof(statement));
+    memset(&context, 0, sizeof(context));
+    memset(&unit, 0, sizeof(unit));
+    inner.kind = F2C_EXPR_CALL;
+    inner.type = TYPE_INTEGER;
+    inner.type_kind = f2c_default_kind(TYPE_INTEGER);
+    inner.text = (char *)"produce";
+    outer.kind = F2C_EXPR_CALL;
+    outer.type = TYPE_INTEGER;
+    outer.type_kind = f2c_default_kind(TYPE_INTEGER);
+    outer.text = (char *)"consume";
+    outer.children = children;
+    outer.child_count = 1U;
+    children[0] = &inner;
+    statement.kind = F2C_STMT_ASSIGNMENT;
+    statement.right = &outer;
+    unit.context = &context;
+    unit.phase = F2C_UNIT_TYPED_IR;
+    unit.statements = &statement;
+    unit.statement_count = 1U;
+    expect(f2c_plan_expression_lifetimes(&context, &unit),
+           "ordered call arguments receive semantic lowering storage");
+    expect(inner.ordered_argument_temporary_index != SIZE_MAX,
+           "the nested call is selected for ordered argument materialization");
+    code = f2c_expression_call(&unit, &outer, &supported);
+    expect(supported && code != NULL,
+           "an ordered expression call lowers from a private expression clone");
+    expect(inner.lowered_c == NULL && !inner.ordered_argument_materialized,
+           "expression lowering leaves the original typed IR unchanged");
+    free(code);
+    free(unit.owned_temporaries);
+    free(statement.temporary_plan.owned_temporaries);
+    free(context.diagnostics.data);
+}
+
+static void test_statement_call_lowering_is_immutable(void) {
+    Symbol source;
+    F2cExpr array;
+    F2cExpr conversion;
+    F2cExpr lower_bound;
+    F2cExpr upper_bound;
+    F2cExpr *children[1];
+    F2cExpr *arguments[1];
+    Buffer output;
+    Context context;
+    Unit unit;
+    memset(&source, 0, sizeof(source));
+    memset(&array, 0, sizeof(array));
+    memset(&conversion, 0, sizeof(conversion));
+    memset(&lower_bound, 0, sizeof(lower_bound));
+    memset(&upper_bound, 0, sizeof(upper_bound));
+    memset(&output, 0, sizeof(output));
+    memset(&context, 0, sizeof(context));
+    memset(&unit, 0, sizeof(unit));
+    source.name = (char *)"values";
+    source.c_name = source.name;
+    source.type = TYPE_INTEGER;
+    source.kind = f2c_default_kind(TYPE_INTEGER);
+    source.rank = 1U;
+    source.dimensions[0].lower = (char *)"1";
+    source.dimensions[0].upper = (char *)"2";
+    lower_bound.kind = F2C_EXPR_INTEGER_LITERAL;
+    lower_bound.parse_error_offset = SIZE_MAX;
+    lower_bound.type = TYPE_INTEGER;
+    lower_bound.type_kind = source.kind;
+    lower_bound.text = (char *)"1";
+    upper_bound.kind = F2C_EXPR_INTEGER_LITERAL;
+    upper_bound.parse_error_offset = SIZE_MAX;
+    upper_bound.type = TYPE_INTEGER;
+    upper_bound.type_kind = source.kind;
+    upper_bound.text = (char *)"2";
+    source.dimensions[0].lower_expression = &lower_bound;
+    source.dimensions[0].upper_expression = &upper_bound;
+    array.kind = F2C_EXPR_NAME;
+    array.parse_error_offset = SIZE_MAX;
+    array.type = TYPE_INTEGER;
+    array.type_kind = source.kind;
+    array.rank = 1U;
+    array.symbol = &source;
+    array.text = source.name;
+    conversion.kind = F2C_EXPR_CALL;
+    conversion.parse_error_offset = SIZE_MAX;
+    conversion.intrinsic = F2C_INTRINSIC_REAL;
+    conversion.type = TYPE_REAL;
+    conversion.type_kind = f2c_default_kind(TYPE_REAL);
+    conversion.rank = 1U;
+    conversion.text = (char *)"real";
+    conversion.children = children;
+    conversion.child_count = 1U;
+    children[0] = &array;
+    arguments[0] = &conversion;
+    unit.context = &context;
+    unit.symbols = &source;
+    unit.symbol_count = 1U;
+    f2c_emit_call(&output, &unit, "consume_array", arguments, 1U, 0);
+    expect(output.data != NULL && strstr(output.data, "f2c_array_conversion_0") != NULL,
+           "statement call lowering materializes an array conversion");
+    expect(conversion.lowered_c == NULL,
+           "statement call lowering leaves the original typed argument tree unchanged");
+    free(output.data);
+    free(context.diagnostics.data);
+}
+
 int main(void) {
     test_character_temporary_plan();
     test_ordered_call_plan();
     test_statement_function_plan();
     test_emitter_rejects_unplanned_ir();
     test_owned_array_temporary_flow();
+    test_expression_call_lowering_is_immutable();
+    test_statement_call_lowering_is_immutable();
     if (failures != 0)
         fprintf(stderr, "%d temporary-lifetime test(s) failed\n", failures);
     return failures == 0 ? 0 : 1;
