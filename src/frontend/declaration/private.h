@@ -19,5 +19,6 @@ int f2c_parse_type_spec_tokens(Context *context, Unit *unit, const Line *line, s
 void f2c_release_type_spec(F2cDeclarationTypeSpec *specification);
 Type f2c_kind_type_from_tokens(Unit *unit, const Line *line, size_t begin, size_t end);
 void f2c_parse_entity_declaration(Context *context, Unit *unit, Line *source_line);
+void f2c_parse_entity_attribute_declaration(Context *context, Unit *unit, Line *source_line);
 
 #endif

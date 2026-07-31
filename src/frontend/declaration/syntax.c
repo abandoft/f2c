@@ -86,9 +86,11 @@ static int starts_with_assignment_designator(const Line *line, size_t start) {
 
 int f2c_declaration_tokens(const Line *line) {
     static const char *const starters[] = {
-        "integer",   "real",     "double",   "logical",     "complex",  "character", "dimension",
-        "parameter", "implicit", "external", "intrinsic",   "optional", "procedure", "import",
-        "interface", "abstract", "save",     "equivalence", "common",   "namelist",  "contiguous",
+        "integer",    "real",      "double",      "logical",      "complex",
+        "character",  "dimension", "parameter",   "implicit",     "external",
+        "intrinsic",  "optional",  "procedure",   "import",       "interface",
+        "abstract",   "save",      "equivalence", "common",       "namelist",
+        "contiguous", "target",    "value",       "asynchronous", "volatile",
     };
     size_t index;
     size_t start;

@@ -205,11 +205,10 @@ set(
     src/frontend/analyze.c
     src/frontend/attributes.c
     src/frontend/declaration/common.c
-    src/frontend/declaration/contiguous.c
+    src/frontend/declaration/attribute.c
     src/frontend/declaration/dimension.c
     src/frontend/declaration/entity.c
     src/frontend/declaration/namelist.c
-    src/frontend/declaration/optional.c
     src/frontend/declaration/private.h
     src/frontend/declaration/syntax.c
     src/frontend/declaration/type.c
