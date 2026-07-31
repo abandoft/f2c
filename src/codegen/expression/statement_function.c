@@ -111,60 +111,6 @@ static int expression_is_reusable(const F2cExpr *expression) {
     return 1;
 }
 
-static size_t statement_function_expansion_count(F2cExpr *expression) {
-    size_t count = 0U;
-    size_t child;
-    Symbol *function;
-    if (expression == NULL)
-        return 0U;
-    for (child = 0U; child < expression->child_count; ++child) {
-        const size_t nested = statement_function_expansion_count(expression->children[child]);
-        if (nested > SIZE_MAX - count)
-            return SIZE_MAX;
-        count += nested;
-    }
-    function = expression->kind == F2C_EXPR_CALL ? expression->symbol : NULL;
-    if (function == NULL || !function->statement_function)
-        return count;
-    if (count == SIZE_MAX)
-        return count;
-    ++count;
-    if (!function->statement_function_expanding &&
-        function->statement_function_expression != NULL) {
-        size_t nested;
-        function->statement_function_expanding = 1;
-        nested = statement_function_expansion_count(function->statement_function_expression);
-        function->statement_function_expanding = 0;
-        if (nested > SIZE_MAX - count)
-            return SIZE_MAX;
-        count += nested;
-    }
-    return count;
-}
-
-static int assign_nested_temporaries(F2cExpr *expression, size_t *next) {
-    size_t child;
-    Symbol *function;
-    size_t nested;
-    if (expression == NULL)
-        return 1;
-    for (child = 0U; child < expression->child_count; ++child)
-        if (!assign_nested_temporaries(expression->children[child], next))
-            return 0;
-    function = expression->kind == F2C_EXPR_CALL ? expression->symbol : NULL;
-    if (function == NULL || !function->statement_function)
-        return 1;
-    if (*next == SIZE_MAX)
-        return 0;
-    expression->statement_temporary_index = (*next)++;
-    expression->statement_nested_temporary_begin = *next;
-    nested = statement_function_expansion_count(function->statement_function_expression);
-    if (nested == SIZE_MAX || nested > SIZE_MAX - *next)
-        return 0;
-    *next += nested;
-    return 1;
-}
-
 char *f2c_expression_statement_function(Unit *unit, const F2cExpr *expression, int *supported) {
     Symbol *function = expression != NULL ? expression->symbol : NULL;
     char **actuals = NULL;
@@ -229,7 +175,7 @@ char *f2c_expression_statement_function(Unit *unit, const F2cExpr *expression, i
     }
     if (expression->statement_nested_temporary_begin != SIZE_MAX) {
         size_t next = expression->statement_nested_temporary_begin;
-        if (!assign_nested_temporaries(body, &next)) {
+        if (!f2c_relocate_statement_function_temporaries(body, &next)) {
             *supported = 0;
             goto cleanup;
         }

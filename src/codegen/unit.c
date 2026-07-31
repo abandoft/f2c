@@ -417,63 +417,6 @@ static int has_local_declaration(Unit *unit, Symbol *symbol) {
              strcmp(symbol->name, unit->result_name) == 0);
 }
 
-static size_t statement_function_expansion_count(F2cExpr *expression) {
-    size_t count = 0U;
-    size_t child;
-    Symbol *function;
-    if (expression == NULL)
-        return 0U;
-    for (child = 0U; child < expression->child_count; ++child) {
-        const size_t nested = statement_function_expansion_count(expression->children[child]);
-        if (nested > SIZE_MAX - count)
-            return SIZE_MAX;
-        count += nested;
-    }
-    function = expression->kind == F2C_EXPR_CALL ? expression->symbol : NULL;
-    if (function == NULL || !function->statement_function)
-        return count;
-    if (count == SIZE_MAX)
-        return count;
-    ++count;
-    if (!function->statement_function_expanding &&
-        function->statement_function_expression != NULL) {
-        size_t nested;
-        function->statement_function_expanding = 1;
-        nested = statement_function_expansion_count(function->statement_function_expression);
-        function->statement_function_expanding = 0;
-        if (nested > SIZE_MAX - count)
-            return SIZE_MAX;
-        count += nested;
-    }
-    return count;
-}
-
-typedef struct StatementFunctionTemporaryAssigner {
-    size_t next;
-} StatementFunctionTemporaryAssigner;
-
-static void assign_statement_function_temporary(F2cExpr *expression, void *state) {
-    StatementFunctionTemporaryAssigner *assigner = (StatementFunctionTemporaryAssigner *)state;
-    size_t nested;
-    if (expression == NULL || expression->kind != F2C_EXPR_CALL || expression->symbol == NULL ||
-        !expression->symbol->statement_function)
-        return;
-    expression->statement_temporary_index = assigner->next++;
-    expression->statement_nested_temporary_begin = assigner->next;
-    nested = statement_function_expansion_count(expression->symbol->statement_function_expression);
-    if (nested != SIZE_MAX && nested <= SIZE_MAX - assigner->next)
-        assigner->next += nested;
-}
-
-static void prepare_statement_function_temporaries(Unit *unit) {
-    size_t statement;
-    StatementFunctionTemporaryAssigner assigner = {0U};
-    for (statement = 0U; statement < unit->statement_count; ++statement)
-        if (!f2c_unit_statement_is_function_definition(unit, statement))
-            f2c_visit_statement_expressions(&unit->statements[statement],
-                                            assign_statement_function_temporary, &assigner);
-}
-
 typedef struct StatementFunctionTemporaryEmitter {
     Buffer *output;
     Unit *unit;
@@ -534,7 +477,7 @@ static void emit_statement_function_temporaries(Buffer *output, Unit *unit) {
     StatementFunctionTemporaryEmitter emitter = {output, unit};
     size_t statement;
     for (statement = 0U; statement < unit->statement_count; ++statement)
-        if (!f2c_unit_statement_is_function_definition(unit, statement))
+        if (!f2c_statement_is_function_definition(unit, statement))
             f2c_visit_statement_expressions(&unit->statements[statement],
                                             emit_statement_function_temporary, &emitter);
 }
@@ -546,7 +489,7 @@ typedef struct CharacterTemporaryCleanupEmitter {
 
 static void emit_character_temporary_cleanup(F2cExpr *expression, void *state) {
     CharacterTemporaryCleanupEmitter *emitter = (CharacterTemporaryCleanupEmitter *)state;
-    if (!f2c_unit_expression_is_character_temporary(expression))
+    if (!f2c_expression_is_character_temporary(expression))
         return;
     f2c_unit_indent(emitter->output, emitter->depth);
     f2c_buffer_printf(emitter->output, "free(f2c_character_result_%zu);\n",
@@ -558,7 +501,7 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
     CharacterTemporaryCleanupEmitter emitter = {output, depth};
     Symbol *function_result = f2c_unit_function_result(unit);
     for (i = 0U; i < unit->statement_count; ++i)
-        if (!f2c_unit_statement_is_function_definition(unit, i))
+        if (!f2c_statement_is_function_definition(unit, i))
             f2c_visit_statement_expressions(&unit->statements[i], emit_character_temporary_cleanup,
                                             &emitter);
     if (function_result != NULL && f2c_unit_has_descriptor_result(unit)) {
@@ -877,8 +820,12 @@ void f2c_emit_unit(Context *context, Unit *unit) {
     }
     if (unit->kind == UNIT_BLOCK_DATA)
         return;
-    f2c_unit_prepare_expression_temporaries(unit);
-    prepare_statement_function_temporaries(unit);
+    if (!unit->expression_lifetimes_analyzed) {
+        f2c_diagnostic_code(
+            context, F2C_DIAGNOSTIC_INTERNAL, context->lines.items[unit->begin].number, 1,
+            "code generation rejected typed IR without semantic temporary-lifetime planning");
+        return;
+    }
     if (unit->kind == UNIT_PROGRAM) {
         f2c_unit_emit_signature(&context->output, unit);
     } else {
