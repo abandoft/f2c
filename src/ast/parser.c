@@ -8,6 +8,20 @@
 static F2cExpr *parse_binary(AstParser *parser, int minimum_precedence);
 static F2cExpr *parse_binary_impl(AstParser *parser, int minimum_precedence);
 
+static size_t numeric_spelling_length(const F2cToken *token) {
+    const char *suffix;
+    if (token == NULL || token->begin == NULL)
+        return 0U;
+    suffix = (const char *)memchr(token->begin, '_', token->length);
+    return suffix != NULL ? (size_t)(suffix - token->begin) : token->length;
+}
+
+static int numeric_spelling_contains(const F2cToken *token, char lower, char upper) {
+    const size_t length = numeric_spelling_length(token);
+    return memchr(token->begin, lower, length) != NULL ||
+           memchr(token->begin, upper, length) != NULL;
+}
+
 static int push_expression(AstParser *parser, F2cExpr *parent, F2cExpr *child) {
     return f2c_ast_push_expression(parser, parent, child);
 }
@@ -368,15 +382,12 @@ static F2cExpr *parse_primary(AstParser *parser) {
     F2cToken token = parser->token;
     F2cExpr *expression = NULL;
     if (token.kind == F2C_TOKEN_NUMBER) {
-        const int real = memchr(token.begin, '.', token.length) != NULL ||
-                         memchr(token.begin, 'e', token.length) != NULL ||
-                         memchr(token.begin, 'E', token.length) != NULL ||
-                         memchr(token.begin, 'd', token.length) != NULL ||
-                         memchr(token.begin, 'D', token.length) != NULL;
-        const Type literal_type = real && (memchr(token.begin, 'd', token.length) != NULL ||
-                                           memchr(token.begin, 'D', token.length) != NULL)
-                                      ? TYPE_DOUBLE
-                                      : (real ? TYPE_REAL : TYPE_INTEGER);
+        const int double_exponent = numeric_spelling_contains(&token, 'd', 'D');
+        const int real = numeric_spelling_contains(&token, '.', '.') ||
+                         numeric_spelling_contains(&token, 'e', 'E') || double_exponent ||
+                         numeric_spelling_contains(&token, 'q', 'Q');
+        const Type literal_type =
+            real && double_exponent ? TYPE_DOUBLE : (real ? TYPE_REAL : TYPE_INTEGER);
         const int literal_kind = f2c_ast_literal_kind_value(parser, &token, literal_type);
         const int double_precision = real && literal_kind == f2c_default_kind(TYPE_DOUBLE);
         expression =
