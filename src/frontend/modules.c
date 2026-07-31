@@ -196,6 +196,9 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
     target->procedure_pointer = source->procedure_pointer;
     target->polymorphic = source->polymorphic;
     target->target = source->target;
+    target->value = source->value;
+    target->asynchronous = source->asynchronous;
+    target->volatile_entity = source->volatile_entity;
     target->module_entity = !source->external;
     target->use_associated = 1;
     target->access = F2C_ACCESS_UNSPECIFIED;
@@ -280,6 +283,12 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
             source->external_parameter_pointer[parameter];
         target->external_parameter_contiguous[parameter] =
             source->external_parameter_contiguous[parameter];
+        target->external_parameter_target[parameter] = source->external_parameter_target[parameter];
+        target->external_parameter_value[parameter] = source->external_parameter_value[parameter];
+        target->external_parameter_asynchronous[parameter] =
+            source->external_parameter_asynchronous[parameter];
+        target->external_parameter_volatile[parameter] =
+            source->external_parameter_volatile[parameter];
         target->external_parameter_descriptor[parameter] =
             source->external_parameter_descriptor[parameter];
         target->external_parameter_derived_types[parameter] =
