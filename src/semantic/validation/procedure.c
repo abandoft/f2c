@@ -362,6 +362,34 @@ failed:
     return 0;
 }
 
+static int signature_character_length_matches(Type type, const char *expected, const char *actual) {
+    if (type != TYPE_CHARACTER)
+        return 1;
+    if (expected == NULL || actual == NULL)
+        return expected == actual;
+    return strcmp(expected, actual) == 0;
+}
+
+static int signature_shape_matches(const F2cShape *expected, size_t expected_rank,
+                                   const F2cShape *actual, size_t actual_rank) {
+    size_t dimension;
+    if (expected_rank != actual_rank)
+        return 0;
+    if (expected_rank == 0U)
+        return 1;
+    if (expected == NULL || actual == NULL || expected->kind != actual->kind)
+        return 0;
+    for (dimension = 0U; dimension < expected_rank && dimension < F2C_MAX_RANK; ++dimension) {
+        const F2cShapeDimension *expected_dimension = &expected->dimensions[dimension];
+        const F2cShapeDimension *actual_dimension = &actual->dimensions[dimension];
+        if (expected_dimension->kind != actual_dimension->kind ||
+            (expected_dimension->extent_known && actual_dimension->extent_known &&
+             expected_dimension->extent != actual_dimension->extent))
+            return 0;
+    }
+    return 1;
+}
+
 int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const Symbol *actual,
                                                    unsigned int depth) {
     size_t i;
@@ -370,13 +398,30 @@ int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const
         expected->external_alternate_return_count != actual->external_alternate_return_count ||
         (!expected->external_subroutine && expected->type != TYPE_UNKNOWN &&
          actual->type != TYPE_UNKNOWN && expected->type != actual->type) ||
+        (!expected->external_subroutine && expected->kind != 0 && actual->kind != 0 &&
+         expected->kind != actual->kind) ||
+        (!expected->external_subroutine &&
+         (expected->external_result_allocatable != actual->external_result_allocatable ||
+          expected->external_result_pointer != actual->external_result_pointer ||
+          !signature_shape_matches(&expected->shape, expected->external_result_rank, &actual->shape,
+                                   actual->external_result_rank) ||
+          expected->derived_type != actual->derived_type ||
+          !signature_character_length_matches(expected->type, expected->character_length,
+                                              actual->character_length))) ||
         expected->external_parameter_count != actual->external_parameter_count)
         return 0;
     for (i = 0U; i < expected->external_parameter_count; ++i) {
         Symbol *expected_procedure = expected->external_parameter_procedures[i];
         Symbol *actual_procedure = actual->external_parameter_procedures[i];
         if (expected->external_parameter_types[i] != actual->external_parameter_types[i] ||
+            expected->external_parameter_kinds[i] != actual->external_parameter_kinds[i] ||
             expected->external_parameter_ranks[i] != actual->external_parameter_ranks[i] ||
+            !signature_shape_matches(
+                &expected->external_parameter_shapes[i], expected->external_parameter_ranks[i],
+                &actual->external_parameter_shapes[i], actual->external_parameter_ranks[i]) ||
+            !signature_character_length_matches(expected->external_parameter_types[i],
+                                                expected->external_parameter_character_lengths[i],
+                                                actual->external_parameter_character_lengths[i]) ||
             expected->external_parameter_intents[i] != actual->external_parameter_intents[i] ||
             expected->external_parameter_optional[i] != actual->external_parameter_optional[i] ||
             expected->external_parameter_allocatable[i] !=
