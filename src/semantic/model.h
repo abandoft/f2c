@@ -73,6 +73,9 @@ struct Symbol {
     size_t type_bound_pass_index;
     int polymorphic;
     int target;
+    int value;
+    int asynchronous;
+    int volatile_entity;
     int module_entity;
     int use_associated;
     int host_associated;
@@ -93,6 +96,10 @@ struct Symbol {
     int *external_parameter_allocatable;
     int *external_parameter_pointer;
     int *external_parameter_contiguous;
+    int *external_parameter_target;
+    int *external_parameter_value;
+    int *external_parameter_asynchronous;
+    int *external_parameter_volatile;
     int *external_parameter_descriptor;
     F2cDerivedType **external_parameter_derived_types;
     int *external_parameter_polymorphic;
