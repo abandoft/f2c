@@ -70,10 +70,6 @@ static void validate_integer(Context *context, size_t line, const char *statemen
 
 void f2c_validation_real_representation_intrinsic(Context *context, Unit *unit, size_t line,
                                                   const char *statement_text, F2cExpr *expression) {
-    static const char *const unary[] = {"x"};
-    static const char *const nearest[] = {"x", "s"};
-    static const char *const scaled[] = {"x", "i"};
-    const char *const *arguments = unary;
     size_t argument_count = 1U;
     F2cBoundIntrinsicArguments bound;
     const char *name;
@@ -82,16 +78,12 @@ void f2c_validation_real_representation_intrinsic(Context *context, Unit *unit, 
         return;
     name = display_name(expression->intrinsic);
     if (expression->intrinsic == F2C_INTRINSIC_NEAREST) {
-        arguments = nearest;
         argument_count = 2U;
     } else if (expression->intrinsic == F2C_INTRINSIC_SCALE ||
                expression->intrinsic == F2C_INTRINSIC_SET_EXPONENT) {
-        arguments = scaled;
         argument_count = 2U;
     }
-    bound = f2c_validation_bind_intrinsic_arguments(context, line, statement_text, name,
-                                                    expression->children, expression->child_count,
-                                                    arguments, argument_count, argument_count);
+    bound = f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     validate_real(context, line, statement_text, name, "X", bound.values[0]);
     if (expression->intrinsic == F2C_INTRINSIC_NEAREST) {
         validate_real(context, line, statement_text, name, "S", bound.values[1]);

@@ -108,32 +108,7 @@ static void validate_mask(Context *context, size_t line, const char *statement_t
 
 static F2cBoundIntrinsicArguments bind_reduction_arguments(
     Context *context, size_t line, const char *statement_text, F2cExpr *expression) {
-    static const char *const logical_names[] = {"mask", "dim"};
-    static const char *const count_names[] = {"mask", "dim", "kind"};
-    static const char *const dot_names[] = {"vector_a", "vector_b"};
-    static const char *const value_names[] = {"array", "dim", "mask"};
-    static const char *const location_names[] = {"array", "dim", "mask", "kind", "back"};
-    const char *const *names = value_names;
-    size_t count = sizeof(value_names) / sizeof(value_names[0]);
-    if (expression->intrinsic == F2C_INTRINSIC_ALL ||
-        expression->intrinsic == F2C_INTRINSIC_ANY) {
-        names = logical_names;
-        count = sizeof(logical_names) / sizeof(logical_names[0]);
-    } else if (expression->intrinsic == F2C_INTRINSIC_COUNT) {
-        names = count_names;
-        count = sizeof(count_names) / sizeof(count_names[0]);
-    } else if (expression->intrinsic == F2C_INTRINSIC_DOT_PRODUCT) {
-        names = dot_names;
-        count = sizeof(dot_names) / sizeof(dot_names[0]);
-    } else if (expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
-               expression->intrinsic == F2C_INTRINSIC_MINLOC) {
-        names = location_names;
-        count = sizeof(location_names) / sizeof(location_names[0]);
-    }
-    return f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, reduction_name(expression->intrinsic), expression->children,
-        expression->child_count, names, count,
-        expression->intrinsic == F2C_INTRINSIC_DOT_PRODUCT ? 2U : 1U);
+    return f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
 }
 
 static void validate_dot_product(Context *context, size_t line, const char *statement_text,
