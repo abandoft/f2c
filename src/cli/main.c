@@ -111,6 +111,8 @@ static void usage(FILE *stream) {
           "  -I PATH       add a directory for #include resolution\n"
           "  -DNAME[=EXPR] define a case-sensitive conditional-preprocessing name\n"
           "  -UNAME        remove a previously supplied conditional definition\n"
+          "  --external-module NAME\n"
+          "                permit a non-intrinsic module supplied outside this request\n"
           "  --version     print version and exit\n"
           "  -h, --help    show this help\n\n"
           "Use '-' as an input path to read standard input, or as an output path to\n"
@@ -126,9 +128,11 @@ int main(int argc, char **argv) {
     F2cOptions options = {NULL, F2C_SOURCE_AUTO, 0};
     const char **input_paths = NULL;
     const char **include_paths = NULL;
+    const char **external_modules = NULL;
     F2cPreprocessorDefinition *definitions = NULL;
     size_t definition_count = 0U;
     size_t include_path_count = 0U;
+    size_t external_module_count = 0U;
     size_t input_count = 0U;
     const char *output = NULL;
     const char *header_output = NULL;
@@ -141,7 +145,7 @@ int main(int argc, char **argv) {
     int i;
     int status = EXIT_SUCCESS;
 
-    input_paths = (const char **)calloc((size_t)argc * 2U, sizeof(*input_paths));
+    input_paths = (const char **)calloc((size_t)argc * 3U, sizeof(*input_paths));
     definitions = (F2cPreprocessorDefinition *)calloc((size_t)argc, sizeof(*definitions));
     if (input_paths == NULL || definitions == NULL) {
         fputs("f2c: out of memory\n", stderr);
@@ -150,6 +154,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
     include_paths = input_paths + argc;
+    external_modules = include_paths + argc;
 
     for (i = 1; i < argc; ++i) {
         const char *arg = argv[i];
@@ -223,6 +228,25 @@ int main(int argc, char **argv) {
                 free_definitions(definitions, definition_count);
                 return EXIT_FAILURE;
             }
+        } else if (strcmp(arg, "--external-module") == 0 ||
+                   strncmp(arg, "--external-module=", strlen("--external-module=")) == 0) {
+            const char *name = arg + strlen("--external-module=");
+            if (strcmp(arg, "--external-module") == 0) {
+                if (++i == argc) {
+                    fputs("f2c: --external-module requires a module name\n", stderr);
+                    free(input_paths);
+                    free_definitions(definitions, definition_count);
+                    return EXIT_FAILURE;
+                }
+                name = argv[i];
+            }
+            if (*name == '\0') {
+                fputs("f2c: --external-module requires a module name\n", stderr);
+                free(input_paths);
+                free_definitions(definitions, definition_count);
+                return EXIT_FAILURE;
+            }
+            external_modules[external_module_count++] = name;
         } else if (strcmp(arg, "-o") == 0) {
             if (++i == argc) {
                 fputs("f2c: -o requires a file name\n", stderr);
@@ -306,6 +330,8 @@ int main(int argc, char **argv) {
         config.include_resolver = f2c_cli_resolve_include;
         config.include_release = f2c_cli_release_include;
         config.include_user_data = &include_context;
+        config.external_module_names = external_modules;
+        config.external_module_count = external_module_count;
         result = f2c_transpile_project_config(inputs, input_count, &config);
     }
 
