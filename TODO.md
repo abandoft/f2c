@@ -152,7 +152,8 @@
   支持的实数数学函数、`ABS/MAX/MIN/DPROD`、旧式跨类型 extrema specific，以及
   `INT/REAL/DBLE/LOGICAL`，包含结果 kind 舍入和转换范围检查；字符词法比较
   `LGE/LGT/LLE/LLT` 也会按空白补齐的无符号字节序折叠。`ISO_FORTRAN_ENV` 的整数/实数 kind
-  常量及其局部参数别名也已进入同一求值路径。复数
+  常量、重命名后的关联名和环境标量常量也已作为真正的 use-associated 参数符号进入同一求值
+  路径；未执行 `USE` 时，相同拼写不会被常量求值器或代码生成器全局替换。复数
   初始化常量现已建立独立实部/虚部值模型，覆盖 kind=4/8 舍入、参数引用、字面量、正负号、
   混合数值算术、缩放除法、整数及一般数值幂、`CMPLX/CONJG`、全部已支持复数数学 intrinsic，
   以及 `AIMAG/REAL/DBLE/INT/ABS` 分量结果；模块、声明、`DATA/COMMON` 静态初始化会生成可移植
@@ -324,8 +325,9 @@
   显式导入私有变量、类型或过程在远端名称处硬失败，宿主关联仍可访问本模块私有成员。导入实体可按
   本地可见性重导出，同一最终实体经直接及包装模块的多路径关联会合并，不同最终实体的同名关联会
   冲突；生成端只由提供模块定义存储，包装模块不会重复定义。上述规则已有精确诊断、严格生成 C17、
-  原生 gfortran 差分和架构门禁。`LA_CONSTANTS` 已支持完整导入、重命名及提供者存储所有权，但仍是
-  硬编码特例。`INTERFACE`/`END INTERFACE` 的名称、`OPERATOR`、`ASSIGNMENT` 和定义 I/O
+  原生 gfortran 差分和架构门禁。`LA_CONSTANTS` 已通过共享常量模块导入器支持完整导入、重命名及
+  提供者存储所有权，但其模块发现和常量目录仍是 Reference LAPACK 专用特例。
+  `INTERFACE`/`END INTERFACE` 的名称、`OPERATOR`、`ASSIGNMENT` 和定义 I/O
   generic-spec 已建立结构化语法 AST，校验开闭设计符并保存精确范围；统一的
   `[MODULE] PROCEDURE [::] specific-list` AST 支持普通及模块过程列表。命名泛型保存完整类型化
   候选集，并按实参 type/kind/rank、关键字和过程类别选择唯一候选；无匹配、歧义、重复、未定义
@@ -336,7 +338,16 @@
   ELEMENTAL 数组降级。特殊泛型设计符支持 `PUBLIC/PRIVATE`、`USE ONLY`、导入及包装模块重导出。
   生成端始终调用真正的提供者具体过程；结构化语法、严格 C17、ASan/UBSan、非法/歧义诊断及
   原生 gfortran 差分均已覆盖。子模块、普通 `PROCEDURE` 的其余目标类别、作用域泛型定义 I/O 与
-  现有 DT I/O 的统一，以及 `LA_CONSTANTS` 通用化仍未实现，因此本项保持未关闭。
+  现有 DT I/O 的统一，以及消除 `LA_CONSTANTS` 专用发现与目录仍未实现，因此本项保持未关闭。
+- [x] 已实现的 `ISO_FORTRAN_ENV` 标量子集使用独立 intrinsic-module 注册表和共享常量模块导入器，
+  覆盖 `INT8/INT16/INT32/INT64`、`REAL32/REAL64/REAL128`、预连接单元、I/O 结束状态及字符、
+  文件和数值存储位数。无 `ONLY` 导入、`ONLY`、重命名、重复实体合并、名称冲突和未知成员均按
+  真实 use association 处理；导入参数可用于声明 kind、命名字面量后缀、规格表达式和初始化常量，
+  并可正确穿过内部过程宿主关联。parser、shape、声明、常量求值和 emitter 已删除
+  `real64/int32/sp/dp` 等全局拼写特判，架构门禁禁止恢复；后缀中的 `d/e` 也不会再改变数字主体的
+  INTEGER/REAL 分类。正向、负向、严格 C17、原生 Fortran 执行差分及固定 Reference LAPACK
+  3,535 源文件、DGESV、四个 INSTALL 和 52,512 条 RFP 差分均已通过。未实现的 intrinsic-module
+  数组、过程、派生类型及其他标准模块仍会在精确成员或模块名称处硬失败，不伪造可用性。
 - [x] 缺失模块现采用明确的三路解析策略：已实现的 intrinsic 模块、同一项目请求中的模块提供者，
   或由请求显式许可的外部非 intrinsic 提供者。无法解析的普通/`NON_INTRINSIC USE` 会在模块名处
   产生语义硬错误；显式但未实现的 `INTRINSIC USE` 会产生 unsupported 硬错误，不再静默当成
