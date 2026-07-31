@@ -1,6 +1,8 @@
 #include "ast/internal.h"
+#include "semantic/numeric_model.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -165,10 +167,8 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
         expression->intrinsic == F2C_INTRINSIC_LBOUND ||
         expression->intrinsic == F2C_INTRINSIC_UBOUND) {
         const int shape_inquiry = expression->intrinsic == F2C_INTRINSIC_SHAPE;
-        source =
-            f2c_ast_intrinsic_argument(expression, shape_inquiry ? "source" : "array", 0U);
-        dimension =
-            shape_inquiry ? NULL : f2c_ast_intrinsic_argument(expression, "dim", 1U);
+        source = f2c_ast_intrinsic_argument(expression, shape_inquiry ? "source" : "array", 0U);
+        dimension = shape_inquiry ? NULL : f2c_ast_intrinsic_argument(expression, "dim", 1U);
         if (dimension != NULL) {
             f2c_ast_set_expression_shape(expression, 0U, F2C_SHAPE_SCALAR);
         } else {
@@ -451,12 +451,6 @@ int f2c_ast_is_comparison(const F2cToken *token) {
            f2c_token_equals(token, ".gt.") || f2c_token_equals(token, ".ge.");
 }
 
-int f2c_ast_token_has_suffix(const F2cToken *token, const char *suffix) {
-    const size_t length = strlen(suffix);
-    return token->length >= length &&
-           strncmp(token->begin + token->length - length, suffix, length) == 0;
-}
-
 static char *literal_kind_name(const F2cToken *token) {
     const char *underscore = (const char *)memchr(token->begin, '_', token->length);
     const char *quote;
@@ -474,55 +468,48 @@ static char *literal_kind_name(const F2cToken *token) {
     return f2c_strdup_n(underscore + 1, length);
 }
 
-Type f2c_ast_literal_kind_type(AstParser *parser, const F2cToken *token) {
-    char *kind_name = literal_kind_name(token);
-    Symbol *kind_symbol;
-    if (kind_name == NULL)
-        return TYPE_UNKNOWN;
-    kind_symbol = f2c_find_symbol(parser->unit, kind_name);
-    if (kind_symbol != NULL && kind_symbol->kind_type != TYPE_UNKNOWN) {
-        Type type = kind_symbol->kind_type;
-        free(kind_name);
-        return type;
-    }
-    if (strcmp(kind_name, "8") == 0 || strcmp(kind_name, "dp") == 0 ||
-        strcmp(kind_name, "real64") == 0) {
-        free(kind_name);
-        return TYPE_DOUBLE;
-    }
-    if (strcmp(kind_name, "4") == 0 || strcmp(kind_name, "sp") == 0 ||
-        strcmp(kind_name, "real32") == 0) {
-        free(kind_name);
-        return TYPE_REAL;
-    }
-    free(kind_name);
-    return TYPE_UNKNOWN;
+static int symbol_kind_value(Unit *unit, const Symbol *symbol, int64_t *value) {
+    if (symbol == NULL || !symbol->parameter)
+        return 0;
+    if (symbol->initializer_expression != NULL &&
+        f2c_evaluate_integer_constant(unit, symbol->initializer_expression, value))
+        return 1;
+    return symbol->initializer_syntax.count != 0U &&
+           f2c_evaluate_integer_syntax(unit, symbol->initializer_syntax, value);
+}
+
+static int literal_kind_supported(Type literal_type, int kind) {
+    if (literal_type == TYPE_INTEGER)
+        return f2c_numeric_model(TYPE_INTEGER, kind) != NULL;
+    if (literal_type == TYPE_REAL || literal_type == TYPE_DOUBLE)
+        return f2c_numeric_model(TYPE_REAL, kind) != NULL;
+    if (literal_type == TYPE_CHARACTER)
+        return kind == f2c_default_kind(TYPE_CHARACTER);
+    return 0;
 }
 
 int f2c_ast_literal_kind_value(AstParser *parser, const F2cToken *token, Type literal_type) {
     char *kind_name = literal_kind_name(token);
     Symbol *kind_symbol;
     char *end = NULL;
-    long value;
+    int64_t value;
     if (kind_name == NULL)
         return f2c_default_kind(literal_type);
-    value = strtol(kind_name, &end, 10);
-    if (end != kind_name && *end == '\0' && value > 0 && value <= INT_MAX) {
-        free(kind_name);
-        return (int)value;
+    errno = 0;
+    value = (int64_t)strtoll(kind_name, &end, 10);
+    if (errno != 0 || end == kind_name || *end != '\0') {
+        kind_symbol = parser != NULL && parser->unit != NULL
+                          ? f2c_find_symbol(parser->unit, kind_name)
+                          : NULL;
+        if (!symbol_kind_value(parser != NULL ? parser->unit : NULL, kind_symbol, &value))
+            value = 0;
     }
-    kind_symbol = f2c_find_symbol(parser->unit, kind_name);
-    if (kind_symbol != NULL && kind_symbol->kind_type != TYPE_UNKNOWN)
-        value = f2c_default_kind(kind_symbol->kind_type);
-    else if (strcmp(kind_name, "dp") == 0 || strcmp(kind_name, "real64") == 0 ||
-             strcmp(kind_name, "int64") == 0)
-        value = 8;
-    else if (strcmp(kind_name, "sp") == 0 || strcmp(kind_name, "real32") == 0 ||
-             strcmp(kind_name, "int32") == 0)
-        value = 4;
-    else
-        value = f2c_default_kind(literal_type);
     free(kind_name);
+    if (value <= 0 || value > INT_MAX || !literal_kind_supported(literal_type, (int)value)) {
+        if (parser != NULL)
+            f2c_ast_parser_error(parser, token != NULL ? token->begin : parser->cursor);
+        return f2c_default_kind(literal_type);
+    }
     return (int)value;
 }
 

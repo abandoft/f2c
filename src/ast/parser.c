@@ -373,18 +373,18 @@ static F2cExpr *parse_primary(AstParser *parser) {
                          memchr(token.begin, 'E', token.length) != NULL ||
                          memchr(token.begin, 'd', token.length) != NULL ||
                          memchr(token.begin, 'D', token.length) != NULL;
-        const Type suffix_type = f2c_ast_literal_kind_type(parser, &token);
-        const int double_precision =
-            memchr(token.begin, 'd', token.length) != NULL ||
-            memchr(token.begin, 'D', token.length) != NULL ||
-            f2c_ast_token_has_suffix(&token, "_8") || f2c_ast_token_has_suffix(&token, "_dp") ||
-            f2c_ast_token_has_suffix(&token, "_real64") || suffix_type == TYPE_DOUBLE;
+        const Type literal_type = real && (memchr(token.begin, 'd', token.length) != NULL ||
+                                           memchr(token.begin, 'D', token.length) != NULL)
+                                      ? TYPE_DOUBLE
+                                      : (real ? TYPE_REAL : TYPE_INTEGER);
+        const int literal_kind = f2c_ast_literal_kind_value(parser, &token, literal_type);
+        const int double_precision = real && literal_kind == f2c_default_kind(TYPE_DOUBLE);
         expression =
             f2c_expr_new(real ? F2C_EXPR_REAL_LITERAL : F2C_EXPR_INTEGER_LITERAL,
                          real ? (double_precision ? TYPE_DOUBLE : TYPE_REAL) : TYPE_INTEGER,
                          token.begin, token.length);
         if (expression != NULL)
-            expression->type_kind = f2c_ast_literal_kind_value(parser, &token, expression->type);
+            expression->type_kind = literal_kind;
         f2c_ast_next_token(parser);
     } else if (token.kind == F2C_TOKEN_STRING || token.kind == F2C_TOKEN_HOLLERITH) {
         expression =

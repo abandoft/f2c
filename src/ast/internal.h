@@ -37,8 +37,6 @@ Type f2c_ast_common_constructor_type(Type left, Type right);
 int f2c_ast_precedence(const F2cToken *token);
 int f2c_ast_is_comparison(const F2cToken *token);
 int f2c_ast_is_defined_operator(const F2cToken *token);
-int f2c_ast_token_has_suffix(const F2cToken *token, const char *suffix);
-Type f2c_ast_literal_kind_type(AstParser *parser, const F2cToken *token);
 int f2c_ast_literal_kind_value(AstParser *parser, const F2cToken *token, Type literal_type);
 Type f2c_ast_kind_type_from_argument(const F2cExpr *argument);
 int f2c_ast_kind_value_from_argument(const F2cExpr *argument);
