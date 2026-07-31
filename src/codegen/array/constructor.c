@@ -1,5 +1,6 @@
 #include "codegen/array/private.h"
 
+#include "codegen/lowering/private.h"
 #include "codegen/value/private.h"
 
 #include <stdio.h>
@@ -185,24 +186,18 @@ static F2cExpr *clone_constructor_expression(const ConstructorEmitter *emitter,
     clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
     clone->source = expression->source != NULL ? f2c_strdup(expression->source) : NULL;
     replacement = constructor_substitution(emitter, expression);
-    clone->lowered_c =
-        replacement != NULL
-            ? f2c_strdup(replacement)
-            : (expression->lowered_c != NULL ? f2c_strdup(expression->lowered_c) : NULL);
-    clone->lowered_extent_c =
-        expression->lowered_extent_c != NULL ? f2c_strdup(expression->lowered_extent_c) : NULL;
-    clone->lowered_character_length_c = expression->lowered_character_length_c != NULL
-                                            ? f2c_strdup(expression->lowered_character_length_c)
-                                            : NULL;
+    clone->lowered_c = NULL;
+    clone->lowered_extent_c = NULL;
+    clone->lowered_character_length_c = NULL;
+    clone->lowered_array_temporary = 0;
+    clone->ordered_argument_materialized = 0;
     clone->children = NULL;
     clone->child_count = 0U;
     clone->child_capacity = 0U;
     if ((expression->text != NULL && clone->text == NULL) ||
         (expression->source != NULL && clone->source == NULL) ||
-        ((replacement != NULL || expression->lowered_c != NULL) && clone->lowered_c == NULL) ||
-        (expression->lowered_extent_c != NULL && clone->lowered_extent_c == NULL) ||
-        (expression->lowered_character_length_c != NULL &&
-         clone->lowered_character_length_c == NULL))
+        !f2c_lowering_clone(emitter->unit, clone, expression) ||
+        (replacement != NULL && !f2c_lowering_copy_code(emitter->unit, clone, replacement)))
         goto failed;
     if (replacement != NULL) {
         clone->kind = F2C_EXPR_NAME;
@@ -228,7 +223,7 @@ static F2cExpr *clone_constructor_expression(const ConstructorEmitter *emitter,
     return clone;
 
 failed:
-    f2c_expr_free(clone);
+    f2c_codegen_expression_free(emitter->unit, clone);
     return NULL;
 }
 
@@ -290,7 +285,7 @@ cleanup:
     free(f2c_buffer_take(&target));
     free(converted);
     free(code);
-    f2c_expr_free(substituted);
+    f2c_codegen_expression_free(emitter->unit, substituted);
     return result;
 }
 
@@ -480,9 +475,9 @@ cleanup:
     free(initial);
     free(limit);
     free(step);
-    f2c_expr_free(initial_expression);
-    f2c_expr_free(limit_expression);
-    f2c_expr_free(step_expression);
+    f2c_codegen_expression_free(emitter->unit, initial_expression);
+    f2c_codegen_expression_free(emitter->unit, limit_expression);
+    f2c_codegen_expression_free(emitter->unit, step_expression);
     return result;
 }
 

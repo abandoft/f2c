@@ -1,11 +1,11 @@
 #include "codegen/expression/private.h"
 
+#include "codegen/lowering/private.h"
+
 #include <stdlib.h>
 #include <string.h>
 
-static void release_partial_clone(F2cExpr *expression) { f2c_expr_free(expression); }
-
-static F2cExpr *clone_expression(const F2cExpr *source) {
+static F2cExpr *clone_expression(Unit *unit, const F2cExpr *source) {
     F2cExpr *clone;
     size_t index;
     if (source == NULL)
@@ -28,14 +28,7 @@ static F2cExpr *clone_expression(const F2cExpr *source) {
         goto failed;
     if (source->source != NULL && (clone->source = f2c_strdup(source->source)) == NULL)
         goto failed;
-    if (source->lowered_c != NULL && (clone->lowered_c = f2c_strdup(source->lowered_c)) == NULL)
-        goto failed;
-    if (source->lowered_extent_c != NULL &&
-        (clone->lowered_extent_c = f2c_strdup(source->lowered_extent_c)) == NULL)
-        goto failed;
-    if (source->lowered_character_length_c != NULL &&
-        (clone->lowered_character_length_c = f2c_strdup(source->lowered_character_length_c)) ==
-            NULL)
+    if (!f2c_lowering_clone(unit, clone, source))
         goto failed;
     if (source->child_count != 0U) {
         if (source->child_count > SIZE_MAX / sizeof(*clone->children))
@@ -45,7 +38,7 @@ static F2cExpr *clone_expression(const F2cExpr *source) {
             goto failed;
         clone->child_capacity = source->child_count;
         for (index = 0U; index < source->child_count; ++index) {
-            clone->children[index] = clone_expression(source->children[index]);
+            clone->children[index] = clone_expression(unit, source->children[index]);
             if (clone->children[index] == NULL)
                 goto failed;
             ++clone->child_count;
@@ -54,7 +47,7 @@ static F2cExpr *clone_expression(const F2cExpr *source) {
     return clone;
 
 failed:
-    release_partial_clone(clone);
+    f2c_codegen_expression_free(unit, clone);
     return NULL;
 }
 
@@ -69,18 +62,16 @@ static size_t dummy_index(const Symbol *function, const F2cExpr *expression) {
     return SIZE_MAX;
 }
 
-static int apply_substitutions(F2cExpr *expression, const Symbol *function, char *const *actuals) {
+static int apply_substitutions(Unit *unit, F2cExpr *expression, const Symbol *function,
+                               char *const *actuals) {
     const size_t dummy = dummy_index(function, expression);
     size_t index;
     if (dummy != SIZE_MAX) {
-        char *replacement = f2c_strdup(actuals[dummy]);
-        if (replacement == NULL)
+        if (!f2c_lowering_copy_code(unit, expression, actuals[dummy]))
             return 0;
-        free(expression->lowered_c);
-        expression->lowered_c = replacement;
     }
     for (index = 0U; index < expression->child_count; ++index) {
-        if (!apply_substitutions(expression->children[index], function, actuals))
+        if (!apply_substitutions(unit, expression->children[index], function, actuals))
             return 0;
     }
     return 1;
@@ -168,8 +159,8 @@ char *f2c_expression_statement_function(Unit *unit, const F2cExpr *expression, i
             goto cleanup;
         }
     }
-    body = clone_expression(function->statement_function_expression);
-    if (body == NULL || !apply_substitutions(body, function, substitutions)) {
+    body = clone_expression(unit, function->statement_function_expression);
+    if (body == NULL || !apply_substitutions(unit, body, function, substitutions)) {
         *supported = 0;
         goto cleanup;
     }
@@ -204,7 +195,7 @@ char *f2c_expression_statement_function(Unit *unit, const F2cExpr *expression, i
 cleanup:
     function->statement_function_expanding = 0;
     free(code);
-    f2c_expr_free(body);
+    f2c_codegen_expression_free(unit, body);
     free_actuals(actuals, expression != NULL ? expression->child_count : 0U);
     free_actuals(substitutions, expression != NULL ? expression->child_count : 0U);
     free(sequenced.data);

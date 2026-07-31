@@ -72,7 +72,7 @@ static F2cExpr *section_index_expression(Unit *unit, const F2cExpr *section, Sym
     return index;
 }
 
-static F2cExpr *lowered_integer_expression(char *code) {
+static F2cExpr *lowered_integer_expression(Unit *unit, char *code) {
     F2cExpr *expression;
     if (code == NULL)
         return NULL;
@@ -82,7 +82,10 @@ static F2cExpr *lowered_integer_expression(char *code) {
         free(code);
         return NULL;
     }
-    expression->lowered_c = code;
+    if (!f2c_lowering_take_code(unit, expression, code)) {
+        f2c_codegen_expression_free(unit, expression);
+        return NULL;
+    }
     expression->rank = 0U;
     return expression;
 }
@@ -108,7 +111,7 @@ static F2cExpr *vector_index_expression(Unit *unit, const F2cExpr *selector, siz
             reference = f2c_emit_array_reference(unit, selector->symbol, indices, 1U);
         }
         free(index);
-        return lowered_integer_expression(reference);
+        return lowered_integer_expression(unit, reference);
     }
     if (selector->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
         char *constructor = f2c_array_emit_expression(unit, selector);
@@ -116,7 +119,7 @@ static F2cExpr *vector_index_expression(Unit *unit, const F2cExpr *selector, siz
             return NULL;
         f2c_buffer_printf(&code, "((%s)[f2c_section_%zu])", constructor, ordinal);
         free(constructor);
-        return lowered_integer_expression(f2c_buffer_take(&code));
+        return lowered_integer_expression(unit, f2c_buffer_take(&code));
     }
     return NULL;
 }
@@ -130,12 +133,11 @@ static F2cExpr *clone_array_reference(Unit *unit, const F2cExpr *expression) {
     *clone = *expression;
     clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
     clone->source = expression->source != NULL ? f2c_strdup(expression->source) : NULL;
-    clone->lowered_c = expression->lowered_c != NULL ? f2c_strdup(expression->lowered_c) : NULL;
-    clone->lowered_extent_c =
-        expression->lowered_extent_c != NULL ? f2c_strdup(expression->lowered_extent_c) : NULL;
-    clone->lowered_character_length_c = expression->lowered_character_length_c != NULL
-                                            ? f2c_strdup(expression->lowered_character_length_c)
-                                            : NULL;
+    clone->lowered_c = NULL;
+    clone->lowered_extent_c = NULL;
+    clone->lowered_character_length_c = NULL;
+    clone->lowered_array_temporary = 0;
+    clone->ordered_argument_materialized = 0;
     clone->children = expression->child_count != 0U
                           ? (F2cExpr **)calloc(expression->child_count, sizeof(*clone->children))
                           : NULL;
@@ -143,10 +145,7 @@ static F2cExpr *clone_array_reference(Unit *unit, const F2cExpr *expression) {
     clone->child_capacity = expression->child_count;
     if ((expression->text != NULL && clone->text == NULL) ||
         (expression->source != NULL && clone->source == NULL) ||
-        (expression->lowered_c != NULL && clone->lowered_c == NULL) ||
-        (expression->lowered_extent_c != NULL && clone->lowered_extent_c == NULL) ||
-        (expression->lowered_character_length_c != NULL &&
-         clone->lowered_character_length_c == NULL) ||
+        !f2c_lowering_clone(unit, clone, expression) ||
         (expression->child_count != 0U && clone->children == NULL))
         goto failed;
     for (dimension = 0U; dimension < expression->child_count; ++dimension) {
@@ -183,12 +182,11 @@ static F2cExpr *clone_expression(Unit *unit, const F2cExpr *expression) {
     *clone = *expression;
     clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
     clone->source = expression->source != NULL ? f2c_strdup(expression->source) : NULL;
-    clone->lowered_c = expression->lowered_c != NULL ? f2c_strdup(expression->lowered_c) : NULL;
-    clone->lowered_extent_c =
-        expression->lowered_extent_c != NULL ? f2c_strdup(expression->lowered_extent_c) : NULL;
-    clone->lowered_character_length_c = expression->lowered_character_length_c != NULL
-                                            ? f2c_strdup(expression->lowered_character_length_c)
-                                            : NULL;
+    clone->lowered_c = NULL;
+    clone->lowered_extent_c = NULL;
+    clone->lowered_character_length_c = NULL;
+    clone->lowered_array_temporary = 0;
+    clone->ordered_argument_materialized = 0;
     clone->children = expression->child_count != 0U
                           ? (F2cExpr **)calloc(expression->child_count, sizeof(*clone->children))
                           : NULL;
@@ -196,10 +194,7 @@ static F2cExpr *clone_expression(Unit *unit, const F2cExpr *expression) {
     clone->child_capacity = expression->child_count;
     if ((expression->text != NULL && clone->text == NULL) ||
         (expression->source != NULL && clone->source == NULL) ||
-        (expression->lowered_c != NULL && clone->lowered_c == NULL) ||
-        (expression->lowered_extent_c != NULL && clone->lowered_extent_c == NULL) ||
-        (expression->lowered_character_length_c != NULL &&
-         clone->lowered_character_length_c == NULL) ||
+        !f2c_lowering_clone(unit, clone, expression) ||
         (expression->child_count != 0U && clone->children == NULL))
         goto failed;
     for (i = 0U; i < expression->child_count; ++i) {
