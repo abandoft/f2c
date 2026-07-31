@@ -21,6 +21,14 @@ typedef struct LoweredCall {
     size_t array_conversion_count;
 } LoweredCall;
 
+static F2cIntent parameter_intent(const Symbol *callee, size_t parameter) {
+    if (callee == NULL || parameter >= callee->external_parameter_count)
+        return F2C_INTENT_UNSPECIFIED;
+    return callee->external_parameter_value[parameter]
+               ? F2C_INTENT_IN
+               : callee->external_parameter_intents[parameter];
+}
+
 static void emit_indent(Buffer *output, int depth) {
     int i;
     for (i = 0; i < depth; ++i)
@@ -96,9 +104,7 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
         return f2c_strdup("NULL");
     if (ast->symbol != NULL && ast->symbol->equivalence_unaligned && ast->rank != 0U &&
         ast->kind == F2C_EXPR_NAME) {
-        const F2cIntent intent = callee != NULL && index < callee->external_parameter_count
-                                     ? callee->external_parameter_intents[index]
-                                     : F2C_INTENT_UNSPECIFIED;
+        const F2cIntent intent = parameter_intent(callee, index);
         const char *suffix = f2c_unaligned_access_suffix(ast->symbol);
         char ordinal[80];
         char *count = f2c_symbol_element_count(unit, ast->symbol);
@@ -167,9 +173,7 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
     }
     if (ast->symbol != NULL && ast->symbol->equivalence_unaligned && ast->rank == 0U &&
         (ast->kind == F2C_EXPR_NAME || ast->kind == F2C_EXPR_ARRAY_REFERENCE)) {
-        const F2cIntent intent = callee != NULL && index < callee->external_parameter_count
-                                     ? callee->external_parameter_intents[index]
-                                     : F2C_INTENT_UNSPECIFIED;
+        const F2cIntent intent = parameter_intent(callee, index);
         const char *suffix = f2c_unaligned_access_suffix(ast->symbol);
         char *address;
         Buffer reference = {0};
@@ -494,8 +498,7 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
         if (!has_view &&
             (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i] ||
              !f2c_descriptor_materialize_view(&call->prelude, &call->postlude, unit, expression,
-                                              callee->external_parameter_intents[i], 0U, i, depth,
-                                              &view)))
+                                              parameter_intent(callee, i), 0U, i, depth, &view)))
             return 0;
         if (actual != NULL &&
             (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i]))
