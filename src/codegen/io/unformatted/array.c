@@ -21,7 +21,7 @@ int f2c_io_emit_unformatted_array(Context *context, Unit *unit, const F2cIoItem 
     F2cExpr *element = NULL;
     char *value = NULL;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     size_t temporary = 0U;
     size_t dimension;
     int emitted_depth;
@@ -93,8 +93,7 @@ int f2c_io_emit_unformatted_array(Context *context, Unit *unit, const F2cIoItem 
         f2c_io_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "}\n");
     }
-    if (cleanup.data != NULL)
-        f2c_buffer_append(&context->output, cleanup.data);
+    (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     result = 1;
@@ -108,6 +107,6 @@ cleanup:
     f2c_expr_free(element);
     free(value);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     return result;
 }

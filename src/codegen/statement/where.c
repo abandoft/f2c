@@ -150,7 +150,7 @@ int f2c_emit_where_begin(Context *context, Unit *unit, const F2cStatement *state
     F2cExpr *mask_element = NULL;
     char *mask = NULL;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     size_t temporary = 0U;
     size_t dimension;
     prepared_mask = f2c_array_clone_expression(statement->expression);
@@ -238,10 +238,10 @@ int f2c_emit_where_begin(Context *context, Unit *unit, const F2cStatement *state
                       "f2c_where_active_%zu[f2c_where_linear_%zu];\n",
                       identifier, identifier, identifier, identifier);
     emit_loop_end(&context->output, *depth);
-    f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     free(mask);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     f2c_expr_free(prepared_mask);
     f2c_expr_free(mask_element);
     free_names(ordinals, rank);
@@ -252,7 +252,7 @@ failed:
     rollback_output(context, output_start);
     free(mask);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     f2c_expr_free(prepared_mask);
     f2c_expr_free(mask_element);
     free_names(ordinals, rank);
@@ -275,7 +275,7 @@ int f2c_emit_elsewhere(Context *context, Unit *unit, const F2cStatement *stateme
     F2cExpr *mask_element = NULL;
     char *mask = NULL;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     size_t temporary = 0U;
     if (owner == NULL || owner->kind != F2C_STMT_WHERE || owner->expression == NULL)
         return 0;
@@ -331,10 +331,10 @@ int f2c_emit_elsewhere(Context *context, Unit *unit, const F2cStatement *stateme
                       "f2c_where_selected_%zu;\n",
                       identifier, identifier, identifier, identifier, identifier);
     emit_loop_end(&context->output, depth);
-    f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     free(mask);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     f2c_expr_free(prepared_mask);
     f2c_expr_free(mask_element);
     free_names(ordinals, rank);
@@ -345,7 +345,7 @@ failed:
     rollback_output(context, output_start);
     free(mask);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     f2c_expr_free(prepared_mask);
     f2c_expr_free(mask_element);
     free_names(ordinals, rank);
@@ -558,7 +558,7 @@ int f2c_emit_where_assignment(Context *context, Unit *unit, const F2cStatement *
     char *left = NULL;
     char *right = NULL;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     size_t temporary = 0U;
     int emitted = 0;
     if (owner == NULL || owner->kind != F2C_STMT_WHERE || owner->expression == NULL ||
@@ -607,7 +607,7 @@ int f2c_emit_where_assignment(Context *context, Unit *unit, const F2cStatement *
         emitted = emit_numeric_assignment(context, unit, statement, left_element, right_element,
                                           left, right, identifier, rank, depth);
     }
-    f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     --depth;
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
@@ -616,7 +616,7 @@ int f2c_emit_where_assignment(Context *context, Unit *unit, const F2cStatement *
     free(left);
     free(right);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     f2c_expr_free(prepared_left);
     f2c_expr_free(prepared_right);
     f2c_expr_free(left_element);
@@ -632,7 +632,7 @@ failed:
     free(left);
     free(right);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     f2c_expr_free(prepared_left);
     f2c_expr_free(prepared_right);
     f2c_expr_free(left_element);

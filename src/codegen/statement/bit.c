@@ -127,7 +127,7 @@ static int emit_array(Context *context, Unit *unit, const F2cStatement *statemen
     const F2cExpr *target = actual(statement, 3U);
     const size_t rank = target != NULL ? target->rank : 0U;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     size_t temporary = 0U;
     size_t argument;
     size_t dimension;
@@ -300,13 +300,13 @@ static int emit_array(Context *context, Unit *unit, const F2cStatement *statemen
     }
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_printf(&context->output, "free(f2c_mvbits_targets_%zu);\n", identifier);
-    f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     --emitted_depth;
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_append(&context->output, "}\n");
     free_prepared(prepared, elements, element_code, scalar_code, extents, actual_extents, rank);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     return 1;
 
 unsupported:
@@ -315,7 +315,7 @@ unsupported:
         context->output.data[output_start] = '\0';
     free_prepared(prepared, elements, element_code, scalar_code, extents, actual_extents, rank);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     return 0;
 }
 
