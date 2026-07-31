@@ -652,6 +652,10 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_function_result_tests)
     add_test(NAME function_result_semantics COMMAND f2c_function_result_tests)
 
+    add_executable(f2c_procedure_signature_tests test/test_procedure_signature.c)
+    f2c_configure_test_target(f2c_procedure_signature_tests)
+    add_test(NAME procedure_signature_semantics COMMAND f2c_procedure_signature_tests)
+
     add_executable(f2c_control_expression_tests test/test_control_expression.c)
     f2c_configure_test_target(f2c_control_expression_tests)
     add_test(NAME control_expression_semantics COMMAND f2c_control_expression_tests)
