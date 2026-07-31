@@ -738,6 +738,10 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_declaration_tests)
     add_test(NAME declaration_semantics COMMAND f2c_declaration_tests)
 
+    add_executable(f2c_argument_attribute_tests test/test_argument_attribute.c)
+    f2c_configure_test_target(f2c_argument_attribute_tests)
+    add_test(NAME argument_attribute_semantics COMMAND f2c_argument_attribute_tests)
+
     add_executable(f2c_diagnostic_tests test/test_diagnostic.c)
     f2c_configure_test_target(f2c_diagnostic_tests)
     add_test(NAME diagnostic_spans COMMAND f2c_diagnostic_tests)
