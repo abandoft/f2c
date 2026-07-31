@@ -1,3 +1,13 @@
+## 1.33.0
+
+- 为全部已支持的标准 intrinsic 建立统一的 typed identity，并记录标准版本、过程类别和语义家族。
+- 统一 intrinsic 参数模式，集中处理关键字关联、必选参数、重复参数、别名及可变参数规则。
+- 让数组 inquiry、状态 inquiry、transformational intrinsic、归约和 `NULL` 指针值贯穿 AST、语义分析与代码生成的 typed 流程。
+- 将 intrinsic 实现按 catalog、identity 和 resolution 职责拆分，消除重复关键字表及标准 intrinsic 的源码名称分派。
+- 将表达式代码生成的临时状态迁移到独立 lowering overlay，避免修改已经验证的 typed IR。
+- 完善 lowering overlay 的扩容、克隆、替换、释放及上下文清理契约。
+- 增加 intrinsic 注册表与架构边界检查，并确保这些检查在 Debug 和 Release 构建中一致执行。
+
 ## 1.32.0
 
 - 为数组函数结果、transformational intrinsic、数组构造器和 elemental 数组值建立统一的拥有型临时量语义目录。
