@@ -72,21 +72,8 @@ int f2c_copy_procedure_signature(Symbol *symbol, Unit *signature) {
     }
     for (i = 0U; i < symbol->external_parameter_count; ++i) {
         Symbol *dummy = f2c_find_symbol(signature, signature->arguments[i]);
-        symbol->external_parameter_types[i] = dummy != NULL ? dummy->type : TYPE_UNKNOWN;
-        symbol->external_parameter_kinds[i] =
-            dummy != NULL ? dummy->kind : f2c_default_kind(TYPE_REAL);
-        symbol->external_parameter_ranks[i] = dummy != NULL ? dummy->rank : 0U;
-        symbol->external_parameter_intents[i] =
-            dummy != NULL ? dummy->intent : F2C_INTENT_UNSPECIFIED;
-        symbol->external_parameter_optional[i] = dummy != NULL && dummy->optional;
-        symbol->external_parameter_allocatable[i] = dummy != NULL && dummy->allocatable;
-        symbol->external_parameter_pointer[i] = dummy != NULL && dummy->pointer;
-        symbol->external_parameter_contiguous[i] = dummy != NULL && dummy->contiguous;
-        symbol->external_parameter_descriptor[i] = f2c_symbol_uses_descriptor(dummy);
-        symbol->external_parameter_derived_types[i] = dummy != NULL ? dummy->derived_type : NULL;
-        symbol->external_parameter_polymorphic[i] = dummy != NULL && dummy->polymorphic;
-        symbol->external_parameter_const[i] = dummy != NULL && dummy->intent == F2C_INTENT_IN;
-        symbol->external_parameter_procedures[i] = dummy != NULL && dummy->external ? dummy : NULL;
+        if (!f2c_set_external_parameter_signature(symbol, i, dummy))
+            return 0;
     }
     return 1;
 }

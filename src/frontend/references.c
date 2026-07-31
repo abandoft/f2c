@@ -261,21 +261,32 @@ static const F2cExpr *actual_value(const F2cExpr *expression) {
                : expression;
 }
 
-static void record_actual_parameter(Symbol *external, size_t parameter, const F2cExpr *expression) {
+static int record_actual_parameter(Symbol *external, size_t parameter, const F2cExpr *expression) {
     const F2cExpr *value = actual_value(expression);
     Symbol *actual = value != NULL ? value->symbol : NULL;
     Type type = value != NULL ? value->type : TYPE_UNKNOWN;
+    char *character_length = NULL;
     if (type == TYPE_UNKNOWN && actual != NULL)
         type = actual->type;
     if (type == TYPE_UNKNOWN)
         type = TYPE_DOUBLE;
+    if (type == TYPE_CHARACTER && actual != NULL && actual->character_length != NULL) {
+        character_length = f2c_strdup(actual->character_length);
+        if (character_length == NULL)
+            return 0;
+    }
     external->external_parameter_types[parameter] = type;
     external->external_parameter_kinds[parameter] =
         value != NULL && value->type_kind != 0 ? value->type_kind : f2c_default_kind(type);
     external->external_parameter_ranks[parameter] = value != NULL ? value->rank : 0U;
+    if (value != NULL)
+        external->external_parameter_shapes[parameter] = value->shape;
+    free(external->external_parameter_character_lengths[parameter]);
+    external->external_parameter_character_lengths[parameter] = character_length;
     if (actual != NULL && actual->external && actual->external_declared &&
         value->kind == F2C_EXPR_NAME)
         external->external_parameter_procedures[parameter] = actual;
+    return 1;
 }
 
 static int alternate_return_actual(const Line *line, size_t begin, size_t end) {
@@ -334,7 +345,14 @@ static int record_external_signature(Unit *unit, Symbol *external, const Line *l
         }
         expression = f2c_parse_expression_tokens(unit, &line->tokens[begin], index - begin,
                                                  line->text, NULL);
-        record_actual_parameter(external, parameter++, expression);
+        if (!record_actual_parameter(external, parameter++, expression)) {
+            f2c_expr_free(expression);
+            if (unit->context != NULL)
+                f2c_diagnostic_code(unit->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line->number, 1,
+                                    "out of memory while recording an actual argument of '%s'",
+                                    external->name);
+            return 0;
+        }
         f2c_expr_free(expression);
         begin = index + 1U;
     }

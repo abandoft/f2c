@@ -82,6 +82,8 @@ struct Symbol {
     Type *external_parameter_types;
     int *external_parameter_kinds;
     size_t *external_parameter_ranks;
+    F2cShape *external_parameter_shapes;
+    char **external_parameter_character_lengths;
     F2cIntent *external_parameter_intents;
     int *external_parameter_optional;
     int *external_parameter_allocatable;

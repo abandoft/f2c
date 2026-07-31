@@ -256,9 +256,16 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
     }
     target->external_parameter_count = source->external ? source->external_parameter_count : 0U;
     for (parameter = 0U; parameter < target->external_parameter_count; ++parameter) {
+        const char *source_length = source->external_parameter_character_lengths[parameter];
+        char *character_length = source_length != NULL ? f2c_strdup(source_length) : NULL;
+        if (source_length != NULL && character_length == NULL)
+            return 0;
         target->external_parameter_types[parameter] = source->external_parameter_types[parameter];
         target->external_parameter_kinds[parameter] = source->external_parameter_kinds[parameter];
         target->external_parameter_ranks[parameter] = source->external_parameter_ranks[parameter];
+        target->external_parameter_shapes[parameter] = source->external_parameter_shapes[parameter];
+        free(target->external_parameter_character_lengths[parameter]);
+        target->external_parameter_character_lengths[parameter] = character_length;
         target->external_parameter_intents[parameter] =
             source->external_parameter_intents[parameter];
         target->external_parameter_optional[parameter] =
@@ -351,19 +358,8 @@ static int import_module_procedure(Unit *unit, Unit *procedure, const char *loca
         return 0;
     for (i = 0U; i < symbol->external_parameter_count; ++i) {
         Symbol *dummy = f2c_find_symbol(procedure, procedure->arguments[i]);
-        symbol->external_parameter_types[i] = dummy != NULL ? dummy->type : TYPE_UNKNOWN;
-        symbol->external_parameter_kinds[i] = dummy != NULL ? dummy->kind : 0;
-        symbol->external_parameter_ranks[i] = dummy != NULL ? dummy->rank : 0U;
-        symbol->external_parameter_intents[i] =
-            dummy != NULL ? dummy->intent : F2C_INTENT_UNSPECIFIED;
-        symbol->external_parameter_optional[i] = dummy != NULL && dummy->optional;
-        symbol->external_parameter_allocatable[i] = dummy != NULL && dummy->allocatable;
-        symbol->external_parameter_pointer[i] = dummy != NULL && dummy->pointer;
-        symbol->external_parameter_contiguous[i] = dummy != NULL && dummy->contiguous;
-        symbol->external_parameter_descriptor[i] = f2c_symbol_uses_descriptor(dummy);
-        symbol->external_parameter_derived_types[i] = dummy != NULL ? dummy->derived_type : NULL;
-        symbol->external_parameter_polymorphic[i] = dummy != NULL && dummy->polymorphic;
-        symbol->external_parameter_const[i] = dummy != NULL && dummy->intent == F2C_INTENT_IN;
+        if (!f2c_set_external_parameter_signature(symbol, i, dummy))
+            return 0;
     }
     return 1;
 }
