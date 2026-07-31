@@ -499,6 +499,14 @@ if(F2C_BUILD_TESTING)
             -DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/test/cli_io.cmake
     )
+    add_test(
+        NAME cli_module_resolution
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DF2C=$<TARGET_FILE:f2c>
+            -DBINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test/cli_module_resolution.cmake
+    )
 
     add_executable(f2c_module_resolution_tests test/test_module_resolution.c)
     f2c_configure_test_target(f2c_module_resolution_tests)
