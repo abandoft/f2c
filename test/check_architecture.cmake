@@ -124,6 +124,7 @@ file(READ "${SOURCE_DIR}/src/ir/expression.h" EXPRESSION_IR)
 file(READ "${SOURCE_DIR}/src/ast/parser.c" EXPRESSION_PARSER)
 file(READ "${SOURCE_DIR}/src/ast/shape.c" EXPRESSION_SHAPE)
 file(READ "${SOURCE_DIR}/src/frontend/procedure.c" PROCEDURE_LOWERING)
+file(READ "${SOURCE_DIR}/src/frontend/derived.c" DERIVED_TYPE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/declaration/type.c" TYPE_DECLARATIONS)
 file(READ "${SOURCE_DIR}/src/frontend/modules.c" USE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/module/dependency.c" MODULE_DEPENDENCIES)
@@ -250,6 +251,32 @@ if(
     message(
         FATAL_ERROR
         "procedure interfaces must retain and validate complete centralized parameter signatures"
+    )
+endif()
+if(
+    NOT SEMANTIC_MODEL MATCHES "int[ \t]+external_pure"
+    OR NOT SEMANTIC_MODEL MATCHES "int[ \t]+external_elemental"
+    OR NOT SEMANTIC_MODEL MATCHES "int[ \t]+external_result_contiguous"
+    OR NOT SEMANTIC_MODEL MATCHES "int[ \t]+external_result_polymorphic"
+    OR NOT SEMANTIC_MODEL MATCHES "F2cAccessibility[ \t]+default_binding_access"
+    OR NOT DERIVED_TYPE_LOWERING MATCHES
+        "duplicate type-bound PROCEDURE attribute"
+    OR NOT DERIVED_TYPE_LOWERING MATCHES
+        "type-bound PRIVATE statement must precede all binding declarations"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES
+        "procedure_signatures_compatible\\(expected,[ \t]*actual,[ \t]*0U,[ \t]*passed_parameter,[ \t]*1\\)"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES
+        "expected_interface->arguments\\[argument\\]"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES
+        "parent->access[ \t]*==[ \t]*F2C_ACCESSIBILITY_PUBLIC"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES
+        "parent->deferred[ \t]*==[ \t]*0[ \t]*&&[ \t]*child->deferred[ \t]*!=[ \t]*0"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES
+        "passed_dummy->derived_type[ \t]*!=[ \t]*derived"
+)
+    message(
+        FATAL_ERROR
+        "type-bound overriding must validate complete signatures, attributes, access, and passed objects"
     )
 endif()
 if(
