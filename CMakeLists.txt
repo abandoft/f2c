@@ -90,6 +90,7 @@ set(
     src/codegen/array/private.h
     src/codegen/array/temporary.c
     src/codegen/call.c
+    src/codegen/character.c
     src/codegen/codegen.h
     src/codegen/data.c
     src/codegen/descriptor/association.c

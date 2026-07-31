@@ -36,6 +36,11 @@ int f2c_symbol_is_automatic_array(Unit *unit, const Symbol *symbol);
 char *f2c_emit_expression_ast(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_emit_pointer_designator(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_emit_typed_expression(Unit *unit, const F2cExpr *expression);
+char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, int *supported);
+char *f2c_symbol_character_length(Unit *unit, const Symbol *symbol);
+char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression);
+char *f2c_character_source_pointer(Unit *unit, const F2cExpr *expression,
+                                   const char *expression_code);
 char *f2c_emit_character_comparison(Unit *unit, const F2cExpr *left, const char *left_code,
                                     const char *operator_text, const F2cExpr *right,
                                     const char *right_code);
