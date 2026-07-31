@@ -141,6 +141,8 @@ set(
     src/codegen/io/unformatted.c
     src/codegen/io/unformatted/array.c
     src/codegen/io/unformatted/private.h
+    src/codegen/lowering/expression.c
+    src/codegen/lowering/private.h
     src/codegen/literal/integer.c
     src/codegen/literal/integer.h
     src/codegen/literal/real.c

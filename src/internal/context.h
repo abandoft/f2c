@@ -3,6 +3,8 @@
 
 #include "ir/statement.h"
 
+typedef struct F2cExpressionLoweringStore F2cExpressionLoweringStore;
+
 typedef struct Units {
     Unit *items;
     size_t count;
@@ -51,6 +53,7 @@ struct Context {
     int constant_step_limit_reported;
     int diagnostic_limit_reported;
     int diagnostic_bytes_limit_reported;
+    F2cExpressionLoweringStore *expression_lowering;
 };
 
 int f2c_initialize_context_limits(Context *context, const F2cConfig *config);

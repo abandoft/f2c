@@ -1,5 +1,6 @@
 #include "internal/f2c.h"
 
+#include "codegen/lowering/private.h"
 #include "core/generated/private.h"
 
 #include <ctype.h>
@@ -134,6 +135,7 @@ static void collect_unit_features(Unit *unit, F2cRequiredFeatures *features) {
 
 static void free_context(Context *context) {
     size_t i;
+    f2c_lowering_clear(context);
     for (i = 0U; i < context->lines.count; ++i) {
         free(context->lines.items[i].text);
         free(context->lines.items[i].tokens);
