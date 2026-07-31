@@ -37,6 +37,8 @@ struct Context {
     F2cIncludeResolver include_resolver;
     F2cIncludeRelease include_release;
     void *include_user_data;
+    const char *const *external_module_names;
+    size_t external_module_count;
     char **source_names;
     size_t source_name_count;
     size_t source_name_capacity;
@@ -57,6 +59,7 @@ struct Context {
 };
 
 int f2c_initialize_context_limits(Context *context, const F2cConfig *config);
+int f2c_validate_context_configuration(Context *context);
 const char *f2c_context_source_name(Context *context, const char *source_name);
 
 #endif

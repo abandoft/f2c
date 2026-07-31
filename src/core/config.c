@@ -1,5 +1,6 @@
 #include "internal/context.h"
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -35,6 +36,34 @@ static void apply_limit(size_t *target, size_t configured) {
         *target = configured;
 }
 
+static int module_name_character(int character, int first) {
+    const unsigned char value = (unsigned char)character;
+    return (value >= (unsigned char)'a' && value <= (unsigned char)'z') ||
+           (value >= (unsigned char)'A' && value <= (unsigned char)'Z') ||
+           (!first && ((value >= (unsigned char)'0' && value <= (unsigned char)'9') ||
+                       value == (unsigned char)'_'));
+}
+
+static int valid_module_name(const char *name) {
+    size_t index;
+    if (name == NULL || !module_name_character(name[0], 1))
+        return 0;
+    for (index = 1U; name[index] != '\0'; ++index)
+        if (!module_name_character(name[index], 0))
+            return 0;
+    return 1;
+}
+
+static int module_names_equal(const char *left, const char *right) {
+    while (*left != '\0' && *right != '\0') {
+        if (tolower((unsigned char)*left) != tolower((unsigned char)*right))
+            return 0;
+        ++left;
+        ++right;
+    }
+    return *left == '\0' && *right == '\0';
+}
+
 int f2c_initialize_context_limits(Context *context, const F2cConfig *config) {
     int valid = 1;
     context->limits.max_input_bytes = F2C_DEFAULT_MAX_INPUT_BYTES;
@@ -48,6 +77,7 @@ int f2c_initialize_context_limits(Context *context, const F2cConfig *config) {
     context->limits.max_macro_arguments = F2C_DEFAULT_MAX_MACRO_ARGUMENTS;
     context->limits.max_include_depth = F2C_DEFAULT_MAX_INCLUDE_DEPTH;
     context->limits.max_include_files = F2C_DEFAULT_MAX_INCLUDE_FILES;
+    context->limits.max_external_modules = F2C_DEFAULT_MAX_EXTERNAL_MODULES;
     context->limits.max_constant_steps = F2C_DEFAULT_MAX_CONSTANT_STEPS;
     context->limits.max_diagnostics = F2C_DEFAULT_MAX_DIAGNOSTICS;
     context->limits.max_diagnostic_bytes = F2C_DEFAULT_MAX_DIAGNOSTIC_BYTES;
@@ -73,6 +103,7 @@ int f2c_initialize_context_limits(Context *context, const F2cConfig *config) {
             apply_limit(&context->limits.max_macro_arguments, config->limits.max_macro_arguments);
             apply_limit(&context->limits.max_include_depth, config->limits.max_include_depth);
             apply_limit(&context->limits.max_include_files, config->limits.max_include_files);
+            apply_limit(&context->limits.max_external_modules, config->limits.max_external_modules);
             apply_limit(&context->limits.max_constant_steps, config->limits.max_constant_steps);
             context->diagnostic_callback = config->diagnostic_callback;
             context->diagnostic_user_data = config->diagnostic_user_data;
@@ -81,10 +112,45 @@ int f2c_initialize_context_limits(Context *context, const F2cConfig *config) {
             context->include_resolver = config->include_resolver;
             context->include_release = config->include_release;
             context->include_user_data = config->include_user_data;
+            context->external_module_names = config->external_module_names;
+            context->external_module_count = config->external_module_count;
         }
     }
     context->output.limit = context->limits.max_output_bytes;
     context->header.limit = context->limits.max_output_bytes;
     context->diagnostics.limit = context->limits.max_diagnostic_bytes;
     return valid;
+}
+
+int f2c_validate_context_configuration(Context *context) {
+    size_t index;
+    if (context->external_module_count > context->limits.max_external_modules) {
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, 1U, 1,
+                            "external module limit of %zu exceeded",
+                            context->limits.max_external_modules);
+        return 0;
+    }
+    if (context->external_module_count != 0U && context->external_module_names == NULL) {
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
+                            "external_module_names is null for a nonzero external_module_count");
+        return 0;
+    }
+    for (index = 0U; index < context->external_module_count; ++index) {
+        size_t previous;
+        const char *name = context->external_module_names[index];
+        if (!valid_module_name(name)) {
+            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
+                                "external module name at index %zu is not a valid Fortran name",
+                                index);
+            return 0;
+        }
+        for (previous = 0U; previous < index; ++previous) {
+            if (module_names_equal(context->external_module_names[previous], name)) {
+                f2c_diagnostic_code(context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
+                                    "external module name '%s' is listed more than once", name);
+                return 0;
+            }
+        }
+    }
+    return 1;
 }

@@ -32,6 +32,7 @@ extern "C" {
 #define F2C_DEFAULT_MAX_MACRO_ARGUMENTS ((size_t)4096U)
 #define F2C_DEFAULT_MAX_INCLUDE_DEPTH ((size_t)256U)
 #define F2C_DEFAULT_MAX_INCLUDE_FILES ((size_t)65536U)
+#define F2C_DEFAULT_MAX_EXTERNAL_MODULES ((size_t)4096U)
 #define F2C_DEFAULT_MAX_CONSTANT_STEPS ((size_t)16U * 1024U * 1024U)
 #define F2C_DEFAULT_MAX_DIAGNOSTICS ((size_t)10000U)
 #define F2C_DEFAULT_MAX_DIAGNOSTIC_BYTES ((size_t)16U * 1024U * 1024U)
@@ -177,6 +178,8 @@ typedef struct F2cLimits {
     size_t max_include_depth;
     /** Maximum number of resolved include files across the request. */
     size_t max_include_files;
+    /** Maximum number of explicitly permitted external module providers. */
+    size_t max_external_modules;
     /** Total integer constant-evaluation steps across the request. */
     size_t max_constant_steps;
 } F2cLimits;
@@ -195,6 +198,12 @@ typedef struct F2cConfig {
     F2cIncludeResolver include_resolver;
     F2cIncludeRelease include_release;
     void *include_user_data;
+    /**
+     * Case-insensitive names of non-intrinsic modules whose providers and
+     * interfaces are intentionally outside this project request.
+     */
+    const char *const *external_module_names;
+    size_t external_module_count;
 } F2cConfig;
 
 /** Translate a UTF-8 Fortran source buffer into a self-contained C17 buffer. */

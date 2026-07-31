@@ -167,9 +167,12 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
     if (f2c_context_source_name(&context, defaults.source_name) == NULL)
         f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
                             "out of memory initializing source names");
-    if (!f2c_initialize_context_limits(&context, config))
+    if (!f2c_initialize_context_limits(&context, config)) {
         f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
                             "configuration structure size does not match this f2c build");
+    } else {
+        (void)f2c_validate_context_configuration(&context);
+    }
     if (inputs == NULL || input_count == 0U) {
         f2c_diagnostic_code(&context, F2C_DIAGNOSTIC_INVALID_ARGUMENT, 1U, 1,
                             "no project inputs were provided");
