@@ -24,6 +24,15 @@ int f2c_host_capture_is_local_descriptor(const Unit *caller, const Symbol *actua
 int f2c_host_capture_needs_descriptor_lifecycle(const Symbol *actual);
 size_t f2c_host_capture_local_descriptor_count(Unit *caller, const Unit *procedure);
 int f2c_host_capture_has_descriptor_lifecycle(Unit *caller, const Unit *procedure);
+int f2c_expression_is_character_temporary(const F2cExpr *expression);
+int f2c_expression_is_derived_actual_temporary(const F2cExpr *expression);
+int f2c_expression_has_materialized_call_result(const F2cExpr *expression);
+int f2c_expression_has_materialized_descriptor_result(const F2cExpr *expression);
+int f2c_expression_has_materialized_derived_result(const F2cExpr *expression);
+const F2cExpr *f2c_expression_ordered_binary_operand(const F2cExpr *expression);
+int f2c_statement_is_function_definition(const Unit *unit, size_t statement);
+int f2c_plan_expression_lifetimes(Context *context, Unit *unit);
+int f2c_relocate_statement_function_temporaries(F2cExpr *expression, size_t *next);
 int f2c_named_kind_constant(const char *name, int64_t *value);
 int f2c_evaluate_integer_constant(Unit *unit, const F2cExpr *expression, int64_t *value);
 int f2c_evaluate_real_constant(Unit *unit, const F2cExpr *expression, double *value);

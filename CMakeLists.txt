@@ -282,6 +282,7 @@ set(
     src/semantic/semantic.h
     src/semantic/signature.c
     src/semantic/storage.c
+    src/semantic/temporary.c
     src/semantic/type.c
     src/semantic/validation.c
     src/semantic/validation/allocation.c

@@ -25,6 +25,21 @@ static int apply_module_analysis_order(Context *context, const size_t *order) {
     return 1;
 }
 
+static int plan_expression_lifetimes(Context *context) {
+    size_t index;
+    for (index = 0U; index < context->modules.count; ++index) {
+        context->options = &context->modules.items[index].options;
+        if (!f2c_plan_expression_lifetimes(context, &context->modules.items[index]))
+            return 0;
+    }
+    for (index = 0U; index < context->units.count; ++index) {
+        context->options = &context->units.items[index].options;
+        if (!f2c_plan_expression_lifetimes(context, &context->units.items[index]))
+            return 0;
+    }
+    return 1;
+}
+
 int f2c_build_syntax_program(Context *context) {
     if (context == NULL || context->phase != F2C_COMPILATION_SOURCE)
         return 0;
@@ -85,6 +100,10 @@ int f2c_build_typed_program(Context *context) {
                             "out of memory finalizing host association");
     if (context->result.error_count == 0U)
         f2c_validate_project_storage(context);
+    if (context->result.error_count == 0U && !plan_expression_lifetimes(context) &&
+        context->result.error_count == 0U)
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_INTERNAL, 1U, 1,
+                            "typed expression lifetime planning failed");
     if (context->result.error_count != 0U)
         return 0;
     context->phase = F2C_COMPILATION_TYPED_IR;
