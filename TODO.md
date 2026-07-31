@@ -345,7 +345,14 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 ### P0-SEM-03 Intrinsic 注册与降级
 
 - [ ] 用单一声明式注册表描述每个 intrinsic 的标准版本、泛型候选、参数关联、kind/rank/shape
-  规则、常量折叠和 C17 降级，删除语义分析与代码生成之间的重复分派。
+  规则、常量折叠和 C17 降级，删除语义分析与代码生成之间的重复分派。当前 117 个 typed intrinsic
+  已将唯一身份、首次标准版本、过程类别、语义家族、参数名称/必选掩码以及结果 type/rank/kind
+  规则合并到同一 `F2cIntrinsicSpecification` 表；标准函数查找、参数绑定和子程序 `CALL` 均从该表
+  取得 typed ID。F77 specific 名称和六个未类型化扩展被隔离在别名目录，显式同名 `EXTERNAL`
+  仍优先于内建过程。独立注册表测试以 Fortran 90 的 113 个 generic 名称和内建子程序为基线，
+  逐项验证规格对象、参数模式、函数签名和过程类别；架构门禁禁止恢复分散元数据表、源码名称
+  `CALL` 分派或家族验证器自行重绑 typed ID。常量折叠能力和各 C17 emitter 尚未全部由声明式规格
+  驱动，因此本项保持未关闭。
 - [ ] 完成 F90 全部 intrinsic 及项目承诺的旧式 intrinsic；重点补齐位操作、字符处理、数值模型、
   kind 选择、数组 inquiry 和随机数语义。数组 inquiry 子集已覆盖非默认下界、零 extent 的标准
   `LBOUND=1/UBOUND=0`、动态 `DIM`、`KIND=1/2/4/8`、切片/构造器/elemental 数组表达式、可分配
@@ -607,9 +614,11 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   数值模型定义、常量折叠、语义验证、表达式降低和生成端支持也分别位于 `semantic/`、
   `semantic/constant/`、`semantic/validation/intrinsic/`、`codegen/expression/` 和
   `core/generated/`，未恢复通用调用生成器中的标准名称分派。intrinsic 实现进一步拆为
-  `semantic/intrinsic/catalog.c`、`identity.c` 和 `resolution.c`，分别负责源码签名注册、typed
-  身份/参数元数据和 type/rank/kind 解析；参数关联由共享验证器完成，家族验证器不再各自维护
-  重复关键字表。
+  `semantic/intrinsic/catalog.c`、`identity.c` 和 `resolution.c`：`identity.c` 统一拥有 canonical
+  typed identity、标准版本、参数模式和结果签名，`catalog.c` 只保留旧式 specific 名称及明确扩展，
+  `resolution.c` 负责 type/rank/kind 解析；intrinsic 子程序的中央验证分派位于
+  `semantic/validation/intrinsic/statement.c`。参数关联由共享验证器完成，家族验证器不再各自维护
+  重复关键字表或按源码拼写重绑 typed ID。
   transformational intrinsic 的结果分配、元素复制、动态 extent 提交和派生类型销毁已从总控
   emitter 拆入 `codegen/transform/result.c`；数组函数结果的 ABI 判定和调用端物化分别位于
   `semantic/result.c` 与 `codegen/array/function.c`，表达式临时量规划和普通变量存活性分析分别
@@ -658,9 +667,10 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 
 - [ ] 按 lexer、preprocessor、parser、AST、语义、常量折叠、intrinsic、I/O、生命周期、IR 和
   emitter 建立独立单元测试，并保留项目级端到端测试。preprocessor 已从超大端到端测试拆为独立
-  测试目标；数值模型契约、intrinsic 注册表完整性/唯一性/参数模式、各 intrinsic 家族语义及数组
-  函数结果 ABI/所有权也已有独立测试目标，架构测试会阻止恢复旧参数绑定器和标准名称分派；其他
-  模块仍需继续拆分。
+  测试目标；数值模型契约、intrinsic 注册表完整性/唯一性/参数模式、Fortran 90 的 113 项独立名称
+  基线、各 intrinsic 家族语义及数组函数结果 ABI/所有权也已有独立测试目标，架构测试会阻止恢复
+  旧参数绑定器、分散 canonical 规格表、标准名称 emitter 分派和 intrinsic `CALL` 字符串分派；
+  其他模块仍需继续拆分。
 - [ ] 建立完整负向语料库，断言错误码、源码范围、恢复位置和输出抑制；禁止只匹配易变英文文本。
 - [ ] 增加行/分支覆盖率门禁和历史趋势，分别统计转译器、生成辅助代码和数值脚本。
 - [ ] 当 `F2C_BUILD_TESTING=ON` 时，数值脚本所需 Python 应成为明确依赖或由独立选项控制；不能
