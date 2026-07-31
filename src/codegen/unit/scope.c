@@ -1,5 +1,7 @@
 #include "codegen/unit/private.h"
 
+#include "semantic/data_flow.h"
+
 #include <stdlib.h>
 
 static int block_scoped_symbol(const Unit *unit, const Symbol *symbol) {
@@ -121,6 +123,30 @@ int f2c_emit_scope_cleanup_plan(Buffer *output, Unit *unit, const F2cScopeCleanu
             unit->context, F2C_DIAGNOSTIC_INTERNAL, line, 1,
             "code generation rejected a control transfer without a variable-liveness proof");
         return 0;
+    }
+    if (!plan->temporary_liveness_analyzed) {
+        const size_t line = plan->source_node < unit->statement_count
+                                ? unit->statements[plan->source_node].line
+                                : unit->begin;
+        f2c_diagnostic_code(unit->context, F2C_DIAGNOSTIC_INTERNAL, line, 1,
+                            "code generation rejected a control transfer without an "
+                            "owned-temporary-liveness proof");
+        return 0;
+    }
+    for (index = 0U; index < plan->released_temporary_count; ++index) {
+        const size_t temporary = plan->released_temporaries[index];
+        if (temporary >= unit->owned_temporary_count ||
+            unit->owned_temporaries[temporary].owner_statement != plan->source_node ||
+            !f2c_temporary_flow_is_released(unit, plan->source_node, temporary) ||
+            f2c_temporary_flow_is_live_out(unit, plan->source_node, temporary)) {
+            const size_t line = plan->source_node < unit->statement_count
+                                    ? unit->statements[plan->source_node].line
+                                    : unit->begin;
+            f2c_diagnostic_code(
+                unit->context, F2C_DIAGNOSTIC_INTERNAL, line, 1,
+                "code generation rejected an inconsistent owned-temporary cleanup proof");
+            return 0;
+        }
     }
     for (index = 0U; index < plan->symbol_count; ++index)
         emit_block_symbol_cleanup(output, unit, plan->symbols[index], depth);

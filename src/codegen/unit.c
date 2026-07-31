@@ -826,6 +826,12 @@ void f2c_emit_unit(Context *context, Unit *unit) {
             "code generation rejected typed IR without semantic temporary-lifetime planning");
         return;
     }
+    if (!unit->temporary_flow.analyzed) {
+        f2c_diagnostic_code(
+            context, F2C_DIAGNOSTIC_INTERNAL, context->lines.items[unit->begin].number, 1,
+            "code generation rejected typed IR without owned-temporary data-flow analysis");
+        return;
+    }
     if (unit->kind == UNIT_PROGRAM) {
         f2c_unit_emit_signature(&context->output, unit);
     } else {
