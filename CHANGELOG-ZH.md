@@ -1,3 +1,14 @@
+## 1.31.0
+
+- 增加通用反向不动点数据流求解能力，正确处理分支合流、循环闭环和不可达控制流。
+- 为普通变量建立逐控制流节点的 use/def/live-in/live-out 分析，覆盖赋值、部分 designator、过程 `INTENT`、I/O、分配语句、DO latch 和嵌套动作。
+- 将作用域清理计划与变量存活性证明绑定，代码生成会拒绝待清理对象仍在目标节点存活或缺少分析证明的控制流。
+- 明确 BLOCK 每次重入产生的新对象实例，避免 `CYCLE`、`GOTO` 等转移让前一次实例错误存活或重复终结。
+- 将表达式临时量、连续实参 bridge、host descriptor、求值顺序和 statement function 存储统一迁移到 typed IR 语义规划阶段，并加入资源溢出保护。
+- 将函数结果 ABI、host capture 生命周期和 statement function 临时量归属语义层，进一步缩小代码生成阶段的职责。
+- 代码生成现在只消费已验证的临时量规划，并由架构门禁阻止重新写入语义规划索引。
+- 增加变量数据流、临时量生命周期、作用域清理和 BLOCK 重入的严格 C17、原生差分及 sanitizer 回归。
+
 ## 1.30.0
 
 - 扩展过程级控制流图，以独立节点表示过程正常出口、image termination 和循环 latch，并区分 `RETURN`、`STOP`、交替返回及 I/O `END/EOR/ERR` 边。
