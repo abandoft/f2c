@@ -500,6 +500,10 @@ if(F2C_BUILD_TESTING)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/test/cli_io.cmake
     )
 
+    add_executable(f2c_module_resolution_tests test/test_module_resolution.c)
+    f2c_configure_test_target(f2c_module_resolution_tests)
+    add_test(NAME module_resolution COMMAND f2c_module_resolution_tests)
+
     add_executable(f2c_ast_tests test/test_ast.c)
     target_include_directories(f2c_ast_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_ast_tests)
