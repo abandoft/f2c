@@ -40,6 +40,7 @@ static int build_cleanup_plan(Context *context, Unit *unit, const F2cControlFlow
     size_t count = 0U;
     size_t index;
     free(plan->symbols);
+    free(plan->released_temporaries);
     memset(plan, 0, sizeof(*plan));
     if (!graph_has_edge(graph, source_node, target_node)) {
         f2c_diagnostic_span_code(
@@ -237,4 +238,115 @@ void f2c_validation_lifetimes(Context *context, Unit *unit) {
                                      &unit->statements[statement]))
             break;
     f2c_control_flow_free(&graph);
+}
+
+static int attach_temporary_cleanup_plan(Context *context, Unit *unit,
+                                         const F2cControlFlowGraph *graph,
+                                         F2cScopeCleanupPlan *plan, const F2cSourceSpan *span) {
+    const F2cStatementTemporaryPlan *statement_plan;
+    size_t item;
+    free(plan->released_temporaries);
+    plan->released_temporaries = NULL;
+    plan->released_temporary_count = 0U;
+    plan->temporary_liveness_analyzed = 0;
+    if (!plan->control_flow_analyzed)
+        return 1;
+    if (!unit->temporary_flow.analyzed || plan->source_node >= graph->node_count ||
+        plan->target_node >= graph->node_count ||
+        !graph_has_edge(graph, plan->source_node, plan->target_node)) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_INTERNAL, span, 1,
+                                 "control-flow cleanup planning requires owned-temporary liveness");
+        return 0;
+    }
+    if (graph->nodes[plan->source_node].statement_index >= unit->statement_count) {
+        plan->temporary_liveness_analyzed = 1;
+        return 1;
+    }
+    statement_plan =
+        &unit->statements[graph->nodes[plan->source_node].statement_index].temporary_plan;
+    if (!statement_plan->ownership_analyzed) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_INTERNAL, span, 1,
+                                 "control-flow cleanup has no statement ownership plan");
+        return 0;
+    }
+    if (statement_plan->owned_temporary_count != 0U) {
+        if (statement_plan->owned_temporary_count > SIZE_MAX / sizeof(*plan->released_temporaries))
+            goto failed;
+        plan->released_temporaries = (size_t *)malloc(statement_plan->owned_temporary_count *
+                                                      sizeof(*plan->released_temporaries));
+        if (plan->released_temporaries == NULL)
+            goto failed;
+    }
+    for (item = 0U; item < statement_plan->owned_temporary_count; ++item) {
+        const size_t temporary = statement_plan->owned_temporaries[item];
+        if (!f2c_temporary_flow_is_created(unit, plan->source_node, temporary) ||
+            !f2c_temporary_flow_is_released(unit, plan->source_node, temporary) ||
+            f2c_temporary_flow_is_live_out(unit, plan->source_node, temporary)) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_INTERNAL, span, 1,
+                                     "owned temporary %zu is not released on control-flow edge",
+                                     temporary);
+            return 0;
+        }
+        plan->released_temporaries[plan->released_temporary_count++] = temporary;
+    }
+    plan->temporary_liveness_analyzed = 1;
+    return 1;
+
+failed:
+    f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, span, 1,
+                             "out of memory while attaching temporary cleanup proof");
+    return 0;
+}
+
+static int attach_statement_temporary_plans(Context *context, Unit *unit,
+                                            const F2cControlFlowGraph *graph,
+                                            F2cStatement *statement) {
+    size_t item;
+    if (statement == NULL)
+        return 1;
+    if (statement->transfer_cleanup.control_flow_analyzed &&
+        !attach_temporary_cleanup_plan(context, unit, graph, &statement->transfer_cleanup,
+                                       &statement->span))
+        return 0;
+    for (item = 0U; item < statement->label_count; ++item)
+        if (statement->label_cleanups != NULL &&
+            statement->label_cleanups[item].control_flow_analyzed &&
+            !attach_temporary_cleanup_plan(
+                context, unit, graph, &statement->label_cleanups[item],
+                statement->label_spans != NULL ? &statement->label_spans[item] : &statement->span))
+            return 0;
+    for (item = 0U; item < statement->resolved_branch_count; ++item)
+        if (statement->resolved_branches[item].cleanup.control_flow_analyzed &&
+            !attach_temporary_cleanup_plan(context, unit, graph,
+                                           &statement->resolved_branches[item].cleanup,
+                                           &statement->span))
+            return 0;
+    for (item = 0U; item < statement->control_count; ++item)
+        if (statement->io_controls[item].cleanup.control_flow_analyzed &&
+            !attach_temporary_cleanup_plan(context, unit, graph,
+                                           &statement->io_controls[item].cleanup,
+                                           &statement->io_controls[item].span))
+            return 0;
+    return attach_statement_temporary_plans(context, unit, graph, statement->nested);
+}
+
+int f2c_analyze_temporary_lifetimes(Context *context, Unit *unit) {
+    F2cControlFlowGraph graph;
+    size_t statement;
+    if (context == NULL || unit == NULL || !unit->expression_lifetimes_analyzed)
+        return 0;
+    if (!f2c_control_flow_build(context, unit, &graph))
+        return 0;
+    if (!f2c_temporary_flow_analyze(context, unit, &graph)) {
+        f2c_control_flow_free(&graph);
+        return 0;
+    }
+    for (statement = 0U; statement < unit->statement_count; ++statement)
+        if (!attach_statement_temporary_plans(context, unit, &graph,
+                                              &unit->statements[statement])) {
+            f2c_control_flow_free(&graph);
+            return 0;
+        }
+    f2c_control_flow_free(&graph);
+    return 1;
 }

@@ -32,6 +32,7 @@ int f2c_expression_has_materialized_derived_result(const F2cExpr *expression);
 const F2cExpr *f2c_expression_ordered_binary_operand(const F2cExpr *expression);
 int f2c_statement_is_function_definition(const Unit *unit, size_t statement);
 int f2c_plan_expression_lifetimes(Context *context, Unit *unit);
+int f2c_analyze_temporary_lifetimes(Context *context, Unit *unit);
 int f2c_relocate_statement_function_temporaries(F2cExpr *expression, size_t *next);
 int f2c_named_kind_constant(const char *name, int64_t *value);
 int f2c_evaluate_integer_constant(Unit *unit, const F2cExpr *expression, int64_t *value);

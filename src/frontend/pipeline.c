@@ -29,12 +29,14 @@ static int plan_expression_lifetimes(Context *context) {
     size_t index;
     for (index = 0U; index < context->modules.count; ++index) {
         context->options = &context->modules.items[index].options;
-        if (!f2c_plan_expression_lifetimes(context, &context->modules.items[index]))
+        if (!f2c_plan_expression_lifetimes(context, &context->modules.items[index]) ||
+            !f2c_analyze_temporary_lifetimes(context, &context->modules.items[index]))
             return 0;
     }
     for (index = 0U; index < context->units.count; ++index) {
         context->options = &context->units.items[index].options;
-        if (!f2c_plan_expression_lifetimes(context, &context->units.items[index]))
+        if (!f2c_plan_expression_lifetimes(context, &context->units.items[index]) ||
+            !f2c_analyze_temporary_lifetimes(context, &context->units.items[index]))
             return 0;
     }
     return 1;
