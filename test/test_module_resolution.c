@@ -107,6 +107,97 @@ static void test_intrinsic_module_policy(void) {
     f2c_result_free(&result);
 }
 
+static void test_intrinsic_module_associations(void) {
+    static const char renamed[] =
+        "program renamed_environment\n"
+        "  use, intrinsic :: iso_fortran_env, only: rk => real64, tiny_kind => int8, &\n"
+        "    short_kind => int16, word_kind => int32\n"
+        "  implicit none(type, external)\n"
+        "  real(kind=rk) :: wide\n"
+        "  integer(kind=tiny_kind) :: tiny\n"
+        "  integer(kind=short_kind) :: short\n"
+        "  integer(kind=word_kind) :: word\n"
+        "  wide = 1.0_rk\n"
+        "  tiny = 1_tiny_kind\n"
+        "  short = 2_short_kind\n"
+        "  word = 3_word_kind\n"
+        "end program renamed_environment\n";
+    static const char unrestricted[] =
+        "program environment_values\n"
+        "  use iso_fortran_env\n"
+        "  implicit none(type, external)\n"
+        "  integer, parameter :: environment_total = character_storage_size + error_unit + &\n"
+        "    file_storage_size + input_unit + iostat_end + iostat_eor + &\n"
+        "    numeric_storage_size + output_unit + real128\n"
+        "  integer, parameter :: kind_total = int8 + int16 + int32 + int64 + real32 + real64\n"
+        "  if (environment_total /= 55 .or. kind_total /= 27) error stop 1\n"
+        "end program environment_values\n";
+    F2cConfig config = default_config();
+    F2cResult result = transpile_config(renamed, "renamed-environment.f90", &config);
+
+    expect(result.error_count == 0U && result.code != NULL,
+           "ONLY renames import ISO_FORTRAN_ENV kinds as typed parameter symbols");
+    expect_contains(result.code, "double wide", "a renamed REAL64 kind selects C double");
+    expect_contains(result.code, "int8_t tiny", "a renamed INT8 kind selects C int8_t");
+    expect_contains(result.code, "int16_t short_value", "a renamed INT16 kind selects C int16_t");
+    expect_contains(result.code, "int32_t word", "a renamed INT32 kind selects C int32_t");
+    f2c_result_free(&result);
+
+    result = transpile_config(unrestricted, "environment-values.f90", &config);
+    expect(result.error_count == 0U && result.code != NULL,
+           "an unrestricted ISO_FORTRAN_ENV USE imports every implemented scalar constant");
+    f2c_result_free(&result);
+}
+
+static void test_intrinsic_module_scope_errors(void) {
+    static const char missing_member[] = "program missing_member\n"
+                                         "  use, intrinsic :: iso_fortran_env, only: missing_kind\n"
+                                         "end program missing_member\n";
+    static const char missing_declaration_import[] = "program missing_declaration_import\n"
+                                                     "  implicit none(type, external)\n"
+                                                     "  real(kind=real64) :: value\n"
+                                                     "end program missing_declaration_import\n";
+    static const char missing_literal_import[] = "program missing_literal_import\n"
+                                                 "  implicit none(type, external)\n"
+                                                 "  real :: value\n"
+                                                 "  value = 1.0_real64\n"
+                                                 "end program missing_literal_import\n";
+    static const char ordinary_name[] = "program ordinary_name\n"
+                                        "  real64 = 9\n"
+                                        "  if (real64 /= 9) error stop 1\n"
+                                        "end program ordinary_name\n";
+    F2cConfig config = default_config();
+    F2cResult result = transpile_config(missing_member, "missing-member.f90", &config);
+
+    expect(result.error_count != 0U && result.code == NULL,
+           "an unimplemented ISO_FORTRAN_ENV member is a hard error");
+    expect_contains(result.diagnostics, "ISO_FORTRAN_ENV has no member 'missing_kind'",
+                    "an unknown intrinsic-module member has a precise diagnostic");
+    f2c_result_free(&result);
+
+    result =
+        transpile_config(missing_declaration_import, "missing-declaration-import.f90", &config);
+    expect(result.error_count != 0U && result.code == NULL,
+           "REAL64 is not globally visible in a declaration without USE association");
+    expect_contains(result.diagnostics, "kind selector must be a supported positive constant",
+                    "a missing declaration-kind import is diagnosed at the selector");
+    f2c_result_free(&result);
+
+    result = transpile_config(missing_literal_import, "missing-literal-import.f90", &config);
+    expect(result.error_count != 0U && result.code == NULL,
+           "REAL64 is not globally visible as a literal kind suffix");
+    expect_contains(result.diagnostics, "malformed right-hand side expression",
+                    "a missing literal-kind import is diagnosed before code generation");
+    f2c_result_free(&result);
+
+    result = transpile_config(ordinary_name, "ordinary-name.f90", &config);
+    expect(result.error_count == 0U && result.code != NULL,
+           "an unassociated REAL64 spelling remains an ordinary implicitly typed name");
+    expect_contains(result.code, "float real64",
+                    "code generation does not replace an ordinary REAL64 name with a magic value");
+    f2c_result_free(&result);
+}
+
 static void test_project_module_provider(void) {
     static const char consumer[] = "program project_consumer\n"
                                    "  use, non_intrinsic :: project_provider, only: answer\n"
@@ -118,10 +209,8 @@ static void test_project_module_provider(void) {
                                    "  integer, parameter :: answer = 42\n"
                                    "end module project_provider\n";
     F2cInput inputs[] = {
-        {consumer, sizeof(consumer) - 1U,
-         {"project-consumer.f90", F2C_SOURCE_FREE, 0}},
-        {provider, sizeof(provider) - 1U,
-         {"project-provider.f90", F2C_SOURCE_FREE, 0}},
+        {consumer, sizeof(consumer) - 1U, {"project-consumer.f90", F2C_SOURCE_FREE, 0}},
+        {provider, sizeof(provider) - 1U, {"project-provider.f90", F2C_SOURCE_FREE, 0}},
     };
     F2cResult result = f2c_transpile_project(inputs, sizeof(inputs) / sizeof(inputs[0]));
 
@@ -182,6 +271,8 @@ int main(void) {
     test_missing_non_intrinsic_module();
     test_external_module_allowlist();
     test_intrinsic_module_policy();
+    test_intrinsic_module_associations();
+    test_intrinsic_module_scope_errors();
     test_project_module_provider();
     test_external_module_configuration();
     if (failures != 0) {
