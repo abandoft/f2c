@@ -278,6 +278,7 @@ set(
     src/semantic/implicit/private.h
     src/semantic/implicit/symbols.c
     src/semantic/intrinsic/catalog.c
+    src/semantic/intrinsic/identity.c
     src/semantic/intrinsic.h
     src/semantic/model.h
     src/semantic/numeric_model.c
@@ -565,6 +566,14 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_numeric_model_intrinsic_tests test/test_numeric_model_intrinsic.c)
     f2c_configure_test_target(f2c_numeric_model_intrinsic_tests)
     add_test(NAME numeric_model_intrinsic_semantics COMMAND f2c_numeric_model_intrinsic_tests)
+
+    add_executable(f2c_intrinsic_registry_tests test/test_intrinsic_registry.c)
+    target_include_directories(
+        f2c_intrinsic_registry_tests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    f2c_configure_internal_test_target(f2c_intrinsic_registry_tests)
+    add_test(NAME intrinsic_registry COMMAND f2c_intrinsic_registry_tests)
 
     add_executable(f2c_numeric_operation_intrinsic_tests test/test_numeric_operation_intrinsic.c)
     f2c_configure_test_target(f2c_numeric_operation_intrinsic_tests)

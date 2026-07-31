@@ -422,234 +422,56 @@ const F2cIntrinsicSignature *f2c_find_intrinsic(const char *name) {
     return NULL;
 }
 
+size_t f2c_intrinsic_signature_count(void) {
+    return sizeof(intrinsic_signatures) / sizeof(intrinsic_signatures[0]);
+}
+
+const F2cIntrinsicSignature *f2c_intrinsic_signature_at(size_t index) {
+    return index < f2c_intrinsic_signature_count() ? &intrinsic_signatures[index] : NULL;
+}
+
 int f2c_is_intrinsic_name(const char *name) { return f2c_find_intrinsic(name) != NULL; }
 
 int f2c_is_intrinsic_subroutine(const char *name) {
-    return name != NULL && (strcmp(name, "cpu_time") == 0 || strcmp(name, "date_and_time") == 0 ||
-                            strcmp(name, "mvbits") == 0 || strcmp(name, "random_number") == 0 ||
-                            strcmp(name, "random_seed") == 0 || strcmp(name, "system_clock") == 0);
+    const F2cIntrinsicDescriptor *descriptor = f2c_find_intrinsic_descriptor(name);
+    return descriptor != NULL &&
+           descriptor->procedure_kind == F2C_INTRINSIC_PROCEDURE_SUBROUTINE;
 }
 
 int f2c_intrinsic_is_bit(F2cIntrinsicId intrinsic) {
-    switch (intrinsic) {
-    case F2C_INTRINSIC_BIT_SIZE:
-    case F2C_INTRINSIC_BTEST:
-    case F2C_INTRINSIC_IAND:
-    case F2C_INTRINSIC_IBCLR:
-    case F2C_INTRINSIC_IBITS:
-    case F2C_INTRINSIC_IBSET:
-    case F2C_INTRINSIC_IEOR:
-    case F2C_INTRINSIC_IOR:
-    case F2C_INTRINSIC_ISHFT:
-    case F2C_INTRINSIC_ISHFTC:
-    case F2C_INTRINSIC_NOT:
-    case F2C_INTRINSIC_MVBITS:
-        return 1;
-    case F2C_INTRINSIC_NONE:
-    case F2C_INTRINSIC_ACHAR:
-    case F2C_INTRINSIC_ADJUSTL:
-    case F2C_INTRINSIC_ADJUSTR:
-    case F2C_INTRINSIC_CHAR:
-    case F2C_INTRINSIC_IACHAR:
-    case F2C_INTRINSIC_ICHAR:
-    case F2C_INTRINSIC_INDEX:
-    case F2C_INTRINSIC_LEN:
-    case F2C_INTRINSIC_LEN_TRIM:
-    case F2C_INTRINSIC_LGE:
-    case F2C_INTRINSIC_LGT:
-    case F2C_INTRINSIC_LLE:
-    case F2C_INTRINSIC_LLT:
-    case F2C_INTRINSIC_REPEAT:
-    case F2C_INTRINSIC_SCAN:
-    case F2C_INTRINSIC_TRIM:
-    case F2C_INTRINSIC_VERIFY:
-    default:
-        return 0;
-    }
+    return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_BIT);
 }
 
 int f2c_intrinsic_is_character(F2cIntrinsicId intrinsic) {
-    switch (intrinsic) {
-    case F2C_INTRINSIC_ACHAR:
-    case F2C_INTRINSIC_ADJUSTL:
-    case F2C_INTRINSIC_ADJUSTR:
-    case F2C_INTRINSIC_CHAR:
-    case F2C_INTRINSIC_IACHAR:
-    case F2C_INTRINSIC_ICHAR:
-    case F2C_INTRINSIC_INDEX:
-    case F2C_INTRINSIC_LEN:
-    case F2C_INTRINSIC_LEN_TRIM:
-    case F2C_INTRINSIC_LGE:
-    case F2C_INTRINSIC_LGT:
-    case F2C_INTRINSIC_LLE:
-    case F2C_INTRINSIC_LLT:
-    case F2C_INTRINSIC_REPEAT:
-    case F2C_INTRINSIC_SCAN:
-    case F2C_INTRINSIC_TRIM:
-    case F2C_INTRINSIC_VERIFY:
-        return 1;
-    case F2C_INTRINSIC_NONE:
-    case F2C_INTRINSIC_BIT_SIZE:
-    case F2C_INTRINSIC_BTEST:
-    case F2C_INTRINSIC_IAND:
-    case F2C_INTRINSIC_IBCLR:
-    case F2C_INTRINSIC_IBITS:
-    case F2C_INTRINSIC_IBSET:
-    case F2C_INTRINSIC_IEOR:
-    case F2C_INTRINSIC_IOR:
-    case F2C_INTRINSIC_ISHFT:
-    case F2C_INTRINSIC_ISHFTC:
-    case F2C_INTRINSIC_NOT:
-    case F2C_INTRINSIC_MVBITS:
-    default:
-        return 0;
-    }
+    return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_CHARACTER);
 }
 
 int f2c_intrinsic_is_conversion(F2cIntrinsicId intrinsic) {
-    switch (intrinsic) {
-    case F2C_INTRINSIC_AIMAG:
-    case F2C_INTRINSIC_CMPLX:
-    case F2C_INTRINSIC_CONJG:
-    case F2C_INTRINSIC_DBLE:
-    case F2C_INTRINSIC_INT:
-    case F2C_INTRINSIC_LOGICAL:
-    case F2C_INTRINSIC_REAL:
-        return 1;
-    case F2C_INTRINSIC_NONE:
-    default:
-        return 0;
-    }
+    return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_CONVERSION);
 }
 
 int f2c_intrinsic_is_mathematical(F2cIntrinsicId intrinsic) {
-    switch (intrinsic) {
-    case F2C_INTRINSIC_ABS:
-    case F2C_INTRINSIC_ACOS:
-    case F2C_INTRINSIC_ASIN:
-    case F2C_INTRINSIC_ATAN:
-    case F2C_INTRINSIC_ATAN2:
-    case F2C_INTRINSIC_COS:
-    case F2C_INTRINSIC_COSH:
-    case F2C_INTRINSIC_DPROD:
-    case F2C_INTRINSIC_EXP:
-    case F2C_INTRINSIC_LOG:
-    case F2C_INTRINSIC_LOG10:
-    case F2C_INTRINSIC_MAX:
-    case F2C_INTRINSIC_MIN:
-    case F2C_INTRINSIC_SIN:
-    case F2C_INTRINSIC_SINH:
-    case F2C_INTRINSIC_SQRT:
-    case F2C_INTRINSIC_TAN:
-    case F2C_INTRINSIC_TANH:
-        return 1;
-    case F2C_INTRINSIC_NONE:
-    default:
-        return 0;
-    }
+    return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_MATHEMATICAL);
 }
 
 int f2c_intrinsic_is_numeric_model(F2cIntrinsicId intrinsic) {
-    switch (intrinsic) {
-    case F2C_INTRINSIC_DIGITS:
-    case F2C_INTRINSIC_EPSILON:
-    case F2C_INTRINSIC_HUGE:
-    case F2C_INTRINSIC_KIND:
-    case F2C_INTRINSIC_MAXEXPONENT:
-    case F2C_INTRINSIC_MINEXPONENT:
-    case F2C_INTRINSIC_PRECISION:
-    case F2C_INTRINSIC_RADIX:
-    case F2C_INTRINSIC_RANGE:
-    case F2C_INTRINSIC_SELECTED_INT_KIND:
-    case F2C_INTRINSIC_SELECTED_REAL_KIND:
-    case F2C_INTRINSIC_TINY:
-        return 1;
-    case F2C_INTRINSIC_NONE:
-    default:
-        return 0;
-    }
+    return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_NUMERIC_MODEL);
 }
 
 int f2c_intrinsic_is_numeric_operation(F2cIntrinsicId intrinsic) {
-    switch (intrinsic) {
-    case F2C_INTRINSIC_AINT:
-    case F2C_INTRINSIC_ANINT:
-    case F2C_INTRINSIC_CEILING:
-    case F2C_INTRINSIC_DIM:
-    case F2C_INTRINSIC_FLOOR:
-    case F2C_INTRINSIC_MERGE:
-    case F2C_INTRINSIC_MOD:
-    case F2C_INTRINSIC_MODULO:
-    case F2C_INTRINSIC_NINT:
-    case F2C_INTRINSIC_SIGN:
-        return 1;
-    case F2C_INTRINSIC_NONE:
-    default:
-        return 0;
-    }
+    return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_NUMERIC_OPERATION);
 }
 
 int f2c_intrinsic_is_real_representation(F2cIntrinsicId intrinsic) {
-    switch (intrinsic) {
-    case F2C_INTRINSIC_EXPONENT:
-    case F2C_INTRINSIC_FRACTION:
-    case F2C_INTRINSIC_NEAREST:
-    case F2C_INTRINSIC_RRSPACING:
-    case F2C_INTRINSIC_SCALE:
-    case F2C_INTRINSIC_SET_EXPONENT:
-    case F2C_INTRINSIC_SPACING:
-        return 1;
-    case F2C_INTRINSIC_NONE:
-    default:
-        return 0;
-    }
+    return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_REAL_REPRESENTATION);
 }
 
 int f2c_intrinsic_is_reduction(F2cIntrinsicId intrinsic) {
-    switch (intrinsic) {
-    case F2C_INTRINSIC_ALL:
-    case F2C_INTRINSIC_ANY:
-    case F2C_INTRINSIC_COUNT:
-    case F2C_INTRINSIC_DOT_PRODUCT:
-    case F2C_INTRINSIC_MAXLOC:
-    case F2C_INTRINSIC_MAXVAL:
-    case F2C_INTRINSIC_MINLOC:
-    case F2C_INTRINSIC_MINVAL:
-    case F2C_INTRINSIC_PRODUCT:
-    case F2C_INTRINSIC_SUM:
-        return 1;
-    case F2C_INTRINSIC_NONE:
-    default:
-        return 0;
-    }
+    return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_REDUCTION);
 }
 
 int f2c_intrinsic_is_transformational(F2cIntrinsicId intrinsic) {
-    switch (intrinsic) {
-    case F2C_INTRINSIC_ALL:
-    case F2C_INTRINSIC_ANY:
-    case F2C_INTRINSIC_COUNT:
-    case F2C_INTRINSIC_CSHIFT:
-    case F2C_INTRINSIC_DOT_PRODUCT:
-    case F2C_INTRINSIC_EOSHIFT:
-    case F2C_INTRINSIC_FINDLOC:
-    case F2C_INTRINSIC_MATMUL:
-    case F2C_INTRINSIC_MAXLOC:
-    case F2C_INTRINSIC_MAXVAL:
-    case F2C_INTRINSIC_MINLOC:
-    case F2C_INTRINSIC_MINVAL:
-    case F2C_INTRINSIC_PACK:
-    case F2C_INTRINSIC_PRODUCT:
-    case F2C_INTRINSIC_RESHAPE:
-    case F2C_INTRINSIC_SPREAD:
-    case F2C_INTRINSIC_SUM:
-    case F2C_INTRINSIC_TRANSPOSE:
-    case F2C_INTRINSIC_UNPACK:
-        return 1;
-    case F2C_INTRINSIC_NONE:
-    default:
-        return 0;
-    }
+    return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_TRANSFORMATIONAL);
 }
 
 static Type absolute_result(Type type) {

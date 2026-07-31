@@ -34,6 +34,42 @@ typedef enum F2cIntrinsicKindRule {
     F2C_INTRINSIC_KIND_FIRST_OPTIONAL
 } F2cIntrinsicKindRule;
 
+typedef enum F2cIntrinsicStandard {
+    F2C_INTRINSIC_STANDARD_FORTRAN_77,
+    F2C_INTRINSIC_STANDARD_FORTRAN_90,
+    F2C_INTRINSIC_STANDARD_FORTRAN_95,
+    F2C_INTRINSIC_STANDARD_FORTRAN_2008,
+    F2C_INTRINSIC_STANDARD_EXTENSION
+} F2cIntrinsicStandard;
+
+typedef enum F2cIntrinsicProcedureKind {
+    F2C_INTRINSIC_PROCEDURE_FUNCTION,
+    F2C_INTRINSIC_PROCEDURE_SUBROUTINE
+} F2cIntrinsicProcedureKind;
+
+typedef enum F2cIntrinsicFamily {
+    F2C_INTRINSIC_FAMILY_NONE = 0U,
+    F2C_INTRINSIC_FAMILY_BIT = 1U << 0,
+    F2C_INTRINSIC_FAMILY_CHARACTER = 1U << 1,
+    F2C_INTRINSIC_FAMILY_CONVERSION = 1U << 2,
+    F2C_INTRINSIC_FAMILY_MATHEMATICAL = 1U << 3,
+    F2C_INTRINSIC_FAMILY_NUMERIC_MODEL = 1U << 4,
+    F2C_INTRINSIC_FAMILY_NUMERIC_OPERATION = 1U << 5,
+    F2C_INTRINSIC_FAMILY_REAL_REPRESENTATION = 1U << 6,
+    F2C_INTRINSIC_FAMILY_REDUCTION = 1U << 7,
+    F2C_INTRINSIC_FAMILY_TRANSFORMATIONAL = 1U << 8,
+    F2C_INTRINSIC_FAMILY_ARRAY_INQUIRY = 1U << 9,
+    F2C_INTRINSIC_FAMILY_ASSUMED_SIZE_INQUIRY = 1U << 10
+} F2cIntrinsicFamily;
+
+typedef struct F2cIntrinsicDescriptor {
+    F2cIntrinsicId id;
+    const char *canonical_name;
+    F2cIntrinsicStandard standard;
+    F2cIntrinsicProcedureKind procedure_kind;
+    unsigned int families;
+} F2cIntrinsicDescriptor;
+
 typedef struct F2cIntrinsicSignature {
     const char *name;
     size_t minimum_arguments;
@@ -44,6 +80,11 @@ typedef struct F2cIntrinsicSignature {
     F2cIntrinsicKindRule kind_rule;
 } F2cIntrinsicSignature;
 
+const F2cIntrinsicDescriptor *f2c_intrinsic_descriptor(F2cIntrinsicId intrinsic);
+const F2cIntrinsicDescriptor *f2c_find_intrinsic_descriptor(const char *name);
+int f2c_intrinsic_has_family(F2cIntrinsicId intrinsic, F2cIntrinsicFamily family);
+size_t f2c_intrinsic_signature_count(void);
+const F2cIntrinsicSignature *f2c_intrinsic_signature_at(size_t index);
 const F2cIntrinsicSignature *f2c_find_intrinsic(const char *name);
 int f2c_is_intrinsic_name(const char *name);
 int f2c_is_intrinsic_subroutine(const char *name);

@@ -162,27 +162,7 @@ static const F2cExpr *inquiry_argument(const F2cExpr *call, const char *keyword,
 }
 
 static int intrinsic_accepts_whole_assumed_size(F2cIntrinsicId intrinsic) {
-    switch (intrinsic) {
-    case F2C_INTRINSIC_DIGITS:
-    case F2C_INTRINSIC_EPSILON:
-    case F2C_INTRINSIC_HUGE:
-    case F2C_INTRINSIC_KIND:
-    case F2C_INTRINSIC_LBOUND:
-    case F2C_INTRINSIC_LEN:
-    case F2C_INTRINSIC_MAXEXPONENT:
-    case F2C_INTRINSIC_MINEXPONENT:
-    case F2C_INTRINSIC_PRECISION:
-    case F2C_INTRINSIC_PRESENT:
-    case F2C_INTRINSIC_RADIX:
-    case F2C_INTRINSIC_RANGE:
-    case F2C_INTRINSIC_SIZE:
-    case F2C_INTRINSIC_TINY:
-    case F2C_INTRINSIC_UBOUND:
-        return 1;
-    case F2C_INTRINSIC_NONE:
-    default:
-        return 0;
-    }
+    return f2c_intrinsic_has_family(intrinsic, F2C_INTRINSIC_FAMILY_ASSUMED_SIZE_INQUIRY);
 }
 
 static void validate_assumed_size_operands(Context *context, size_t line,
