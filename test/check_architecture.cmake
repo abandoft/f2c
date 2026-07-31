@@ -25,6 +25,16 @@ foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
     )
         message(FATAL_ERROR "${RELATIVE_FILE} reparses source expressions in the emitter")
     endif()
+    if(
+        PRODUCTION_FILE MATCHES "/src/codegen/"
+        AND CONTENT MATCHES
+            "(temporary_index|contiguous_temporary_index|host_descriptor_temporary_(begin|count)|ordered_temporary_index|ordered_argument_temporary_index|statement_temporary_index|statement_nested_temporary_begin)[ \t]*=[^=]"
+    )
+        message(
+            FATAL_ERROR
+            "${RELATIVE_FILE} mutates semantic temporary planning during code generation"
+        )
+    endif()
     if(CONTENT MATCHES "f2c_parse_expression_ast[ \t\r\n]*\\(")
         if(
             NOT RELATIVE_FILE STREQUAL "src/ast/parser.c"
@@ -86,6 +96,9 @@ file(READ "${SOURCE_DIR}/src/codegen/expression.c" EXPRESSION_CODEGEN)
 file(READ "${SOURCE_DIR}/src/codegen/statement/assignment.c" ASSIGNMENT_CODEGEN)
 file(READ "${SOURCE_DIR}/src/frontend/declaration/syntax.c" DECLARATION_CLASSIFICATION)
 file(READ "${SOURCE_DIR}/src/codegen/module.c" MODULE_CODEGEN)
+file(READ "${SOURCE_DIR}/src/semantic/temporary.c" TEMPORARY_PLANNING)
+file(READ "${SOURCE_DIR}/src/codegen/unit.c" UNIT_CODEGEN)
+file(READ "${SOURCE_DIR}/src/codegen/unit/temporary.c" TEMPORARY_DECLARATIONS)
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
 endif()
@@ -154,6 +167,17 @@ if(
     OR NOT FRONTEND_PIPELINE MATCHES "f2c_build_module_analysis_order[ \t\r\n]*\\("
 )
     message(FATAL_ERROR "project modules must be analyzed from structured USE dependencies")
+endif()
+if(
+    NOT FRONTEND_PIPELINE MATCHES "f2c_plan_expression_lifetimes[ \t\r\n]*\\("
+    OR NOT TEMPORARY_PLANNING MATCHES "expression_lifetimes_analyzed[ \t]*=[ \t]*1"
+    OR NOT UNIT_CODEGEN MATCHES "unit->expression_lifetimes_analyzed"
+    OR TEMPORARY_DECLARATIONS MATCHES "f2c_unit_prepare_expression_temporaries"
+)
+    message(
+        FATAL_ERROR
+        "temporary lifetimes must be planned in semantic typed IR before code generation"
+    )
 endif()
 if(
     SEMANTIC_MODEL MATCHES "F2cDerivedType[ \t]*\\*[ \t]*\\*[ \t]*imported_derived_types"
