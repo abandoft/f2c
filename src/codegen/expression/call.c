@@ -39,7 +39,7 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
         return NULL;
     if (actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
-    if (actual->ordered_argument_materialized) {
+    if (f2c_lowering_argument_materialized(unit, actual)) {
         if (actual->rank != 0U || actual->type == TYPE_DERIVED || actual->type == TYPE_UNKNOWN) {
             *supported = 0;
             return NULL;
@@ -58,12 +58,12 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
         }
         return f2c_emit_scalar_temporary_address(f2c_symbol_c_type(symbol), symbol->type, code);
     }
-    if (actual->lowered_c != NULL && actual->kind == F2C_EXPR_NAME && actual->symbol == NULL &&
-        actual->value_category == F2C_VALUE_VARIABLE) {
+    if (f2c_lowering_code(unit, actual) != NULL && actual->kind == F2C_EXPR_NAME &&
+        actual->symbol == NULL && actual->value_category == F2C_VALUE_VARIABLE) {
         f2c_buffer_printf(&result, "&(%s)", code);
         return f2c_buffer_take(&result);
     }
-    if (actual->lowered_c != NULL)
+    if (f2c_lowering_code(unit, actual) != NULL)
         return f2c_strdup(code);
     if (actual->kind == F2C_EXPR_NAME && symbol != NULL) {
         if (symbol->parameter) {
@@ -660,7 +660,7 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         Buffer name = {0};
         char *code;
         if (actual == NULL || actual->ordered_argument_temporary_index == SIZE_MAX ||
-            actual->ordered_argument_materialized)
+            f2c_lowering_argument_materialized(unit, actual))
             continue;
         code = f2c_expression_emit(unit, actual, supported);
         if (!*supported || code == NULL) {
@@ -681,9 +681,11 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
             *supported = 0;
             goto failed;
         }
-        free(actual->lowered_c);
-        actual->lowered_c = f2c_buffer_take(&name);
-        actual->ordered_argument_materialized = 1;
+        if (!f2c_lowering_take_code(unit, actual, f2c_buffer_take(&name)) ||
+            !f2c_lowering_set_argument_materialized(unit, actual, 1)) {
+            *supported = 0;
+            goto failed;
+        }
     }
     call = emit_call_body(unit, lowering_expression, supported);
     f2c_codegen_expression_free(unit, lowering_expression);

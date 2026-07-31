@@ -1,10 +1,13 @@
 #include "codegen/array/private.h"
 
+#include "codegen/lowering/private.h"
+
 #include <stdlib.h>
 
-int f2c_array_function_result_call(const F2cExpr *expression) {
+int f2c_array_function_result_call(const Unit *unit, const F2cExpr *expression) {
     return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->rank != 0U &&
-           expression->lowered_c == NULL && expression->intrinsic == F2C_INTRINSIC_NONE &&
+           f2c_lowering_code(unit, expression) == NULL &&
+           expression->intrinsic == F2C_INTRINSIC_NONE &&
            f2c_expression_has_descriptor_result(expression);
 }
 
@@ -114,7 +117,7 @@ int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_
     Buffer storage = {0};
     Buffer descriptor = {0};
     char *call;
-    if (!f2c_array_function_result_call(expression))
+    if (!f2c_array_function_result_call(unit, expression))
         return 1;
     if (unit == NULL || role == NULL || temporary == NULL || prelude == NULL || cleanup == NULL ||
         expression->rank > F2C_MAX_RANK || expression->type == TYPE_UNKNOWN ||
@@ -148,13 +151,16 @@ int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_
     append_nonowning_copy(prelude, expression, descriptor.data, storage.data, depth + 1);
     f2c_array_indent(prelude, depth);
     f2c_buffer_append(prelude, "}\n");
-    expression->lowered_c = f2c_buffer_take(&storage);
-    expression->lowered_array_temporary = 1;
+    if (!f2c_lowering_take_code(unit, expression, f2c_buffer_take(&storage)) ||
+        !f2c_lowering_set_array_temporary(unit, expression, 1)) {
+        free(call);
+        free(descriptor.data);
+        return 0;
+    }
     if (expression->type == TYPE_CHARACTER) {
         Buffer length = {0};
         f2c_buffer_printf(&length, "%s.character_length", descriptor.data);
-        expression->lowered_character_length_c = f2c_buffer_take(&length);
-        if (expression->lowered_character_length_c == NULL) {
+        if (!f2c_lowering_take_character_length(unit, expression, f2c_buffer_take(&length))) {
             free(call);
             free(descriptor.data);
             return 0;
@@ -167,5 +173,5 @@ int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_
     }
     free(call);
     free(descriptor.data);
-    return expression->lowered_c != NULL;
+    return f2c_lowering_code(unit, expression) != NULL;
 }

@@ -26,7 +26,7 @@ char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t 
 int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *expression,
                                        size_t identifier, const char *role, size_t *temporary,
                                        Buffer *prelude, F2cArrayCleanupList *cleanup, int depth);
-int f2c_array_function_result_call(const F2cExpr *expression);
+int f2c_array_function_result_call(const Unit *unit, const F2cExpr *expression);
 int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_t identifier,
                                           const char *role, size_t *temporary, Buffer *prelude,
                                           F2cArrayCleanupList *cleanup, int depth);
@@ -36,7 +36,7 @@ int f2c_array_owned_temporary_valid(const Unit *unit, const F2cExpr *expression,
                                     F2cOwnedTemporaryKind expected);
 int f2c_array_cleanup_emit(Buffer *output, Unit *unit, const F2cArrayCleanupList *list);
 void f2c_array_cleanup_clear(F2cArrayCleanupList *list);
-int f2c_array_contains_unmaterialized_value(const F2cExpr *expression);
+int f2c_array_contains_unmaterialized_value(const Unit *unit, const F2cExpr *expression);
 int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, const F2cExpr *left,
                                                  const F2cExpr *right, size_t line, int depth);
 int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_t identifier,

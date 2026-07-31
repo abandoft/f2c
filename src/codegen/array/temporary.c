@@ -68,9 +68,7 @@ int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_
         f2c_array_indent(prelude, depth);
         f2c_buffer_printf(prelude, "(void)%s;\n", name.data);
         free(code);
-        free(expression->lowered_c);
-        expression->lowered_c = f2c_buffer_take(&name);
-        return expression->lowered_c != NULL;
+        return f2c_lowering_take_code(unit, expression, f2c_buffer_take(&name));
     }
     if (expression->kind == F2C_EXPR_IMPLIED_DO && expression->child_count >= 3U) {
         const size_t value_count = expression->child_count - 3U;
@@ -99,22 +97,38 @@ static int flat_array_constructor(const F2cExpr *expression) {
     return 1;
 }
 
-static int array_transform_call(const F2cExpr *expression) {
+static int array_transform_call(const Unit *unit, const F2cExpr *expression) {
     return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->rank != 0U &&
-           expression->lowered_c == NULL &&
+           f2c_lowering_code(unit, expression) == NULL &&
            f2c_intrinsic_is_transformational(expression->intrinsic);
 }
 
-int f2c_array_contains_unmaterialized_value(const F2cExpr *expression) {
+int f2c_array_contains_unmaterialized_value(const Unit *unit, const F2cExpr *expression) {
     size_t child;
-    if (array_transform_call(expression) || f2c_array_function_result_call(expression))
+    if (array_transform_call(unit, expression) || f2c_array_function_result_call(unit, expression))
         return 1;
     if (expression == NULL)
         return 0;
     for (child = 0U; child < expression->child_count; ++child)
-        if (f2c_array_contains_unmaterialized_value(expression->children[child]))
+        if (f2c_array_contains_unmaterialized_value(unit, expression->children[child]))
             return 1;
     return 0;
+}
+
+static int set_named_array_temporary(Unit *unit, F2cExpr *expression, Buffer *name) {
+    Buffer length = {0};
+    if (unit == NULL || expression == NULL || name == NULL || name->data == NULL)
+        return 0;
+    if (expression->type == TYPE_CHARACTER)
+        f2c_buffer_printf(&length, "f2c_char_len_%s", name->data);
+    if (!f2c_lowering_take_code(unit, expression, f2c_buffer_take(name)) ||
+        !f2c_lowering_set_array_temporary(unit, expression, 1) ||
+        (expression->type == TYPE_CHARACTER &&
+         !f2c_lowering_take_character_length(unit, expression, f2c_buffer_take(&length)))) {
+        free(length.data);
+        return 0;
+    }
+    return 1;
 }
 
 static int materialize_transform(Context *context, Unit *unit, F2cExpr *expression,
@@ -130,7 +144,7 @@ static int materialize_transform(Context *context, Unit *unit, F2cExpr *expressi
     size_t dimension;
     int output_state;
     int emitted;
-    if (!array_transform_call(expression) || expression->lowered_c != NULL)
+    if (!array_transform_call(unit, expression))
         return 1;
     if (!f2c_array_owned_temporary_valid(unit, expression,
                                          F2C_OWNED_TEMPORARY_TRANSFORMATIONAL_RESULT))
@@ -189,22 +203,15 @@ static int materialize_transform(Context *context, Unit *unit, F2cExpr *expressi
                           dimension + 1U, name.data, dimension + 1U);
     }
     end_temporary_output(context, prelude, &saved_output, output_state);
-    expression->lowered_c = f2c_buffer_take(&name);
-    expression->lowered_array_temporary = 1;
-    if (expression->type == TYPE_CHARACTER) {
-        Buffer length = {0};
-        f2c_buffer_printf(&length, "f2c_char_len_%s", expression->lowered_c);
-        expression->lowered_character_length_c = f2c_buffer_take(&length);
-        if (expression->lowered_character_length_c == NULL)
-            return 0;
-    }
+    if (!set_named_array_temporary(unit, expression, &name))
+        return 0;
     return f2c_array_cleanup_append(unit, cleanup, expression, depth);
 }
 
-static int scalar_context_requires_elemental_temporary(const F2cExpr *expression,
+static int scalar_context_requires_elemental_temporary(const Unit *unit, const F2cExpr *expression,
                                                        const char *role) {
     return expression != NULL && role != NULL && strcmp(role, "scalar") == 0 &&
-           expression->rank != 0U && expression->lowered_c == NULL &&
+           expression->rank != 0U && f2c_lowering_code(unit, expression) == NULL &&
            (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY);
 }
 
@@ -220,7 +227,7 @@ static int materialize_elemental_value(Context *context, Unit *unit, F2cExpr *ex
     int output_state;
     int emitted;
     (void)temporary;
-    if (!scalar_context_requires_elemental_temporary(expression, role))
+    if (!scalar_context_requires_elemental_temporary(unit, expression, role))
         return 1;
     if (!f2c_array_owned_temporary_valid(unit, expression,
                                          F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE))
@@ -271,15 +278,8 @@ static int materialize_elemental_value(Context *context, Unit *unit, F2cExpr *ex
                           dimension + 1U, name.data, dimension + 1U);
     }
     end_temporary_output(context, prelude, &saved_output, output_state);
-    expression->lowered_c = f2c_buffer_take(&name);
-    expression->lowered_array_temporary = 1;
-    if (expression->type == TYPE_CHARACTER) {
-        Buffer length = {0};
-        f2c_buffer_printf(&length, "f2c_char_len_%s", expression->lowered_c);
-        expression->lowered_character_length_c = f2c_buffer_take(&length);
-        if (expression->lowered_character_length_c == NULL)
-            return 0;
-    }
+    if (!set_named_array_temporary(unit, expression, &name))
+        return 0;
     return f2c_array_cleanup_append(unit, cleanup, expression, depth);
 }
 
@@ -313,7 +313,8 @@ int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *ex
     if (!materialize_elemental_value(context, unit, expression, identifier, role, temporary,
                                      prelude, cleanup, depth))
         return 0;
-    if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && expression->lowered_c == NULL) {
+    if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR &&
+        f2c_lowering_code(unit, expression) == NULL) {
         Buffer name = {0};
         char *code = NULL;
         int supported = 0;
@@ -341,8 +342,7 @@ int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *ex
                                   f2c_expression_c_type(expression), name.data, code);
             }
             free(code);
-            expression->lowered_c = f2c_buffer_take(&name);
-            return expression->lowered_c != NULL;
+            return f2c_lowering_take_code(unit, expression, f2c_buffer_take(&name));
         } else {
             Buffer count = {0};
             Buffer capacity = {0};
@@ -382,16 +382,18 @@ int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *ex
                 free(character_length_set.data);
                 return 0;
             }
-            expression->lowered_c = f2c_buffer_take(&name);
-            expression->lowered_extent_c = f2c_buffer_take(&count);
-            if (expression->type == TYPE_CHARACTER)
-                expression->lowered_character_length_c = f2c_buffer_take(&character_length);
+            if (!f2c_lowering_take_code(unit, expression, f2c_buffer_take(&name)) ||
+                !f2c_lowering_take_extent(unit, expression, f2c_buffer_take(&count)) ||
+                (expression->type == TYPE_CHARACTER &&
+                 !f2c_lowering_take_character_length(unit, expression,
+                                                     f2c_buffer_take(&character_length)))) {
+                free(capacity.data);
+                free(character_length.data);
+                free(character_length_set.data);
+                return 0;
+            }
             free(capacity.data);
             free(character_length_set.data);
-            if (expression->lowered_c == NULL || expression->lowered_extent_c == NULL ||
-                (expression->type == TYPE_CHARACTER &&
-                 expression->lowered_character_length_c == NULL))
-                return 0;
             if (!f2c_array_cleanup_append(unit, cleanup, expression, depth))
                 return 0;
         }
@@ -412,7 +414,7 @@ int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, c
         right->kind != F2C_EXPR_CALL || right->rank == 0U)
         return 0;
     for (child = 0U; child < right->child_count; ++child)
-        if (f2c_array_contains_unmaterialized_value(right->children[child]))
+        if (f2c_array_contains_unmaterialized_value(unit, right->children[child]))
             break;
     if (child == right->child_count)
         return 0;

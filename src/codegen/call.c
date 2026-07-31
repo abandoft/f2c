@@ -387,15 +387,16 @@ static int prepare_array_conversions(LoweredCall *call, Unit *unit, F2cExpr *exp
         Symbol *source = expression->children[0]->symbol;
         char *count = f2c_symbol_element_count(unit, source);
         const size_t index = call->array_conversion_count++;
+        const char *lowered_code;
         Buffer name = {0};
         if (count == NULL)
             return 0;
         f2c_buffer_printf(&name, "f2c_array_conversion_%zu", index);
-        expression->lowered_c = f2c_buffer_take(&name);
-        if (expression->lowered_c == NULL) {
+        if (!f2c_lowering_take_code(unit, expression, f2c_buffer_take(&name))) {
             free(count);
             return 0;
         }
+        lowered_code = f2c_lowering_code(unit, expression);
         emit_indent(&call->prelude, depth);
         f2c_buffer_printf(&call->prelude, "size_t f2c_array_conversion_count_%zu = (size_t)(%s);\n",
                           index, count);
@@ -407,18 +408,18 @@ static int prepare_array_conversions(LoweredCall *call, Unit *unit, F2cExpr *exp
         f2c_buffer_printf(&call->prelude,
                           "%s *%s = (%s *)malloc(sizeof(%s) * "
                           "F2C_MAX((size_t)1U, f2c_array_conversion_count_%zu));\n",
-                          f2c_expression_c_type(expression), expression->lowered_c,
+                          f2c_expression_c_type(expression), lowered_code,
                           f2c_expression_c_type(expression), f2c_expression_c_type(expression),
                           index);
         emit_indent(&call->prelude, depth);
-        f2c_buffer_printf(&call->prelude, "if (%s == NULL) abort();\n", expression->lowered_c);
+        f2c_buffer_printf(&call->prelude, "if (%s == NULL) abort();\n", lowered_code);
         emit_indent(&call->prelude, depth);
         f2c_buffer_printf(&call->prelude,
                           "for (size_t f2c_array_conversion_i_%zu = 0U; "
                           "f2c_array_conversion_i_%zu < f2c_array_conversion_count_%zu; "
                           "++f2c_array_conversion_i_%zu) %s[f2c_array_conversion_i_%zu] = "
                           "(%s)%s[f2c_array_conversion_i_%zu];\n",
-                          index, index, index, index, expression->lowered_c, index,
+                          index, index, index, index, lowered_code, index,
                           f2c_expression_c_type(expression), f2c_symbol_c_name(unit, source),
                           index);
         call->has_transfers = 1;

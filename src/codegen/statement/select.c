@@ -200,7 +200,7 @@ int f2c_emit_select_case_end(Context *context, Unit *unit, const F2cStatement *s
         f2c_buffer_append(&context->output, "}\n");
     }
     if (select->expression != NULL && select->expression->type == TYPE_CHARACTER &&
-        f2c_array_contains_unmaterialized_value(select->expression)) {
+        f2c_array_contains_unmaterialized_value(unit, select->expression)) {
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output, "free(f2c_select_case_pointer_%zu);\n",
                           select_identifier(unit, select));

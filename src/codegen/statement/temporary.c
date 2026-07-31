@@ -37,7 +37,7 @@ int f2c_prepare_statement_expression(Context *context, Unit *unit, const F2cStat
     memset(prepared, 0, sizeof(*prepared));
     prepared->unit = unit;
     prepared->expression = expression;
-    if (f2c_array_contains_unmaterialized_value(expression)) {
+    if (f2c_array_contains_unmaterialized_value(unit, expression)) {
         prepared->owned_expression = f2c_array_clone_expression(unit, expression);
         if (prepared->owned_expression == NULL ||
             !f2c_array_materialize_constructors(context, unit, prepared->owned_expression,
@@ -72,14 +72,14 @@ void f2c_release_statement_expression(F2cPreparedStatementExpression *prepared) 
     memset(prepared, 0, sizeof(*prepared));
 }
 
-static int materialized_else_if_owned_by(const F2cStatement *statement,
+static int materialized_else_if_owned_by(const Unit *unit, const F2cStatement *statement,
                                          const F2cStatement *opener) {
     if (statement == NULL)
         return 0;
     if (statement->kind == F2C_STMT_ELSE_IF && statement->construct_owner == opener &&
-        f2c_array_contains_unmaterialized_value(statement->expression))
+        f2c_array_contains_unmaterialized_value(unit, statement->expression))
         return 1;
-    return materialized_else_if_owned_by(statement->nested, opener);
+    return materialized_else_if_owned_by(unit, statement->nested, opener);
 }
 
 size_t f2c_if_materialized_else_wrappers(const Unit *unit, const F2cStatement *terminator) {
@@ -95,7 +95,7 @@ size_t f2c_if_materialized_else_wrappers(const Unit *unit, const F2cStatement *t
         const F2cStatement *candidate = &unit->statements[index];
         if (candidate == terminator)
             break;
-        if (materialized_else_if_owned_by(candidate, opener))
+        if (materialized_else_if_owned_by(unit, candidate, opener))
             ++wrappers;
     }
     return wrappers;

@@ -1,5 +1,7 @@
 #include "codegen/array/private.h"
 
+#include "codegen/lowering/private.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,7 +29,7 @@ int f2c_array_cleanup_append(Unit *unit, F2cArrayCleanupList *list, const F2cExp
     size_t item;
     if (list == NULL ||
         !f2c_array_owned_temporary_valid(unit, expression, expression->owned_temporary_kind) ||
-        expression->lowered_c == NULL)
+        f2c_lowering_code(unit, expression) == NULL)
         return 0;
     for (item = 0U; item < list->count; ++item)
         if (list->items[item].temporary == expression->owned_temporary_index)
@@ -51,6 +53,8 @@ int f2c_array_cleanup_append(Unit *unit, F2cArrayCleanupList *list, const F2cExp
 static int emit_action(Buffer *output, Unit *unit, const F2cArrayCleanupAction *action) {
     const F2cExpr *expression;
     const F2cOwnedTemporary *owned;
+    const char *lowered_code;
+    const char *lowered_extent;
     size_t dimension;
     if (output == NULL || unit == NULL || action == NULL ||
         action->temporary >= unit->owned_temporary_count)
@@ -60,23 +64,27 @@ static int emit_action(Buffer *output, Unit *unit, const F2cArrayCleanupAction *
     if (!f2c_array_owned_temporary_valid(unit, expression, owned->kind) ||
         action->temporary != expression->owned_temporary_index)
         return 0;
+    lowered_code = f2c_lowering_code(unit, expression);
+    lowered_extent = f2c_lowering_extent(unit, expression);
+    if (lowered_code == NULL)
+        return 0;
     f2c_array_indent(output, action->depth);
     if (owned->requires_finalization) {
         f2c_buffer_printf(output, "f2c_destroy_array_%s(%s, ", owned->derived_type->c_name,
-                          expression->lowered_c);
-        if (expression->lowered_extent_c != NULL) {
-            f2c_buffer_printf(output, "(size_t)(%s)", expression->lowered_extent_c);
+                          lowered_code);
+        if (lowered_extent != NULL) {
+            f2c_buffer_printf(output, "(size_t)(%s)", lowered_extent);
         } else {
             f2c_buffer_printf(output, "f2c_inquiry_size(%zuU, (const size_t[]){", owned->rank);
             for (dimension = 0U; dimension < owned->rank; ++dimension)
                 f2c_buffer_printf(output, "%s(size_t)%s_extent_%zu", dimension == 0U ? "" : ", ",
-                                  expression->lowered_c, dimension + 1U);
+                                  lowered_code, dimension + 1U);
             f2c_buffer_append(output, "})");
         }
         f2c_buffer_printf(output, ", %zuU);\n", owned->rank);
         f2c_array_indent(output, action->depth);
     }
-    f2c_buffer_printf(output, "free(%s);\n", expression->lowered_c);
+    f2c_buffer_printf(output, "free(%s);\n", lowered_code);
     return 1;
 }
 

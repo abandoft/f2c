@@ -155,7 +155,7 @@ static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
     int emitted = 0;
     if (context == NULL || unit == NULL || statement == NULL || statement->left == NULL ||
         statement->right == NULL || statement->left->rank != 0U || statement->right->rank != 0U ||
-        !f2c_array_contains_unmaterialized_value(statement->right))
+        !f2c_array_contains_unmaterialized_value(unit, statement->right))
         return 0;
     prepared_right = f2c_array_clone_expression(unit, statement->right);
     if (prepared_right == NULL ||
