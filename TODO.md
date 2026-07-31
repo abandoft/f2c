@@ -453,15 +453,21 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   `*label` 已纳入结构化构造入口检查和逐边作用域清理。赋值标签变量使用通用 bitset 工作队列数据流
   求解实际到达定义，覆盖分支合流、循环回边、不可达定义、普通整数重定义、输出定义、允许标签列表
   和多个标签变量之间的候选边迭代收敛；裸赋值 `GOTO` 与已赋值 FORMAT 均只保存真正可达的语义
-  目标，不再扫描全单元 `ASSIGN`。仍需将普通变量 def-use、表达式临时量和拥有型函数结果纳入同一
-  数据流域，因此本项保持未关闭。
+  目标，不再扫描全单元 `ASSIGN`。普通变量现已使用同一反向不动点基础设施计算逐节点
+  use/def/live-in/live-out，覆盖完整赋值与部分 designator、过程 `INTENT`、I/O、分配语句、
+  DO latch、嵌套动作和 BLOCK 重入对象实例边界；逐边清理计划会证明待销毁符号在目标节点不再
+  存活。表达式临时量、连续实参 bridge、host descriptor、求值顺序和 statement function 存储
+  也已在 typed IR 语义阶段分配并绑定所属语句，emitter 会拒绝缺失生命周期证明的 IR。仍需把
+  拥有型数组/函数结果及边特有的所有权转移合并到同一数据流域，因此本项保持未关闭。
 - [ ] 对任何离开作用域的边执行正确的临时量释放、可分配对象清理和派生对象终结；异常 I/O 分支
   也必须走同一生命周期模型。当前正常 BLOCK 结束、`RETURN`、`CYCLE/EXIT`、所有标签分支及
   `ERR/END/EOR` 会复用 typed cleanup plan，覆盖 BLOCK 内可分配对象和标量/数组派生对象；每个
   显式计划都保存并验证 CFG 源节点和目标节点，emitter 会拒绝未经控制流分析的计划。未处理 I/O
   错误和 `STOP/ERROR STOP` 按 image termination 语义不错误执行普通作用域终结。BLOCK 正常结束、
   提前返回、循环转移、跨块 GOTO 和 I/O 错误分支已有严格 C17、ASan/UBSan 及原生 Fortran 差分。
-  仍需把表达式临时量和拥有型函数结果纳入统一逐边所有权数据流后才能关闭。
+  普通 BLOCK 对象已经具备逐节点存活性证明，表达式临时量也已有语义阶段的编号、所属语句和
+  完整性门禁；但临时对象的销毁仍以语句内模板为主。仍需把拥有型数组/函数结果、部分 I/O 传输
+  后的异常边和终结动作纳入统一逐边所有权数据流后才能关闭。
 - [ ] 完成语句级错误恢复，在单个输入中报告多个独立错误，同时保证错误结果不生成半成品 C。
 
 ### P0-IO-01 F90 外部与内部 I/O
@@ -522,8 +528,10 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 
 - [ ] 代码生成只接受已验证的不可变 IR；消除 `codegen` 中的源码字符串识别、语义诊断和重新
   解析。普通/字符/派生类型赋值、指针赋值和 `NULLIFY` 已拆入独立 statement emitter，并仅消费
-  已绑定的表达式与符号；标签和 I/O 跳转仅消费语义阶段生成的目标及清理计划。其他 codegen 模块
-  仍存在少量源码字符串识别和生成期语义判断，因此本项保持未关闭。
+  已绑定的表达式与符号；标签和 I/O 跳转仅消费语义阶段生成的目标及清理计划。表达式临时量、
+  statement function 临时存储、函数结果 ABI 和 host capture 生命周期查询已经归属语义层，
+  架构门禁禁止 codegen 回写临时量规划索引。其他 codegen 模块仍存在少量源码字符串识别、
+  生成期语义判断及 `lowered_c` 等瞬态写入，因此本项保持未关闭。
 - [ ] 系统审计严格别名、整数溢出、移位、浮点收缩、复数、求值顺序和指针算术，保证生成代码
   不依赖未定义行为或编译器扩展。位操作 intrinsic 已统一使用固定位宽无符号表示和 `memcpy`
   位复制，规避有符号移位、移位量等于位宽及别名未定义行为，并以符号位、完整位宽、零长度和
@@ -582,7 +590,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   `core/generated/`，未恢复通用调用生成器中的名称分派。
   transformational intrinsic 的结果分配、元素复制、动态 extent 提交和派生类型销毁已从总控
   emitter 拆入 `codegen/transform/result.c`；数组函数结果的 ABI 判定和调用端物化分别位于
-  `codegen/result.c` 与 `codegen/array/function.c`，主变换和过程调用文件继续满足规模门禁。
+  `semantic/result.c` 与 `codegen/array/function.c`，表达式临时量规划和普通变量存活性分析分别
+  位于 `semantic/temporary.c` 与 `semantic/data_flow/variables.c`，主变换和过程调用文件继续
+  满足规模门禁。
   过程 CFG 构建、前驱/基本块连接、通用 bitset 数据流、赋值标签到达定义和逐边生命周期计划分别
   位于 `semantic/control_flow.c`、`semantic/control_flow/connectivity.c`、
   `semantic/data_flow/bitset.c`、`semantic/validation/assigned_label.c` 与
