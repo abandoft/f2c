@@ -1,3 +1,14 @@
+## 1.34.0
+
+- Unified the canonical specification catalog, argument schemas, and typed-identity binding for every supported standard intrinsic, removing dispersed name dispatch and duplicate keyword rules.
+- Added explicit external-module configuration and the `--external-module` CLI option; unresolved `USE` statements no longer pass silently, and LAPACK external-module dependencies must be declared.
+- Imported intrinsic-module constants into their actual module scopes and resolved declaration, constant-expression, and literal kind suffixes uniformly through symbols.
+- Centralized dynamically sized procedure signatures with complete parameter and result type, kind, rank, shape, character-length, ownership, procedure-attribute, and nested-procedure metadata.
+- Completed compatibility checks for project interfaces, procedure arguments, and type-bound overrides, including `PURE/ELEMENTAL`, `PASS/NOPASS`, deferred binding, and non-overridable constraints.
+- Added inline and standalone `TARGET`, `VALUE`, `ASYNCHRONOUS`, and `VOLATILE` declarations with conflict diagnostics, module import, and interface-characteristic propagation.
+- Added isolated copies for scalar `VALUE` dummies, covering numeric, logical, complex, fixed-length character, and derived values with dynamic components, with deep-copy resource cleanup on every exit path.
+- Completed `OPTIONAL VALUE`, `VALUE,TARGET`, procedure-pointer, and internal-procedure calls while preserving observable `VOLATILE` access, alias restrictions, and read-only actual-argument data-flow contracts.
+
 ## 1.33.0
 
 - Added unified typed identities for every supported standard intrinsic, including standard-version, procedure-category, and semantic-family metadata.
