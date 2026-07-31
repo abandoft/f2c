@@ -113,6 +113,15 @@ int f2c_emit_scope_cleanup_plan(Buffer *output, Unit *unit, const F2cScopeCleanu
             "code generation rejected a control transfer without a CFG cleanup proof");
         return 0;
     }
+    if (!plan->variable_liveness_analyzed) {
+        const size_t line = plan->source_node < unit->statement_count
+                                ? unit->statements[plan->source_node].line
+                                : unit->begin;
+        f2c_diagnostic_code(
+            unit->context, F2C_DIAGNOSTIC_INTERNAL, line, 1,
+            "code generation rejected a control transfer without a variable-liveness proof");
+        return 0;
+    }
     for (index = 0U; index < plan->symbol_count; ++index)
         emit_block_symbol_cleanup(output, unit, plan->symbols[index], depth);
     return 1;

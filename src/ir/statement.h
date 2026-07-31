@@ -83,6 +83,7 @@ typedef struct F2cScopeCleanupPlan {
     size_t source_node;
     size_t target_node;
     int control_flow_analyzed;
+    int variable_liveness_analyzed;
 } F2cScopeCleanupPlan;
 
 typedef struct F2cResolvedBranch {

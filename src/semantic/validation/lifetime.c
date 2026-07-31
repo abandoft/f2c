@@ -1,5 +1,7 @@
 #include "semantic/validation/private.h"
 
+#include "semantic/data_flow.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -49,6 +51,13 @@ static int build_cleanup_plan(Context *context, Unit *unit, const F2cControlFlow
     plan->source_node = source_node;
     plan->target_node = target_node;
     plan->control_flow_analyzed = 1;
+    plan->variable_liveness_analyzed = unit->variable_flow.analyzed;
+    if (!plan->variable_liveness_analyzed) {
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_INTERNAL, span, 1,
+            "control-flow cleanup planning requires ordinary-variable liveness");
+        return 0;
+    }
     if (!finalize_scopes)
         return 1;
     for (index = unit->symbol_count; index != 0U; --index) {
@@ -57,8 +66,17 @@ static int build_cleanup_plan(Context *context, Unit *unit, const F2cControlFlow
             source_line > symbol->scope_begin_line && source_line < symbol->scope_end_line;
         const int target_inside =
             target_line > symbol->scope_begin_line && target_line < symbol->scope_end_line;
-        if (block_scoped_symbol(unit, symbol) && source_inside && !target_inside)
+        if (block_scoped_symbol(unit, symbol) && source_inside && !target_inside) {
+            if (f2c_variable_flow_is_live_in(unit, target_node, symbol)) {
+                f2c_diagnostic_span_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, span, 1,
+                    "control transfer leaves the scope of '%s' but its value remains live "
+                    "at the target",
+                    symbol->name);
+                return 0;
+            }
             ++count;
+        }
     }
     if (count == 0U)
         return 1;
@@ -210,6 +228,10 @@ void f2c_validation_lifetimes(Context *context, Unit *unit) {
     size_t statement;
     if (!f2c_control_flow_build(context, unit, &graph))
         return;
+    if (!f2c_variable_flow_analyze(context, unit, &graph)) {
+        f2c_control_flow_free(&graph);
+        return;
+    }
     for (statement = 0U; statement < unit->statement_count; ++statement)
         if (!prepare_statement_plans(context, unit, &graph, statement,
                                      &unit->statements[statement]))
