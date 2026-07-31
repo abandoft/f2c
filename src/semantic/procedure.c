@@ -186,6 +186,9 @@ static void validate_interface_definition(Context *context, Unit *caller, const 
             !same_shape_contract(declared, defined) ||
             declared->allocatable != defined->allocatable ||
             declared->pointer != defined->pointer || declared->contiguous != defined->contiguous ||
+            declared->target != defined->target || declared->value != defined->value ||
+            declared->asynchronous != defined->asynchronous ||
+            declared->volatile_entity != defined->volatile_entity ||
             declared->optional != defined->optional || declared->intent != defined->intent ||
             declared->external != defined->external ||
             declared->derived_type != defined->derived_type ||
