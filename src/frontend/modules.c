@@ -1,5 +1,6 @@
 #include "ast/declaration/use.h"
 #include "frontend/module/access.h"
+#include "frontend/module/constant.h"
 #include "frontend/module/resolution.h"
 #include "frontend/module_constants.h"
 #include "internal/f2c.h"
@@ -68,166 +69,9 @@ const F2cModuleConstant *f2c_la_constants(size_t *count) {
     return la_constants;
 }
 
-static const F2cModuleConstant *find_la_constant(const char *name) {
-    size_t i;
-    for (i = 0U; i < sizeof(la_constants) / sizeof(la_constants[0]); ++i) {
-        if (strcmp(la_constants[i].name, name) == 0)
-            return &la_constants[i];
-    }
-    return NULL;
-}
-
-static F2cExpr *parse_compiler_constant(Unit *unit, const char *source) {
-    F2cTokenStream stream;
-    F2cToken *tokens = NULL;
-    size_t count = 0U;
-    size_t capacity = 0U;
-    F2cExpr *expression = NULL;
-    const char *error_at = NULL;
-    f2c_token_stream_init(&stream, source, 1U, 1U);
-    for (;;) {
-        F2cToken *replacement;
-        size_t next;
-        f2c_token_stream_next(&stream);
-        if (stream.token.kind == F2C_TOKEN_END)
-            break;
-        if (stream.token.kind == F2C_TOKEN_INVALID)
-            goto cleanup;
-        if (count == capacity) {
-            next = capacity == 0U ? 8U : capacity * 2U;
-            if (next < capacity || next > SIZE_MAX / sizeof(*tokens))
-                goto cleanup;
-            replacement = (F2cToken *)realloc(tokens, next * sizeof(*tokens));
-            if (replacement == NULL)
-                goto cleanup;
-            tokens = replacement;
-            capacity = next;
-        }
-        tokens[count++] = stream.token;
-    }
-    expression = f2c_parse_expression_tokens(unit, tokens, count, source, &error_at);
-    if (error_at != NULL) {
-        f2c_expr_free(expression);
-        expression = NULL;
-    }
-
-cleanup:
-    free(tokens);
-    return expression;
-}
-
-static int use_name_is_renamed(const F2cUseStatementSyntax *syntax, const char *name) {
-    size_t index;
-    if (syntax == NULL)
-        return 0;
-    for (index = 0U; index < syntax->item_count; ++index) {
-        const F2cUseAssociationSyntax *association = &syntax->items[index];
-        if (association->renamed && association->remote.kind == F2C_USE_DESIGNATOR_NAME &&
-            f2c_token_equals(association->remote.name, name))
-            return 1;
-    }
-    return 0;
-}
-
-static void import_la_constant(Context *context, Unit *unit, const char *local_name,
-                               const char *module_name, const F2cSourceSpan *span) {
-    const F2cModuleConstant *constant = find_la_constant(module_name);
-    Symbol *symbol;
-    Buffer c_name = {0};
-    char *resolved_c_name;
-    if (constant == NULL) {
-        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, span, 1,
-                                 "LA_CONSTANTS has no member '%s'", module_name);
-        return;
-    }
-    f2c_buffer_printf(&c_name, "f2c_la_constants_%s", module_name);
-    resolved_c_name = f2c_buffer_take(&c_name);
-    if (resolved_c_name == NULL) {
-        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, span, 1,
-                                 "out of memory importing '%s'", local_name);
-        return;
-    }
-    symbol = f2c_find_symbol(unit, local_name);
-    if (symbol != NULL) {
-        const int same_entity = symbol->use_associated && symbol->c_name != NULL &&
-                                strcmp(symbol->c_name, resolved_c_name) == 0;
-        free(resolved_c_name);
-        if (!same_entity)
-            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, span, 1,
-                                     "USE local name '%s' denotes conflicting entities",
-                                     local_name);
-        return;
-    }
-    symbol = f2c_ensure_symbol(unit, local_name);
-    if (symbol == NULL) {
-        free(resolved_c_name);
-        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, span, 1,
-                                 "out of memory importing '%s'", local_name);
-        return;
-    }
-    symbol->type = constant->type;
-    symbol->kind = f2c_default_kind(constant->type);
-    symbol->value_category = F2C_VALUE_CONSTANT;
-    if (strcmp(module_name, "sp") == 0)
-        symbol->kind_type = TYPE_REAL;
-    else if (strcmp(module_name, "dp") == 0)
-        symbol->kind_type = TYPE_DOUBLE;
-    symbol->parameter = 1;
-    symbol->module_entity = 1;
-    symbol->use_associated = 1;
-    symbol->access = F2C_ACCESS_UNSPECIFIED;
-    memset(&symbol->access_span, 0, sizeof(symbol->access_span));
-    free(symbol->c_name);
-    symbol->c_name = resolved_c_name;
-    free(symbol->initializer);
-    symbol->initializer = f2c_strdup(constant->initializer);
-    f2c_expr_free(symbol->initializer_expression);
-    symbol->initializer_expression = parse_compiler_constant(unit, constant->initializer);
-    if (symbol->c_name == NULL || symbol->initializer == NULL ||
-        symbol->initializer_expression == NULL) {
-        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, span, 1,
-                                 "unable to build typed intrinsic-module constant '%s'",
-                                 local_name);
-    }
-    if (constant->type == TYPE_CHARACTER) {
-        free(symbol->character_length);
-        symbol->character_length = f2c_strdup("1");
-    }
-}
-
 static void import_la_constants(Context *context, Unit *unit, const F2cUseStatementSyntax *syntax) {
-    size_t index;
-    if (syntax->only_token == NULL) {
-        for (index = 0U; index < sizeof(la_constants) / sizeof(la_constants[0]); ++index) {
-            const F2cModuleConstant *constant = &la_constants[index];
-            if (!use_name_is_renamed(syntax, constant->name))
-                import_la_constant(context, unit, constant->name, constant->name,
-                                   &syntax->module_name->span);
-        }
-    }
-    for (index = 0U; index < syntax->item_count; ++index) {
-        const F2cUseAssociationSyntax *association = &syntax->items[index];
-        char *local_name;
-        char *module_name;
-        if (association->local.kind != F2C_USE_DESIGNATOR_NAME ||
-            association->remote.kind != F2C_USE_DESIGNATOR_NAME) {
-            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, &association->span, 1,
-                                     "LA_CONSTANTS exposes only named entities");
-            continue;
-        }
-        local_name = f2c_token_text(association->local.name);
-        module_name = f2c_token_text(association->remote.name);
-        if (local_name == NULL || module_name == NULL) {
-            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &association->span, 1,
-                                     "out of memory importing LA_CONSTANTS");
-            free(local_name);
-            free(module_name);
-            return;
-        }
-        import_la_constant(context, unit, local_name, module_name, &association->span);
-        free(local_name);
-        free(module_name);
-    }
+    f2c_import_constant_module(context, unit, syntax, "LA_CONSTANTS", "f2c_la_constants",
+                               la_constants, sizeof(la_constants) / sizeof(la_constants[0]));
 }
 
 static Unit *find_project_module(Context *context, const char *name) {
@@ -599,7 +443,7 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
     size_t i;
     for (i = 0U; i < module->derived_type_count; ++i) {
         int imported;
-        if (use_name_is_renamed(syntax, module->derived_types[i].name))
+        if (f2c_use_name_is_renamed(syntax, module->derived_types[i].name))
             continue;
         if (syntax != NULL && !f2c_module_derived_type_is_public(
                                   module, module->derived_types[i].name, &module->derived_types[i]))
@@ -623,7 +467,7 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
     for (i = 0U; i < module->imported_derived_type_count; ++i) {
         F2cImportedDerivedType *source = &module->imported_derived_types[i];
         int imported;
-        if (use_name_is_renamed(syntax, source->local_name))
+        if (f2c_use_name_is_renamed(syntax, source->local_name))
             continue;
         if (syntax != NULL &&
             !f2c_module_derived_type_is_public(module, source->local_name, source->type))
@@ -640,7 +484,7 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
     }
     for (i = 0U; i < module->symbol_count; ++i) {
         int imported;
-        if (use_name_is_renamed(syntax, module->symbols[i].name))
+        if (f2c_use_name_is_renamed(syntax, module->symbols[i].name))
             continue;
         if (syntax == NULL && unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
             strcmp(unit->result_name, module->symbols[i].name) == 0)
@@ -667,7 +511,7 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
         const char *visible =
             procedure->fortran_name != NULL ? procedure->fortran_name : procedure->name;
         if (procedure != unit && procedure->begin > module->end &&
-            procedure->begin < module->container_end && !use_name_is_renamed(syntax, visible) &&
+            procedure->begin < module->container_end && !f2c_use_name_is_renamed(syntax, visible) &&
             (syntax == NULL || f2c_module_procedure_is_public(module, procedure))) {
             const int imported = import_module_procedure(unit, procedure, visible);
             if (imported == 0) {

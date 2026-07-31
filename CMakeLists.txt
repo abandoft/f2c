@@ -220,6 +220,8 @@ set(
     src/frontend/lexer.c
     src/frontend/module/access.c
     src/frontend/module/access.h
+    src/frontend/module/constant.c
+    src/frontend/module/constant.h
     src/frontend/module/dependency.c
     src/frontend/module/dependency.h
     src/frontend/module/resolution.c
