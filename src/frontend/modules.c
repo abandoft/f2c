@@ -1,5 +1,6 @@
 #include "ast/declaration/use.h"
 #include "frontend/module/access.h"
+#include "frontend/module/resolution.h"
 #include "frontend/module_constants.h"
 #include "internal/f2c.h"
 
@@ -753,20 +754,25 @@ void f2c_import_module(Context *context, Unit *unit, Line *source_line) {
         import_la_constants(context, unit, &syntax);
         goto cleanup;
     }
-    if (syntax.nature == F2C_USE_NATURE_INTRINSIC ||
-        (syntax.nature == F2C_USE_NATURE_UNSPECIFIED &&
-         (strcmp(module_name, "iso_fortran_env") == 0 ||
-          strcmp(module_name, "iso_c_binding") == 0 ||
-          strncmp(module_name, "ieee_", strlen("ieee_")) == 0))) {
+    if (syntax.nature == F2C_USE_NATURE_INTRINSIC) {
+        if (!f2c_supported_intrinsic_module(syntax.module_name))
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, source_line,
+                                      syntax.module_name, 1,
+                                      "intrinsic module '%s' is not supported", module_name);
+        goto cleanup;
+    }
+    if (syntax.nature == F2C_USE_NATURE_UNSPECIFIED &&
+        f2c_supported_intrinsic_module(syntax.module_name)) {
         goto cleanup;
     }
     module = find_project_module(context, module_name);
     if (module == NULL) {
-        /* A project translation may intentionally consume one source at a time.  In that mode
-         * the provider of a non-intrinsic module is external to this translation request; any
-         * names that are not covered by the intrinsic registry retain their ordinary external
-         * procedure handling.  When the provider is present in the same request, the branch
-         * below imports its typed entities and interfaces. */
+        if (!f2c_permitted_external_module(context, syntax.module_name))
+            f2c_diagnostic_token_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, source_line, syntax.module_name, 1,
+                "non-intrinsic module '%s' is not present in this project request; "
+                "declare it as an external module only when its interface is supplied separately",
+                module_name);
         goto cleanup;
     }
     if (syntax.only_token == NULL)
