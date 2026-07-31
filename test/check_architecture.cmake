@@ -119,6 +119,7 @@ file(READ "${SOURCE_DIR}/src/ir/expression.h" EXPRESSION_IR)
 file(READ "${SOURCE_DIR}/src/frontend/procedure.c" PROCEDURE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/modules.c" USE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/module/dependency.c" MODULE_DEPENDENCIES)
+file(READ "${SOURCE_DIR}/src/frontend/module/intrinsic.c" INTRINSIC_MODULES)
 file(READ "${SOURCE_DIR}/src/frontend/module/resolution.c" MODULE_RESOLUTION)
 file(READ "${SOURCE_DIR}/src/frontend/pipeline.c" FRONTEND_PIPELINE)
 file(READ "${SOURCE_DIR}/src/frontend/module/access.c" ACCESS_LOWERING)
@@ -315,7 +316,8 @@ if(
     NOT USE_LOWERING MATCHES "f2c_permitted_external_module[ \t\r\n]*\\("
     OR NOT USE_LOWERING MATCHES
         "non-intrinsic module '%s' is not present in this project request"
-    OR NOT MODULE_RESOLUTION MATCHES "f2c_supported_intrinsic_module[ \t\r\n]*\\("
+    OR NOT INTRINSIC_MODULES MATCHES "f2c_supported_intrinsic_module[ \t\r\n]*\\("
+    OR NOT INTRINSIC_MODULES MATCHES "f2c_import_constant_module[ \t\r\n]*\\("
     OR NOT MODULE_RESOLUTION MATCHES "context->external_module_count"
 )
     message(

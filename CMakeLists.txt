@@ -224,6 +224,8 @@ set(
     src/frontend/module/constant.h
     src/frontend/module/dependency.c
     src/frontend/module/dependency.h
+    src/frontend/module/intrinsic.c
+    src/frontend/module/intrinsic.h
     src/frontend/module/resolution.c
     src/frontend/module/resolution.h
     src/frontend/module_constants.h

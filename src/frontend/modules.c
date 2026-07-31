@@ -1,6 +1,7 @@
 #include "ast/declaration/use.h"
 #include "frontend/module/access.h"
 #include "frontend/module/constant.h"
+#include "frontend/module/intrinsic.h"
 #include "frontend/module/resolution.h"
 #include "frontend/module_constants.h"
 #include "internal/f2c.h"
@@ -210,6 +211,12 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
     free(target->initializer);
     target->initializer =
         source->parameter && source->initializer != NULL ? f2c_strdup(source->initializer) : NULL;
+    f2c_expr_free(target->initializer_expression);
+    target->initializer_expression =
+        source->parameter && source->initializer_syntax.count == 0U &&
+                source->initializer_expression != NULL
+            ? f2c_expr_clone_substitute_integers(source->initializer_expression, NULL, 0U)
+            : NULL;
     free(target->character_length);
     target->character_length =
         source->character_length != NULL ? f2c_strdup(source->character_length) : NULL;
@@ -220,6 +227,8 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
     target->c_type = source->c_type != NULL ? f2c_strdup(source->c_type) : NULL;
     if (target->c_name == NULL ||
         (source->parameter && source->initializer != NULL && target->initializer == NULL) ||
+        (source->parameter && source->initializer_syntax.count == 0U &&
+         source->initializer_expression != NULL && target->initializer_expression == NULL) ||
         (source->character_length != NULL && target->character_length == NULL) ||
         (source->derived_type_name != NULL && target->derived_type_name == NULL) ||
         (source->c_type != NULL && target->c_type == NULL))
@@ -599,14 +608,18 @@ void f2c_import_module(Context *context, Unit *unit, Line *source_line) {
         goto cleanup;
     }
     if (syntax.nature == F2C_USE_NATURE_INTRINSIC) {
-        if (!f2c_supported_intrinsic_module(syntax.module_name))
+        if (!f2c_supported_intrinsic_module(syntax.module_name)) {
             f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_UNSUPPORTED, source_line,
                                       syntax.module_name, 1,
                                       "intrinsic module '%s' is not supported", module_name);
+        } else {
+            f2c_import_intrinsic_module(context, unit, &syntax);
+        }
         goto cleanup;
     }
     if (syntax.nature == F2C_USE_NATURE_UNSPECIFIED &&
         f2c_supported_intrinsic_module(syntax.module_name)) {
+        f2c_import_intrinsic_module(context, unit, &syntax);
         goto cleanup;
     }
     module = find_project_module(context, module_name);

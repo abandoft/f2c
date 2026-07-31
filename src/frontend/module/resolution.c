@@ -1,9 +1,5 @@
 #include "frontend/module/resolution.h"
 
-int f2c_supported_intrinsic_module(const F2cToken *name) {
-    return f2c_token_equals(name, "iso_fortran_env");
-}
-
 int f2c_permitted_external_module(const Context *context, const F2cToken *name) {
     size_t index;
     if (context == NULL || name == NULL)
