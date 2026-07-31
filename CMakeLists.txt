@@ -181,6 +181,7 @@ set(
     src/codegen/unit/private.h
     src/codegen/unit/scope.c
     src/codegen/unit/temporary.c
+    src/codegen/unit/value.c
     src/codegen/value/derived.c
     src/codegen/value/private.h
     src/core/config.c

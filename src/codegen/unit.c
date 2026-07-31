@@ -100,6 +100,7 @@ static void emit_declarations(Context *context, Unit *unit) {
             f2c_buffer_printf(output, "}, f2c_descriptor_%s->stride)) abort();\n", name);
         }
     }
+    f2c_unit_emit_value_copies(output, unit, 1);
     {
         Symbol *result = f2c_unit_function_result(unit);
         if (result != NULL && f2c_unit_has_descriptor_result(unit)) {
@@ -661,6 +662,7 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
         f2c_unit_indent(output, depth);
         f2c_buffer_printf(output, "free(%s);\n", f2c_symbol_c_name(unit, symbol));
     }
+    f2c_unit_emit_value_cleanup(output, unit, depth);
 }
 
 static void emit_unused_suppression(Buffer *output, Unit *unit) {

@@ -17,5 +17,7 @@ void f2c_unit_emit_automatic_array_cleanup(Buffer *output, Unit *unit, Symbol *s
 char *f2c_unit_data_array_initializer(Unit *unit, const Symbol *symbol);
 void f2c_unit_emit_expression_temporaries(Buffer *output, Unit *unit);
 void f2c_unit_emit_equivalence_declarations(Context *context, Unit *unit);
+void f2c_unit_emit_value_copies(Buffer *output, Unit *unit, int depth);
+void f2c_unit_emit_value_cleanup(Buffer *output, Unit *unit, int depth);
 
 #endif
