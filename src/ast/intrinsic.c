@@ -130,13 +130,15 @@ static void resolve_intrinsic_type(F2cExpr *expression, const F2cIntrinsicSignat
         if (source != NULL)
             expression->type = source->type;
     }
-    if (strcmp(expression->text, "real") == 0) {
+    if (signature != NULL && signature->id == F2C_INTRINSIC_REAL &&
+        signature->maximum_arguments == 2U) {
         const F2cExpr *kind =
             f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 1U);
         const Type kind_type = f2c_ast_kind_type_from_argument(kind);
         if (kind_type == TYPE_REAL || kind_type == TYPE_DOUBLE)
             expression->type = kind_type;
-    } else if (strcmp(expression->text, "cmplx") == 0) {
+    } else if (signature != NULL && signature->id == F2C_INTRINSIC_CMPLX &&
+               signature->maximum_arguments == 3U) {
         const F2cExpr *kind =
             f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 2U);
         const Type kind_type = f2c_ast_kind_type_from_argument(kind);
@@ -147,13 +149,14 @@ static void resolve_intrinsic_type(F2cExpr *expression, const F2cIntrinsicSignat
     }
 }
 
-static void resolve_intrinsic_shape(AstParser *parser, F2cExpr *expression) {
+static void resolve_intrinsic_shape(AstParser *parser, F2cExpr *expression,
+                                    const F2cIntrinsicSignature *signature) {
     size_t argument;
-    expression->rank = f2c_is_intrinsic_name(expression->text)
-                           ? f2c_resolve_intrinsic_rank(expression->text, expression->children,
-                                                        expression->child_count)
-                           : 0U;
-    if (!f2c_is_intrinsic_name(expression->text)) {
+    expression->rank =
+        signature != NULL ? f2c_resolve_intrinsic_rank(signature->name, expression->children,
+                                                       expression->child_count)
+                          : 0U;
+    if (signature == NULL) {
         for (argument = 0U; argument < expression->child_count; ++argument) {
             if (expression->children[argument]->rank > expression->rank)
                 expression->rank = expression->children[argument]->rank;
@@ -267,6 +270,6 @@ void f2c_ast_resolve_intrinsic_call(AstParser *parser, F2cExpr *expression) {
     const F2cIntrinsicSignature *signature = f2c_find_intrinsic(expression->text);
     resolve_intrinsic_type(expression, signature);
     expression->intrinsic = signature != NULL ? signature->id : F2C_INTRINSIC_NONE;
-    resolve_intrinsic_shape(parser, expression);
+    resolve_intrinsic_shape(parser, expression, signature);
     resolve_intrinsic_kind(expression, signature);
 }
