@@ -434,6 +434,11 @@ static int procedure_signatures_compatible(const Symbol *expected, const Symbol 
             expected->external_parameter_pointer[i] != actual->external_parameter_pointer[i] ||
             expected->external_parameter_contiguous[i] !=
                 actual->external_parameter_contiguous[i] ||
+            expected->external_parameter_target[i] != actual->external_parameter_target[i] ||
+            expected->external_parameter_value[i] != actual->external_parameter_value[i] ||
+            expected->external_parameter_asynchronous[i] !=
+                actual->external_parameter_asynchronous[i] ||
+            expected->external_parameter_volatile[i] != actual->external_parameter_volatile[i] ||
             expected->external_parameter_descriptor[i] !=
                 actual->external_parameter_descriptor[i] ||
             (i != ignored_derived_parameter && expected->external_parameter_derived_types[i] !=
