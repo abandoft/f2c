@@ -1,3 +1,14 @@
+## 1.31.0
+
+- Added a reusable backward fixed-point data-flow solver that handles branch joins, closed loops, and unreachable control flow.
+- Added per-CFG-node use/def/live-in/live-out analysis for ordinary variables, covering assignments, partial designators, procedure `INTENT`, I/O, allocation statements, DO latches, and nested actions.
+- Bound scope-cleanup plans to variable-liveness proofs, making code generation reject transfers whose cleanup objects remain live at the target or lack an analysis proof.
+- Modeled each BLOCK reentry as a new object incarnation, preventing `CYCLE`, `GOTO`, and related transfers from preserving or finalizing a previous incarnation incorrectly.
+- Moved expression temporaries, contiguous-argument bridges, host descriptors, evaluation ordering, and statement-function storage into unified typed-IR semantic planning with resource-overflow guards.
+- Moved function-result ABI, host-capture lifetime, and statement-function temporary ownership into the semantic layer, further narrowing code-generation responsibilities.
+- Made code generation consume only verified temporary plans and added an architectural gate that prevents semantic planning indices from being rewritten there.
+- Added strict C17, native differential, and sanitizer regressions for variable data flow, temporary lifetimes, scope cleanup, and BLOCK reentry.
+
 ## 1.30.0
 
 - Expanded the procedure-level CFG with dedicated procedure-exit, image-termination, and loop-latch nodes plus distinct `RETURN`, `STOP`, alternate-return, and I/O `END/EOR/ERR` edges.
