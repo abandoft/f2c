@@ -124,7 +124,7 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
     char *storage = NULL;
     char *character_length = NULL;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     size_t temporary = 0U;
     size_t dimension;
     int emitted_depth;
@@ -293,7 +293,7 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
     }
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_append(&context->output, "free(f2c_component_values);\n");
-    f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     result = 1;
@@ -321,7 +321,7 @@ cleanup_all:
     free(storage);
     free(character_length);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     f2c_expr_free(prepared_right);
     f2c_expr_free(right_element);
     f2c_expr_free(left_element);

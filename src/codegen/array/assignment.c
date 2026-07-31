@@ -78,7 +78,7 @@ int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *ta
     size_t loop;
     size_t temporary = 0U;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     int emitted_depth;
     if (context == NULL || unit == NULL || target == NULL || right == NULL || right->rank == 0U ||
         target->rank == 0U || right->rank != target->rank || right->kind == F2C_EXPR_NAME ||
@@ -279,14 +279,14 @@ int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *ta
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "free(f2c_element_values);\n");
     }
-    f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     free(value);
     free(character_length);
     free(old_element_count);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     f2c_expr_free(prepared_right);
     f2c_expr_free(element);
     free_extents(target_extents, target->rank);
@@ -298,7 +298,7 @@ unsupported:
     free(character_length);
     free(old_element_count);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     f2c_expr_free(prepared_right);
     f2c_expr_free(element);
     free_extents(target_extents, target->rank);
@@ -316,7 +316,7 @@ emission_failed:
     free(character_length);
     free(old_element_count);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     f2c_expr_free(prepared_right);
     f2c_expr_free(element);
     free_extents(target_extents, target->rank);

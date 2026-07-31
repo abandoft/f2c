@@ -24,7 +24,7 @@ int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
                                  const F2cStatement *alternate_call, size_t line, int depth) {
     F2cExpr **prepared = NULL;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     size_t argument;
     size_t temporary = 0U;
     int scoped;
@@ -40,11 +40,11 @@ int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
                                                 &temporary, &prelude, &cleanup, depth + 1)) {
             free_arguments(prepared, count);
             free(prelude.data);
-            free(cleanup.data);
+            f2c_array_cleanup_clear(&cleanup);
             return 0;
         }
     }
-    scoped = prelude.length != 0U || cleanup.length != 0U;
+    scoped = prelude.length != 0U || cleanup.count != 0U;
     if (scoped) {
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "{\n");
@@ -57,13 +57,13 @@ int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
         f2c_emit_call_with_signature(&context->output, unit, name, callee, prepared, count,
                                      depth + (scoped ? 1 : 0));
     if (scoped) {
-        f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+        (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
     }
     free_arguments(prepared, count);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     return 1;
 }
 
@@ -83,7 +83,7 @@ int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStateme
     size_t shape_argument = SIZE_MAX;
     size_t temporary = 0U;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     int emitted_depth;
     if (context == NULL || unit == NULL || statement == NULL || statement->kind != F2C_STMT_CALL)
         return 0;
@@ -194,13 +194,13 @@ int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStateme
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "}\n");
     }
-    f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     free_arguments(arguments, statement->item_count);
     free_arguments(prepared_arguments, statement->item_count);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     for (argument = 0U; argument < statement->item_count * rank; ++argument)
         free(actual_extents[argument]);
     free(actual_extents);
@@ -212,7 +212,7 @@ unsupported:
     free_arguments(arguments, statement->item_count);
     free_arguments(prepared_arguments, statement->item_count);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     for (argument = 0U; argument < statement->item_count * rank; ++argument)
         free(actual_extents != NULL ? actual_extents[argument] : NULL);
     free(actual_extents);

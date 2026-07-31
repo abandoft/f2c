@@ -277,7 +277,7 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
     char *extents[F2C_MAX_RANK] = {0};
     char *right_extents[F2C_MAX_RANK] = {0};
     Buffer prelude = {0};
-    Buffer temporary_cleanup = {0};
+    F2cArrayCleanupList temporary_cleanup = {0};
     size_t dimension;
     size_t section_count = 0U;
     size_t temporary = 0U;
@@ -504,8 +504,7 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "free(f2c_section_scalar);\n");
     }
-    f2c_buffer_append(&context->output,
-                      temporary_cleanup.data != NULL ? temporary_cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &temporary_cleanup);
     --emitted_depth;
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_append(&context->output, "}\n");
@@ -523,7 +522,7 @@ cleanup:
         free(right_extents[dimension]);
     }
     free(prelude.data);
-    free(temporary_cleanup.data);
+    f2c_array_cleanup_clear(&temporary_cleanup);
     f2c_expr_free(prepared_left);
     f2c_expr_free(prepared_right);
     return result;
