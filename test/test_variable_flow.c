@@ -193,10 +193,91 @@ static void test_counted_loop_latch(void) {
     f2c_control_flow_free(&graph);
 }
 
+static void test_block_reentry_kills_prior_incarnation(void) {
+    Symbol value;
+    Symbol component_symbol;
+    F2cExpr value_name;
+    F2cExpr component;
+    F2cExpr literal;
+    F2cExpr *component_children[1];
+    F2cStatement statements[3];
+    F2cControlFlowEdge successor0 = {1U, F2C_CFG_EDGE_FALLTHROUGH};
+    F2cControlFlowEdge successor1 = {2U, F2C_CFG_EDGE_FALLTHROUGH};
+    F2cControlFlowEdge successor2 = {0U, F2C_CFG_EDGE_LOOP_BACK};
+    F2cControlFlowEdge predecessor0 = {2U, F2C_CFG_EDGE_LOOP_BACK};
+    F2cControlFlowEdge predecessor1 = {0U, F2C_CFG_EDGE_FALLTHROUGH};
+    F2cControlFlowEdge predecessor2 = {1U, F2C_CFG_EDGE_FALLTHROUGH};
+    F2cControlFlowNode nodes[3];
+    F2cControlFlowGraph graph;
+    Unit unit;
+    memset(&value, 0, sizeof(value));
+    memset(&component_symbol, 0, sizeof(component_symbol));
+    memset(&component, 0, sizeof(component));
+    memset(&literal, 0, sizeof(literal));
+    memset(statements, 0, sizeof(statements));
+    memset(nodes, 0, sizeof(nodes));
+    memset(&graph, 0, sizeof(graph));
+    memset(&unit, 0, sizeof(unit));
+    value.name = (char *)"value";
+    value.scope_begin_line = 10U;
+    value.scope_end_line = 30U;
+    value_name = name_expression(&value);
+    component.kind = F2C_EXPR_COMPONENT;
+    component.symbol = &component_symbol;
+    component.children = component_children;
+    component.child_count = 1U;
+    component.definable = 1;
+    component_children[0] = &value_name;
+    literal.kind = F2C_EXPR_INTEGER_LITERAL;
+    statements[0].kind = F2C_STMT_BLOCK_SCOPE;
+    statements[0].line = 10U;
+    statements[1].kind = F2C_STMT_ASSIGNMENT;
+    statements[1].line = 20U;
+    statements[1].left = &component;
+    statements[1].right = &literal;
+    statements[2].kind = F2C_STMT_CYCLE;
+    statements[2].line = 25U;
+    nodes[0].successors = &successor0;
+    nodes[0].successor_count = 1U;
+    nodes[0].predecessors = &predecessor0;
+    nodes[0].predecessor_count = 1U;
+    nodes[0].kind = F2C_CFG_NODE_STATEMENT;
+    nodes[0].statement_index = 0U;
+    nodes[1].successors = &successor1;
+    nodes[1].successor_count = 1U;
+    nodes[1].predecessors = &predecessor1;
+    nodes[1].predecessor_count = 1U;
+    nodes[1].kind = F2C_CFG_NODE_STATEMENT;
+    nodes[1].statement_index = 1U;
+    nodes[2].successors = &successor2;
+    nodes[2].successor_count = 1U;
+    nodes[2].predecessors = &predecessor2;
+    nodes[2].predecessor_count = 1U;
+    nodes[2].kind = F2C_CFG_NODE_STATEMENT;
+    nodes[2].statement_index = 2U;
+    graph.nodes = nodes;
+    graph.node_count = 3U;
+    graph.statement_count = 3U;
+    unit.symbols = &value;
+    unit.symbol_count = 1U;
+    unit.statements = statements;
+    unit.statement_count = 3U;
+    expect(f2c_variable_flow_analyze(NULL, &unit, &graph),
+           "ordinary-variable flow converges across block reentry");
+    expect(f2c_variable_flow_is_live_in(&unit, 1U, &value),
+           "a component definition consumes the current block object");
+    expect(!f2c_variable_flow_is_live_in(&unit, 0U, &value),
+           "entering a block kills the prior object incarnation");
+    expect(!f2c_variable_flow_is_live_out(&unit, 2U, &value),
+           "a CYCLE target does not keep the destroyed incarnation live");
+    f2c_variable_flow_clear(&unit);
+}
+
 int main(void) {
     test_linear_def_use_and_kill();
     test_call_intents();
     test_counted_loop_latch();
+    test_block_reentry_kills_prior_incarnation();
     if (failures != 0)
         fprintf(stderr, "%d variable-flow test(s) failed\n", failures);
     return failures == 0 ? 0 : 1;

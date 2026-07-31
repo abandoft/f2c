@@ -230,7 +230,22 @@ static void mark_statement(VariableFlowBuilder *builder, const F2cStatement *sta
     size_t index;
     if (statement == NULL)
         return;
-    if (statement->kind == F2C_STMT_ASSIGNMENT || statement->kind == F2C_STMT_POINTER_ASSIGNMENT) {
+    if (statement->kind == F2C_STMT_BLOCK_SCOPE) {
+        for (index = 0U; index < builder->unit->symbol_count; ++index) {
+            Symbol *symbol = &builder->unit->symbols[index];
+            if (symbol->scope_begin_line == statement->line)
+                mark_symbol(builder, builder->flow->definitions, symbol);
+        }
+    } else if (statement->kind == F2C_STMT_END_BLOCK_SCOPE) {
+        for (index = builder->unit->symbol_count; index != 0U; --index) {
+            Symbol *symbol = &builder->unit->symbols[index - 1U];
+            if (symbol->scope_end_line == statement->line) {
+                mark_symbol(builder, builder->flow->uses, symbol);
+                mark_symbol(builder, builder->flow->definitions, symbol);
+            }
+        }
+    } else if (statement->kind == F2C_STMT_ASSIGNMENT ||
+               statement->kind == F2C_STMT_POINTER_ASSIGNMENT) {
         if (statement->resolved_procedure != NULL) {
             mark_actual(builder, statement->left,
                         definition_intent(statement->resolved_procedure, 0U));
