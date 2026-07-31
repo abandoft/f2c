@@ -24,9 +24,15 @@ int f2c_copy_function_result_metadata(Symbol *symbol, Unit *signature) {
     }
     symbol->type = signature->kind == UNIT_FUNCTION ? signature->return_type : TYPE_UNKNOWN;
     symbol->kind = signature->kind == UNIT_FUNCTION ? signature->return_kind : 0;
+    symbol->external_pure = signature->pure;
+    symbol->external_elemental = signature->elemental;
     symbol->external_result_allocatable = result != NULL && result->allocatable;
     symbol->external_result_pointer = result != NULL && result->pointer;
+    symbol->external_result_contiguous = result != NULL && result->contiguous;
+    symbol->external_result_polymorphic = result != NULL && result->polymorphic;
     symbol->external_result_rank = result != NULL ? result->rank : 0U;
+    symbol->contiguous = result != NULL && result->contiguous;
+    symbol->polymorphic = result != NULL && result->polymorphic;
     if (result != NULL)
         symbol->shape = result->shape;
     symbol->derived_type = result != NULL ? result->derived_type : NULL;

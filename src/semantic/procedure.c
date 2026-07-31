@@ -39,6 +39,8 @@ static int same_function_result_type(const Unit *left, const Unit *right) {
         !same_shape_contract(left_result, right_result) ||
         left_result->allocatable != right_result->allocatable ||
         left_result->pointer != right_result->pointer ||
+        left_result->contiguous != right_result->contiguous ||
+        left_result->polymorphic != right_result->polymorphic ||
         !same_character_length(left_result, right_result))
         return 0;
     return left->return_type != TYPE_DERIVED ||
@@ -144,9 +146,15 @@ static void validate_interface_definition(Context *context, Unit *caller, const 
                        definition->kind == UNIT_SUBROUTINE ? "SUBROUTINE" : "FUNCTION");
         return;
     }
-    if (interface->elemental != definition->elemental) {
+    if (interface->pure && !definition->pure) {
         f2c_diagnostic(context, line, 1,
-                       "explicit interface for '%s' has an incompatible ELEMENTAL attribute",
+                       "explicit interface for '%s' requires a PURE project definition",
+                       visible_name);
+    }
+    if (interface->elemental && !definition->elemental) {
+        f2c_diagnostic(context, line, 1,
+                       "explicit interface for '%s' has an incompatible ELEMENTAL attribute "
+                       "(the project definition is not ELEMENTAL)",
                        visible_name);
     }
     if (interface->kind == UNIT_FUNCTION && !same_function_result_type(interface, definition)) {
@@ -179,7 +187,12 @@ static void validate_interface_definition(Context *context, Unit *caller, const 
             declared->allocatable != defined->allocatable ||
             declared->pointer != defined->pointer || declared->contiguous != defined->contiguous ||
             declared->optional != defined->optional || declared->intent != defined->intent ||
-            declared->external != defined->external || !same_character_length(declared, defined)) {
+            declared->external != defined->external ||
+            declared->derived_type != defined->derived_type ||
+            declared->polymorphic != defined->polymorphic ||
+            !same_character_length(declared, defined) ||
+            (declared->external &&
+             !f2c_validation_procedure_signatures_compatible(declared, defined, 0U))) {
             f2c_diagnostic(context, line, 1,
                            "dummy argument %zu of explicit interface '%s' is incompatible with "
                            "the project definition",

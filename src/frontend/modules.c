@@ -176,9 +176,13 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
     target->external = source->external;
     target->external_declared = source->external_declared;
     target->external_subroutine = source->external_subroutine;
+    target->external_pure = source->external_pure;
+    target->external_elemental = source->external_elemental;
     target->external_alternate_return_count = source->external_alternate_return_count;
     target->external_result_allocatable = source->external_result_allocatable;
     target->external_result_pointer = source->external_result_pointer;
+    target->external_result_contiguous = source->external_result_contiguous;
+    target->external_result_polymorphic = source->external_result_polymorphic;
     target->external_result_rank = source->external_result_rank;
     target->external_signature_observed = source->external_signature_observed;
     target->external_signature_explicit = source->external_signature_explicit;

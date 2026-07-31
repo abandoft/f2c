@@ -390,11 +390,15 @@ static int signature_shape_matches(const F2cShape *expected, size_t expected_ran
     return 1;
 }
 
-int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const Symbol *actual,
-                                                   unsigned int depth) {
+static int procedure_signatures_compatible(const Symbol *expected, const Symbol *actual,
+                                           unsigned int depth, size_t ignored_derived_parameter,
+                                           int exact_elemental) {
     size_t i;
     if (expected == NULL || actual == NULL || depth > 16U ||
         expected->external_subroutine != actual->external_subroutine ||
+        (expected->external_pure && !actual->external_pure) ||
+        (exact_elemental && expected->external_elemental != actual->external_elemental) ||
+        (!exact_elemental && expected->external_elemental && !actual->external_elemental) ||
         expected->external_alternate_return_count != actual->external_alternate_return_count ||
         (!expected->external_subroutine && expected->type != TYPE_UNKNOWN &&
          actual->type != TYPE_UNKNOWN && expected->type != actual->type) ||
@@ -403,6 +407,8 @@ int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const
         (!expected->external_subroutine &&
          (expected->external_result_allocatable != actual->external_result_allocatable ||
           expected->external_result_pointer != actual->external_result_pointer ||
+          expected->external_result_contiguous != actual->external_result_contiguous ||
+          expected->external_result_polymorphic != actual->external_result_polymorphic ||
           !signature_shape_matches(&expected->shape, expected->external_result_rank, &actual->shape,
                                    actual->external_result_rank) ||
           expected->derived_type != actual->derived_type ||
@@ -430,17 +436,23 @@ int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const
                 actual->external_parameter_contiguous[i] ||
             expected->external_parameter_descriptor[i] !=
                 actual->external_parameter_descriptor[i] ||
-            expected->external_parameter_derived_types[i] !=
-                actual->external_parameter_derived_types[i] ||
+            (i != ignored_derived_parameter && expected->external_parameter_derived_types[i] !=
+                                                   actual->external_parameter_derived_types[i]) ||
             expected->external_parameter_polymorphic[i] !=
                 actual->external_parameter_polymorphic[i] ||
             (expected_procedure == NULL) != (actual_procedure == NULL))
             return 0;
-        if (expected_procedure != NULL && !f2c_validation_procedure_signatures_compatible(
-                                              expected_procedure, actual_procedure, depth + 1U))
+        if (expected_procedure != NULL &&
+            !procedure_signatures_compatible(expected_procedure, actual_procedure, depth + 1U,
+                                             SIZE_MAX, 1))
             return 0;
     }
     return 1;
+}
+
+int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const Symbol *actual,
+                                                   unsigned int depth) {
+    return procedure_signatures_compatible(expected, actual, depth, SIZE_MAX, 1);
 }
 
 static int derived_extends(const F2cDerivedType *candidate, const F2cDerivedType *ancestor) {
@@ -528,43 +540,27 @@ static int overriding_signatures_compatible(const F2cTypeBinding *parent,
                                             const F2cTypeBinding *child) {
     const Symbol *expected = &parent->procedure;
     const Symbol *actual = &child->procedure;
-    size_t expected_argument = 0U;
-    size_t actual_argument = 0U;
-    if (expected->external_subroutine != actual->external_subroutine ||
+    const Unit *expected_interface = expected->procedure_interface;
+    const Unit *actual_interface = actual->procedure_interface;
+    const size_t passed_parameter = parent->nopass ? SIZE_MAX : expected->type_bound_pass_index;
+    size_t argument;
+    if (expected_interface == NULL || actual_interface == NULL ||
         expected->external_parameter_count != actual->external_parameter_count ||
         parent->nopass != child->nopass ||
-        (!expected->external_subroutine &&
-         (expected->type != actual->type || expected->kind != actual->kind)))
+        (!parent->nopass &&
+         (expected->type_bound_pass_index != actual->type_bound_pass_index ||
+          expected->type_bound_pass_index >= expected->external_parameter_count)) ||
+        (parent->deferred == 0 && child->deferred != 0) ||
+        (parent->access == F2C_ACCESSIBILITY_PUBLIC &&
+         child->access == F2C_ACCESSIBILITY_PRIVATE) ||
+        !procedure_signatures_compatible(expected, actual, 0U, passed_parameter, 1))
         return 0;
-    while (expected_argument < expected->external_parameter_count &&
-           actual_argument < actual->external_parameter_count) {
-        if (!parent->nopass && expected_argument == expected->type_bound_pass_index) {
-            ++expected_argument;
-            ++actual_argument;
-            continue;
-        }
-        if (expected->external_parameter_types[expected_argument] !=
-                actual->external_parameter_types[actual_argument] ||
-            expected->external_parameter_kinds[expected_argument] !=
-                actual->external_parameter_kinds[actual_argument] ||
-            expected->external_parameter_ranks[expected_argument] !=
-                actual->external_parameter_ranks[actual_argument] ||
-            expected->external_parameter_intents[expected_argument] !=
-                actual->external_parameter_intents[actual_argument] ||
-            expected->external_parameter_optional[expected_argument] !=
-                actual->external_parameter_optional[actual_argument] ||
-            expected->external_parameter_allocatable[expected_argument] !=
-                actual->external_parameter_allocatable[actual_argument] ||
-            expected->external_parameter_pointer[expected_argument] !=
-                actual->external_parameter_pointer[actual_argument] ||
-            expected->external_parameter_contiguous[expected_argument] !=
-                actual->external_parameter_contiguous[actual_argument] ||
-            expected->external_parameter_descriptor[expected_argument] !=
-                actual->external_parameter_descriptor[actual_argument])
+    for (argument = 0U; argument < expected->external_parameter_count; ++argument)
+        if (argument >= expected_interface->argument_count ||
+            argument >= actual_interface->argument_count ||
+            strcmp(expected_interface->arguments[argument],
+                   actual_interface->arguments[argument]) != 0)
             return 0;
-        ++expected_argument;
-        ++actual_argument;
-    }
     return 1;
 }
 
@@ -572,6 +568,16 @@ static Unit *binding_interface(Context *context, Unit *scope, F2cTypeBinding *bi
     if (binding->interface_name != NULL && binding->interface_name[0] != '\0')
         return f2c_find_interface_signature(context, scope, binding->interface_name, 1);
     return NULL;
+}
+
+static void free_temporary_procedure_signature(Symbol *symbol) {
+    if (symbol == NULL)
+        return;
+    (void)f2c_symbol_resize_external_parameters(symbol, 0U);
+    free(symbol->procedure_interface_name);
+    free(symbol->character_length);
+    free(symbol->c_type);
+    free(symbol->derived_type_name);
 }
 
 static void resolve_type_binding(Context *context, Unit *scope, F2cDerivedType *derived,
@@ -603,14 +609,15 @@ static void resolve_type_binding(Context *context, Unit *scope, F2cDerivedType *
     if (interface != NULL && target != NULL) {
         Symbol expected = {0};
         Symbol actual = {0};
-        if (!f2c_copy_procedure_signature(&expected, interface) ||
-            !f2c_copy_procedure_signature(&actual, target) ||
-            !f2c_validation_procedure_signatures_compatible(&expected, &actual, 0U))
+        const int expected_copied = f2c_copy_procedure_signature(&expected, interface);
+        const int actual_copied = f2c_copy_procedure_signature(&actual, target);
+        if (!expected_copied || !actual_copied ||
+            !procedure_signatures_compatible(&expected, &actual, 0U, SIZE_MAX, 0))
             f2c_diagnostic(context, context->lines.items[derived->begin].number, 1,
                            "implementation '%s' does not match interface '%s' for binding '%s'",
                            binding->target_name, binding->interface_name, binding->name);
-        free(expected.procedure_interface_name);
-        free(actual.procedure_interface_name);
+        free_temporary_procedure_signature(&expected);
+        free_temporary_procedure_signature(&actual);
     }
     if (!f2c_copy_procedure_signature(procedure, signature)) {
         f2c_diagnostic(context, context->lines.items[derived->begin].number, 1,
@@ -642,11 +649,11 @@ static void resolve_type_binding(Context *context, Unit *scope, F2cDerivedType *
         if (pass_index < signature->argument_count)
             passed_dummy = f2c_find_symbol(signature, signature->arguments[pass_index]);
         if (passed_dummy == NULL || passed_dummy->type != TYPE_DERIVED ||
-            passed_dummy->rank != 0U || passed_dummy->derived_type == NULL ||
-            !derived_extends(derived, passed_dummy->derived_type))
+            passed_dummy->rank != 0U || passed_dummy->derived_type != derived ||
+            !passed_dummy->polymorphic || passed_dummy->pointer || passed_dummy->allocatable)
             f2c_diagnostic(context, context->lines.items[derived->begin].number, 1,
-                           "passed-object dummy for binding '%s' must be a scalar object of type "
-                           "'%s' or an ancestor",
+                           "passed-object dummy for binding '%s' must be a scalar, nonpointer, "
+                           "nonallocatable CLASS('%s') object",
                            binding->name, derived->name);
     }
     procedure->type_bound_pass_index = pass_index;

@@ -65,6 +65,12 @@ static int apply_binding_attributes(Context *context, const Line *line, size_t b
                                     F2cTypeBinding *binding) {
     size_t index = begin;
     int valid = 1;
+    int seen_deferred = 0;
+    int seen_nopass = 0;
+    int seen_pass = 0;
+    int seen_non_overridable = 0;
+    int seen_public = 0;
+    int seen_private = 0;
     while (index < end) {
         const F2cToken *attribute;
         if (line->tokens[index].kind == F2C_TOKEN_COMMA) {
@@ -80,12 +86,45 @@ static int apply_binding_attributes(Context *context, const Line *line, size_t b
             continue;
         }
         if (f2c_token_equals(attribute, "deferred")) {
+            if (seen_deferred) {
+                diagnose_attribute(context, line, attribute,
+                                   "duplicate type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            if (seen_non_overridable) {
+                diagnose_attribute(context, line, attribute,
+                                   "conflicting type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            seen_deferred = 1;
             binding->deferred = 1;
             ++index;
         } else if (f2c_token_equals(attribute, "nopass")) {
+            if (seen_nopass) {
+                diagnose_attribute(context, line, attribute,
+                                   "duplicate type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            if (seen_pass) {
+                diagnose_attribute(context, line, attribute,
+                                   "conflicting type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            seen_nopass = 1;
             binding->nopass = 1;
             ++index;
         } else if (f2c_token_equals(attribute, "pass")) {
+            if (seen_pass) {
+                diagnose_attribute(context, line, attribute,
+                                   "duplicate type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            if (seen_nopass) {
+                diagnose_attribute(context, line, attribute,
+                                   "conflicting type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            seen_pass = 1;
             binding->nopass = 0;
             ++index;
             if (index < end && line->tokens[index].kind == F2C_TOKEN_LEFT_PAREN) {
@@ -105,10 +144,48 @@ static int apply_binding_attributes(Context *context, const Line *line, size_t b
                 index = close + 1U;
             }
         } else if (f2c_token_equals(attribute, "non_overridable")) {
+            if (seen_non_overridable) {
+                diagnose_attribute(context, line, attribute,
+                                   "duplicate type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            if (seen_deferred) {
+                diagnose_attribute(context, line, attribute,
+                                   "conflicting type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            seen_non_overridable = 1;
             binding->non_overridable = 1;
             ++index;
-        } else if (f2c_token_equals(attribute, "public") ||
-                   f2c_token_equals(attribute, "private")) {
+        } else if (f2c_token_equals(attribute, "public")) {
+            if (seen_public) {
+                diagnose_attribute(context, line, attribute,
+                                   "duplicate type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            if (seen_private) {
+                diagnose_attribute(context, line, attribute,
+                                   "conflicting type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            seen_public = 1;
+            binding->access = F2C_ACCESSIBILITY_PUBLIC;
+            binding->access_span = attribute->span;
+            ++index;
+        } else if (f2c_token_equals(attribute, "private")) {
+            if (seen_private) {
+                diagnose_attribute(context, line, attribute,
+                                   "duplicate type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            if (seen_public) {
+                diagnose_attribute(context, line, attribute,
+                                   "conflicting type-bound PROCEDURE attribute '%s'");
+                valid = 0;
+            }
+            seen_private = 1;
+            binding->access = F2C_ACCESSIBILITY_PRIVATE;
+            binding->access_span = attribute->span;
             ++index;
         } else {
             diagnose_attribute(context, line, attribute,
@@ -143,6 +220,10 @@ static void initialize_binding(Context *context, F2cDerivedType *derived, const 
     binding->procedure.type_bound = 1;
     binding->procedure.derived_owner = derived;
     (void)apply_binding_attributes(context, line, attribute_begin, attribute_end, binding);
+    if (binding->access == F2C_ACCESS_UNSPECIFIED) {
+        binding->access = derived->default_binding_access;
+        binding->access_span = derived->default_binding_access_span;
+    }
     binding->procedure.type_bound_deferred = binding->deferred;
     binding->procedure.type_bound_nopass = binding->nopass;
     if (binding->name == NULL || binding->target_name == NULL || binding->procedure.name == NULL ||
@@ -413,6 +494,7 @@ static F2cDerivedType *append_derived_type(Context *context, Unit *unit, const L
     derived->begin = begin;
     derived->end = end;
     derived->abstract_type = header_has_attribute(line, "abstract");
+    derived->default_binding_access = F2C_ACCESSIBILITY_PUBLIC;
     {
         const F2cToken *public_token = header_attribute_token(line, "public");
         const F2cToken *private_token = header_attribute_token(line, "private");
@@ -479,6 +561,8 @@ void f2c_parse_derived_type_definitions(Context *context, Unit *unit) {
         F2cDerivedType *derived = &unit->derived_types[type_index];
         Unit component_scope;
         int in_bindings = 0;
+        int binding_private_seen = 0;
+        int binding_declaration_seen = 0;
         parse_parent_type(context, unit, derived);
         memset(&component_scope, 0, sizeof(component_scope));
         component_scope.context = context;
@@ -494,15 +578,38 @@ void f2c_parse_derived_type_definitions(Context *context, Unit *unit) {
                 in_bindings = 1;
                 continue;
             }
+            if (in_bindings && f2c_line_token_equals(line, start, "private")) {
+                if (start + 1U != line->token_count) {
+                    f2c_diagnostic_token_code(
+                        context, F2C_DIAGNOSTIC_SYNTAX, line, &line->tokens[start], 1,
+                        "type-bound PRIVATE statement may not contain additional tokens");
+                } else if (binding_private_seen) {
+                    f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line,
+                                              &line->tokens[start], 1,
+                                              "duplicate type-bound PRIVATE statement");
+                } else if (binding_declaration_seen) {
+                    f2c_diagnostic_token_code(
+                        context, F2C_DIAGNOSTIC_SEMANTIC, line, &line->tokens[start], 1,
+                        "type-bound PRIVATE statement must precede all binding declarations");
+                } else {
+                    derived->default_binding_access = F2C_ACCESSIBILITY_PRIVATE;
+                    derived->default_binding_access_span = line->tokens[start].span;
+                }
+                binding_private_seen = 1;
+                continue;
+            }
             if (f2c_line_token_equals(line, start, "final")) {
+                binding_declaration_seen = in_bindings;
                 parse_finalizers(context, derived, line);
                 continue;
             }
             if (in_bindings && f2c_line_token_equals(line, start, "procedure")) {
+                binding_declaration_seen = 1;
                 parse_type_bound_procedure(context, derived, line);
                 continue;
             }
             if (in_bindings && f2c_line_token_equals(line, start, "generic")) {
+                binding_declaration_seen = 1;
                 parse_defined_io_generic(context, derived, line);
                 continue;
             }

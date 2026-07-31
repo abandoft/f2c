@@ -34,8 +34,6 @@ size_t f2c_procedure_select_explicit_interface(Context *context, Unit *caller, c
                                                F2cExpr *const *arguments, size_t argument_count,
                                                int subroutine_call, Unit **selection,
                                                size_t *matching_count);
-int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const Symbol *actual,
-                                                   unsigned int depth);
 Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
                                     const char *statement_text, const char *name,
                                     const F2cSourceSpan *call_span, F2cExpr ***arguments,

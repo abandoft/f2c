@@ -37,9 +37,13 @@ struct Symbol {
     int external;
     int external_declared;
     int external_subroutine;
+    int external_pure;
+    int external_elemental;
     size_t external_alternate_return_count;
     int external_result_allocatable;
     int external_result_pointer;
+    int external_result_contiguous;
+    int external_result_polymorphic;
     size_t external_result_rank;
     int external_signature_observed;
     int external_signature_explicit;
@@ -218,6 +222,8 @@ typedef struct F2cTypeBinding {
     int deferred;
     int nopass;
     int non_overridable;
+    F2cAccessibility access;
+    F2cSourceSpan access_span;
     struct F2cTypeBinding *overridden;
     F2cDerivedType *owner;
     F2cDerivedType *storage_owner;
@@ -241,6 +247,8 @@ struct F2cDerivedType {
     size_t binding_capacity;
     char *defined_io_bindings[F2C_DEFINED_IO_COUNT];
     int abstract_type;
+    F2cAccessibility default_binding_access;
+    F2cSourceSpan default_binding_access_span;
     F2cAccessibility access;
     F2cSourceSpan access_span;
     size_t begin;
