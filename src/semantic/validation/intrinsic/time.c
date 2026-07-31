@@ -4,7 +4,6 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 
 static int resolved_kind(const F2cExpr *expression) {
     return expression != NULL && expression->type_kind != 0
@@ -55,7 +54,6 @@ static void validate_scalar_output(Context *context, const F2cStatement *stateme
 static void validate_date_and_time(Context *context, F2cStatement *statement) {
     F2cBoundIntrinsicArguments bound;
     size_t argument;
-    statement->intrinsic = F2C_INTRINSIC_DATE_AND_TIME;
     if (statement->item_count > 4U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "DATE_AND_TIME accepts at most four arguments");
@@ -88,7 +86,6 @@ static void validate_date_and_time(Context *context, F2cStatement *statement) {
 
 static void validate_system_clock(Context *context, F2cStatement *statement) {
     F2cBoundIntrinsicArguments bound;
-    statement->intrinsic = F2C_INTRINSIC_SYSTEM_CLOCK;
     if (statement->item_count > 3U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "SYSTEM_CLOCK accepts at most three arguments");
@@ -115,7 +112,6 @@ static void validate_system_clock(Context *context, F2cStatement *statement) {
 
 static void validate_cpu_time(Context *context, F2cStatement *statement) {
     F2cBoundIntrinsicArguments bound;
-    statement->intrinsic = F2C_INTRINSIC_CPU_TIME;
     if (statement->item_count != 1U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "CPU_TIME requires exactly one argument");
@@ -135,12 +131,12 @@ static void validate_cpu_time(Context *context, F2cStatement *statement) {
 }
 
 void f2c_validation_time_intrinsic(Context *context, F2cStatement *statement) {
-    if (statement == NULL || statement->kind != F2C_STMT_CALL || statement->name == NULL)
+    if (statement == NULL || statement->kind != F2C_STMT_CALL)
         return;
-    if (strcmp(statement->name, "date_and_time") == 0)
+    if (statement->intrinsic == F2C_INTRINSIC_DATE_AND_TIME)
         validate_date_and_time(context, statement);
-    else if (strcmp(statement->name, "system_clock") == 0)
+    else if (statement->intrinsic == F2C_INTRINSIC_SYSTEM_CLOCK)
         validate_system_clock(context, statement);
-    else if (strcmp(statement->name, "cpu_time") == 0)
+    else if (statement->intrinsic == F2C_INTRINSIC_CPU_TIME)
         validate_cpu_time(context, statement);
 }

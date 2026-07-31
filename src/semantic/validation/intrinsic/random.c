@@ -3,7 +3,6 @@
 #include "semantic/validation/intrinsic/arguments.h"
 
 #include <stdio.h>
-#include <string.h>
 
 static int default_integer(const F2cExpr *expression) {
     const int kind = expression != NULL && expression->type_kind != 0
@@ -23,7 +22,6 @@ static void diagnose_argument(Context *context, const F2cStatement *statement,
 static void validate_random_number(Context *context, F2cStatement *statement) {
     F2cBoundIntrinsicArguments bound;
     const F2cExpr *harvest;
-    statement->intrinsic = F2C_INTRINSIC_RANDOM_NUMBER;
     if (statement->item_count != 1U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "RANDOM_NUMBER requires exactly one argument");
@@ -79,7 +77,6 @@ static void validate_random_seed(Context *context, F2cStatement *statement) {
     F2cBoundIntrinsicArguments bound;
     size_t present = 0U;
     size_t argument;
-    statement->intrinsic = F2C_INTRINSIC_RANDOM_SEED;
     if (statement->item_count > 3U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "RANDOM_SEED accepts at most three argument positions");
@@ -95,10 +92,10 @@ static void validate_random_seed(Context *context, F2cStatement *statement) {
 }
 
 void f2c_validation_random_intrinsic(Context *context, F2cStatement *statement) {
-    if (statement == NULL || statement->kind != F2C_STMT_CALL || statement->name == NULL)
+    if (statement == NULL || statement->kind != F2C_STMT_CALL)
         return;
-    if (strcmp(statement->name, "random_number") == 0)
+    if (statement->intrinsic == F2C_INTRINSIC_RANDOM_NUMBER)
         validate_random_number(context, statement);
-    else if (strcmp(statement->name, "random_seed") == 0)
+    else if (statement->intrinsic == F2C_INTRINSIC_RANDOM_SEED)
         validate_random_seed(context, statement);
 }

@@ -3,7 +3,6 @@
 #include "semantic/validation/intrinsic/arguments.h"
 
 #include <stdint.h>
-#include <string.h>
 
 static const char *intrinsic_display_name(F2cIntrinsicId intrinsic) {
     switch (intrinsic) {
@@ -162,8 +161,7 @@ void f2c_validation_bit_intrinsic(Context *context, Unit *unit, size_t line,
 }
 
 void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement) {
-    const F2cIntrinsicArgumentSchema *schema =
-        f2c_intrinsic_argument_schema(F2C_INTRINSIC_MVBITS);
+    const F2cIntrinsicArgumentSchema *schema = f2c_intrinsic_argument_schema(F2C_INTRINSIC_MVBITS);
     F2cBoundIntrinsicArguments bound;
     const F2cExpr *shape = NULL;
     const F2cExpr *from;
@@ -177,10 +175,9 @@ void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement
     int from_position_known;
     int length_known;
     int to_position_known;
-    if (statement == NULL || statement->kind != F2C_STMT_CALL || statement->name == NULL ||
-        strcmp(statement->name, "mvbits") != 0)
+    if (statement == NULL || statement->kind != F2C_STMT_CALL ||
+        statement->intrinsic != F2C_INTRINSIC_MVBITS)
         return;
-    statement->intrinsic = F2C_INTRINSIC_MVBITS;
     if (statement->item_count != 5U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "MVBITS requires exactly 5 arguments");
@@ -189,8 +186,7 @@ void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement
         statement->arguments, statement->item_count);
     for (argument = 0U; argument < 5U; ++argument)
         require_integer(context, statement->line, statement->text, "MVBITS",
-                        schema->names[argument],
-                        bound.values[argument]);
+                        schema->names[argument], bound.values[argument]);
     from = bound.values[0];
     to = bound.values[3];
     if (from != NULL && to != NULL && from->type == TYPE_INTEGER && to->type == TYPE_INTEGER &&

@@ -311,6 +311,7 @@ set(
     src/semantic/validation/intrinsic/random.c
     src/semantic/validation/intrinsic/reduction.c
     src/semantic/validation/intrinsic/representation.c
+    src/semantic/validation/intrinsic/statement.c
     src/semantic/validation/intrinsic/time.c
     src/semantic/validation/intrinsic/transform.c
     src/semantic/validation/lifetime.c

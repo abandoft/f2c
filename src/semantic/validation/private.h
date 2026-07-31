@@ -68,6 +68,7 @@ void f2c_validation_reduction_intrinsic(Context *context, Unit *unit, size_t lin
                                         const char *statement_text, F2cExpr *expression);
 void f2c_validation_transform_intrinsic(Context *context, Unit *unit, size_t line,
                                         const char *statement_text, F2cExpr *expression);
+int f2c_validation_intrinsic_subroutine(Context *context, Unit *unit, F2cStatement *statement);
 void f2c_validation_mvbits(Context *context, Unit *unit, F2cStatement *statement);
 void f2c_validation_time_intrinsic(Context *context, F2cStatement *statement);
 void f2c_validation_random_intrinsic(Context *context, F2cStatement *statement);
