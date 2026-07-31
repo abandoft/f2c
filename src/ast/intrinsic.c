@@ -194,8 +194,9 @@ static void resolve_intrinsic_shape(AstParser *parser, F2cExpr *expression) {
         }
     }
     if (f2c_intrinsic_is_transformational(expression->intrinsic) ||
-        strcmp(expression->text, "shape") == 0 || strcmp(expression->text, "lbound") == 0 ||
-        strcmp(expression->text, "ubound") == 0 ||
+        expression->intrinsic == F2C_INTRINSIC_SHAPE ||
+        expression->intrinsic == F2C_INTRINSIC_LBOUND ||
+        expression->intrinsic == F2C_INTRINSIC_UBOUND ||
         f2c_intrinsic_is_reduction(expression->intrinsic))
         f2c_ast_set_transform_intrinsic_shape(parser, expression);
 }
@@ -220,10 +221,12 @@ static void resolve_intrinsic_kind(F2cExpr *expression, const F2cIntrinsicSignat
             expression->derived_type = source->derived_type;
         }
     }
-    if (strcmp(expression->text, "size") == 0 || strcmp(expression->text, "lbound") == 0 ||
-        strcmp(expression->text, "ubound") == 0 || strcmp(expression->text, "shape") == 0) {
+    if (expression->intrinsic == F2C_INTRINSIC_SIZE ||
+        expression->intrinsic == F2C_INTRINSIC_LBOUND ||
+        expression->intrinsic == F2C_INTRINSIC_UBOUND ||
+        expression->intrinsic == F2C_INTRINSIC_SHAPE) {
         const F2cExpr *kind_argument = f2c_ast_intrinsic_argument(
-            expression, "kind", strcmp(expression->text, "shape") == 0 ? 1U : 2U);
+            expression, "kind", expression->intrinsic == F2C_INTRINSIC_SHAPE ? 1U : 2U);
         const int selected_kind = f2c_ast_kind_value_from_argument(kind_argument);
         if (selected_kind != 0)
             expression->type_kind = selected_kind;

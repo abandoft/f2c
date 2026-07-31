@@ -124,7 +124,6 @@ const F2cExpr *f2c_ast_intrinsic_argument(const F2cExpr *call, const char *keywo
 }
 
 void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expression) {
-    const char *name = expression->text;
     const F2cExpr *source;
     const F2cExpr *shape;
     const F2cExpr *dimension;
@@ -162,11 +161,14 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
         }
         return;
     }
-    if (strcmp(name, "shape") == 0 || strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0) {
-        source = f2c_ast_intrinsic_argument(expression,
-                                            strcmp(name, "shape") == 0 ? "source" : "array", 0U);
+    if (expression->intrinsic == F2C_INTRINSIC_SHAPE ||
+        expression->intrinsic == F2C_INTRINSIC_LBOUND ||
+        expression->intrinsic == F2C_INTRINSIC_UBOUND) {
+        const int shape_inquiry = expression->intrinsic == F2C_INTRINSIC_SHAPE;
+        source =
+            f2c_ast_intrinsic_argument(expression, shape_inquiry ? "source" : "array", 0U);
         dimension =
-            strcmp(name, "shape") == 0 ? NULL : f2c_ast_intrinsic_argument(expression, "dim", 1U);
+            shape_inquiry ? NULL : f2c_ast_intrinsic_argument(expression, "dim", 1U);
         if (dimension != NULL) {
             f2c_ast_set_expression_shape(expression, 0U, F2C_SHAPE_SCALAR);
         } else {

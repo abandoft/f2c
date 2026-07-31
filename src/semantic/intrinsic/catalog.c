@@ -753,9 +753,9 @@ size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, s
     }
     if (signature->id == F2C_INTRINSIC_PACK)
         return 1U;
-    if (strcmp(name, "shape") == 0)
+    if (signature->id == F2C_INTRINSIC_SHAPE)
         return 1U;
-    if (strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0)
+    if (signature->id == F2C_INTRINSIC_LBOUND || signature->id == F2C_INTRINSIC_UBOUND)
         return f2c_intrinsic_argument(arguments, count, "dim", 1U) != NULL ? 0U : 1U;
     if (signature->id == F2C_INTRINSIC_UNPACK) {
         const F2cExpr *mask = f2c_intrinsic_argument(arguments, count, "mask", 1U);
