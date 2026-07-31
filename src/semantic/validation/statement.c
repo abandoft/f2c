@@ -576,6 +576,53 @@ static void validate_declaration_initializer(Context *context, size_t line, cons
     }
 }
 
+static void validate_entity_attributes(Context *context, Unit *unit, const Symbol *symbol,
+                                       size_t line) {
+    int64_t character_length;
+    if (symbol->derived_owner != NULL && (symbol->optional || symbol->target || symbol->value ||
+                                          symbol->asynchronous || symbol->volatile_entity)) {
+        f2c_diagnostic_at(context, line, 1U, 1,
+                          "derived-type component '%s' has an attribute that is valid only for "
+                          "variables or dummy arguments",
+                          symbol->name);
+    }
+    if (symbol->value && !symbol->argument)
+        f2c_diagnostic_at(context, line, 1U, 1, "VALUE entity '%s' must be a dummy argument",
+                          symbol->name);
+    if (symbol->value && symbol->external)
+        f2c_diagnostic_at(context, line, 1U, 1,
+                          "VALUE dummy '%s' must be a data object, not a procedure", symbol->name);
+    if (symbol->value && symbol->rank != 0U)
+        f2c_diagnostic_at(context, line, 1U, 1, "VALUE dummy '%s' must be scalar", symbol->name);
+    if (symbol->value && (symbol->allocatable || symbol->pointer))
+        f2c_diagnostic_at(context, line, 1U, 1, "VALUE dummy '%s' cannot be ALLOCATABLE or POINTER",
+                          symbol->name);
+    if (symbol->value && (symbol->intent == F2C_INTENT_OUT || symbol->intent == F2C_INTENT_INOUT))
+        f2c_diagnostic_at(context, line, 1U, 1,
+                          "VALUE dummy '%s' cannot have INTENT(OUT) or INTENT(INOUT)",
+                          symbol->name);
+    if (symbol->value && symbol->volatile_entity)
+        f2c_diagnostic_at(context, line, 1U, 1,
+                          "VALUE dummy '%s' cannot have the VOLATILE attribute", symbol->name);
+    if (symbol->value && symbol->type == TYPE_CHARACTER &&
+        !f2c_evaluate_integer_constant(unit, symbol->character_length_expression,
+                                       &character_length))
+        f2c_diagnostic_at(context, line, 1U, 1,
+                          "CHARACTER VALUE dummy '%s' must have a constant length", symbol->name);
+    if (symbol->pointer && symbol->target)
+        f2c_diagnostic_at(context, line, 1U, 1, "entity '%s' cannot be both POINTER and TARGET",
+                          symbol->name);
+    if (symbol->parameter && (symbol->asynchronous || symbol->volatile_entity))
+        f2c_diagnostic_at(context, line, 1U, 1,
+                          "PARAMETER entity '%s' cannot be ASYNCHRONOUS or VOLATILE", symbol->name);
+    if (symbol->volatile_entity && symbol->intent == F2C_INTENT_IN)
+        f2c_diagnostic_at(context, line, 1U, 1, "VOLATILE dummy '%s' cannot have INTENT(IN)",
+                          symbol->name);
+    if ((symbol->asynchronous || symbol->volatile_entity) && symbol->external)
+        f2c_diagnostic_at(context, line, 1U, 1, "procedure '%s' cannot be ASYNCHRONOUS or VOLATILE",
+                          symbol->name);
+}
+
 static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *symbol) {
     size_t dimension;
     const size_t line = symbol->declaration_line != 0U ? symbol->declaration_line
@@ -677,6 +724,7 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
             unit, symbol->character_length_expression, &constant_length);
     }
     f2c_shape_from_symbol(unit, &symbol->shape, symbol);
+    validate_entity_attributes(context, unit, symbol, line);
     if (f2c_symbol_is_assumed_size(symbol) && !symbol->argument && !symbol->parameter) {
         f2c_diagnostic_at_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, 1U, 1,
                                "assumed-size array '%s' must be a dummy argument", symbol->name);
