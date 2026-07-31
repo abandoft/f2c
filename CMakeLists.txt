@@ -266,6 +266,7 @@ set(
     src/semantic/constant/real.c
     src/semantic/data_flow.h
     src/semantic/data_flow/bitset.c
+    src/semantic/data_flow/temporaries.c
     src/semantic/data_flow/variables.c
     src/semantic/host.c
     src/semantic/implicit.c

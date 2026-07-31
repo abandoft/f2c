@@ -66,6 +66,8 @@ static void free_derived_type(F2cDerivedType *derived) {
 void f2c_free_unit(Unit *unit) {
     size_t index;
     f2c_variable_flow_clear(unit);
+    f2c_temporary_flow_clear(unit);
+    free(unit->owned_temporaries);
     free(unit->name);
     free(unit->fortran_name);
     free(unit->result_name);
