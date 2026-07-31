@@ -180,8 +180,7 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
         *stride = f2c_strdup("1");
         return *supported && *pointer != NULL && *count != NULL && *stride != NULL;
     }
-    if (array->kind == F2C_EXPR_CALL && array->text != NULL &&
-        strcmp(array->text, "reshape") == 0) {
+    if (array->kind == F2C_EXPR_CALL && array->intrinsic == F2C_INTRINSIC_RESHAPE) {
         const F2cExpr *source = call_argument(array, "source", 0U);
         const F2cExpr *pad = call_argument(array, "pad", 2U);
         const F2cExpr *order = call_argument(array, "order", 3U);

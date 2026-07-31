@@ -261,11 +261,14 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
             free(pointer);
             return f2c_buffer_take(&result);
         }
-        if (expression->text != NULL && expression->child_count != 0U &&
-            (strcmp(expression->text, "reshape") == 0 || strcmp(expression->text, "pack") == 0 ||
-             strcmp(expression->text, "unpack") == 0 || strcmp(expression->text, "spread") == 0 ||
-             strcmp(expression->text, "cshift") == 0 || strcmp(expression->text, "eoshift") == 0 ||
-             strcmp(expression->text, "transpose") == 0)) {
+        if (expression->child_count != 0U &&
+            (expression->intrinsic == F2C_INTRINSIC_RESHAPE ||
+             expression->intrinsic == F2C_INTRINSIC_PACK ||
+             expression->intrinsic == F2C_INTRINSIC_UNPACK ||
+             expression->intrinsic == F2C_INTRINSIC_SPREAD ||
+             expression->intrinsic == F2C_INTRINSIC_CSHIFT ||
+             expression->intrinsic == F2C_INTRINSIC_EOSHIFT ||
+             expression->intrinsic == F2C_INTRINSIC_TRANSPOSE)) {
             const F2cExpr *source = expression->children[0];
             if (source != NULL && source->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
                 source->child_count == 1U)

@@ -242,11 +242,11 @@ static int emit_matmul_array(Context *context, Unit *unit, Symbol *target, const
 
 int f2c_transform_emit_matrix(Context *context, Unit *unit, Symbol *target, const F2cExpr *call,
                               size_t line, int depth) {
-    if (call == NULL || call->text == NULL)
+    if (call == NULL)
         return 0;
-    if (strcmp(call->text, "transpose") == 0)
+    if (call->intrinsic == F2C_INTRINSIC_TRANSPOSE)
         return emit_transpose(context, unit, target, call, line, depth);
-    if (strcmp(call->text, "matmul") == 0)
+    if (call->intrinsic == F2C_INTRINSIC_MATMUL)
         return emit_matmul_array(context, unit, target, call, line, depth);
     return 0;
 }
