@@ -89,6 +89,15 @@ typedef struct F2cIntrinsicSignature {
     F2cIntrinsicKindRule kind_rule;
 } F2cIntrinsicSignature;
 
+typedef struct F2cIntrinsicSpecification {
+    F2cIntrinsicDescriptor descriptor;
+    F2cIntrinsicArgumentSchema arguments;
+    F2cIntrinsicSignature signature;
+} F2cIntrinsicSpecification;
+
+const F2cIntrinsicSpecification *f2c_intrinsic_specification(F2cIntrinsicId intrinsic);
+const F2cIntrinsicSpecification *f2c_find_intrinsic_specification(const char *name);
+const F2cIntrinsicSignature *f2c_intrinsic_canonical_signature(F2cIntrinsicId intrinsic);
 const F2cIntrinsicDescriptor *f2c_intrinsic_descriptor(F2cIntrinsicId intrinsic);
 const F2cIntrinsicDescriptor *f2c_find_intrinsic_descriptor(const char *name);
 const F2cIntrinsicArgumentSchema *f2c_intrinsic_argument_schema(F2cIntrinsicId intrinsic);
