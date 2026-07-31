@@ -154,6 +154,31 @@ static void test_growth_and_tombstone_reuse(void) {
     free(expressions);
 }
 
+static void test_clone_across_growth(void) {
+    Context context;
+    Unit unit;
+    F2cExpr expressions[9];
+    size_t index;
+    memset(&context, 0, sizeof(context));
+    memset(expressions, 0, sizeof(expressions));
+    unit = test_unit(&context);
+    expect(f2c_lowering_copy_code(&unit, &expressions[0], "growth_source") &&
+               f2c_lowering_set_array_temporary(&unit, &expressions[0], 1) &&
+               f2c_lowering_set_argument_materialized(&unit, &expressions[0], 1),
+           "the growth clone source is initialized");
+    for (index = 1U; index < 8U; ++index)
+        expect(f2c_lowering_copy_code(&unit, &expressions[index], "occupied"),
+               "the initial overlay table reaches its growth threshold");
+    expect(f2c_lowering_clone(&unit, &expressions[8], &expressions[0]),
+           "cloning remains valid when target insertion grows the overlay");
+    expect(f2c_lowering_code(&unit, &expressions[8]) != NULL &&
+               strcmp(f2c_lowering_code(&unit, &expressions[8]), "growth_source") == 0 &&
+               f2c_lowering_is_array_temporary(&unit, &expressions[8]) &&
+               f2c_lowering_argument_materialized(&unit, &expressions[8]),
+           "growth-safe cloning preserves strings and flags");
+    f2c_lowering_clear(&context);
+}
+
 static void test_codegen_expression_free(void) {
     Context context;
     Unit unit;
@@ -185,6 +210,7 @@ int main(void) {
     test_values_and_replacement();
     test_clone_and_forget_tree();
     test_growth_and_tombstone_reuse();
+    test_clone_across_growth();
     test_codegen_expression_free();
     if (failures != 0)
         fprintf(stderr, "%d expression lowering test(s) failed\n", failures);

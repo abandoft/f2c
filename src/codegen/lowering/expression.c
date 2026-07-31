@@ -265,6 +265,8 @@ int f2c_lowering_clone(Unit *unit, const F2cExpr *target, const F2cExpr *source)
     char *code = NULL;
     char *extent = NULL;
     char *character_length = NULL;
+    int array_temporary;
+    int argument_materialized;
     if (unit == NULL || target == NULL || source == NULL)
         return 0;
     if (target == source)
@@ -272,6 +274,8 @@ int f2c_lowering_clone(Unit *unit, const F2cExpr *target, const F2cExpr *source)
     f2c_lowering_forget(unit, target);
     if (source_lowering == NULL)
         return 1;
+    array_temporary = source_lowering->array_temporary;
+    argument_materialized = source_lowering->argument_materialized;
     if ((source_lowering->code != NULL && (code = f2c_strdup(source_lowering->code)) == NULL) ||
         (source_lowering->extent != NULL &&
          (extent = f2c_strdup(source_lowering->extent)) == NULL) ||
@@ -292,8 +296,8 @@ int f2c_lowering_clone(Unit *unit, const F2cExpr *target, const F2cExpr *source)
     target_lowering->code = code;
     target_lowering->extent = extent;
     target_lowering->character_length = character_length;
-    target_lowering->array_temporary = source_lowering->array_temporary;
-    target_lowering->argument_materialized = source_lowering->argument_materialized;
+    target_lowering->array_temporary = array_temporary;
+    target_lowering->argument_materialized = argument_materialized;
     return 1;
 }
 
