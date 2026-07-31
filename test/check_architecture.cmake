@@ -28,7 +28,7 @@ foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
     if(
         PRODUCTION_FILE MATCHES "/src/codegen/"
         AND CONTENT MATCHES
-            "(temporary_index|contiguous_temporary_index|host_descriptor_temporary_(begin|count)|ordered_temporary_index|ordered_argument_temporary_index|statement_temporary_index|statement_nested_temporary_begin)[ \t]*=[^=]"
+            "(temporary_index|contiguous_temporary_index|host_descriptor_temporary_(begin|count)|ordered_temporary_index|ordered_argument_temporary_index|statement_temporary_index|statement_nested_temporary_begin|lifetime_statement_index|temporary_lifetime_analyzed|owned_temporary_index|owned_temporary_kind|temporary_ownership_analyzed)[ \t]*=[^=]"
     )
         message(
             FATAL_ERROR
@@ -99,8 +99,26 @@ file(READ "${SOURCE_DIR}/src/codegen/module.c" MODULE_CODEGEN)
 file(READ "${SOURCE_DIR}/src/semantic/temporary.c" TEMPORARY_PLANNING)
 file(READ "${SOURCE_DIR}/src/codegen/unit.c" UNIT_CODEGEN)
 file(READ "${SOURCE_DIR}/src/codegen/unit/temporary.c" TEMPORARY_DECLARATIONS)
+file(READ "${SOURCE_DIR}/src/codegen/array/function.c" ARRAY_FUNCTION_RESULTS)
+file(READ "${SOURCE_DIR}/src/codegen/array/temporary.c" ARRAY_TEMPORARIES)
+file(READ "${SOURCE_DIR}/src/codegen/array/ownership.c" ARRAY_OWNERSHIP)
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
+endif()
+if(
+    ARRAY_FUNCTION_RESULTS MATCHES "Buffer[ \t]*\\*cleanup"
+    OR ARRAY_TEMPORARIES MATCHES "Buffer[ \t]*\\*cleanup"
+    OR ARRAY_FUNCTION_RESULTS MATCHES
+        "f2c_buffer_(append|printf)[ \t\r\n]*\\([^,]*cleanup"
+    OR ARRAY_TEMPORARIES MATCHES
+        "f2c_buffer_(append|printf)[ \t\r\n]*\\([^,]*cleanup"
+    OR NOT ARRAY_OWNERSHIP MATCHES "F2cArrayCleanupAction"
+    OR NOT ARRAY_OWNERSHIP MATCHES "f2c_array_cleanup_append[ \t\r\n]*\\("
+)
+    message(
+        FATAL_ERROR
+        "owned array results must lower through typed cleanup actions, not cleanup strings"
+    )
 endif()
 if(
     NOT PROCEDURE_LOWERING MATCHES "f2c_parse_procedure_declaration_syntax[ \t\r\n]*\\("

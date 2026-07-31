@@ -1,8 +1,10 @@
 #include "semantic/semantic.h"
 
+#include "codegen/array/private.h"
 #include "codegen/codegen.h"
 #include "internal/context.h"
 #include "ir/statement.h"
+#include "semantic/data_flow.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -166,11 +168,80 @@ static void test_emitter_rejects_unplanned_ir(void) {
     free(context.diagnostics.data);
 }
 
+static void test_owned_array_temporary_flow(void) {
+    F2cExpr first;
+    F2cExpr second;
+    F2cStatement statement;
+    F2cArrayCleanupList cleanup;
+    Buffer output;
+    Context context;
+    Unit unit;
+    const char *second_cleanup;
+    const char *first_cleanup;
+    memset(&first, 0, sizeof(first));
+    memset(&second, 0, sizeof(second));
+    memset(&statement, 0, sizeof(statement));
+    memset(&cleanup, 0, sizeof(cleanup));
+    memset(&output, 0, sizeof(output));
+    memset(&context, 0, sizeof(context));
+    memset(&unit, 0, sizeof(unit));
+    first.kind = F2C_EXPR_CALL;
+    first.intrinsic = F2C_INTRINSIC_RESHAPE;
+    first.type = TYPE_INTEGER;
+    first.type_kind = f2c_default_kind(TYPE_INTEGER);
+    first.rank = 1U;
+    first.lowered_c = (char *)"first_owned_array";
+    first.lowered_extent_c = (char *)"2U";
+    second = first;
+    second.lowered_c = (char *)"second_owned_array";
+    second.lowered_extent_c = (char *)"3U";
+    statement.kind = F2C_STMT_ASSIGNMENT;
+    statement.right = &first;
+    statement.limit = &second;
+    unit.context = &context;
+    unit.kind = UNIT_SUBROUTINE;
+    unit.phase = F2C_UNIT_TYPED_IR;
+    unit.statements = &statement;
+    unit.statement_count = 1U;
+    expect(f2c_plan_expression_lifetimes(&context, &unit),
+           "semantic planning catalogs owned array expressions");
+    expect(unit.owned_temporary_count == 2U && statement.temporary_plan.owned_temporary_count == 2U,
+           "the statement owns both transformational results");
+    expect(first.owned_temporary_index == 0U && second.owned_temporary_index == 1U &&
+               first.owned_temporary_kind == F2C_OWNED_TEMPORARY_TRANSFORMATIONAL_RESULT &&
+               second.owned_temporary_kind == F2C_OWNED_TEMPORARY_TRANSFORMATIONAL_RESULT,
+           "owned array values receive stable typed-IR identities");
+    expect(f2c_analyze_temporary_lifetimes(&context, &unit),
+           "owned temporary data flow converges on a typed statement");
+    expect(unit.temporary_flow.analyzed &&
+               f2c_temporary_flow_is_created(&unit, 0U, first.owned_temporary_index) &&
+               f2c_temporary_flow_is_released(&unit, 0U, first.owned_temporary_index) &&
+               !f2c_temporary_flow_is_live_out(&unit, 0U, first.owned_temporary_index),
+           "a statement-owned array result is created, released, and cannot escape its CFG node");
+    expect(f2c_array_cleanup_append(&unit, &cleanup, &first, 1) &&
+               f2c_array_cleanup_append(&unit, &cleanup, &second, 1),
+           "code generation accepts cleanup actions backed by the semantic catalog");
+    expect(!f2c_array_cleanup_append(&unit, &cleanup, &first, 1),
+           "the typed cleanup list rejects duplicate ownership actions");
+    expect(f2c_array_cleanup_emit(&output, &unit, &cleanup), "typed cleanup actions lower to C");
+    second_cleanup = output.data != NULL ? strstr(output.data, "free(second_owned_array);") : NULL;
+    first_cleanup = output.data != NULL ? strstr(output.data, "free(first_owned_array);") : NULL;
+    expect(second_cleanup != NULL && first_cleanup != NULL && second_cleanup < first_cleanup,
+           "owned array values are destroyed in reverse creation order");
+    f2c_array_cleanup_clear(&cleanup);
+    free(output.data);
+    f2c_temporary_flow_clear(&unit);
+    free(unit.owned_temporaries);
+    free(statement.temporary_plan.owned_temporaries);
+    free(context.diagnostics.data);
+}
+
 int main(void) {
     test_character_temporary_plan();
     test_ordered_call_plan();
     test_statement_function_plan();
     test_emitter_rejects_unplanned_ir();
+    test_owned_array_temporary_flow();
     if (failures != 0)
         fprintf(stderr, "%d temporary-lifetime test(s) failed\n", failures);
     return failures == 0 ? 0 : 1;

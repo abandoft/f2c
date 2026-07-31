@@ -342,6 +342,39 @@ static void test_record_transfer_codegen(void) {
     f2c_result_free(&result);
 }
 
+static void test_unformatted_owned_result_cleanup(void) {
+    static const char source[] = "program unformatted_owned_result\n"
+                                 "  implicit none\n"
+                                 "  integer :: status\n"
+                                 "  open(47, status='scratch', form='unformatted', iostat=status)\n"
+                                 "  write(47, err=100) values()\n"
+                                 "  close(47)\n"
+                                 "  stop\n"
+                                 "100 close(47)\n"
+                                 "contains\n"
+                                 "  function values() result(output)\n"
+                                 "    integer, allocatable :: output(:)\n"
+                                 "    allocate(output(2))\n"
+                                 "    output = [1, 2]\n"
+                                 "  end function values\n"
+                                 "end program unformatted_owned_result\n";
+    F2cOptions options = {"unformatted_owned_result.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    const char *materialization =
+        result.code != NULL ? strstr(result.code, "f2c_array_unformatted_function_") : NULL;
+    const char *cleanup = materialization != NULL
+                              ? strstr(materialization, "free(f2c_array_unformatted_function_")
+                              : NULL;
+    const char *error_branch =
+        cleanup != NULL ? strstr(cleanup, "if (f2c_io_is_error(f2c_io_status))") : NULL;
+    expect(result.error_count == 0U && result.code != NULL,
+           "an owned array function result lowers as an unformatted output item");
+    expect(cleanup != NULL, "the unformatted transfer emits the typed owned-result cleanup action");
+    expect(error_branch != NULL && cleanup < error_branch,
+           "owned I/O temporaries are released before the ERR control-flow edge");
+    f2c_result_free(&result);
+}
+
 static void test_iolength_semantics(void) {
     static const char source[] = "program invalid_iolength\n"
                                  "  implicit none\n"
@@ -459,6 +492,7 @@ int main(void) {
     test_internal_file_codegen();
     test_record_transfer_constraints();
     test_record_transfer_codegen();
+    test_unformatted_owned_result_cleanup();
     test_iolength_semantics();
     test_iolength_codegen();
     if (failures != 0) {
