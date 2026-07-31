@@ -124,18 +124,14 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output, "const int32_t f2c_do_start_%zu = (int32_t)(%s);\n",
                           loop_id, start_expression.code);
-        f2c_buffer_append(&context->output, start_expression.cleanup.data != NULL
-                                                ? start_expression.cleanup.data
-                                                : "");
+        (void)f2c_array_cleanup_emit(&context->output, unit, &start_expression.cleanup);
         f2c_buffer_append(&context->output, finish_expression.prelude.data != NULL
                                                 ? finish_expression.prelude.data
                                                 : "");
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output, "const int32_t f2c_do_limit_%zu = (int32_t)(%s);\n",
                           loop_id, finish_expression.code);
-        f2c_buffer_append(&context->output, finish_expression.cleanup.data != NULL
-                                                ? finish_expression.cleanup.data
-                                                : "");
+        (void)f2c_array_cleanup_emit(&context->output, unit, &finish_expression.cleanup);
         if (!canonical_positive_unit) {
             f2c_buffer_append(&context->output, step_expression.prelude.data != NULL
                                                     ? step_expression.prelude.data
@@ -143,9 +139,7 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "const int32_t f2c_do_step_%zu = (int32_t)(%s);\n",
                               loop_id, step_expression.code);
-            f2c_buffer_append(&context->output, step_expression.cleanup.data != NULL
-                                                    ? step_expression.cleanup.data
-                                                    : "");
+            (void)f2c_array_cleanup_emit(&context->output, unit, &step_expression.cleanup);
         }
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output, "%s = f2c_do_start_%zu;\n", variable, loop_id);
@@ -181,25 +175,20 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output, "const %s f2c_do_start_%zu = (%s)(%s);\n", c_type,
                           loop_id, c_type, start_expression.code);
-        f2c_buffer_append(&context->output, start_expression.cleanup.data != NULL
-                                                ? start_expression.cleanup.data
-                                                : "");
+        (void)f2c_array_cleanup_emit(&context->output, unit, &start_expression.cleanup);
         f2c_buffer_append(&context->output, finish_expression.prelude.data != NULL
                                                 ? finish_expression.prelude.data
                                                 : "");
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output, "const %s f2c_do_limit_%zu = (%s)(%s);\n", c_type,
                           loop_id, c_type, finish_expression.code);
-        f2c_buffer_append(&context->output, finish_expression.cleanup.data != NULL
-                                                ? finish_expression.cleanup.data
-                                                : "");
+        (void)f2c_array_cleanup_emit(&context->output, unit, &finish_expression.cleanup);
         f2c_buffer_append(&context->output,
                           step_expression.prelude.data != NULL ? step_expression.prelude.data : "");
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output, "const %s f2c_do_step_%zu = (%s)(%s);\n", c_type,
                           loop_id, c_type, step_expression.code);
-        f2c_buffer_append(&context->output,
-                          step_expression.cleanup.data != NULL ? step_expression.cleanup.data : "");
+        (void)f2c_array_cleanup_emit(&context->output, unit, &step_expression.cleanup);
     }
     if (statement->unroll_hint) {
         indent(&context->output, *depth);
@@ -254,8 +243,7 @@ int f2c_emit_do_begin(Context *context, Unit *unit, const F2cStatement *statemen
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "const bool f2c_condition_%zu = (bool)(%s);\n",
                               identifier, condition.code);
-            f2c_buffer_append(&context->output,
-                              condition.cleanup.data != NULL ? condition.cleanup.data : "");
+            (void)f2c_array_cleanup_emit(&context->output, unit, &condition.cleanup);
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "if (!f2c_condition_%zu) break;\n", identifier);
         } else {

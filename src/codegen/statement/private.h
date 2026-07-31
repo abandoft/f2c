@@ -1,6 +1,7 @@
 #ifndef F2C_CODEGEN_STATEMENT_PRIVATE_H
 #define F2C_CODEGEN_STATEMENT_PRIVATE_H
 
+#include "codegen/array/private.h"
 #include "internal/f2c.h"
 
 typedef struct {
@@ -8,7 +9,7 @@ typedef struct {
     const F2cExpr *expression;
     char *code;
     Buffer prelude;
-    Buffer cleanup;
+    F2cArrayCleanupList cleanup;
     int materialized;
 } F2cPreparedStatementExpression;
 

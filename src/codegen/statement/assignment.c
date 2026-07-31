@@ -149,7 +149,7 @@ static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
     F2cStatement prepared_statement;
     F2cExpr *prepared_right = NULL;
     Buffer prelude = {0};
-    Buffer cleanup = {0};
+    F2cArrayCleanupList cleanup = {0};
     size_t temporary = 0U;
     int emitted = 0;
     if (context == NULL || unit == NULL || statement == NULL || statement->left == NULL ||
@@ -179,7 +179,7 @@ static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
         emitted = 1;
         goto done;
     }
-    f2c_buffer_append(&context->output, cleanup.data != NULL ? cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     emitted = 1;
@@ -187,7 +187,7 @@ static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
 done:
     f2c_expr_free(prepared_right);
     free(prelude.data);
-    free(cleanup.data);
+    f2c_array_cleanup_clear(&cleanup);
     return emitted;
 }
 

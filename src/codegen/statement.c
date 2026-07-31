@@ -21,7 +21,7 @@ static void emit_condition(Buffer *output, const char *condition) {
 static int emit_inline_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                  Line *source_line, int depth);
 
-static void emit_materialized_scalar(Context *context,
+static void emit_materialized_scalar(Context *context, Unit *unit,
                                      const F2cPreparedStatementExpression *prepared,
                                      const char *name, const char *c_type, int depth) {
     indent(&context->output, depth);
@@ -32,16 +32,16 @@ static void emit_materialized_scalar(Context *context,
                       prepared->prelude.data != NULL ? prepared->prelude.data : "");
     indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output, "%s = (%s)(%s);\n", name, c_type, prepared->code);
-    f2c_buffer_append(&context->output,
-                      prepared->cleanup.data != NULL ? prepared->cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &prepared->cleanup);
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
 }
 
-static void emit_condition_value(Context *context, const F2cPreparedStatementExpression *prepared,
-                                 size_t identifier, int depth, Buffer *name) {
+static void emit_condition_value(Context *context, Unit *unit,
+                                 const F2cPreparedStatementExpression *prepared, size_t identifier,
+                                 int depth, Buffer *name) {
     f2c_buffer_printf(name, "f2c_condition_%zu", identifier);
-    emit_materialized_scalar(context, prepared, name->data, "bool", depth);
+    emit_materialized_scalar(context, unit, prepared, name->data, "bool", depth);
 }
 
 int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *statement,
@@ -150,7 +150,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             indent(&context->output, *depth);
             f2c_buffer_append(&context->output, "} else {\n");
             ++*depth;
-            emit_condition_value(context, &condition, identifier, *depth, &name);
+            emit_condition_value(context, unit, &condition, identifier, *depth, &name);
             indent(&context->output, *depth);
             f2c_buffer_append(&context->output, "if ");
             emit_condition(&context->output, name.data);
@@ -194,8 +194,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             indent(&context->output, *depth + 1);
             f2c_buffer_printf(&context->output, "%s f2c_arithmetic_if_value_%zu = %s;\n",
                               f2c_expression_c_type(statement->expression), identifier, value.code);
-            f2c_buffer_append(&context->output,
-                              value.cleanup.data != NULL ? value.cleanup.data : "");
+            (void)f2c_array_cleanup_emit(&context->output, unit, &value.cleanup);
             indent(&context->output, *depth + 1);
             f2c_buffer_printf(&context->output, "if (f2c_arithmetic_if_value_%zu < 0) {\n",
                               identifier);
@@ -230,7 +229,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                                                   &condition))
                 return 0;
             if (condition.materialized)
-                emit_condition_value(context, &condition, identifier, *depth, &name);
+                emit_condition_value(context, unit, &condition, identifier, *depth, &name);
             indent(&context->output, *depth);
             if (statement->block) {
                 f2c_buffer_append(&context->output, "if ");
@@ -371,8 +370,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             f2c_buffer_printf(&context->output,
                               "const int32_t f2c_alternate_return_%zu = (int32_t)(%s);\n",
                               identifier, selector.code);
-            f2c_buffer_append(&context->output,
-                              selector.cleanup.data != NULL ? selector.cleanup.data : "");
+            (void)f2c_array_cleanup_emit(&context->output, unit, &selector.cleanup);
             f2c_emit_unit_cleanup(&context->output, unit, *depth + 1);
             indent(&context->output, *depth + 1);
             f2c_buffer_printf(&context->output, "return f2c_alternate_return_%zu;\n", identifier);
@@ -438,7 +436,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
                 f2c_buffer_printf(&context->output, "const int f2c_stop_code_%zu = (int)(%s);\n",
                                   identifier, code.code);
             }
-            f2c_buffer_append(&context->output, code.cleanup.data != NULL ? code.cleanup.data : "");
+            (void)f2c_array_cleanup_emit(&context->output, unit, &code.cleanup);
             indent(&context->output, *depth + 1);
             if (statement->expression->type == TYPE_CHARACTER) {
                 f2c_buffer_append(&context->output,
@@ -528,8 +526,7 @@ int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *stateme
             f2c_buffer_printf(&context->output,
                               "const int32_t f2c_goto_selector_%zu = (int32_t)(%s);\n", identifier,
                               selector.code);
-            f2c_buffer_append(&context->output,
-                              selector.cleanup.data != NULL ? selector.cleanup.data : "");
+            (void)f2c_array_cleanup_emit(&context->output, unit, &selector.cleanup);
             indent(&context->output, *depth + 1);
             f2c_buffer_printf(&context->output, "switch (f2c_goto_selector_%zu) {\n", identifier);
             for (i = 0U; i < statement->label_count; ++i) {

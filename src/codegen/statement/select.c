@@ -161,7 +161,7 @@ int f2c_emit_select_case_begin(Context *context, Unit *unit, const F2cStatement 
         f2c_buffer_printf(&context->output, "const %s f2c_select_case_value_%zu = (%s);\n",
                           f2c_expression_c_type(statement->expression), identifier, selector.code);
     }
-    f2c_buffer_append(&context->output, selector.cleanup.data != NULL ? selector.cleanup.data : "");
+    (void)f2c_array_cleanup_emit(&context->output, unit, &selector.cleanup);
     f2c_release_statement_expression(&selector);
     return 1;
 }

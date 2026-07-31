@@ -66,7 +66,7 @@ void f2c_release_statement_expression(F2cPreparedStatementExpression *prepared) 
     f2c_expr_free(prepared->owned_expression);
     free(prepared->code);
     free(prepared->prelude.data);
-    free(prepared->cleanup.data);
+    f2c_array_cleanup_clear(&prepared->cleanup);
     memset(prepared, 0, sizeof(*prepared));
 }
 
