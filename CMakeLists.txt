@@ -650,6 +650,14 @@ if(F2C_BUILD_TESTING)
     )
     add_test(NAME variable_liveness COMMAND f2c_variable_flow_tests)
 
+    add_executable(f2c_temporary_lifetime_tests test/test_temporary_lifetime.c)
+    f2c_configure_internal_test_target(f2c_temporary_lifetime_tests)
+    target_include_directories(
+        f2c_temporary_lifetime_tests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    add_test(NAME temporary_lifetime_planning COMMAND f2c_temporary_lifetime_tests)
+
     add_executable(
         f2c_real_representation_intrinsic_tests
         test/test_real_representation_intrinsic.c
