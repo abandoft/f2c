@@ -137,7 +137,13 @@ file(READ "${SOURCE_DIR}/src/codegen/array/ownership.c" ARRAY_OWNERSHIP)
 file(READ "${SOURCE_DIR}/src/codegen/call.c" CALL_LOWERING)
 file(READ "${SOURCE_DIR}/src/codegen/expression/call.c" EXPRESSION_CALL_LOWERING)
 file(READ "${SOURCE_DIR}/src/codegen/lowering.c" INTRINSIC_EMISSION)
+file(READ "${SOURCE_DIR}/src/semantic/intrinsic.h" INTRINSIC_API)
 file(READ "${SOURCE_DIR}/src/semantic/intrinsic/catalog.c" INTRINSIC_CATALOG)
+file(READ "${SOURCE_DIR}/src/semantic/intrinsic/identity.c" INTRINSIC_IDENTITY)
+file(READ
+     "${SOURCE_DIR}/src/semantic/validation/intrinsic/statement.c"
+     INTRINSIC_STATEMENT_VALIDATION
+)
 if(
     EXPRESSION_IR MATCHES
         "(lowered_c|lowered_extent_c|lowered_character_length_c|lowered_array_temporary|ordered_argument_materialized)"
@@ -156,6 +162,55 @@ if(
 )
     message(FATAL_ERROR "intrinsic catalog must not absorb typed result resolution")
 endif()
+if(
+    NOT INTRINSIC_API MATCHES "typedef[ \t\r\n]+struct[ \t\r\n]+F2cIntrinsicSpecification"
+    OR NOT INTRINSIC_IDENTITY MATCHES
+        "static[ \t\r\n]+const[ \t\r\n]+F2cIntrinsicSpecification[ \t\r\n]+specifications"
+    OR INTRINSIC_IDENTITY MATCHES
+        "static[ \t\r\n]+const[ \t\r\n]+F2cIntrinsic(Descriptor|ArgumentSchema)[ \t\r\n]+[a-z_]+[ \t\r\n]*\\["
+    OR INTRINSIC_CATALOG MATCHES
+        "static[ \t\r\n]+const[ \t\r\n]+F2cIntrinsicSignature[ \t\r\n]+intrinsic_signatures"
+)
+    message(
+        FATAL_ERROR
+        "canonical intrinsic identity, argument schema, and signature must share one specification table"
+    )
+endif()
+if(
+    NOT INTRINSIC_STATEMENT_VALIDATION MATCHES
+        "f2c_find_intrinsic_specification[ \t\r\n]*\\("
+    OR NOT INTRINSIC_STATEMENT_VALIDATION MATCHES
+        "statement->intrinsic[ \t]*=[ \t]*specification->descriptor\\.id"
+    OR NOT INTRINSIC_STATEMENT_VALIDATION MATCHES
+        "switch[ \t\r\n]*\\([ \t\r\n]*statement->intrinsic[ \t\r\n]*\\)"
+)
+    message(FATAL_ERROR "intrinsic CALL validation must bind and dispatch by typed identity")
+endif()
+foreach(
+    INTRINSIC_CALL_FILE
+    IN ITEMS
+        src/semantic/validation/intrinsic/statement.c
+        src/semantic/validation/intrinsic/bit.c
+        src/semantic/validation/intrinsic/random.c
+        src/semantic/validation/intrinsic/time.c
+)
+    file(READ "${SOURCE_DIR}/${INTRINSIC_CALL_FILE}" INTRINSIC_CALL_CONTENT)
+    if(
+        INTRINSIC_CALL_CONTENT MATCHES
+            "strcmp[ \t\r\n]*\\([^\\n]*\"(mvbits|random_number|random_seed|cpu_time|date_and_time|system_clock)\""
+    )
+        message(FATAL_ERROR "${INTRINSIC_CALL_FILE} dispatches an intrinsic CALL by source spelling")
+    endif()
+    if(
+        NOT INTRINSIC_CALL_FILE STREQUAL "src/semantic/validation/intrinsic/statement.c"
+        AND INTRINSIC_CALL_CONTENT MATCHES "statement->intrinsic[ \t]*=[^=]"
+    )
+        message(
+            FATAL_ERROR
+            "${INTRINSIC_CALL_FILE} rebinds an intrinsic CALL outside the central dispatcher"
+        )
+    endif()
+endforeach()
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
 endif()
