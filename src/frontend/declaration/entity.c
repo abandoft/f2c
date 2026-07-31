@@ -15,7 +15,10 @@ enum F2cDeclarationAttributeFlag {
     F2C_DECL_DIMENSION = 1U << 8,
     F2C_DECL_PUBLIC = 1U << 9,
     F2C_DECL_PRIVATE = 1U << 10,
-    F2C_DECL_CONTIGUOUS = 1U << 11
+    F2C_DECL_CONTIGUOUS = 1U << 11,
+    F2C_DECL_VALUE = 1U << 12,
+    F2C_DECL_ASYNCHRONOUS = 1U << 13,
+    F2C_DECL_VOLATILE = 1U << 14
 };
 
 typedef struct F2cDeclarationAttributes {
@@ -90,6 +93,12 @@ static unsigned int simple_attribute_flag(const F2cToken *token) {
         return F2C_DECL_TARGET;
     if (f2c_token_equals(token, "contiguous"))
         return F2C_DECL_CONTIGUOUS;
+    if (f2c_token_equals(token, "value"))
+        return F2C_DECL_VALUE;
+    if (f2c_token_equals(token, "asynchronous"))
+        return F2C_DECL_ASYNCHRONOUS;
+    if (f2c_token_equals(token, "volatile"))
+        return F2C_DECL_VOLATILE;
     if (f2c_token_equals(token, "public"))
         return F2C_DECL_PUBLIC;
     if (f2c_token_equals(token, "private"))
@@ -393,6 +402,9 @@ static int apply_entity(Context *context, Unit *unit, const Line *line,
     symbol->contiguous |= (flags & F2C_DECL_CONTIGUOUS) != 0U;
     symbol->polymorphic |= type_spec->polymorphic;
     symbol->target |= (flags & F2C_DECL_TARGET) != 0U;
+    symbol->value |= (flags & F2C_DECL_VALUE) != 0U;
+    symbol->asynchronous |= (flags & F2C_DECL_ASYNCHRONOUS) != 0U;
+    symbol->volatile_entity |= (flags & F2C_DECL_VOLATILE) != 0U;
     symbol->optional |= (flags & F2C_DECL_OPTIONAL) != 0U;
     symbol->parameter |= (flags & F2C_DECL_PARAMETER) != 0U;
     symbol->saved |= (flags & F2C_DECL_SAVE) != 0U;
