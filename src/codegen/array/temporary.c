@@ -20,15 +20,16 @@ static int trivial_scalar(const F2cExpr *expression) {
 }
 
 static int array_inquiry_call(const F2cExpr *expression) {
-    return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
-           (strcmp(expression->text, "shape") == 0 || strcmp(expression->text, "lbound") == 0 ||
-            strcmp(expression->text, "ubound") == 0);
+    return expression != NULL && expression->kind == F2C_EXPR_CALL &&
+           (expression->intrinsic == F2C_INTRINSIC_SHAPE ||
+            expression->intrinsic == F2C_INTRINSIC_LBOUND ||
+            expression->intrinsic == F2C_INTRINSIC_UBOUND);
 }
 
 static int transfer_mold_argument(const F2cExpr *call, size_t child) {
     const F2cExpr *argument;
-    if (call == NULL || call->kind != F2C_EXPR_CALL || call->text == NULL ||
-        strcmp(call->text, "transfer") != 0 || child >= call->child_count)
+    if (call == NULL || call->kind != F2C_EXPR_CALL ||
+        call->intrinsic != F2C_INTRINSIC_TRANSFER || child >= call->child_count)
         return 0;
     argument = call->children[child];
     if (argument != NULL && argument->kind == F2C_EXPR_KEYWORD_ARGUMENT)

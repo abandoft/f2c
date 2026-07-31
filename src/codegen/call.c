@@ -288,8 +288,8 @@ static char *lower_transfer_actual(LoweredCall *call, Unit *unit, const F2cExpr 
     if (expression != NULL && expression->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
         expression->child_count == 1U)
         expression = expression->children[0];
-    if (expression == NULL || expression->kind != F2C_EXPR_CALL || expression->text == NULL ||
-        strcmp(expression->text, "transfer") != 0 || expression->child_count < 3U)
+    if (expression == NULL || expression->kind != F2C_EXPR_CALL ||
+        expression->intrinsic != F2C_INTRINSIC_TRANSFER || expression->child_count < 3U)
         goto done;
     source = expression->children[0];
     mold = expression->children[1];

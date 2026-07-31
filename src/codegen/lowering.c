@@ -192,8 +192,8 @@ char *f2c_emit_binary(Unit *unit, const char *left, Type left_type, const char *
     return f2c_buffer_take(&result);
 }
 
-char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_types, size_t count,
-                         Type result_type) {
+char *f2c_emit_intrinsic(const char *name, F2cIntrinsicId intrinsic, char **args,
+                         const Type *argument_types, size_t count, Type result_type) {
     Buffer result = {0};
     const char *mapped = name;
     size_t i;
@@ -323,7 +323,7 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
         f2c_buffer_printf(&result, "logf(%s)", count != 0U ? args[0] : "0");
     } else if (strcmp(name, "log10") == 0) {
         f2c_buffer_printf(&result, "%s(%s)", mapped, count != 0U ? args[0] : "0");
-    } else if (strcmp(name, "isnan") == 0 || strcmp(name, "la_isnan") == 0) {
+    } else if (intrinsic == F2C_INTRINSIC_ISNAN) {
         f2c_buffer_printf(&result, "isnan(%s)", count != 0U ? args[0] : "0");
     } else if (strcmp(name, "cabs1") == 0 || strcmp(name, "abs1") == 0) {
         const char *value = count != 0U ? args[0] : "0";
@@ -346,7 +346,7 @@ char *f2c_emit_intrinsic(const char *name, char **args, const Type *argument_typ
         f2c_buffer_append(&result, "0");
     } else if (strcmp(name, "omp_get_num_threads") == 0) {
         f2c_buffer_append(&result, "1");
-    } else if (strcmp(name, "transfer") == 0) {
+    } else if (intrinsic == F2C_INTRINSIC_TRANSFER) {
         f2c_buffer_printf(&result, "F2C_TRANSFER(%s, %s)", count >= 1U ? args[0] : "0",
                           count >= 2U ? args[1] : "0");
     } else if (strcmp(name, "maxloc") == 0 || strcmp(name, "maxval") == 0) {

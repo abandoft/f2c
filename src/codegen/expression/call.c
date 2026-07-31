@@ -323,7 +323,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         return f2c_expression_numeric_operation_intrinsic(unit, expression, supported);
     if (intrinsic_call && f2c_intrinsic_is_real_representation(expression->intrinsic))
         return f2c_expression_real_representation_intrinsic(unit, expression, supported);
-    if (expression->text != NULL && strcmp(expression->text, "present") == 0 &&
+    if (expression->intrinsic == F2C_INTRINSIC_PRESENT &&
         expression->child_count == 1U && expression->children[0] != NULL &&
         expression->children[0]->kind == F2C_EXPR_NAME && expression->children[0]->symbol != NULL) {
         const Symbol *present_symbol = expression->children[0]->symbol;
@@ -334,7 +334,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
             f2c_buffer_printf(&result, "(%s != NULL)", f2c_symbol_c_name(unit, present_symbol));
         return f2c_buffer_take(&result);
     }
-    if (expression->text != NULL && strcmp(expression->text, "allocated") == 0 &&
+    if (expression->intrinsic == F2C_INTRINSIC_ALLOCATED &&
         expression->child_count == 1U && expression->children[0] != NULL &&
         (expression->children[0]->kind == F2C_EXPR_NAME ||
          expression->children[0]->kind == F2C_EXPR_COMPONENT) &&
@@ -348,7 +348,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         free(storage);
         return f2c_buffer_take(&result);
     }
-    if (expression->text != NULL && strcmp(expression->text, "associated") == 0 &&
+    if (expression->intrinsic == F2C_INTRINSIC_ASSOCIATED &&
         expression->child_count >= 1U && expression->child_count <= 2U &&
         f2c_intrinsic_argument(expression->children, expression->child_count, "pointer", 0U) !=
             NULL) {
@@ -437,10 +437,10 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         free(pointer_storage);
         return f2c_buffer_take(&result);
     }
-    if (expression->text != NULL &&
-        (strcmp(expression->text, "size") == 0 ||
-         ((strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0) &&
-          expression->rank == 0U)))
+    if (expression->intrinsic == F2C_INTRINSIC_SIZE ||
+        ((expression->intrinsic == F2C_INTRINSIC_LBOUND ||
+          expression->intrinsic == F2C_INTRINSIC_UBOUND) &&
+         expression->rank == 0U))
         return f2c_expression_array_inquiry(unit, expression, supported);
     {
         int matched = 0;
@@ -455,8 +455,9 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         return NULL;
     }
     if (intrinsic_call) {
-        char *intrinsic = f2c_emit_intrinsic(expression->text, arguments, types,
-                                             expression->child_count, expression->type);
+        char *intrinsic =
+            f2c_emit_intrinsic(expression->text, expression->intrinsic, arguments, types,
+                               expression->child_count, expression->type);
         f2c_expression_free_arguments(arguments, types, expression->child_count);
         return intrinsic;
     }
