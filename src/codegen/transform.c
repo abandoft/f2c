@@ -16,9 +16,10 @@ static char *vector_element(Unit *unit, const F2cExpr *vector, size_t index) {
         f2c_buffer_printf(&result, "%s[%zuU]", lowered_code, index);
         return f2c_buffer_take(&result);
     }
-    if (value->kind == F2C_EXPR_CALL && value->text != NULL && value->rank == 1U &&
-        (strcmp(value->text, "shape") == 0 || strcmp(value->text, "lbound") == 0 ||
-         strcmp(value->text, "ubound") == 0))
+    if (value->kind == F2C_EXPR_CALL && value->rank == 1U &&
+        (value->intrinsic == F2C_INTRINSIC_SHAPE ||
+         value->intrinsic == F2C_INTRINSIC_LBOUND ||
+         value->intrinsic == F2C_INTRINSIC_UBOUND))
         return f2c_transform_inquiry_element(unit, value, index);
     if (value->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
         if (index >= value->child_count)
@@ -764,8 +765,9 @@ int f2c_emit_transform_assignment(Context *context, Unit *unit, const F2cExpr *l
     if (f2c_intrinsic_is_reduction(right->intrinsic) &&
         right->intrinsic != F2C_INTRINSIC_DOT_PRODUCT && right->rank != 0U)
         return f2c_transform_emit_reduction(context, unit, target, right, line, depth);
-    if (right->intrinsic == F2C_INTRINSIC_NONE && name != NULL &&
-        (strcmp(name, "shape") == 0 || strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0))
+    if (right->intrinsic == F2C_INTRINSIC_SHAPE ||
+        right->intrinsic == F2C_INTRINSIC_LBOUND ||
+        right->intrinsic == F2C_INTRINSIC_UBOUND)
         return f2c_transform_emit_inquiry(context, unit, left, right, line, depth);
     if (!f2c_intrinsic_is_transformational(right->intrinsic))
         return 0;

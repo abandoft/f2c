@@ -16,9 +16,9 @@ static const F2cExpr *inquiry_array(const F2cExpr *call) {
     const char *keyword;
     size_t positional = 0U;
     size_t argument;
-    if (call == NULL || call->text == NULL)
+    if (call == NULL)
         return NULL;
-    keyword = strcmp(call->text, "shape") == 0 ? "source" : "array";
+    keyword = call->intrinsic == F2C_INTRINSIC_SHAPE ? "source" : "array";
     for (argument = 0U; argument < call->child_count; ++argument) {
         const F2cExpr *actual = call->children[argument];
         if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT) {
@@ -42,7 +42,7 @@ static char *inquiry_lower(Unit *unit, const F2cExpr *array, size_t dimension) {
 
 static char *inquiry_extent(Unit *unit, const F2cExpr *call, const F2cExpr *array,
                             size_t dimension) {
-    if (call != NULL && call->text != NULL && strcmp(call->text, "lbound") == 0 &&
+    if (call != NULL && call->intrinsic == F2C_INTRINSIC_LBOUND &&
         f2c_expression_is_whole_assumed_size(array) && dimension + 1U == array->rank)
         return f2c_strdup("1U");
     return f2c_array_expression_extent(unit, array, dimension);
@@ -53,10 +53,10 @@ char *f2c_array_inquiry_dimension(Unit *unit, const F2cExpr *call, size_t dimens
     char *extent;
     char *lower;
     Buffer result = {0};
-    if (unit == NULL || call == NULL || call->text == NULL || array == NULL ||
-        dimension >= array->rank ||
-        (strcmp(call->text, "shape") != 0 && strcmp(call->text, "lbound") != 0 &&
-         strcmp(call->text, "ubound") != 0))
+    if (unit == NULL || call == NULL || array == NULL || dimension >= array->rank ||
+        (call->intrinsic != F2C_INTRINSIC_SHAPE &&
+         call->intrinsic != F2C_INTRINSIC_LBOUND &&
+         call->intrinsic != F2C_INTRINSIC_UBOUND))
         return NULL;
     extent = inquiry_extent(unit, call, array, dimension);
     lower = inquiry_lower(unit, array, dimension);
@@ -66,10 +66,10 @@ char *f2c_array_inquiry_dimension(Unit *unit, const F2cExpr *call, size_t dimens
         return NULL;
     }
     f2c_buffer_printf(&result, "((%s)", f2c_expression_c_type(call));
-    if (strcmp(call->text, "shape") == 0)
+    if (call->intrinsic == F2C_INTRINSIC_SHAPE)
         f2c_buffer_printf(&result, "f2c_inquiry_size_integer((size_t)(%s), %d))", extent,
                           call->type_kind);
-    else if (strcmp(call->text, "lbound") == 0)
+    else if (call->intrinsic == F2C_INTRINSIC_LBOUND)
         f2c_buffer_printf(&result,
                           "f2c_inquiry_bound_integer(f2c_inquiry_lower_bound("
                           "(int64_t)(%s), (size_t)(%s)), %d))",

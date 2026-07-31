@@ -39,7 +39,6 @@ static void free_inquiry_dimensions(char **extents, char **lowers, size_t rank) 
 }
 
 char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *supported) {
-    const char *name = expression != NULL ? expression->text : NULL;
     const F2cExpr *array;
     const F2cExpr *dimension;
     char *extents[F2C_MAX_RANK] = {0};
@@ -51,24 +50,29 @@ char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *s
     size_t metadata_rank;
     size_t index;
     int assumed_size;
-    if (name == NULL ||
-        (strcmp(name, "size") != 0 && strcmp(name, "lbound") != 0 && strcmp(name, "ubound") != 0))
+    if (expression == NULL ||
+        (expression->intrinsic != F2C_INTRINSIC_SIZE &&
+         expression->intrinsic != F2C_INTRINSIC_LBOUND &&
+         expression->intrinsic != F2C_INTRINSIC_UBOUND))
         return NULL;
     array = inquiry_argument(expression, "array", 0U);
     dimension = inquiry_argument(expression, "dim", 1U);
     if (array == NULL || array->rank == 0U || array->rank > F2C_MAX_RANK ||
-        ((strcmp(name, "lbound") == 0 || strcmp(name, "ubound") == 0) && dimension == NULL)) {
+        ((expression->intrinsic == F2C_INTRINSIC_LBOUND ||
+          expression->intrinsic == F2C_INTRINSIC_UBOUND) &&
+         dimension == NULL)) {
         *supported = 0;
         return NULL;
     }
     assumed_size = f2c_expression_is_whole_assumed_size(array);
     metadata_rank = array->rank;
-    if (assumed_size && strcmp(name, "lbound") != 0)
+    if (assumed_size && expression->intrinsic != F2C_INTRINSIC_LBOUND)
         --metadata_rank;
-    if (assumed_size && strcmp(name, "size") == 0 && dimension == NULL)
+    if (assumed_size && expression->intrinsic == F2C_INTRINSIC_SIZE && dimension == NULL)
         goto unsupported;
     for (index = 0U; index < metadata_rank; ++index) {
-        if (assumed_size && strcmp(name, "lbound") == 0 && index + 1U == array->rank)
+        if (assumed_size && expression->intrinsic == F2C_INTRINSIC_LBOUND &&
+            index + 1U == array->rank)
             extents[index] = f2c_strdup("1U");
         else
             extents[index] = f2c_array_expression_extent(unit, array, index);
@@ -88,7 +92,7 @@ char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *s
     if (!*supported || (dimension != NULL && dimension_code == NULL))
         goto unsupported;
     f2c_buffer_printf(&result, "((%s)", f2c_expression_c_type(expression));
-    if (strcmp(name, "size") == 0) {
+    if (expression->intrinsic == F2C_INTRINSIC_SIZE) {
         f2c_buffer_append(&result, "f2c_inquiry_size_integer(");
         if (dimension_code != NULL)
             f2c_buffer_printf(&result,
@@ -100,7 +104,7 @@ char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *s
             f2c_buffer_printf(&result, "f2c_inquiry_size(%zuU, (const size_t[]){%s})",
                               metadata_rank, extent_list.data != NULL ? extent_list.data : "");
         f2c_buffer_printf(&result, ", %d))", expression->type_kind);
-    } else if (strcmp(name, "lbound") == 0) {
+    } else if (expression->intrinsic == F2C_INTRINSIC_LBOUND) {
         f2c_buffer_printf(&result,
                           "f2c_inquiry_bound_integer(f2c_inquiry_lower((int64_t)(%s), %zuU, "
                           "(const int64_t[]){%s}, (const size_t[]){%s}), %d))",

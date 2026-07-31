@@ -12,8 +12,8 @@ char *f2c_transform_inquiry_element(Unit *unit, const F2cExpr *value, size_t ind
 int f2c_transform_emit_inquiry(Context *context, Unit *unit, const F2cExpr *left,
                                const F2cExpr *call, size_t line, int depth) {
     Symbol *target = left != NULL ? left->symbol : NULL;
-    const F2cExpr *array =
-        f2c_transform_argument(call, strcmp(call->text, "shape") == 0 ? "source" : "array", 0U);
+    const F2cExpr *array = f2c_transform_argument(
+        call, call->intrinsic == F2C_INTRINSIC_SHAPE ? "source" : "array", 0U);
     char *values[F2C_MAX_RANK] = {0};
     size_t dimension;
     if (target == NULL || left->kind != F2C_EXPR_NAME || target->type != TYPE_INTEGER ||
