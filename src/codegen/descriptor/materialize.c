@@ -1,6 +1,7 @@
 #include "codegen/descriptor/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/lowering/private.h"
 #include "codegen/value/private.h"
 
 #include <stdio.h>
@@ -289,14 +290,14 @@ int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit
     indent(cleanup, depth);
     f2c_buffer_printf(cleanup, "free(%s);\n", view->data);
     free(element_code);
-    f2c_expr_free(element);
+    f2c_codegen_expression_free(unit, element);
     free(count);
     free(character_length);
     return 1;
 
 failed:
     free(element_code);
-    f2c_expr_free(element);
+    f2c_codegen_expression_free(unit, element);
     free(count);
     free(character_length);
     f2c_descriptor_view_free(view);

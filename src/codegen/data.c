@@ -1,5 +1,7 @@
 #include "internal/f2c.h"
 
+#include "codegen/lowering/private.h"
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -124,7 +126,7 @@ static int evaluate_substituted_integer(Unit *unit, const F2cExpr *expression,
         f2c_expr_clone_substitute_integers(expression, substitutions, substitution_count);
     const int valid =
         substituted != NULL && f2c_evaluate_integer_constant(unit, substituted, value);
-    f2c_expr_free(substituted);
+    f2c_codegen_expression_free(unit, substituted);
     return valid;
 }
 
@@ -225,7 +227,7 @@ static int emit_data_target(Context *context, Unit *unit, const F2cIoItem *targe
             const int emitted = target->data_static_initializer == 1
                                     ? consume_array_values(substituted, cursor)
                                     : emit_array_values(context, unit, substituted, cursor, depth);
-            f2c_expr_free(substituted);
+            f2c_codegen_expression_free(unit, substituted);
             return emitted;
         }
         {
@@ -233,11 +235,11 @@ static int emit_data_target(Context *context, Unit *unit, const F2cIoItem *targe
             if (value == NULL ||
                 (target->data_static_initializer != 1 &&
                  !emit_data_assignment(context, unit, substituted, value, depth))) {
-                f2c_expr_free(substituted);
+                f2c_codegen_expression_free(unit, substituted);
                 return 0;
             }
         }
-        f2c_expr_free(substituted);
+        f2c_codegen_expression_free(unit, substituted);
         return 1;
     }
     if (!evaluate_substituted_integer(unit, target->initial, substitutions->items,
