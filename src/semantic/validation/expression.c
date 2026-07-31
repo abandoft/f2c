@@ -161,19 +161,28 @@ static const F2cExpr *inquiry_argument(const F2cExpr *call, const char *keyword,
     return NULL;
 }
 
-static int intrinsic_accepts_whole_assumed_size(const char *name) {
-    static const char *const inquiries[] = {
-        "digits", "epsilon",     "huge",        "is_contiguous", "kind",    "lbound",
-        "len",    "maxexponent", "minexponent", "precision",     "present", "radix",
-        "range",  "rank",        "size",        "storage_size",  "tiny",    "ubound",
-    };
-    size_t inquiry;
-    if (name == NULL)
+static int intrinsic_accepts_whole_assumed_size(F2cIntrinsicId intrinsic) {
+    switch (intrinsic) {
+    case F2C_INTRINSIC_DIGITS:
+    case F2C_INTRINSIC_EPSILON:
+    case F2C_INTRINSIC_HUGE:
+    case F2C_INTRINSIC_KIND:
+    case F2C_INTRINSIC_LBOUND:
+    case F2C_INTRINSIC_LEN:
+    case F2C_INTRINSIC_MAXEXPONENT:
+    case F2C_INTRINSIC_MINEXPONENT:
+    case F2C_INTRINSIC_PRECISION:
+    case F2C_INTRINSIC_PRESENT:
+    case F2C_INTRINSIC_RADIX:
+    case F2C_INTRINSIC_RANGE:
+    case F2C_INTRINSIC_SIZE:
+    case F2C_INTRINSIC_TINY:
+    case F2C_INTRINSIC_UBOUND:
+        return 1;
+    case F2C_INTRINSIC_NONE:
+    default:
         return 0;
-    for (inquiry = 0U; inquiry < sizeof(inquiries) / sizeof(inquiries[0]); ++inquiry)
-        if (strcmp(name, inquiries[inquiry]) == 0)
-            return 1;
-    return 0;
+    }
 }
 
 static void validate_assumed_size_operands(Context *context, size_t line,
@@ -190,7 +199,7 @@ static void validate_assumed_size_operands(Context *context, size_t line,
             continue;
         if (expression->kind == F2C_EXPR_CALL &&
             (!f2c_is_intrinsic_name(expression->text) ||
-             intrinsic_accepts_whole_assumed_size(expression->text)))
+             intrinsic_accepts_whole_assumed_size(expression->intrinsic)))
             continue;
         f2c_diagnostic_at(
             context, line, f2c_validation_expression_start_column(statement_text, operand), 1,
@@ -202,7 +211,7 @@ static void validate_assumed_size_operands(Context *context, size_t line,
 
 static void validate_array_inquiry(Context *context, Unit *unit, size_t line,
                                    const char *statement_text, const F2cExpr *expression) {
-    const int shape = expression->text != NULL && strcmp(expression->text, "shape") == 0;
+    const int shape = expression->intrinsic == F2C_INTRINSIC_SHAPE;
     const F2cExpr *array = inquiry_argument(expression, shape ? "source" : "array", 0U);
     const F2cExpr *dimension = shape ? NULL : inquiry_argument(expression, "dim", 1U);
     const F2cExpr *kind = inquiry_argument(expression, "kind", shape ? 1U : 2U);
@@ -227,8 +236,8 @@ static void validate_array_inquiry(Context *context, Unit *unit, size_t line,
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, array), 1,
                           "SHAPE source cannot be an assumed-size array");
-    } else if (assumed_size &&
-               (strcmp(expression->text, "size") == 0 || strcmp(expression->text, "ubound") == 0)) {
+    } else if (assumed_size && (expression->intrinsic == F2C_INTRINSIC_SIZE ||
+                                expression->intrinsic == F2C_INTRINSIC_UBOUND)) {
         if (dimension == NULL) {
             f2c_diagnostic_at(context, line,
                               f2c_validation_expression_start_column(statement_text, array), 1,
@@ -694,8 +703,10 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                                                      expression);
         f2c_validation_reduction_intrinsic(context, unit, line, statement_text, expression);
         f2c_validation_transform_intrinsic(context, unit, line, statement_text, expression);
-        if (strcmp(expression->text, "size") == 0 || strcmp(expression->text, "shape") == 0 ||
-            strcmp(expression->text, "lbound") == 0 || strcmp(expression->text, "ubound") == 0)
+        if (expression->intrinsic == F2C_INTRINSIC_SIZE ||
+            expression->intrinsic == F2C_INTRINSIC_SHAPE ||
+            expression->intrinsic == F2C_INTRINSIC_LBOUND ||
+            expression->intrinsic == F2C_INTRINSIC_UBOUND)
             validate_array_inquiry(context, unit, line, statement_text, expression);
         if (signature != NULL && signature->rank_rule == F2C_INTRINSIC_RANK_ELEMENTAL) {
             const F2cExpr *array_argument = NULL;
@@ -725,11 +736,11 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                 }
             }
         }
-        if (strcmp(expression->text, "present") == 0)
+        if (expression->intrinsic == F2C_INTRINSIC_PRESENT)
             validate_present_intrinsic(context, unit, line, statement_text, expression);
-        else if (strcmp(expression->text, "allocated") == 0)
+        else if (expression->intrinsic == F2C_INTRINSIC_ALLOCATED)
             validate_allocated_intrinsic(context, line, statement_text, expression);
-        else if (strcmp(expression->text, "associated") == 0)
+        else if (expression->intrinsic == F2C_INTRINSIC_ASSOCIATED)
             validate_associated_intrinsic(context, line, statement_text, expression);
     } else if (expression->kind == F2C_EXPR_CALL && expression->symbol != NULL &&
                expression->symbol->type_bound) {
