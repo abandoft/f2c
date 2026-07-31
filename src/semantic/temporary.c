@@ -3,6 +3,7 @@
 #include "internal/f2c.h"
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct ExpressionTemporaryAssigner {
@@ -12,6 +13,86 @@ typedef struct ExpressionTemporaryAssigner {
     size_t next;
     int failed;
 } ExpressionTemporaryAssigner;
+
+static F2cOwnedTemporaryKind owned_temporary_kind(const F2cExpr *expression) {
+    if (expression == NULL || expression->rank == 0U)
+        return F2C_OWNED_TEMPORARY_NONE;
+    if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
+        return F2C_OWNED_TEMPORARY_ARRAY_CONSTRUCTOR;
+    if (expression->kind == F2C_EXPR_CALL &&
+        f2c_intrinsic_is_transformational(expression->intrinsic))
+        return F2C_OWNED_TEMPORARY_TRANSFORMATIONAL_RESULT;
+    if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_NONE &&
+        f2c_expression_has_descriptor_result(expression))
+        return F2C_OWNED_TEMPORARY_ARRAY_FUNCTION_RESULT;
+    if (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY)
+        return F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE;
+    return F2C_OWNED_TEMPORARY_NONE;
+}
+
+static void clear_owned_temporary_plans(Unit *unit) {
+    size_t statement;
+    if (unit == NULL)
+        return;
+    free(unit->owned_temporaries);
+    unit->owned_temporaries = NULL;
+    unit->owned_temporary_count = 0U;
+    unit->owned_temporary_capacity = 0U;
+    for (statement = 0U; statement < unit->statement_count; ++statement) {
+        free(unit->statements[statement].temporary_plan.owned_temporaries);
+        memset(&unit->statements[statement].temporary_plan, 0,
+               sizeof(unit->statements[statement].temporary_plan));
+    }
+}
+
+static int append_statement_owned_temporary(ExpressionTemporaryAssigner *assigner,
+                                            F2cExpr *expression, F2cOwnedTemporaryKind kind) {
+    F2cOwnedTemporary *catalog_replacement;
+    F2cStatementTemporaryPlan *statement_plan;
+    size_t *statement_replacement;
+    size_t catalog_capacity;
+    size_t statement_count;
+    const size_t index = assigner->unit->owned_temporary_count;
+    if (index == assigner->unit->owned_temporary_capacity) {
+        catalog_capacity = assigner->unit->owned_temporary_capacity == 0U
+                               ? 8U
+                               : assigner->unit->owned_temporary_capacity * 2U;
+        if (catalog_capacity < assigner->unit->owned_temporary_capacity ||
+            catalog_capacity > SIZE_MAX / sizeof(*catalog_replacement))
+            return 0;
+        catalog_replacement = (F2cOwnedTemporary *)realloc(
+            assigner->unit->owned_temporaries, catalog_capacity * sizeof(*catalog_replacement));
+        if (catalog_replacement == NULL)
+            return 0;
+        assigner->unit->owned_temporaries = catalog_replacement;
+        assigner->unit->owned_temporary_capacity = catalog_capacity;
+    }
+    statement_plan = &assigner->unit->statements[assigner->statement].temporary_plan;
+    statement_count = statement_plan->owned_temporary_count;
+    if (statement_count == SIZE_MAX ||
+        statement_count + 1U > SIZE_MAX / sizeof(*statement_replacement))
+        return 0;
+    statement_replacement = (size_t *)realloc(
+        statement_plan->owned_temporaries, (statement_count + 1U) * sizeof(*statement_replacement));
+    if (statement_replacement == NULL)
+        return 0;
+    statement_plan->owned_temporaries = statement_replacement;
+    statement_plan->owned_temporaries[statement_count] = index;
+    statement_plan->owned_temporary_count = statement_count + 1U;
+    assigner->unit->owned_temporaries[index] =
+        (F2cOwnedTemporary){kind,
+                            expression->type,
+                            expression->type_kind,
+                            expression->rank,
+                            assigner->statement,
+                            expression->span,
+                            expression->derived_type,
+                            expression->type == TYPE_DERIVED && expression->derived_type != NULL};
+    assigner->unit->owned_temporary_count = index + 1U;
+    expression->owned_temporary_index = index;
+    expression->owned_temporary_kind = kind;
+    return 1;
+}
 
 int f2c_expression_is_character_temporary(const F2cExpr *expression) {
     const int function_call = expression != NULL && expression->kind == F2C_EXPR_CALL &&
@@ -297,10 +378,14 @@ static void reset_expression_plan(F2cExpr *expression) {
     expression->statement_nested_temporary_begin = SIZE_MAX;
     expression->lifetime_statement_index = SIZE_MAX;
     expression->temporary_lifetime_analyzed = 0;
+    expression->owned_temporary_index = SIZE_MAX;
+    expression->owned_temporary_kind = F2C_OWNED_TEMPORARY_NONE;
+    expression->temporary_ownership_analyzed = 0;
 }
 
 static void assign_expression_temporary(F2cExpr *expression, void *state) {
     ExpressionTemporaryAssigner *assigner = (ExpressionTemporaryAssigner *)state;
+    const F2cOwnedTemporaryKind ownership = owned_temporary_kind(expression);
     size_t child;
     size_t temporary;
     if (expression == NULL)
@@ -358,8 +443,15 @@ static void assign_expression_temporary(F2cExpr *expression, void *state) {
         can_materialize_ordered_operand(f2c_expression_ordered_binary_operand(expression)) &&
         reserve_temporaries(assigner, 1U, &expression->span, "ordered-operand", &temporary))
         expression->ordered_temporary_index = temporary;
+    if (ownership != F2C_OWNED_TEMPORARY_NONE &&
+        !append_statement_owned_temporary(assigner, expression, ownership)) {
+        f2c_diagnostic_span_code(assigner->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &expression->span,
+                                 1, "out of memory while planning owned expression temporaries");
+        assigner->failed = 1;
+    }
     expression->lifetime_statement_index = assigner->statement;
     expression->temporary_lifetime_analyzed = !assigner->failed;
+    expression->temporary_ownership_analyzed = !assigner->failed;
 }
 
 static size_t statement_function_expansion_count(F2cExpr *expression) {
@@ -449,17 +541,23 @@ int f2c_plan_expression_lifetimes(Context *context, Unit *unit) {
     size_t statement;
     if (context == NULL || unit == NULL || unit->phase != F2C_UNIT_TYPED_IR)
         return 0;
+    clear_owned_temporary_plans(unit);
     unit->expression_lifetimes_analyzed = 0;
     unit->expression_temporary_count = 0U;
     unit->statement_function_temporary_count = 0U;
     for (statement = 0U; statement < unit->statement_count; ++statement) {
-        if (f2c_statement_is_function_definition(unit, statement))
+        if (f2c_statement_is_function_definition(unit, statement)) {
+            unit->statements[statement].temporary_plan.ownership_analyzed = 1;
             continue;
+        }
         expression_assigner.statement = statement;
         f2c_visit_statement_expressions(&unit->statements[statement], assign_expression_temporary,
                                         &expression_assigner);
-        if (expression_assigner.failed)
+        if (expression_assigner.failed) {
+            clear_owned_temporary_plans(unit);
             return 0;
+        }
+        unit->statements[statement].temporary_plan.ownership_analyzed = 1;
     }
     for (statement = 0U; statement < unit->statement_count; ++statement) {
         if (f2c_statement_is_function_definition(unit, statement))
