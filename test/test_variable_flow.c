@@ -73,11 +73,11 @@ static void test_linear_def_use_and_kill(void) {
 }
 
 static void test_call_intents(void) {
-    char *arguments[3] = {(char *)"input", (char *)"output", (char *)"update"};
-    Symbol dummies[3];
-    Symbol actuals[3];
-    F2cExpr expressions[3];
-    F2cExpr *argument_expressions[3];
+    char *arguments[4] = {(char *)"input", (char *)"output", (char *)"update", (char *)"copy"};
+    Symbol dummies[4];
+    Symbol actuals[4];
+    F2cExpr expressions[4];
+    F2cExpr *argument_expressions[4];
     F2cStatement statement;
     F2cControlFlowGraph graph;
     Unit definition;
@@ -94,21 +94,23 @@ static void test_call_intents(void) {
     dummies[1].intent = F2C_INTENT_OUT;
     dummies[2].name = arguments[2];
     dummies[2].intent = F2C_INTENT_INOUT;
+    dummies[3].name = arguments[3];
+    dummies[3].value = 1;
     definition.arguments = arguments;
-    definition.argument_count = 3U;
+    definition.argument_count = 4U;
     definition.symbols = dummies;
-    definition.symbol_count = 3U;
-    for (index = 0U; index < 3U; ++index) {
+    definition.symbol_count = 4U;
+    for (index = 0U; index < 4U; ++index) {
         actuals[index].name = arguments[index];
         expressions[index] = name_expression(&actuals[index]);
         argument_expressions[index] = &expressions[index];
     }
     statement.kind = F2C_STMT_CALL;
     statement.arguments = argument_expressions;
-    statement.item_count = 3U;
+    statement.item_count = 4U;
     statement.resolved_procedure = &definition;
     unit.symbols = actuals;
-    unit.symbol_count = 3U;
+    unit.symbol_count = 4U;
     unit.statements = &statement;
     unit.statement_count = 1U;
     expect(f2c_control_flow_build(NULL, &unit, &graph), "a call variable-flow CFG is built");
@@ -123,6 +125,9 @@ static void test_call_intents(void) {
     expect(f2c_variable_flow_is_used(&unit, 0U, &actuals[2]) &&
                f2c_variable_flow_is_defined(&unit, 0U, &actuals[2]),
            "INTENT(INOUT) is both a use and a definition");
+    expect(f2c_variable_flow_is_used(&unit, 0U, &actuals[3]) &&
+               !f2c_variable_flow_is_defined(&unit, 0U, &actuals[3]),
+           "VALUE copies from the actual argument without defining it");
     f2c_variable_flow_clear(&unit);
     f2c_control_flow_free(&graph);
 }
