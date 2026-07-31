@@ -21,16 +21,13 @@ static void diagnose_argument(Context *context, const F2cStatement *statement,
 }
 
 static void validate_random_number(Context *context, F2cStatement *statement) {
-    static const char *const names[] = {"harvest"};
     F2cBoundIntrinsicArguments bound;
     const F2cExpr *harvest;
     statement->intrinsic = F2C_INTRINSIC_RANDOM_NUMBER;
     if (statement->item_count != 1U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "RANDOM_NUMBER requires exactly one argument");
-    bound = f2c_validation_bind_intrinsic_arguments(context, statement->line, statement->text,
-                                                    "RANDOM_NUMBER", statement->arguments,
-                                                    statement->item_count, names, 1U, 1U);
+    bound = f2c_validation_bind_intrinsic_statement(context, statement);
     harvest = bound.values[0];
     if (harvest == NULL)
         return;
@@ -79,7 +76,6 @@ static void validate_seed_vector(Context *context, const F2cStatement *statement
 }
 
 static void validate_random_seed(Context *context, F2cStatement *statement) {
-    static const char *const names[] = {"size", "put", "get"};
     F2cBoundIntrinsicArguments bound;
     size_t present = 0U;
     size_t argument;
@@ -87,9 +83,7 @@ static void validate_random_seed(Context *context, F2cStatement *statement) {
     if (statement->item_count > 3U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "RANDOM_SEED accepts at most three argument positions");
-    bound = f2c_validation_bind_intrinsic_arguments(context, statement->line, statement->text,
-                                                    "RANDOM_SEED", statement->arguments,
-                                                    statement->item_count, names, 3U, 0U);
+    bound = f2c_validation_bind_intrinsic_statement(context, statement);
     for (argument = 0U; argument < 3U; ++argument)
         present += bound.values[argument] != NULL;
     if (present > 1U)

@@ -53,16 +53,13 @@ static void validate_scalar_output(Context *context, const F2cStatement *stateme
 }
 
 static void validate_date_and_time(Context *context, F2cStatement *statement) {
-    static const char *const names[] = {"date", "time", "zone", "values"};
     F2cBoundIntrinsicArguments bound;
     size_t argument;
     statement->intrinsic = F2C_INTRINSIC_DATE_AND_TIME;
     if (statement->item_count > 4U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "DATE_AND_TIME accepts at most four arguments");
-    bound = f2c_validation_bind_intrinsic_arguments(context, statement->line, statement->text,
-                                                    "DATE_AND_TIME", statement->arguments,
-                                                    statement->item_count, names, 4U, 0U);
+    bound = f2c_validation_bind_intrinsic_statement(context, statement);
     for (argument = 0U; argument < 3U; ++argument) {
         const F2cExpr *value = bound.values[argument];
         validate_scalar_output(context, statement, value, TYPE_CHARACTER,
@@ -90,15 +87,12 @@ static void validate_date_and_time(Context *context, F2cStatement *statement) {
 }
 
 static void validate_system_clock(Context *context, F2cStatement *statement) {
-    static const char *const names[] = {"count", "count_rate", "count_max"};
     F2cBoundIntrinsicArguments bound;
     statement->intrinsic = F2C_INTRINSIC_SYSTEM_CLOCK;
     if (statement->item_count > 3U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "SYSTEM_CLOCK accepts at most three arguments");
-    bound = f2c_validation_bind_intrinsic_arguments(context, statement->line, statement->text,
-                                                    "SYSTEM_CLOCK", statement->arguments,
-                                                    statement->item_count, names, 3U, 0U);
+    bound = f2c_validation_bind_intrinsic_statement(context, statement);
     validate_scalar_output(context, statement, bound.values[0], TYPE_INTEGER, "COUNT");
     if (bound.values[0] != NULL && !supported_integer_kind(bound.values[0]))
         diagnose_argument(context, statement, bound.values[0],
@@ -120,15 +114,12 @@ static void validate_system_clock(Context *context, F2cStatement *statement) {
 }
 
 static void validate_cpu_time(Context *context, F2cStatement *statement) {
-    static const char *const names[] = {"time"};
     F2cBoundIntrinsicArguments bound;
     statement->intrinsic = F2C_INTRINSIC_CPU_TIME;
     if (statement->item_count != 1U)
         f2c_diagnostic_at(context, statement->line, statement->name_span.begin.column, 1,
                           "CPU_TIME requires exactly one argument");
-    bound = f2c_validation_bind_intrinsic_arguments(context, statement->line, statement->text,
-                                                    "CPU_TIME", statement->arguments,
-                                                    statement->item_count, names, 1U, 1U);
+    bound = f2c_validation_bind_intrinsic_statement(context, statement);
     if (bound.values[0] == NULL)
         return;
     if ((bound.values[0]->type != TYPE_REAL && bound.values[0]->type != TYPE_DOUBLE) ||
