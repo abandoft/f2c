@@ -1,5 +1,6 @@
 #include "internal/f2c.h"
 
+#include "codegen/array/private.h"
 #include "codegen/descriptor/private.h"
 #include "codegen/value/private.h"
 
@@ -608,12 +609,26 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
                                      const F2cStatement *alternate_call, int depth) {
     size_t i;
     LoweredCall call;
+    F2cExpr **lowering_arguments = NULL;
     const Symbol *callee;
     const Unit *capture_procedure;
     int has_scope;
     if (name == NULL)
         return;
     memset(&call, 0, sizeof(call));
+    if (count != 0U) {
+        if (argument_expressions == NULL || count > SIZE_MAX / sizeof(*lowering_arguments))
+            return;
+        lowering_arguments = (F2cExpr **)calloc(count, sizeof(*lowering_arguments));
+        if (lowering_arguments == NULL)
+            return;
+        for (i = 0U; i < count; ++i) {
+            lowering_arguments[i] = f2c_array_clone_expression(argument_expressions[i]);
+            if (lowering_arguments[i] == NULL)
+                goto done;
+        }
+        argument_expressions = lowering_arguments;
+    }
     callee = explicit_callee != NULL ? explicit_callee : f2c_find_symbol(unit, name);
     if (callee == NULL) {
         for (i = 0U; i < unit->symbol_count; ++i) {
@@ -630,13 +645,11 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
     for (i = 0U; i < count; ++i) {
         if (argument_expressions != NULL &&
             !prepare_array_conversions(&call, unit, argument_expressions[i], depth + 1)) {
-            lowered_call_free(&call);
-            return;
+            goto done;
         }
     }
     if (!lower_call(&call, unit, callee, argument_expressions, count, depth)) {
-        lowered_call_free(&call);
-        return;
+        goto done;
     }
     if (callee != NULL) {
         for (i = 0U; i < count && i < callee->external_parameter_count; ++i) {
@@ -652,18 +665,15 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
             f2c_buffer_printf(&cast, "(%s *)(%s)", expected->c_name, call.arguments[i]);
             free(call.arguments[i]);
             call.arguments[i] = f2c_buffer_take(&cast);
-            if (call.arguments[i] == NULL) {
-                lowered_call_free(&call);
-                return;
-            }
+            if (call.arguments[i] == NULL)
+                goto done;
         }
         for (i = 0U; i < count && i < callee->external_parameter_count; ++i) {
             char *bridged = f2c_bridge_implicit_mutable_actual(
                 callee, i, argument_expressions != NULL ? argument_expressions[i] : NULL,
                 call.arguments[i]);
             if (bridged == NULL) {
-                lowered_call_free(&call);
-                return;
+                goto done;
             }
             free(call.arguments[i]);
             call.arguments[i] = bridged;
@@ -671,14 +681,12 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
     }
     if (!prepare_allocatable_descriptors(&call, unit, callee, argument_expressions, count,
                                          depth + 1)) {
-        lowered_call_free(&call);
-        return;
+        goto done;
     }
     if (f2c_host_capture_has_descriptor_lifecycle(unit, capture_procedure)) {
         if (!f2c_emit_host_capture_statement_descriptors(&call.prelude, &call.postlude, unit,
                                                          capture_procedure, depth + 1)) {
-            lowered_call_free(&call);
-            return;
+            goto done;
         }
         call.has_descriptors = 1;
     }
@@ -696,8 +704,7 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
     for (i = 0U; i < count; ++i)
         f2c_buffer_printf(output, "%s%s", i == 0U ? "" : ", ", call.arguments[i]);
     if (!f2c_emit_host_capture_statement_actuals(output, unit, capture_procedure, count != 0U)) {
-        lowered_call_free(&call);
-        return;
+        goto done;
     }
     for (i = 0U; i < count; ++i) {
         const F2cExpr *expression = argument_expressions != NULL ? argument_expressions[i] : NULL;
@@ -717,8 +724,7 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
         free(length);
     }
     if (!f2c_emit_host_capture_lengths(output, unit, capture_procedure)) {
-        lowered_call_free(&call);
-        return;
+        goto done;
     }
     f2c_buffer_append(output, ");\n");
     if (has_scope) {
@@ -753,7 +759,11 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
         emit_indent(output, depth);
         f2c_buffer_append(output, "}\n");
     }
+done:
     lowered_call_free(&call);
+    for (i = 0U; i < count; ++i)
+        f2c_expr_free(lowering_arguments != NULL ? lowering_arguments[i] : NULL);
+    free(lowering_arguments);
 }
 
 void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,

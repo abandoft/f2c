@@ -640,48 +640,24 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
                                             &call_cleanup, f2c_buffer_take(&result), supported);
 }
 
-typedef struct OrderedArgumentState {
-    F2cExpr *expression;
-    char *original_lowered;
-    int original_materialized;
-} OrderedArgumentState;
-
-static void restore_ordered_arguments(OrderedArgumentState *states, size_t count) {
-    size_t index;
-    for (index = count; index != 0U; --index) {
-        OrderedArgumentState *state = &states[index - 1U];
-        char *temporary = state->expression->lowered_c;
-        state->expression->lowered_c = state->original_lowered;
-        state->expression->ordered_argument_materialized = state->original_materialized;
-        free(temporary);
-    }
-}
-
 char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported) {
-    OrderedArgumentState *states = NULL;
+    F2cExpr *lowering_expression;
     Buffer setup = {0};
     Buffer cleanup = {0};
-    size_t state_count = 0U;
     size_t argument;
     char *call;
     if (expression == NULL || supported == NULL)
         return NULL;
-    if (expression->child_count != 0U) {
-        if (expression->child_count > SIZE_MAX / sizeof(*states)) {
-            *supported = 0;
-            return NULL;
-        }
-        states = (OrderedArgumentState *)calloc(expression->child_count, sizeof(*states));
-        if (states == NULL) {
-            *supported = 0;
-            return NULL;
-        }
+    lowering_expression = f2c_array_clone_expression(expression);
+    if (lowering_expression == NULL) {
+        *supported = 0;
+        return NULL;
     }
-    for (argument = 0U; argument < expression->child_count; ++argument) {
-        F2cExpr *actual = (F2cExpr *)intrinsic_argument_value(expression->children[argument]);
+    for (argument = 0U; argument < lowering_expression->child_count; ++argument) {
+        F2cExpr *actual =
+            (F2cExpr *)intrinsic_argument_value(lowering_expression->children[argument]);
         Buffer name = {0};
         char *code;
-        OrderedArgumentState *state;
         if (actual == NULL || actual->ordered_argument_temporary_index == SIZE_MAX ||
             actual->ordered_argument_materialized)
             continue;
@@ -704,16 +680,12 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
             *supported = 0;
             goto failed;
         }
-        state = &states[state_count++];
-        state->expression = actual;
-        state->original_lowered = actual->lowered_c;
-        state->original_materialized = actual->ordered_argument_materialized;
+        free(actual->lowered_c);
         actual->lowered_c = f2c_buffer_take(&name);
         actual->ordered_argument_materialized = 1;
     }
-    call = emit_call_body(unit, expression, supported);
-    restore_ordered_arguments(states, state_count);
-    free(states);
+    call = emit_call_body(unit, lowering_expression, supported);
+    f2c_expr_free(lowering_expression);
     if (!*supported || call == NULL) {
         free(call);
         free(setup.data);
@@ -722,8 +694,7 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
     return f2c_expression_wrap_managed_call(expression, 0, &setup, &cleanup, call, supported);
 
 failed:
-    restore_ordered_arguments(states, state_count);
-    free(states);
+    f2c_expr_free(lowering_expression);
     free(setup.data);
     return NULL;
 }
