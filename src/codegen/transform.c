@@ -1,15 +1,19 @@
 #include "codegen/transform/private.h"
 
+#include "codegen/lowering/private.h"
+
 #include <stdlib.h>
 #include <string.h>
 
 static char *vector_element(Unit *unit, const F2cExpr *vector, size_t index) {
     const F2cExpr *value = f2c_transform_argument_value(vector);
+    const char *lowered_code;
     if (value == NULL)
         return NULL;
-    if (value->lowered_c != NULL && value->rank == 1U) {
+    lowered_code = f2c_lowering_code(unit, value);
+    if (lowered_code != NULL && value->rank == 1U) {
         Buffer result = {0};
-        f2c_buffer_printf(&result, "%s[%zuU]", value->lowered_c, index);
+        f2c_buffer_printf(&result, "%s[%zuU]", lowered_code, index);
         return f2c_buffer_take(&result);
     }
     if (value->kind == F2C_EXPR_CALL && value->text != NULL && value->rank == 1U &&

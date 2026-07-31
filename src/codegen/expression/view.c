@@ -2,6 +2,7 @@
 
 #include "codegen/array/private.h"
 #include "codegen/descriptor/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -122,16 +123,18 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
     char *lower;
     char *upper;
     char *step;
+    const char *lowered_code;
     size_t dimension;
     if (array == NULL || array->rank == 0U)
         return 0;
-    if (array->lowered_array_temporary && array->lowered_c != NULL) {
+    lowered_code = f2c_lowering_code(unit, array);
+    if (f2c_lowering_is_array_temporary(unit, array) && lowered_code != NULL) {
         Buffer count_code = {0};
-        *pointer = f2c_strdup(array->lowered_c);
+        *pointer = f2c_strdup(lowered_code);
         f2c_buffer_printf(&count_code, "f2c_inquiry_size(%zuU, (const size_t[]){", array->rank);
         for (dimension = 0U; dimension < array->rank; ++dimension)
             f2c_buffer_printf(&count_code, "%s(size_t)%s_extent_%zu", dimension == 0U ? "" : ", ",
-                              array->lowered_c, dimension + 1U);
+                              lowered_code, dimension + 1U);
         f2c_buffer_append(&count_code, "})");
         *count = f2c_buffer_take(&count_code);
         *stride = f2c_strdup("1");

@@ -1,6 +1,7 @@
 #include "codegen/transform/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,6 +59,7 @@ void f2c_transform_free_array(TransformArray *array) {
 }
 
 int f2c_transform_array_view(Unit *unit, const F2cExpr *expression, TransformArray *array) {
+    const char *lowered_code;
     size_t dimension;
     memset(array, 0, sizeof(*array));
     expression = f2c_transform_argument_value(expression);
@@ -69,13 +71,13 @@ int f2c_transform_array_view(Unit *unit, const F2cExpr *expression, TransformArr
     array->derived_type = expression->derived_type;
     if (expression->type == TYPE_CHARACTER)
         array->element_length = f2c_character_length_expression(unit, expression);
-    if (expression->lowered_array_temporary && expression->lowered_c != NULL) {
+    lowered_code = f2c_lowering_code(unit, expression);
+    if (f2c_lowering_is_array_temporary(unit, expression) && lowered_code != NULL) {
         Buffer count = {0};
-        array->pointer = f2c_strdup(expression->lowered_c);
+        array->pointer = f2c_strdup(lowered_code);
         for (dimension = 0U; dimension < array->rank; ++dimension) {
             Buffer extent = {0};
-            f2c_buffer_printf(&extent, "(size_t)%s_extent_%zu", expression->lowered_c,
-                              dimension + 1U);
+            f2c_buffer_printf(&extent, "(size_t)%s_extent_%zu", lowered_code, dimension + 1U);
             array->extents[dimension] = f2c_buffer_take(&extent);
         }
         f2c_buffer_printf(&count, "f2c_inquiry_size(%zuU, (const size_t[]){", array->rank);

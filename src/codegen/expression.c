@@ -1,6 +1,7 @@
 #include "codegen/expression/private.h"
 
 #include "codegen/descriptor/private.h"
+#include "codegen/lowering/private.h"
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -235,6 +236,7 @@ static char *emit_structure_constructor(Unit *unit, const F2cExpr *expression, i
 
 char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported) {
     Buffer result = {0};
+    const char *lowered_code;
     char *left;
     char *right;
     Type result_type;
@@ -242,8 +244,9 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
         *supported = 0;
         return NULL;
     }
-    if (expression->lowered_c != NULL)
-        return f2c_strdup(expression->lowered_c);
+    lowered_code = f2c_lowering_code(unit, expression);
+    if (lowered_code != NULL)
+        return f2c_strdup(lowered_code);
     if (expression->resolved_procedure != NULL &&
         (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY))
         return f2c_expression_call(unit, expression, supported);

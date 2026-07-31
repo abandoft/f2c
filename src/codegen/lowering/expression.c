@@ -171,27 +171,33 @@ static const F2cExpressionLowering *unit_lowering_const(const Unit *unit,
 
 const char *f2c_lowering_code(const Unit *unit, const F2cExpr *expression) {
     const F2cExpressionLowering *lowering = unit_lowering_const(unit, expression);
-    return lowering != NULL ? lowering->code : NULL;
+    return lowering != NULL ? lowering->code : expression != NULL ? expression->lowered_c : NULL;
 }
 
 const char *f2c_lowering_extent(const Unit *unit, const F2cExpr *expression) {
     const F2cExpressionLowering *lowering = unit_lowering_const(unit, expression);
-    return lowering != NULL ? lowering->extent : NULL;
+    return lowering != NULL     ? lowering->extent
+           : expression != NULL ? expression->lowered_extent_c
+                                : NULL;
 }
 
 const char *f2c_lowering_character_length(const Unit *unit, const F2cExpr *expression) {
     const F2cExpressionLowering *lowering = unit_lowering_const(unit, expression);
-    return lowering != NULL ? lowering->character_length : NULL;
+    return lowering != NULL     ? lowering->character_length
+           : expression != NULL ? expression->lowered_character_length_c
+                                : NULL;
 }
 
 int f2c_lowering_is_array_temporary(const Unit *unit, const F2cExpr *expression) {
     const F2cExpressionLowering *lowering = unit_lowering_const(unit, expression);
-    return lowering != NULL && lowering->array_temporary;
+    return lowering != NULL ? lowering->array_temporary
+                            : expression != NULL && expression->lowered_array_temporary;
 }
 
 int f2c_lowering_argument_materialized(const Unit *unit, const F2cExpr *expression) {
     const F2cExpressionLowering *lowering = unit_lowering_const(unit, expression);
-    return lowering != NULL && lowering->argument_materialized;
+    return lowering != NULL ? lowering->argument_materialized
+                            : expression != NULL && expression->ordered_argument_materialized;
 }
 
 static int take_string(Unit *unit, const F2cExpr *expression, char *value, size_t member) {

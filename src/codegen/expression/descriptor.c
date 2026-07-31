@@ -1,6 +1,7 @@
 #include "codegen/expression/private.h"
 
 #include "codegen/descriptor/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdlib.h>
 
@@ -13,29 +14,29 @@ static const F2cExpr *actual_value(const F2cExpr *actual) {
 static char *emit_lowered_descriptor_actual(Unit *unit, const F2cExpr *actual) {
     Buffer result = {0};
     char *character_length = NULL;
+    const char *lowered_code;
     size_t dimension;
-    if (actual == NULL || !actual->lowered_array_temporary || actual->lowered_c == NULL ||
-        actual->rank == 0U)
+    if (actual == NULL || !f2c_lowering_is_array_temporary(unit, actual) ||
+        (lowered_code = f2c_lowering_code(unit, actual)) == NULL || actual->rank == 0U)
         return NULL;
     if (actual->type == TYPE_CHARACTER)
         character_length = f2c_character_length_expression(unit, actual);
     f2c_buffer_printf(&result,
                       "(&(f2c_descriptor){.data = %s, .deallocatable = false, "
                       ".element_size = sizeof(%s), .rank = %zuU, .lower = {",
-                      actual->lowered_c, f2c_expression_c_type(actual), actual->rank);
+                      lowered_code, f2c_expression_c_type(actual), actual->rank);
     for (dimension = 0U; dimension < actual->rank; ++dimension)
         f2c_buffer_printf(&result, "%sINT64_C(1)", dimension == 0U ? "" : ", ");
     f2c_buffer_append(&result, "}, .extent = {");
     for (dimension = 0U; dimension < actual->rank; ++dimension)
         f2c_buffer_printf(&result, "%s(int64_t)%s_extent_%zu", dimension == 0U ? "" : ", ",
-                          actual->lowered_c, dimension + 1U);
+                          lowered_code, dimension + 1U);
     f2c_buffer_append(&result, "}, .stride = {");
     for (dimension = 0U; dimension < actual->rank; ++dimension) {
         size_t prior;
         f2c_buffer_printf(&result, "%s(ptrdiff_t)1", dimension == 0U ? "" : ", ");
         for (prior = 0U; prior < dimension; ++prior)
-            f2c_buffer_printf(&result, " * (ptrdiff_t)%s_extent_%zu", actual->lowered_c,
-                              prior + 1U);
+            f2c_buffer_printf(&result, " * (ptrdiff_t)%s_extent_%zu", lowered_code, prior + 1U);
     }
     f2c_buffer_printf(&result, "}, .character_length = (size_t)(%s)})",
                       character_length != NULL ? character_length : "0U");
@@ -52,7 +53,7 @@ static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supp
     actual = actual_value(actual);
     if (actual != NULL && actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
-    if (actual != NULL && actual->lowered_array_temporary)
+    if (actual != NULL && f2c_lowering_is_array_temporary(unit, actual))
         return emit_lowered_descriptor_actual(unit, actual);
     if (actual == NULL || actual->symbol == NULL || !f2c_descriptor_view(unit, actual, &view)) {
         *supported = 0;
