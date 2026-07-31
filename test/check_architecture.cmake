@@ -141,9 +141,13 @@ file(READ "${SOURCE_DIR}/src/codegen/expression.c" EXPRESSION_CODEGEN)
 file(READ "${SOURCE_DIR}/src/codegen/expression/leaf.c" LEAF_CODEGEN)
 file(READ "${SOURCE_DIR}/src/codegen/statement/assignment.c" ASSIGNMENT_CODEGEN)
 file(READ "${SOURCE_DIR}/src/frontend/declaration/syntax.c" DECLARATION_CLASSIFICATION)
+file(READ "${SOURCE_DIR}/src/frontend/declaration/attribute.c" ATTRIBUTE_DECLARATIONS)
+file(READ "${SOURCE_DIR}/src/frontend/analyze.c" FRONTEND_ANALYSIS)
 file(READ "${SOURCE_DIR}/src/codegen/module.c" MODULE_CODEGEN)
 file(READ "${SOURCE_DIR}/src/semantic/temporary.c" TEMPORARY_PLANNING)
 file(READ "${SOURCE_DIR}/src/codegen/unit.c" UNIT_CODEGEN)
+file(READ "${SOURCE_DIR}/src/codegen/unit/interface.c" UNIT_INTERFACES)
+file(READ "${SOURCE_DIR}/src/codegen/unit/value.c" VALUE_CODEGEN)
 file(READ "${SOURCE_DIR}/src/codegen/unit/temporary.c" TEMPORARY_DECLARATIONS)
 file(READ "${SOURCE_DIR}/src/codegen/array/function.c" ARRAY_FUNCTION_RESULTS)
 file(READ "${SOURCE_DIR}/src/codegen/array/temporary.c" ARRAY_TEMPORARIES)
@@ -225,6 +229,31 @@ foreach(
         )
     endif()
 endforeach()
+if(
+    NOT SEMANTIC_MODEL MATCHES "int[ \t]+value"
+    OR NOT SEMANTIC_MODEL MATCHES "int[ \t]+asynchronous"
+    OR NOT SEMANTIC_MODEL MATCHES "int[ \t]+volatile_entity"
+    OR NOT SEMANTIC_MODEL MATCHES "external_parameter_value"
+    OR NOT SEMANTIC_MODEL MATCHES "external_parameter_target"
+    OR NOT SEMANTIC_MODEL MATCHES "external_parameter_asynchronous"
+    OR NOT SEMANTIC_MODEL MATCHES "external_parameter_volatile"
+    OR NOT ATTRIBUTE_DECLARATIONS MATCHES "F2C_ENTITY_ATTRIBUTE_VALUE"
+    OR NOT ATTRIBUTE_DECLARATIONS MATCHES "F2C_ENTITY_ATTRIBUTE_ASYNCHRONOUS"
+    OR NOT ATTRIBUTE_DECLARATIONS MATCHES "F2C_ENTITY_ATTRIBUTE_VOLATILE"
+    OR NOT FRONTEND_ANALYSIS MATCHES "f2c_parse_entity_attribute_declaration"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES "external_parameter_value\\[i\\]"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES "external_parameter_target\\[i\\]"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES "external_parameter_asynchronous\\[i\\]"
+    OR NOT PROCEDURE_SIGNATURE_VALIDATION MATCHES "external_parameter_volatile\\[i\\]"
+    OR NOT VALUE_CODEGEN MATCHES "f2c_clone_%s"
+    OR NOT VALUE_CODEGEN MATCHES "f2c_unit_emit_value_cleanup"
+    OR NOT UNIT_INTERFACES MATCHES "restrictable_argument"
+)
+    message(
+        FATAL_ERROR
+        "argument attributes must flow through declarations, typed signatures, alias contracts, and VALUE ownership lowering"
+    )
+endif()
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
 endif()
