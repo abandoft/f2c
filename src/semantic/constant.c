@@ -93,24 +93,6 @@ static int64_t literal_character_length(const char *text) {
     return length;
 }
 
-int f2c_named_kind_constant(const char *name, int64_t *value) {
-    int64_t result;
-    if (name == NULL || value == NULL)
-        return 0;
-    if (strcmp(name, "int8") == 0)
-        result = 1;
-    else if (strcmp(name, "int16") == 0)
-        result = 2;
-    else if (strcmp(name, "int32") == 0 || strcmp(name, "real32") == 0 || strcmp(name, "sp") == 0)
-        result = 4;
-    else if (strcmp(name, "int64") == 0 || strcmp(name, "real64") == 0 || strcmp(name, "dp") == 0)
-        result = 8;
-    else
-        return 0;
-    *value = result;
-    return 1;
-}
-
 static size_t evaluation_line(const F2cConstantEvaluation *evaluation) {
     if (evaluation->context != NULL && evaluation->unit != NULL &&
         evaluation->unit->begin < evaluation->context->lines.count)
@@ -469,10 +451,10 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
     if (expression->kind == F2C_EXPR_LOGICAL_LITERAL && expression->text != NULL) {
         return logical_literal_value(expression->text, value);
     }
-    if (expression->kind == F2C_EXPR_NAME && f2c_named_kind_constant(expression->text, value))
-        return 1;
     if (expression->kind == F2C_EXPR_NAME && expression->symbol != NULL &&
-        expression->symbol->parameter && expression->symbol->initializer != NULL) {
+        expression->symbol->parameter &&
+        (expression->symbol->initializer_expression != NULL ||
+         expression->symbol->initializer_syntax.count != 0U)) {
         F2cExpr *temporary = NULL;
         const F2cExpr *initializer = expression->symbol->initializer_expression;
         if (initializer == NULL && expression->symbol->initializer_syntax.count != 0U) {
@@ -625,12 +607,7 @@ int f2c_expression_is_initialization_constant(const F2cExpr *expression) {
     case F2C_EXPR_LOGICAL_LITERAL:
         return 1;
     case F2C_EXPR_NAME:
-        if (expression->symbol != NULL && expression->symbol->parameter)
-            return 1;
-        {
-            int64_t value;
-            return f2c_named_kind_constant(expression->text, &value);
-        }
+        return expression->symbol != NULL && expression->symbol->parameter;
     case F2C_EXPR_CALL:
         if (expression->text == NULL || !f2c_is_intrinsic_name(expression->text))
             return 0;

@@ -42,13 +42,7 @@ Type f2c_kind_type_from_tokens(Unit *unit, const Line *line, size_t begin, size_
     if (end == begin + 1U && line->tokens[begin].kind == F2C_TOKEN_IDENTIFIER) {
         char *name = f2c_token_text(&line->tokens[begin]);
         Symbol *symbol = name != NULL && unit != NULL ? f2c_find_symbol(unit, name) : NULL;
-        if (name != NULL &&
-            (strcmp(name, "real64") == 0 || strcmp(name, "dp") == 0 || strcmp(name, "int64") == 0))
-            result = TYPE_DOUBLE;
-        else if (name != NULL && (strcmp(name, "real32") == 0 || strcmp(name, "sp") == 0 ||
-                                  strcmp(name, "int32") == 0))
-            result = TYPE_REAL;
-        else if (symbol != NULL)
+        if (symbol != NULL)
             result = symbol->kind_type;
         free(name);
         if (result != TYPE_UNKNOWN)
@@ -76,28 +70,22 @@ static int named_kind_value(Unit *unit, const F2cToken *token, int *value) {
     name = f2c_token_text(token);
     if (name == NULL)
         return 0;
-    if (f2c_named_kind_constant(name, &constant)) {
+    symbol = unit != NULL ? f2c_find_symbol(unit, name) : NULL;
+    if (symbol == NULL || !symbol->parameter) {
+        free(name);
+        return 0;
+    }
+    if (symbol->initializer_expression != NULL &&
+        f2c_evaluate_integer_constant(unit, symbol->initializer_expression, &constant) &&
+        constant > 0 && constant <= INT_MAX) {
+        *value = (int)constant;
+    } else if (symbol->initializer_syntax.count != 0U &&
+               f2c_evaluate_integer_syntax(unit, symbol->initializer_syntax, &constant) &&
+               constant > 0 && constant <= INT_MAX) {
         *value = (int)constant;
     } else {
-        symbol = unit != NULL ? f2c_find_symbol(unit, name) : NULL;
-        if (symbol == NULL) {
-            free(name);
-            return 0;
-        }
-        if (symbol->kind_type != TYPE_UNKNOWN) {
-            *value = f2c_default_kind(symbol->kind_type);
-        } else if (symbol->initializer_expression != NULL &&
-                   f2c_evaluate_integer_constant(unit, symbol->initializer_expression, &constant) &&
-                   constant > 0 && constant <= INT_MAX) {
-            *value = (int)constant;
-        } else if (symbol->initializer_syntax.count != 0U &&
-                   f2c_evaluate_integer_syntax(unit, symbol->initializer_syntax, &constant) &&
-                   constant > 0 && constant <= INT_MAX) {
-            *value = (int)constant;
-        } else {
-            free(name);
-            return 0;
-        }
+        free(name);
+        return 0;
     }
     free(name);
     return 1;

@@ -150,11 +150,6 @@ char *f2c_expression_name(Unit *unit, const F2cExpr *expression, int *supported)
     if (unit->kind == UNIT_FUNCTION && unit->result_name != NULL && expression->text != NULL &&
         strcmp(expression->text, unit->result_name) == 0)
         return f2c_strdup("f2c_result");
-    if (strcmp(expression->text != NULL ? expression->text : "", "real64") == 0)
-        return f2c_strdup("8");
-    if (strcmp(expression->text != NULL ? expression->text : "", "real32") == 0 ||
-        strcmp(expression->text != NULL ? expression->text : "", "int32") == 0)
-        return f2c_strdup("4");
     return f2c_strdup(symbol != NULL ? f2c_symbol_c_name(unit, symbol)
                                      : (expression->text != NULL ? expression->text : "0"));
 }
