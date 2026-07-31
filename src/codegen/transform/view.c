@@ -116,12 +116,12 @@ int f2c_transform_array_view(Unit *unit, const F2cExpr *expression, TransformArr
         element = f2c_array_element_expression(unit, expression, array->rank, ordinals);
         code = element != NULL ? f2c_transform_emit_expression(unit, element) : NULL;
         if (element == NULL || code == NULL) {
-            f2c_expr_free(element);
+            f2c_codegen_expression_free(unit, element);
             free(code);
             f2c_transform_free_array(array);
             return 0;
         }
-        f2c_expr_free(element);
+        f2c_codegen_expression_free(unit, element);
         free(code);
         f2c_buffer_printf(&count, "f2c_inquiry_size(%zuU, (const size_t[]){", array->rank);
         for (dimension = 0U; dimension < array->rank; ++dimension)
@@ -182,7 +182,7 @@ int f2c_transform_materialize_array(Context *context, Unit *unit, TransformArray
     element_code = element != NULL ? f2c_transform_emit_expression(unit, element) : NULL;
     element_definable = element != NULL && element->definable;
     element_kind = element != NULL ? element->kind : F2C_EXPR_INVALID;
-    f2c_expr_free(element);
+    f2c_codegen_expression_free(unit, element);
     if (element_code == NULL ||
         (array->type == TYPE_DERIVED && !element_definable && element_kind != F2C_EXPR_CALL &&
          element_kind != F2C_EXPR_STRUCTURE_CONSTRUCTOR)) {

@@ -5,6 +5,7 @@
 #include "internal/f2c.h"
 
 typedef struct {
+    Unit *unit;
     F2cExpr *owned_expression;
     const F2cExpr *expression;
     char *code;

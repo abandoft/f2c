@@ -1,6 +1,7 @@
 #include "codegen/io/unformatted/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,7 +31,7 @@ int f2c_io_emit_unformatted_array(Context *context, Unit *unit, const F2cIoItem 
         item->expression->rank == 0U || item->expression->rank > F2C_MAX_RANK || stream == NULL ||
         unit_number == NULL || status == NULL)
         return 0;
-    prepared = f2c_array_clone_expression(item->expression);
+    prepared = f2c_array_clone_expression(unit, item->expression);
     if (prepared == NULL ||
         !f2c_array_hoist_scalar_subexpressions(unit, prepared, item->expression->span.begin.line,
                                                "unformatted", &temporary, &prelude, depth + 1, 1) ||
@@ -103,8 +104,8 @@ cleanup:
         f2c_diagnostic(context, item->expression->span.begin.line, 1,
                        "unformatted array item could not be lowered to scalar element order");
     free_extents(extents, item->expression->rank);
-    f2c_expr_free(prepared);
-    f2c_expr_free(element);
+    f2c_codegen_expression_free(unit, prepared);
+    f2c_codegen_expression_free(unit, element);
     free(value);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);

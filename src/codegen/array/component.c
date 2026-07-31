@@ -1,6 +1,7 @@
 #include "codegen/array/private.h"
 
 #include "codegen/descriptor/private.h"
+#include "codegen/lowering/private.h"
 #include "codegen/value/private.h"
 
 #include <stdio.h>
@@ -146,7 +147,7 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
                        "component array assignment requires compatible type and kind");
         return 1;
     }
-    prepared_right = f2c_array_clone_expression(right);
+    prepared_right = f2c_array_clone_expression(unit, right);
     if (prepared_right == NULL ||
         !f2c_array_materialize_constructors(context, unit, prepared_right, line, "component",
                                             &temporary, &prelude, &cleanup, depth + 1))
@@ -322,8 +323,8 @@ cleanup_all:
     free(character_length);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    f2c_expr_free(prepared_right);
-    f2c_expr_free(right_element);
-    f2c_expr_free(left_element);
+    f2c_codegen_expression_free(unit, prepared_right);
+    f2c_codegen_expression_free(unit, right_element);
+    f2c_codegen_expression_free(unit, left_element);
     return result;
 }

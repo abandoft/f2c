@@ -1,5 +1,7 @@
 #include "codegen/array/private.h"
 
+#include "codegen/lowering/private.h"
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -164,7 +166,7 @@ static F2cExpr *clone_array_reference(Unit *unit, const F2cExpr *expression) {
     return clone;
 
 failed:
-    f2c_expr_free(clone);
+    f2c_codegen_expression_free(unit, clone);
     return NULL;
 }
 
@@ -209,7 +211,7 @@ static F2cExpr *clone_expression(Unit *unit, const F2cExpr *expression) {
     return clone;
 
 failed:
-    f2c_expr_free(clone);
+    f2c_codegen_expression_free(unit, clone);
     return NULL;
 }
 
@@ -248,7 +250,7 @@ static F2cExpr *clone_whole_array_element(Unit *unit, const F2cExpr *expression,
         Buffer index_text = {0};
         F2cExpr *index;
         if (lower == NULL) {
-            f2c_expr_free(element);
+            f2c_codegen_expression_free(unit, element);
             return NULL;
         }
         f2c_buffer_printf(&index_text, "((%s) + (int64_t)f2c_section_%zu)", lower, dimension);
@@ -256,8 +258,8 @@ static F2cExpr *clone_whole_array_element(Unit *unit, const F2cExpr *expression,
         index = f2c_expr_new(F2C_EXPR_NAME, TYPE_INTEGER, index_text.data, index_text.length);
         free(f2c_buffer_take(&index_text));
         if (index == NULL || !f2c_expr_push(element, index)) {
-            f2c_expr_free(index);
-            f2c_expr_free(element);
+            f2c_codegen_expression_free(unit, index);
+            f2c_codegen_expression_free(unit, element);
             return NULL;
         }
     }
@@ -292,8 +294,8 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
         left->kind != F2C_EXPR_ARRAY_REFERENCE || left->symbol == NULL)
         return 0;
     identifier = left->span.begin.line;
-    prepared_left = f2c_array_clone_expression(left);
-    prepared_right = f2c_array_clone_expression(right);
+    prepared_left = f2c_array_clone_expression(unit, left);
+    prepared_right = f2c_array_clone_expression(unit, right);
     if (prepared_left == NULL || prepared_right == NULL ||
         !f2c_array_hoist_scalar_subexpressions(unit, prepared_left, identifier, "section_left",
                                                &temporary, &prelude, depth + 1, 1) ||
@@ -333,8 +335,8 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
     lowered_left = clone_array_reference(unit, left);
     lowered_right = clone_whole_array_element(unit, right, section_count);
     if (lowered_left == NULL || lowered_right == NULL) {
-        f2c_expr_free(lowered_left);
-        f2c_expr_free(lowered_right);
+        f2c_codegen_expression_free(unit, lowered_left);
+        f2c_codegen_expression_free(unit, lowered_right);
         goto cleanup;
     }
     left_code = f2c_array_emit_expression(unit, lowered_left);
@@ -514,8 +516,8 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
 
 lowered_cleanup:
     free(character_length);
-    f2c_expr_free(lowered_left);
-    f2c_expr_free(lowered_right);
+    f2c_codegen_expression_free(unit, lowered_left);
+    f2c_codegen_expression_free(unit, lowered_right);
 cleanup:
     for (dimension = 0U; dimension < F2C_MAX_RANK; ++dimension) {
         free(extents[dimension]);
@@ -523,8 +525,8 @@ cleanup:
     }
     free(prelude.data);
     f2c_array_cleanup_clear(&temporary_cleanup);
-    f2c_expr_free(prepared_left);
-    f2c_expr_free(prepared_right);
+    f2c_codegen_expression_free(unit, prepared_left);
+    f2c_codegen_expression_free(unit, prepared_right);
     return result;
 }
 

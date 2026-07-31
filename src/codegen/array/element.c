@@ -1,15 +1,16 @@
 #include "codegen/array/private.h"
 
 #include "codegen/descriptor/private.h"
+#include "codegen/lowering/private.h"
 #include "semantic/intrinsic.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static F2cExpr *clone_exact(const F2cExpr *expression);
+static F2cExpr *clone_exact(Unit *unit, const F2cExpr *expression);
 
-static F2cExpr *clone_shell(const F2cExpr *expression) {
+static F2cExpr *clone_shell(Unit *unit, const F2cExpr *expression) {
     F2cExpr *clone;
     if (expression == NULL)
         return NULL;
@@ -19,46 +20,44 @@ static F2cExpr *clone_shell(const F2cExpr *expression) {
     *clone = *expression;
     clone->text = expression->text != NULL ? f2c_strdup(expression->text) : NULL;
     clone->source = expression->source != NULL ? f2c_strdup(expression->source) : NULL;
-    clone->lowered_c = expression->lowered_c != NULL ? f2c_strdup(expression->lowered_c) : NULL;
-    clone->lowered_extent_c =
-        expression->lowered_extent_c != NULL ? f2c_strdup(expression->lowered_extent_c) : NULL;
-    clone->lowered_character_length_c = expression->lowered_character_length_c != NULL
-                                            ? f2c_strdup(expression->lowered_character_length_c)
-                                            : NULL;
+    clone->lowered_c = NULL;
+    clone->lowered_extent_c = NULL;
+    clone->lowered_character_length_c = NULL;
+    clone->lowered_array_temporary = 0;
+    clone->ordered_argument_materialized = 0;
     clone->children = NULL;
     clone->child_count = 0U;
     clone->child_capacity = 0U;
     if ((expression->text != NULL && clone->text == NULL) ||
         (expression->source != NULL && clone->source == NULL) ||
-        (expression->lowered_c != NULL && clone->lowered_c == NULL) ||
-        (expression->lowered_extent_c != NULL && clone->lowered_extent_c == NULL) ||
-        (expression->lowered_character_length_c != NULL &&
-         clone->lowered_character_length_c == NULL)) {
-        f2c_expr_free(clone);
+        !f2c_lowering_clone(unit, clone, expression)) {
+        f2c_codegen_expression_free(unit, clone);
         return NULL;
     }
     return clone;
 }
 
-static F2cExpr *clone_exact(const F2cExpr *expression) {
-    F2cExpr *clone = clone_shell(expression);
+static F2cExpr *clone_exact(Unit *unit, const F2cExpr *expression) {
+    F2cExpr *clone = clone_shell(unit, expression);
     size_t child;
     if (clone == NULL)
         return NULL;
     for (child = 0U; child < expression->child_count; ++child) {
-        F2cExpr *copy = clone_exact(expression->children[child]);
+        F2cExpr *copy = clone_exact(unit, expression->children[child]);
         if (copy == NULL || !f2c_expr_push(clone, copy)) {
-            f2c_expr_free(copy);
-            f2c_expr_free(clone);
+            f2c_codegen_expression_free(unit, copy);
+            f2c_codegen_expression_free(unit, clone);
             return NULL;
         }
     }
     return clone;
 }
 
-F2cExpr *f2c_array_clone_expression(const F2cExpr *expression) { return clone_exact(expression); }
+F2cExpr *f2c_array_clone_expression(Unit *unit, const F2cExpr *expression) {
+    return clone_exact(unit, expression);
+}
 
-static F2cExpr *lowered_expression(char *code, Type type, int type_kind) {
+static F2cExpr *lowered_expression(Unit *unit, char *code, Type type, int type_kind) {
     F2cExpr *index;
     if (code == NULL)
         return NULL;
@@ -68,12 +67,15 @@ static F2cExpr *lowered_expression(char *code, Type type, int type_kind) {
         return NULL;
     }
     index->type_kind = type_kind;
-    index->lowered_c = code;
+    if (!f2c_lowering_take_code(unit, index, code)) {
+        f2c_codegen_expression_free(unit, index);
+        return NULL;
+    }
     return index;
 }
 
-static F2cExpr *lowered_integer(char *code) {
-    return lowered_expression(code, TYPE_INTEGER, f2c_default_kind(TYPE_INTEGER));
+static F2cExpr *lowered_integer(Unit *unit, char *code) {
+    return lowered_expression(unit, code, TYPE_INTEGER, f2c_default_kind(TYPE_INTEGER));
 }
 
 static F2cExpr *ordinal_subscript(Unit *unit, const F2cExpr *expression, size_t dimension,
@@ -84,7 +86,7 @@ static F2cExpr *ordinal_subscript(Unit *unit, const F2cExpr *expression, size_t 
         return NULL;
     f2c_buffer_printf(&code, "((%s) + (int64_t)(%s))", lower, ordinal);
     free(lower);
-    return lowered_integer(f2c_buffer_take(&code));
+    return lowered_integer(unit, f2c_buffer_take(&code));
 }
 
 static F2cExpr *section_subscript(Unit *unit, const F2cExpr *expression, const F2cExpr *section,
@@ -110,7 +112,7 @@ static F2cExpr *section_subscript(Unit *unit, const F2cExpr *expression, const F
     f2c_buffer_printf(&code, "((%s) + (int64_t)(%s) * (%s))", lower, ordinal, step);
     free(lower);
     free(step);
-    return lowered_integer(f2c_buffer_take(&code));
+    return lowered_integer(unit, f2c_buffer_take(&code));
 }
 
 static char *section_extent(Unit *unit, const F2cExpr *expression, const F2cExpr *section,
@@ -175,8 +177,8 @@ static F2cExpr *whole_array_element(Unit *unit, const F2cExpr *expression, size_
     for (dimension = 0U; dimension < rank; ++dimension) {
         F2cExpr *index = ordinal_subscript(unit, expression, dimension, ordinals[dimension]);
         if (index == NULL || !f2c_expr_push(element, index)) {
-            f2c_expr_free(index);
-            f2c_expr_free(element);
+            f2c_codegen_expression_free(unit, index);
+            f2c_codegen_expression_free(unit, element);
             return NULL;
         }
     }
@@ -185,7 +187,7 @@ static F2cExpr *whole_array_element(Unit *unit, const F2cExpr *expression, size_
 
 static F2cExpr *array_reference_element(Unit *unit, const F2cExpr *expression, size_t rank,
                                         const char *const *ordinals) {
-    F2cExpr *element = clone_shell(expression);
+    F2cExpr *element = clone_shell(unit, expression);
     const size_t selector_offset = f2c_descriptor_selector_offset(expression);
     size_t dimension;
     size_t ordinal = 0U;
@@ -195,9 +197,9 @@ static F2cExpr *array_reference_element(Unit *unit, const F2cExpr *expression, s
     memset(&element->shape, 0, sizeof(element->shape));
     element->shape.kind = F2C_SHAPE_SCALAR;
     for (dimension = 0U; dimension < selector_offset; ++dimension) {
-        F2cExpr *base = clone_exact(expression->children[dimension]);
+        F2cExpr *base = clone_exact(unit, expression->children[dimension]);
         if (base == NULL || !f2c_expr_push(element, base)) {
-            f2c_expr_free(base);
+            f2c_codegen_expression_free(unit, base);
             goto failed;
         }
     }
@@ -217,10 +219,10 @@ static F2cExpr *array_reference_element(Unit *unit, const F2cExpr *expression, s
             vector_ordinal[0] = ordinals[ordinal++];
             index = f2c_array_element_expression(unit, selector, 1U, vector_ordinal);
         } else {
-            index = clone_exact(selector);
+            index = clone_exact(unit, selector);
         }
         if (index == NULL || !f2c_expr_push(element, index)) {
-            f2c_expr_free(index);
+            f2c_codegen_expression_free(unit, index);
             goto failed;
         }
     }
@@ -228,13 +230,13 @@ static F2cExpr *array_reference_element(Unit *unit, const F2cExpr *expression, s
         goto failed;
     return element;
 failed:
-    f2c_expr_free(element);
+    f2c_codegen_expression_free(unit, element);
     return NULL;
 }
 
 static F2cExpr *elemental_tree(Unit *unit, const F2cExpr *expression, size_t rank,
                                const char *const *ordinals) {
-    F2cExpr *element = clone_shell(expression);
+    F2cExpr *element = clone_shell(unit, expression);
     size_t child;
     if (element == NULL)
         return NULL;
@@ -245,25 +247,25 @@ static F2cExpr *elemental_tree(Unit *unit, const F2cExpr *expression, size_t ran
         const F2cExpr *source = expression->children[child];
         F2cExpr *copy;
         if (source->kind == F2C_EXPR_KEYWORD_ARGUMENT && source->child_count == 1U) {
-            copy = clone_shell(source);
+            copy = clone_shell(unit, source);
             if (copy != NULL) {
                 F2cExpr *value =
                     source->children[0]->rank != 0U
                         ? f2c_array_element_expression(unit, source->children[0], rank, ordinals)
-                        : clone_exact(source->children[0]);
+                        : clone_exact(unit, source->children[0]);
                 if (value == NULL || !f2c_expr_push(copy, value)) {
-                    f2c_expr_free(value);
-                    f2c_expr_free(copy);
+                    f2c_codegen_expression_free(unit, value);
+                    f2c_codegen_expression_free(unit, copy);
                     copy = NULL;
                 }
             }
         } else {
             copy = source->rank != 0U ? f2c_array_element_expression(unit, source, rank, ordinals)
-                                      : clone_exact(source);
+                                      : clone_exact(unit, source);
         }
         if (copy == NULL || !f2c_expr_push(element, copy)) {
-            f2c_expr_free(copy);
-            f2c_expr_free(element);
+            f2c_codegen_expression_free(unit, copy);
+            f2c_codegen_expression_free(unit, element);
             return NULL;
         }
     }
@@ -291,39 +293,40 @@ static F2cExpr *transpose_element(Unit *unit, const F2cExpr *expression,
     return f2c_array_element_expression(unit, source, 2U, source_ordinals);
 }
 
-static F2cExpr *lowered_array_temporary_element(const F2cExpr *expression, size_t rank,
+static F2cExpr *lowered_array_temporary_element(Unit *unit, const F2cExpr *expression, size_t rank,
                                                 const char *const *ordinals) {
     Buffer code = {0};
     F2cExpr *element;
+    const char *character_length;
+    const char *lowered_code;
     size_t dimension;
     size_t factor;
-    if (expression == NULL || expression->lowered_c == NULL || expression->rank != rank)
+    lowered_code = f2c_lowering_code(unit, expression);
+    if (expression == NULL || lowered_code == NULL || expression->rank != rank)
         return NULL;
-    if (expression->type == TYPE_CHARACTER && expression->lowered_character_length_c != NULL)
-        f2c_buffer_printf(&code, "(&(%s)[(", expression->lowered_c);
+    character_length = f2c_lowering_character_length(unit, expression);
+    if (expression->type == TYPE_CHARACTER && character_length != NULL)
+        f2c_buffer_printf(&code, "(&(%s)[(", lowered_code);
     else
-        f2c_buffer_printf(&code, "((%s)[", expression->lowered_c);
+        f2c_buffer_printf(&code, "((%s)[", lowered_code);
     for (dimension = 0U; dimension < rank; ++dimension) {
         f2c_buffer_printf(&code, "%s((size_t)(%s))", dimension == 0U ? "" : " + ",
                           ordinals[dimension]);
         for (factor = 0U; factor < dimension; ++factor)
-            f2c_buffer_printf(&code, " * (size_t)%s_extent_%zu", expression->lowered_c,
-                              factor + 1U);
+            f2c_buffer_printf(&code, " * (size_t)%s_extent_%zu", lowered_code, factor + 1U);
     }
-    if (expression->type == TYPE_CHARACTER && expression->lowered_character_length_c != NULL)
-        f2c_buffer_printf(&code, ") * (size_t)(%s)])", expression->lowered_character_length_c);
+    if (expression->type == TYPE_CHARACTER && character_length != NULL)
+        f2c_buffer_printf(&code, ") * (size_t)(%s)])", character_length);
     else
         f2c_buffer_append(&code, "])");
-    element = lowered_expression(f2c_buffer_take(&code), expression->type, expression->type_kind);
+    element =
+        lowered_expression(unit, f2c_buffer_take(&code), expression->type, expression->type_kind);
     if (element != NULL)
         element->derived_type = expression->derived_type;
-    if (element != NULL && expression->type == TYPE_CHARACTER &&
-        expression->lowered_character_length_c != NULL) {
-        element->lowered_character_length_c = f2c_strdup(expression->lowered_character_length_c);
-        if (element->lowered_character_length_c == NULL) {
-            f2c_expr_free(element);
-            return NULL;
-        }
+    if (element != NULL && expression->type == TYPE_CHARACTER && character_length != NULL &&
+        !f2c_lowering_copy_character_length(unit, element, character_length)) {
+        f2c_codegen_expression_free(unit, element);
+        return NULL;
     }
     return element;
 }
@@ -334,20 +337,20 @@ F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, siz
     if (expression == NULL || rank == 0U || ordinals == NULL)
         return NULL;
     if (expression->rank == 0U)
-        return clone_exact(expression);
+        return clone_exact(unit, expression);
     if (expression->rank != rank)
         return NULL;
-    if (expression->lowered_array_temporary)
-        return lowered_array_temporary_element(expression, rank, ordinals);
+    if (f2c_lowering_is_array_temporary(unit, expression))
+        return lowered_array_temporary_element(unit, expression, rank, ordinals);
     if (expression->kind == F2C_EXPR_NAME)
         return whole_array_element(unit, expression, rank, ordinals);
     if (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U) {
-        F2cExpr *element = clone_shell(expression);
+        F2cExpr *element = clone_shell(unit, expression);
         size_t dimension;
-        F2cExpr *base = clone_exact(expression->children[0]);
+        F2cExpr *base = clone_exact(unit, expression->children[0]);
         if (element == NULL || base == NULL || !f2c_expr_push(element, base)) {
-            f2c_expr_free(base);
-            f2c_expr_free(element);
+            f2c_codegen_expression_free(unit, base);
+            f2c_codegen_expression_free(unit, element);
             return NULL;
         }
         element->rank = 0U;
@@ -356,8 +359,8 @@ F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, siz
         for (dimension = 0U; dimension < rank; ++dimension) {
             F2cExpr *index = ordinal_subscript(unit, expression, dimension, ordinals[dimension]);
             if (index == NULL || !f2c_expr_push(element, index)) {
-                f2c_expr_free(index);
-                f2c_expr_free(element);
+                f2c_codegen_expression_free(unit, index);
+                f2c_codegen_expression_free(unit, element);
                 return NULL;
             }
         }
@@ -374,7 +377,8 @@ F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, siz
         if (rank == 1U && expression->text != NULL &&
             (strcmp(expression->text, "shape") == 0 || strcmp(expression->text, "lbound") == 0 ||
              strcmp(expression->text, "ubound") == 0))
-            return lowered_expression(f2c_array_inquiry_element(unit, expression, ordinals[0]),
+            return lowered_expression(unit,
+                                      f2c_array_inquiry_element(unit, expression, ordinals[0]),
                                       expression->type, expression->type_kind);
         intrinsic = f2c_find_intrinsic(expression->text);
         return ((intrinsic != NULL && intrinsic->rank_rule == F2C_INTRINSIC_RANK_ELEMENTAL) ||
@@ -385,45 +389,42 @@ F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, siz
     }
     if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && rank == 1U) {
         char *array = f2c_array_emit_expression(unit, expression);
+        const char *character_length = f2c_lowering_character_length(unit, expression);
         Buffer code = {0};
         F2cExpr *element;
         if (array == NULL)
             return NULL;
-        if (expression->type == TYPE_CHARACTER && expression->lowered_character_length_c != NULL)
+        if (expression->type == TYPE_CHARACTER && character_length != NULL)
             f2c_buffer_printf(&code, "(&(%s)[(size_t)(%s) * (size_t)(%s)])", array, ordinals[0],
-                              expression->lowered_character_length_c);
+                              character_length);
         else
             f2c_buffer_printf(&code, "((%s)[(size_t)(%s)])", array, ordinals[0]);
         free(array);
-        element =
-            lowered_expression(f2c_buffer_take(&code), expression->type, expression->type_kind);
+        element = lowered_expression(unit, f2c_buffer_take(&code), expression->type,
+                                     expression->type_kind);
         if (element != NULL)
             element->derived_type = expression->derived_type;
-        if (element != NULL && expression->type == TYPE_CHARACTER &&
-            expression->lowered_character_length_c != NULL) {
-            element->lowered_character_length_c =
-                f2c_strdup(expression->lowered_character_length_c);
-            if (element->lowered_character_length_c == NULL) {
-                f2c_expr_free(element);
-                return NULL;
-            }
+        if (element != NULL && expression->type == TYPE_CHARACTER && character_length != NULL &&
+            !f2c_lowering_copy_character_length(unit, element, character_length)) {
+            f2c_codegen_expression_free(unit, element);
+            return NULL;
         }
         return element;
     }
     return NULL;
 }
 
-static const F2cExpr *shape_carrier(const F2cExpr *expression, size_t rank) {
+static const F2cExpr *shape_carrier(Unit *unit, const F2cExpr *expression, size_t rank) {
     size_t child;
     if (expression == NULL)
         return NULL;
-    if ((expression->lowered_array_temporary || expression->kind == F2C_EXPR_NAME ||
+    if ((f2c_lowering_is_array_temporary(unit, expression) || expression->kind == F2C_EXPR_NAME ||
          expression->kind == F2C_EXPR_ARRAY_REFERENCE || expression->kind == F2C_EXPR_COMPONENT ||
          expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) &&
         expression->rank == rank)
         return expression;
     for (child = 0U; child < expression->child_count; ++child) {
-        const F2cExpr *carrier = shape_carrier(expression->children[child], rank);
+        const F2cExpr *carrier = shape_carrier(unit, expression->children[child], rank);
         if (carrier != NULL)
             return carrier;
     }
@@ -432,12 +433,15 @@ static const F2cExpr *shape_carrier(const F2cExpr *expression, size_t rank) {
 
 char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t dimension) {
     const F2cExpr *carrier;
+    const char *lowered_code;
+    const char *lowered_extent;
     char literal[32];
     if (expression == NULL || dimension >= expression->rank)
         return NULL;
-    if (expression->lowered_array_temporary && expression->lowered_c != NULL) {
+    lowered_code = f2c_lowering_code(unit, expression);
+    if (f2c_lowering_is_array_temporary(unit, expression) && lowered_code != NULL) {
         Buffer extent = {0};
-        f2c_buffer_printf(&extent, "%s_extent_%zu", expression->lowered_c, dimension + 1U);
+        f2c_buffer_printf(&extent, "%s_extent_%zu", lowered_code, dimension + 1U);
         return f2c_buffer_take(&extent);
     }
     if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_TRANSPOSE &&
@@ -452,16 +456,18 @@ char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t 
                        (unsigned long long)expression->shape.dimensions[dimension].extent);
         return f2c_strdup(literal);
     }
-    carrier = shape_carrier(expression, expression->rank);
+    carrier = shape_carrier(unit, expression, expression->rank);
     if (carrier == NULL)
         return NULL;
-    if (carrier->lowered_array_temporary && carrier->lowered_c != NULL) {
+    lowered_code = f2c_lowering_code(unit, carrier);
+    if (f2c_lowering_is_array_temporary(unit, carrier) && lowered_code != NULL) {
         Buffer extent = {0};
-        f2c_buffer_printf(&extent, "%s_extent_%zu", carrier->lowered_c, dimension + 1U);
+        f2c_buffer_printf(&extent, "%s_extent_%zu", lowered_code, dimension + 1U);
         return f2c_buffer_take(&extent);
     }
-    if (dimension == 0U && carrier->lowered_extent_c != NULL)
-        return f2c_strdup(carrier->lowered_extent_c);
+    lowered_extent = f2c_lowering_extent(unit, carrier);
+    if (dimension == 0U && lowered_extent != NULL)
+        return f2c_strdup(lowered_extent);
     if (carrier->kind == F2C_EXPR_NAME && carrier->symbol != NULL)
         return f2c_symbol_dimension_extent(unit, carrier->symbol, dimension);
     if (carrier->kind == F2C_EXPR_COMPONENT && carrier->symbol != NULL &&

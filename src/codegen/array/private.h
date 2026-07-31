@@ -17,7 +17,7 @@ typedef struct F2cArrayCleanupList {
 
 void f2c_array_indent(Buffer *output, int depth);
 char *f2c_array_emit_expression(Unit *unit, const F2cExpr *expression);
-F2cExpr *f2c_array_clone_expression(const F2cExpr *expression);
+F2cExpr *f2c_array_clone_expression(Unit *unit, const F2cExpr *expression);
 F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, size_t rank,
                                       const char *const *ordinals);
 char *f2c_array_inquiry_dimension(Unit *unit, const F2cExpr *call, size_t dimension);

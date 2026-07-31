@@ -1,5 +1,7 @@
 #include "codegen/array/private.h"
 
+#include "codegen/lowering/private.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -10,12 +12,12 @@ static const F2cExpr *actual_value(const F2cExpr *argument) {
                : argument;
 }
 
-static void free_arguments(F2cExpr **arguments, size_t count) {
+static void free_arguments(Unit *unit, F2cExpr **arguments, size_t count) {
     size_t argument;
     if (arguments == NULL)
         return;
     for (argument = 0U; argument < count; ++argument)
-        f2c_expr_free(arguments[argument]);
+        f2c_codegen_expression_free(unit, arguments[argument]);
     free(arguments);
 }
 
@@ -34,11 +36,11 @@ int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
     if (count != 0U && prepared == NULL)
         return 0;
     for (argument = 0U; argument < count; ++argument) {
-        prepared[argument] = f2c_array_clone_expression(arguments[argument]);
+        prepared[argument] = f2c_array_clone_expression(unit, arguments[argument]);
         if (prepared[argument] == NULL ||
             !f2c_array_materialize_constructors(context, unit, prepared[argument], line, "call",
                                                 &temporary, &prelude, &cleanup, depth + 1)) {
-            free_arguments(prepared, count);
+            free_arguments(unit, prepared, count);
             free(prelude.data);
             f2c_array_cleanup_clear(&cleanup);
             return 0;
@@ -61,7 +63,7 @@ int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
     }
-    free_arguments(prepared, count);
+    free_arguments(unit, prepared, count);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
     return 1;
@@ -108,7 +110,8 @@ int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStateme
     if (statement->item_count != 0U && prepared_arguments == NULL)
         goto unsupported;
     for (argument = 0U; argument < statement->item_count; ++argument) {
-        prepared_arguments[argument] = f2c_array_clone_expression(statement->arguments[argument]);
+        prepared_arguments[argument] =
+            f2c_array_clone_expression(unit, statement->arguments[argument]);
         if (prepared_arguments[argument] == NULL ||
             !f2c_array_materialize_constructors(context, unit, prepared_arguments[argument],
                                                 statement->line, "call", &temporary, &prelude,
@@ -133,7 +136,7 @@ int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStateme
         const F2cExpr *source = prepared_arguments[argument];
         arguments[argument] = source != NULL && source->rank != 0U
                                   ? f2c_array_element_expression(unit, source, rank, ordinals)
-                                  : f2c_array_clone_expression(source);
+                                  : f2c_array_clone_expression(unit, source);
         if (arguments[argument] == NULL)
             goto unsupported;
     }
@@ -197,8 +200,8 @@ int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStateme
     (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
-    free_arguments(arguments, statement->item_count);
-    free_arguments(prepared_arguments, statement->item_count);
+    free_arguments(unit, arguments, statement->item_count);
+    free_arguments(unit, prepared_arguments, statement->item_count);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
     for (argument = 0U; argument < statement->item_count * rank; ++argument)
@@ -209,8 +212,8 @@ int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStateme
     return 1;
 
 unsupported:
-    free_arguments(arguments, statement->item_count);
-    free_arguments(prepared_arguments, statement->item_count);
+    free_arguments(unit, arguments, statement->item_count);
+    free_arguments(unit, prepared_arguments, statement->item_count);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
     for (argument = 0U; argument < statement->item_count * rank; ++argument)

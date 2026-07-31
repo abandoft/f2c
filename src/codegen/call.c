@@ -2,6 +2,7 @@
 
 #include "codegen/array/private.h"
 #include "codegen/descriptor/private.h"
+#include "codegen/lowering/private.h"
 #include "codegen/value/private.h"
 
 #include <stdio.h>
@@ -623,7 +624,7 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
         if (lowering_arguments == NULL)
             return;
         for (i = 0U; i < count; ++i) {
-            lowering_arguments[i] = f2c_array_clone_expression(argument_expressions[i]);
+            lowering_arguments[i] = f2c_array_clone_expression(unit, argument_expressions[i]);
             if (lowering_arguments[i] == NULL)
                 goto done;
         }
@@ -762,7 +763,8 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
 done:
     lowered_call_free(&call);
     for (i = 0U; i < count; ++i)
-        f2c_expr_free(lowering_arguments != NULL ? lowering_arguments[i] : NULL);
+        f2c_codegen_expression_free(unit,
+                                    lowering_arguments != NULL ? lowering_arguments[i] : NULL);
     free(lowering_arguments);
 }
 

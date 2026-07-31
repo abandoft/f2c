@@ -2,6 +2,7 @@
 
 #include "codegen/array/private.h"
 #include "codegen/descriptor/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -648,7 +649,7 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
     char *call;
     if (expression == NULL || supported == NULL)
         return NULL;
-    lowering_expression = f2c_array_clone_expression(expression);
+    lowering_expression = f2c_array_clone_expression(unit, expression);
     if (lowering_expression == NULL) {
         *supported = 0;
         return NULL;
@@ -685,7 +686,7 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
         actual->ordered_argument_materialized = 1;
     }
     call = emit_call_body(unit, lowering_expression, supported);
-    f2c_expr_free(lowering_expression);
+    f2c_codegen_expression_free(unit, lowering_expression);
     if (!*supported || call == NULL) {
         free(call);
         free(setup.data);
@@ -694,7 +695,7 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
     return f2c_expression_wrap_managed_call(expression, 0, &setup, &cleanup, call, supported);
 
 failed:
-    f2c_expr_free(lowering_expression);
+    f2c_codegen_expression_free(unit, lowering_expression);
     free(setup.data);
     return NULL;
 }

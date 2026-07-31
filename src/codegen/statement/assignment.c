@@ -1,6 +1,7 @@
 #include "codegen/statement/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -156,7 +157,7 @@ static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
         statement->right == NULL || statement->left->rank != 0U || statement->right->rank != 0U ||
         !f2c_array_contains_unmaterialized_value(statement->right))
         return 0;
-    prepared_right = f2c_array_clone_expression(statement->right);
+    prepared_right = f2c_array_clone_expression(unit, statement->right);
     if (prepared_right == NULL ||
         !f2c_array_materialize_constructors(context, unit, prepared_right, line, "scalar",
                                             &temporary, &prelude, &cleanup, depth + 1) ||
@@ -185,7 +186,7 @@ static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
     emitted = 1;
 
 done:
-    f2c_expr_free(prepared_right);
+    f2c_codegen_expression_free(unit, prepared_right);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
     return emitted;

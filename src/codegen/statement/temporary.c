@@ -1,6 +1,7 @@
 #include "codegen/statement/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -34,9 +35,10 @@ int f2c_prepare_statement_expression(Context *context, Unit *unit, const F2cStat
     if (context == NULL || unit == NULL || expression == NULL || role == NULL || prepared == NULL)
         return 0;
     memset(prepared, 0, sizeof(*prepared));
+    prepared->unit = unit;
     prepared->expression = expression;
     if (f2c_array_contains_unmaterialized_value(expression)) {
-        prepared->owned_expression = f2c_array_clone_expression(expression);
+        prepared->owned_expression = f2c_array_clone_expression(unit, expression);
         if (prepared->owned_expression == NULL ||
             !f2c_array_materialize_constructors(context, unit, prepared->owned_expression,
                                                 expression_identifier(unit, statement, source_line),
@@ -63,7 +65,7 @@ int f2c_prepare_statement_expression(Context *context, Unit *unit, const F2cStat
 void f2c_release_statement_expression(F2cPreparedStatementExpression *prepared) {
     if (prepared == NULL)
         return;
-    f2c_expr_free(prepared->owned_expression);
+    f2c_codegen_expression_free(prepared->unit, prepared->owned_expression);
     free(prepared->code);
     free(prepared->prelude.data);
     f2c_array_cleanup_clear(&prepared->cleanup);

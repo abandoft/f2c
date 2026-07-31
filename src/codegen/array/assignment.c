@@ -1,5 +1,6 @@
 #include "codegen/array/private.h"
 
+#include "codegen/lowering/private.h"
 #include "codegen/value/private.h"
 
 #include <stdio.h>
@@ -90,7 +91,7 @@ int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *ta
                        "type");
         return 1;
     }
-    prepared_right = f2c_array_clone_expression(right);
+    prepared_right = f2c_array_clone_expression(unit, right);
     if (prepared_right == NULL ||
         !f2c_array_materialize_constructors(context, unit, prepared_right, line, "assignment",
                                             &temporary, &prelude, &cleanup, depth + 1))
@@ -287,8 +288,8 @@ int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *ta
     free(old_element_count);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    f2c_expr_free(prepared_right);
-    f2c_expr_free(element);
+    f2c_codegen_expression_free(unit, prepared_right);
+    f2c_codegen_expression_free(unit, element);
     free_extents(target_extents, target->rank);
     free_extents(right_extents, target->rank);
     return 1;
@@ -299,8 +300,8 @@ unsupported:
     free(old_element_count);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    f2c_expr_free(prepared_right);
-    f2c_expr_free(element);
+    f2c_codegen_expression_free(unit, prepared_right);
+    f2c_codegen_expression_free(unit, element);
     free_extents(target_extents, target->rank);
     free_extents(right_extents, target->rank);
     f2c_diagnostic(context, line, 1,
@@ -317,8 +318,8 @@ emission_failed:
     free(old_element_count);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    f2c_expr_free(prepared_right);
-    f2c_expr_free(element);
+    f2c_codegen_expression_free(unit, prepared_right);
+    f2c_codegen_expression_free(unit, element);
     free_extents(target_extents, target->rank);
     free_extents(right_extents, target->rank);
     f2c_diagnostic(context, line, 1,

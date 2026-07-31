@@ -1,6 +1,7 @@
 #include "codegen/statement/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,14 +62,14 @@ unsupported:
     return 0;
 }
 
-static void free_prepared(F2cExpr **prepared, F2cExpr **elements, char **element_code,
+static void free_prepared(Unit *unit, F2cExpr **prepared, F2cExpr **elements, char **element_code,
                           char **scalar_code, char **extents, char *actual_extents[][F2C_MAX_RANK],
                           size_t rank) {
     size_t argument;
     size_t dimension;
     for (argument = 0U; argument < 5U; ++argument) {
-        f2c_expr_free(prepared[argument]);
-        f2c_expr_free(elements[argument]);
+        f2c_codegen_expression_free(unit, prepared[argument]);
+        f2c_codegen_expression_free(unit, elements[argument]);
         free(element_code[argument]);
         free(scalar_code[argument]);
         for (dimension = 0U; dimension < rank; ++dimension)
@@ -144,7 +145,7 @@ static int emit_array(Context *context, Unit *unit, const F2cStatement *statemen
         const F2cExpr *value = actual(statement, argument);
         if (value == NULL || (value->rank != 0U && value->rank != rank))
             goto unsupported;
-        prepared[argument] = f2c_array_clone_expression(value);
+        prepared[argument] = f2c_array_clone_expression(unit, value);
         if (prepared[argument] == NULL ||
             !f2c_array_hoist_scalar_subexpressions(unit, prepared[argument], identifier, "mvbits",
                                                    &temporary, &prelude, depth + 1, 1) ||
@@ -304,7 +305,8 @@ static int emit_array(Context *context, Unit *unit, const F2cStatement *statemen
     --emitted_depth;
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_append(&context->output, "}\n");
-    free_prepared(prepared, elements, element_code, scalar_code, extents, actual_extents, rank);
+    free_prepared(unit, prepared, elements, element_code, scalar_code, extents, actual_extents,
+                  rank);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
     return 1;
@@ -313,7 +315,8 @@ unsupported:
     context->output.length = output_start;
     if (context->output.data != NULL)
         context->output.data[output_start] = '\0';
-    free_prepared(prepared, elements, element_code, scalar_code, extents, actual_extents, rank);
+    free_prepared(unit, prepared, elements, element_code, scalar_code, extents, actual_extents,
+                  rank);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
     return 0;

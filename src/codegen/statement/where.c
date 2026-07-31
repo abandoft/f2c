@@ -1,6 +1,7 @@
 #include "codegen/statement/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/lowering/private.h"
 #include "codegen/value/private.h"
 
 #include <stdlib.h>
@@ -124,7 +125,7 @@ static int emit_element(Unit *unit, const F2cExpr *expression, size_t rank,
     if (!supported || *code == NULL) {
         free(*code);
         *code = NULL;
-        f2c_expr_free(*element);
+        f2c_codegen_expression_free(unit, *element);
         *element = NULL;
         return 0;
     }
@@ -153,7 +154,7 @@ int f2c_emit_where_begin(Context *context, Unit *unit, const F2cStatement *state
     F2cArrayCleanupList cleanup = {0};
     size_t temporary = 0U;
     size_t dimension;
-    prepared_mask = f2c_array_clone_expression(statement->expression);
+    prepared_mask = f2c_array_clone_expression(unit, statement->expression);
     if (prepared_mask == NULL ||
         !f2c_array_hoist_scalar_subexpressions(unit, prepared_mask, identifier, "where_mask",
                                                &temporary, &prelude, *depth + 1, 1) ||
@@ -242,8 +243,8 @@ int f2c_emit_where_begin(Context *context, Unit *unit, const F2cStatement *state
     free(mask);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    f2c_expr_free(prepared_mask);
-    f2c_expr_free(mask_element);
+    f2c_codegen_expression_free(unit, prepared_mask);
+    f2c_codegen_expression_free(unit, mask_element);
     free_names(ordinals, rank);
     free_extents(extents, rank);
     return 1;
@@ -253,8 +254,8 @@ failed:
     free(mask);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    f2c_expr_free(prepared_mask);
-    f2c_expr_free(mask_element);
+    f2c_codegen_expression_free(unit, prepared_mask);
+    f2c_codegen_expression_free(unit, mask_element);
     free_names(ordinals, rank);
     free_extents(extents, rank);
     f2c_diagnostic(context, statement->line, 1,
@@ -286,7 +287,7 @@ int f2c_emit_elsewhere(Context *context, Unit *unit, const F2cStatement *stateme
         parent_id = statement_id(unit, parent);
     if (statement->expression != NULL) {
         const size_t branch_id = statement_id(unit, statement);
-        prepared_mask = f2c_array_clone_expression(statement->expression);
+        prepared_mask = f2c_array_clone_expression(unit, statement->expression);
         if (prepared_mask == NULL ||
             !f2c_array_hoist_scalar_subexpressions(unit, prepared_mask, branch_id,
                                                    "where_branch_mask", &temporary, &prelude, depth,
@@ -335,8 +336,8 @@ int f2c_emit_elsewhere(Context *context, Unit *unit, const F2cStatement *stateme
     free(mask);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    f2c_expr_free(prepared_mask);
-    f2c_expr_free(mask_element);
+    f2c_codegen_expression_free(unit, prepared_mask);
+    f2c_codegen_expression_free(unit, mask_element);
     free_names(ordinals, rank);
     free_extents(extents, rank);
     return 1;
@@ -346,8 +347,8 @@ failed:
     free(mask);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    f2c_expr_free(prepared_mask);
-    f2c_expr_free(mask_element);
+    f2c_codegen_expression_free(unit, prepared_mask);
+    f2c_codegen_expression_free(unit, mask_element);
     free_names(ordinals, rank);
     free_extents(extents, rank);
     f2c_diagnostic(context, statement->line, 1,
@@ -566,8 +567,8 @@ int f2c_emit_where_assignment(Context *context, Unit *unit, const F2cStatement *
         return 0;
     identifier = statement_id(unit, owner);
     rank = owner->expression->rank;
-    prepared_left = f2c_array_clone_expression(statement->left);
-    prepared_right = f2c_array_clone_expression(statement->right);
+    prepared_left = f2c_array_clone_expression(unit, statement->left);
+    prepared_right = f2c_array_clone_expression(unit, statement->right);
     if (prepared_left == NULL || prepared_right == NULL ||
         !f2c_array_hoist_scalar_subexpressions(unit, prepared_left, identifier, "where_left",
                                                &temporary, &prelude, depth + 1, 1) ||
@@ -617,10 +618,10 @@ int f2c_emit_where_assignment(Context *context, Unit *unit, const F2cStatement *
     free(right);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    f2c_expr_free(prepared_left);
-    f2c_expr_free(prepared_right);
-    f2c_expr_free(left_element);
-    f2c_expr_free(right_element);
+    f2c_codegen_expression_free(unit, prepared_left);
+    f2c_codegen_expression_free(unit, prepared_right);
+    f2c_codegen_expression_free(unit, left_element);
+    f2c_codegen_expression_free(unit, right_element);
     free_names(ordinals, rank);
     free_extents(left_extents, rank);
     if (statement->right->rank != 0U)
@@ -633,10 +634,10 @@ failed:
     free(right);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    f2c_expr_free(prepared_left);
-    f2c_expr_free(prepared_right);
-    f2c_expr_free(left_element);
-    f2c_expr_free(right_element);
+    f2c_codegen_expression_free(unit, prepared_left);
+    f2c_codegen_expression_free(unit, prepared_right);
+    f2c_codegen_expression_free(unit, left_element);
+    f2c_codegen_expression_free(unit, right_element);
     free_names(ordinals, rank);
     free_extents(left_extents, rank);
     if (statement->right->rank != 0U)

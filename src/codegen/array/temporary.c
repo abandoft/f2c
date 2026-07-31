@@ -1,5 +1,6 @@
 #include "codegen/array/private.h"
 
+#include "codegen/lowering/private.h"
 #include "codegen/transform/private.h"
 
 #include <stdlib.h>
@@ -415,7 +416,7 @@ int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, c
             break;
     if (child == right->child_count)
         return 0;
-    prepared = f2c_array_clone_expression(right);
+    prepared = f2c_array_clone_expression(unit, right);
     if (prepared == NULL)
         goto done;
     for (child = 0U; child < prepared->child_count; ++child)
@@ -440,7 +441,7 @@ int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, c
     emitted = 1;
 
 done:
-    f2c_expr_free(prepared);
+    f2c_codegen_expression_free(unit, prepared);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
     return emitted;
