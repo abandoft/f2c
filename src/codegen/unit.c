@@ -27,9 +27,11 @@ static void emit_declarations(Context *context, Unit *unit) {
         }
         f2c_unit_indent(output, 1);
         f2c_buffer_printf(output,
-                          "%s *%s = f2c_descriptor_%s != NULL ? (%s *)"
+                          "%s%s *%s = f2c_descriptor_%s != NULL ? (%s%s *)"
                           "f2c_descriptor_%s->data : NULL;\n",
-                          f2c_symbol_c_type(symbol), name, name, f2c_symbol_c_type(symbol), name);
+                          symbol->volatile_entity ? "volatile " : "", f2c_symbol_c_type(symbol),
+                          name, name, symbol->volatile_entity ? "volatile " : "",
+                          f2c_symbol_c_type(symbol), name);
         if (symbol->pointer) {
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output,
@@ -168,7 +170,8 @@ static void emit_declarations(Context *context, Unit *unit) {
             f2c_buffer_append(output, "const ");
         if (symbol->allocatable || symbol->pointer) {
             size_t d;
-            f2c_buffer_printf(output, "%s *%s = NULL;\n", f2c_symbol_c_type(symbol),
+            f2c_buffer_printf(output, "%s%s *%s = NULL;\n",
+                              symbol->volatile_entity ? "volatile " : "", f2c_symbol_c_type(symbol),
                               f2c_symbol_c_name(unit, symbol));
             if (symbol->pointer) {
                 f2c_unit_indent(output, 1);
@@ -252,8 +255,8 @@ static void emit_declarations(Context *context, Unit *unit) {
             free(count);
             continue;
         }
-        f2c_buffer_printf(output, "%s %s", f2c_symbol_c_type(symbol),
-                          f2c_symbol_c_name(unit, symbol));
+        f2c_buffer_printf(output, "%s%s %s", symbol->volatile_entity ? "volatile " : "",
+                          f2c_symbol_c_type(symbol), f2c_symbol_c_name(unit, symbol));
         if (symbol->type == TYPE_CHARACTER && symbol->rank == 0U &&
             symbol->character_length != NULL) {
             char *length = f2c_emit_typed_expression(unit, symbol->character_length_expression);

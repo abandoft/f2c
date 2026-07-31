@@ -52,7 +52,8 @@ static void emit_metadata_declarations(Buffer *output, Unit *unit, Symbol *symbo
     f2c_unit_indent(output, depth);
     f2c_buffer_printf(output, "size_t f2c_auto_count_%s = 0U;\n", name);
     f2c_unit_indent(output, depth);
-    f2c_buffer_printf(output, "%s *%s = NULL;\n", f2c_symbol_c_type(symbol), name);
+    f2c_buffer_printf(output, "%s%s *%s = NULL;\n", symbol->volatile_entity ? "volatile " : "",
+                      f2c_symbol_c_type(symbol), name);
 }
 
 void f2c_unit_emit_automatic_array_allocation(Buffer *output, Unit *unit, Symbol *symbol,
@@ -99,9 +100,9 @@ void f2c_unit_emit_automatic_array_allocation(Buffer *output, Unit *unit, Symbol
     f2c_buffer_printf(output, "if (%s%s > SIZE_MAX / sizeof(*%s)) abort();\n", storage_count_prefix,
                       name, name);
     f2c_unit_indent(output, depth);
-    f2c_buffer_printf(output, "%s = (%s *)calloc(%s%s == 0U ? 1U : %s%s, sizeof(*%s));\n", name,
-                      f2c_symbol_c_type(symbol), storage_count_prefix, name, storage_count_prefix,
-                      name, name);
+    f2c_buffer_printf(output, "%s = (%s%s *)calloc(%s%s == 0U ? 1U : %s%s, sizeof(*%s));\n", name,
+                      symbol->volatile_entity ? "volatile " : "", f2c_symbol_c_type(symbol),
+                      storage_count_prefix, name, storage_count_prefix, name, name);
     f2c_unit_indent(output, depth);
     f2c_buffer_printf(output, "if (%s == NULL) abort();\n", name);
     if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL) {

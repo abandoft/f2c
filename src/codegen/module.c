@@ -128,8 +128,9 @@ void f2c_emit_project_modules(Context *context) {
             f2c_buffer_append(&context->output, symbol->parameter ? "static F2C_UNUSED const "
                                                                   : "static F2C_UNUSED ");
             if (symbol->allocatable || symbol->pointer) {
-                f2c_buffer_printf(&context->output, "%s *%s = NULL;\n", f2c_symbol_c_type(symbol),
-                                  name);
+                f2c_buffer_printf(&context->output, "%s%s *%s = NULL;\n",
+                                  symbol->volatile_entity ? "volatile " : "",
+                                  f2c_symbol_c_type(symbol), name);
                 if (symbol->pointer)
                     f2c_buffer_printf(&context->output,
                                       "static F2C_UNUSED bool %s_deallocatable = false;\n", name);
@@ -149,7 +150,9 @@ void f2c_emit_project_modules(Context *context) {
                 free(initializer);
                 continue;
             }
-            f2c_buffer_printf(&context->output, "%s %s", f2c_symbol_c_type(symbol), name);
+            f2c_buffer_printf(&context->output, "%s%s %s",
+                              symbol->volatile_entity ? "volatile " : "", f2c_symbol_c_type(symbol),
+                              name);
             if (symbol->type == TYPE_CHARACTER && symbol->rank == 0U) {
                 char *length = f2c_symbol_character_length(module, symbol);
                 if (length == NULL) {
