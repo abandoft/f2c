@@ -178,7 +178,8 @@ static void validate_assumed_size_operands(Context *context, size_t line,
         if (!f2c_expression_is_whole_assumed_size(operand))
             continue;
         if (expression->kind == F2C_EXPR_CALL &&
-            (!f2c_is_intrinsic_name(expression->text) ||
+            ((expression->intrinsic == F2C_INTRINSIC_NONE &&
+              !f2c_is_intrinsic_name(expression->text)) ||
              intrinsic_accepts_whole_assumed_size(expression->intrinsic)))
             continue;
         f2c_diagnostic_at(

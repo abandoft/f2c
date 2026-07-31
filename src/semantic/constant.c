@@ -517,7 +517,7 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
             return 1;
         if (evaluate_character_intrinsic(evaluation, expression, value, depth))
             return 1;
-        if (strcmp(expression->text, "len") == 0 && expression->child_count == 1U) {
+        if (expression->intrinsic == F2C_INTRINSIC_LEN && expression->child_count == 1U) {
             const F2cExpr *argument = expression->children[0];
             if (argument->kind == F2C_EXPR_STRING_LITERAL) {
                 left = literal_character_length(argument->text);

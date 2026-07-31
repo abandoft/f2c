@@ -14,8 +14,8 @@ static int ordered_numeric_scalar(const F2cExpr *expression) {
 }
 
 static int null_pointer_value(const F2cExpr *expression) {
-    return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->text != NULL &&
-           strcmp(expression->text, "null") == 0;
+    return expression != NULL && expression->kind == F2C_EXPR_CALL &&
+           expression->intrinsic == F2C_INTRINSIC_NULL;
 }
 
 static int pointer_target_designator(const F2cExpr *expression) {
