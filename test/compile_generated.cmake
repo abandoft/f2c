@@ -109,6 +109,7 @@ foreach(
        module_interface_use
        module_procedure
        module_allocatable
+       argument_attributes
        allocatable_scope
        many_arguments
        statement_function
