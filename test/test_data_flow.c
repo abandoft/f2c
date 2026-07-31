@@ -136,11 +136,94 @@ static void test_invalid_successor_rejected(void) {
            "a rejected graph does not leak a partial data-flow result");
 }
 
+static int backward_transfer(void *user, size_t node, const F2cBitFlowState *output,
+                             F2cBitFlowState *input) {
+    (void)user;
+    (void)output;
+    if (node == 1U)
+        input->bits[0] |= UINT64_C(1);
+    if (node == 2U)
+        input->bits[0] |= UINT64_C(2);
+    return 1;
+}
+
+static void test_backward_union_fixed_point(void) {
+    F2cControlFlowEdge successors0[] = {{1U, F2C_CFG_EDGE_BRANCH},
+                                        {2U, F2C_CFG_EDGE_BRANCH}};
+    F2cControlFlowEdge successors1[] = {{3U, F2C_CFG_EDGE_FALLTHROUGH}};
+    F2cControlFlowEdge successors2[] = {{3U, F2C_CFG_EDGE_FALLTHROUGH}};
+    F2cControlFlowEdge successors3[] = {{1U, F2C_CFG_EDGE_LOOP_BACK},
+                                        {4U, F2C_CFG_EDGE_LOOP_EXIT}};
+    F2cControlFlowEdge predecessors1[] = {{0U, F2C_CFG_EDGE_BRANCH},
+                                          {3U, F2C_CFG_EDGE_LOOP_BACK}};
+    F2cControlFlowEdge predecessors2[] = {{0U, F2C_CFG_EDGE_BRANCH}};
+    F2cControlFlowEdge predecessors3[] = {{1U, F2C_CFG_EDGE_FALLTHROUGH},
+                                          {2U, F2C_CFG_EDGE_FALLTHROUGH}};
+    F2cControlFlowEdge predecessors4[] = {{3U, F2C_CFG_EDGE_LOOP_EXIT}};
+    F2cControlFlowNode nodes[5];
+    F2cControlFlowGraph graph;
+    F2cBitFlowResult result;
+    memset(nodes, 0, sizeof(nodes));
+    memset(&graph, 0, sizeof(graph));
+    nodes[0].successors = successors0;
+    nodes[0].successor_count = 2U;
+    nodes[1].successors = successors1;
+    nodes[1].successor_count = 1U;
+    nodes[1].predecessors = predecessors1;
+    nodes[1].predecessor_count = 2U;
+    nodes[2].successors = successors2;
+    nodes[2].successor_count = 1U;
+    nodes[2].predecessors = predecessors2;
+    nodes[2].predecessor_count = 1U;
+    nodes[3].successors = successors3;
+    nodes[3].successor_count = 2U;
+    nodes[3].predecessors = predecessors3;
+    nodes[3].predecessor_count = 2U;
+    nodes[4].predecessors = predecessors4;
+    nodes[4].predecessor_count = 1U;
+    graph.nodes = nodes;
+    graph.node_count = 5U;
+    expect(f2c_bit_flow_solve_backward(&graph, 1U, NULL, 0U, backward_transfer, NULL, NULL,
+                                       &result),
+           "the backward bitset worklist converges across joins and a loop");
+    if (result.states != NULL) {
+        expect(result.states[0].bits[0] == UINT64_C(3),
+               "a predecessor sees uses from both branch successors");
+        expect(result.states[1].bits[0] == UINT64_C(1),
+               "a loop-carried use reaches the prior iteration without sibling-branch facts");
+        expect(result.states[2].bits[0] == UINT64_C(1),
+               "a loop-carried use reaches the alternate branch successor");
+        expect(result.states[4].bits[0] == 0U,
+               "a terminal node retains the empty exit boundary");
+    }
+    f2c_bit_flow_free(&result);
+}
+
+static void test_backward_invalid_predecessor_rejected(void) {
+    F2cControlFlowEdge predecessor = {2U, F2C_CFG_EDGE_FALLTHROUGH};
+    F2cControlFlowNode nodes[2];
+    F2cControlFlowGraph graph;
+    F2cBitFlowResult result;
+    memset(nodes, 0, sizeof(nodes));
+    memset(&graph, 0, sizeof(graph));
+    memset(&result, 0, sizeof(result));
+    nodes[1].predecessors = &predecessor;
+    nodes[1].predecessor_count = 1U;
+    graph.nodes = nodes;
+    graph.node_count = 2U;
+    expect(!f2c_bit_flow_solve_backward(&graph, 1U, NULL, 0U, NULL, NULL, NULL, &result),
+           "a backward problem rejects an out-of-range predecessor");
+    expect(result.states == NULL && result.storage == NULL,
+           "a rejected backward graph does not leak partial state");
+}
+
 int main(void) {
     test_union_fixed_point();
     test_edge_filter();
     test_flag_only_domain();
     test_invalid_successor_rejected();
+    test_backward_union_fixed_point();
+    test_backward_invalid_predecessor_rejected();
     if (failures != 0)
         fprintf(stderr, "%d data-flow test(s) failed\n", failures);
     return failures == 0 ? 0 : 1;

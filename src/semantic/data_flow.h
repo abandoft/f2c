@@ -25,6 +25,10 @@ int f2c_bit_flow_solve(const F2cControlFlowGraph *graph, size_t entry_node, size
                        const uint64_t *entry_bits, uint64_t entry_flags,
                        F2cBitFlowTransfer transfer, F2cBitFlowEdgeFilter edge_filter, void *user,
                        F2cBitFlowResult *result);
+int f2c_bit_flow_solve_backward(const F2cControlFlowGraph *graph, size_t word_count,
+                                const uint64_t *exit_bits, uint64_t exit_flags,
+                                F2cBitFlowTransfer transfer, F2cBitFlowEdgeFilter edge_filter,
+                                void *user, F2cBitFlowResult *result);
 void f2c_bit_flow_free(F2cBitFlowResult *result);
 
 #endif
