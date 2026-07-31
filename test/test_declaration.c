@@ -92,12 +92,20 @@ static void test_attribute_keywords_as_identifiers(void) {
         "program keyword_identifiers\n"
         "  implicit none\n"
         "  integer :: dimension, external, parameter, save, equivalence\n"
+        "  integer :: optional, contiguous, target, value, asynchronous, volatile\n"
         "  dimension = 1\n"
         "  external = 2\n"
         "  parameter = 3\n"
         "  save = 4\n"
         "  equivalence = 5\n"
-        "  if (dimension + external + parameter + save + equivalence /= 15) stop 1\n"
+        "  optional = 6\n"
+        "  contiguous = 7\n"
+        "  target = 8\n"
+        "  value = 9\n"
+        "  asynchronous = 10\n"
+        "  volatile = 11\n"
+        "  if (dimension + external + parameter + save + equivalence + optional + contiguous + &\n"
+        "      target + value + asynchronous + volatile /= 66) stop 1\n"
         "end program keyword_identifiers\n";
     DiagnosticCapture capture = {0};
     F2cResult result = transpile(source, &capture);
@@ -107,7 +115,13 @@ static void test_attribute_keywords_as_identifiers(void) {
                strstr(result.code, "external = 2;") != NULL &&
                strstr(result.code, "parameter = 3;") != NULL &&
                strstr(result.code, "save = 4;") != NULL &&
-               strstr(result.code, "equivalence = 5;") != NULL,
+               strstr(result.code, "equivalence = 5;") != NULL &&
+               strstr(result.code, "optional = 6;") != NULL &&
+               strstr(result.code, "contiguous = 7;") != NULL &&
+               strstr(result.code, "target = 8;") != NULL &&
+               strstr(result.code, "value = 9;") != NULL &&
+               strstr(result.code, "asynchronous = 10;") != NULL &&
+               strstr(result.code, "volatile_value = 11;") != NULL,
            "keyword-named assignments remain executable statements in typed IR");
     expect(!capture.captured,
            "keyword-named variables are classified from token context without diagnostics");
