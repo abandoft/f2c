@@ -119,9 +119,11 @@ file(READ "${SOURCE_DIR}/src/ir/expression.h" EXPRESSION_IR)
 file(READ "${SOURCE_DIR}/src/frontend/procedure.c" PROCEDURE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/modules.c" USE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/module/dependency.c" MODULE_DEPENDENCIES)
+file(READ "${SOURCE_DIR}/src/frontend/module/resolution.c" MODULE_RESOLUTION)
 file(READ "${SOURCE_DIR}/src/frontend/pipeline.c" FRONTEND_PIPELINE)
 file(READ "${SOURCE_DIR}/src/frontend/module/access.c" ACCESS_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/interface.c" INTERFACE_LOWERING)
+file(READ "${SOURCE_DIR}/src/cli/main.c" CLI_MAIN)
 file(READ "${SOURCE_DIR}/src/semantic/validation/expression.c" EXPRESSION_VALIDATION)
 file(READ "${SOURCE_DIR}/src/semantic/validation/statement.c" STATEMENT_VALIDATION)
 file(READ "${SOURCE_DIR}/src/codegen/expression.c" EXPRESSION_CODEGEN)
@@ -310,6 +312,27 @@ if(
     message(FATAL_ERROR "project modules must be analyzed from structured USE dependencies")
 endif()
 if(
+    NOT USE_LOWERING MATCHES "f2c_permitted_external_module[ \t\r\n]*\\("
+    OR NOT USE_LOWERING MATCHES
+        "non-intrinsic module '%s' is not present in this project request"
+    OR NOT MODULE_RESOLUTION MATCHES "f2c_supported_intrinsic_module[ \t\r\n]*\\("
+    OR NOT MODULE_RESOLUTION MATCHES "context->external_module_count"
+)
+    message(
+        FATAL_ERROR
+        "USE resolution must distinguish supported intrinsic, project, and explicitly external modules"
+    )
+endif()
+if(
+    NOT CLI_MAIN MATCHES "--external-module"
+    OR NOT CLI_MAIN MATCHES
+        "config\\.external_module_names[ \t]*=[ \t]*external_modules"
+    OR NOT CLI_MAIN MATCHES
+        "config\\.external_module_count[ \t]*=[ \t]*external_module_count"
+)
+    message(FATAL_ERROR "the CLI must forward explicit external-module providers to the API")
+endif()
+if(
     NOT FRONTEND_PIPELINE MATCHES "f2c_plan_expression_lifetimes[ \t\r\n]*\\("
     OR NOT TEMPORARY_PLANNING MATCHES "expression_lifetimes_analyzed[ \t]*=[ \t]*1"
     OR NOT UNIT_CODEGEN MATCHES "unit->expression_lifetimes_analyzed"
@@ -334,6 +357,15 @@ file(READ "${SOURCE_DIR}/src/frontend/source.c" SOURCE_NORMALIZATION)
 file(READ "${SOURCE_DIR}/src/frontend/preprocessor.c" PREPROCESSOR_IMPLEMENTATION)
 if(PUBLIC_API MATCHES "F2C_CONFIG_V[0-9]" OR CONFIG_IMPLEMENTATION MATCHES "offsetof[ \\t\\r\\n]*\\([ \\t\\r\\n]*F2cConfig")
     message(FATAL_ERROR "the unfinished public API must not preserve historical configuration layouts")
+endif()
+if(
+    NOT PUBLIC_API MATCHES "size_t[ \t]+max_external_modules"
+    OR NOT PUBLIC_API MATCHES "external_module_names"
+    OR NOT PUBLIC_API MATCHES "size_t[ \t]+external_module_count"
+    OR NOT CONFIG_IMPLEMENTATION MATCHES "f2c_validate_context_configuration"
+    OR NOT CONFIG_IMPLEMENTATION MATCHES "is not a valid Fortran name"
+)
+    message(FATAL_ERROR "external-module permissions must be validated request-local API state")
 endif()
 if(NOT CONFIG_IMPLEMENTATION MATCHES "structure_size[ \\t\\r\\n]*!=[ \\t\\r\\n]*sizeof[ \\t\\r\\n]*\\([ \\t\\r\\n]*\\*config[ \\t\\r\\n]*\\)")
     message(FATAL_ERROR "F2cConfig must require the exact current structure size")
