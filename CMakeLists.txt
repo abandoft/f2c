@@ -646,6 +646,14 @@ if(F2C_BUILD_TESTING)
     )
     add_test(NAME data_flow_worklist COMMAND f2c_data_flow_tests)
 
+    add_executable(f2c_expression_lowering_tests test/test_expression_lowering.c)
+    f2c_configure_internal_test_target(f2c_expression_lowering_tests)
+    target_include_directories(
+        f2c_expression_lowering_tests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    add_test(NAME expression_lowering_overlay COMMAND f2c_expression_lowering_tests)
+
     add_executable(f2c_variable_flow_tests test/test_variable_flow.c)
     f2c_configure_internal_test_target(f2c_variable_flow_tests)
     target_include_directories(
