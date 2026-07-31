@@ -195,136 +195,22 @@ char *f2c_emit_binary(Unit *unit, const char *left, Type left_type, const char *
 char *f2c_emit_intrinsic(const char *name, F2cIntrinsicId intrinsic, char **args,
                          const Type *argument_types, size_t count, Type result_type) {
     Buffer result = {0};
-    const char *mapped = name;
-    size_t i;
-    if (strcmp(name, "abs") == 0 || strcmp(name, "dabs") == 0)
-        mapped = "F2C_ABS";
-    else if (strcmp(name, "dsqrt") == 0)
-        mapped = "sqrt";
-    else if (strcmp(name, "dexp") == 0)
-        mapped = "exp";
-    else if (strcmp(name, "dlog") == 0)
-        mapped = "log";
-    else if (strcmp(name, "dsin") == 0)
-        mapped = "sin";
-    else if (strcmp(name, "dcos") == 0)
-        mapped = "cos";
-    else if (strcmp(name, "conjg") == 0 || strcmp(name, "dconjg") == 0)
-        mapped = count != 0U && argument_types[0] == TYPE_COMPLEX ? "conjf" : "conj";
-    else if (strcmp(name, "aimag") == 0)
-        mapped = count != 0U && argument_types[0] == TYPE_COMPLEX ? "cimagf" : "cimag";
-    else if (strcmp(name, "dimag") == 0)
-        mapped = "cimag";
-    else if (strcmp(name, "dreal") == 0)
-        mapped = "creal";
-    else if (strcmp(name, "cabs") == 0 || strcmp(name, "cdabs") == 0)
-        mapped = count != 0U && argument_types[0] == TYPE_COMPLEX ? "cabsf" : "cabs";
-    if (count != 0U && argument_types[0] == TYPE_REAL) {
-        if (strcmp(name, "sqrt") == 0)
-            mapped = "sqrtf";
-        else if (strcmp(name, "sin") == 0)
-            mapped = "sinf";
-        else if (strcmp(name, "cos") == 0)
-            mapped = "cosf";
-        else if (strcmp(name, "tan") == 0)
-            mapped = "tanf";
-        else if (strcmp(name, "exp") == 0)
-            mapped = "expf";
-        else if (strcmp(name, "log") == 0)
-            mapped = "logf";
-        else if (strcmp(name, "log10") == 0)
-            mapped = "log10f";
-        else if (strcmp(name, "atan") == 0)
-            mapped = "atanf";
-        else if (strcmp(name, "asin") == 0)
-            mapped = "asinf";
-        else if (strcmp(name, "acos") == 0)
-            mapped = "acosf";
-        else if (strcmp(name, "atan2") == 0)
-            mapped = "atan2f";
-    } else if (count != 0U &&
-               (argument_types[0] == TYPE_COMPLEX || argument_types[0] == TYPE_DOUBLE_COMPLEX)) {
-        const int single = argument_types[0] == TYPE_COMPLEX;
-        if (strcmp(name, "sqrt") == 0)
-            mapped = single ? "csqrtf" : "csqrt";
-        else if (strcmp(name, "exp") == 0)
-            mapped = single ? "cexpf" : "cexp";
-        else if (strcmp(name, "log") == 0)
-            mapped = single ? "clogf" : "clog";
-        else if (strcmp(name, "sin") == 0)
-            mapped = single ? "csinf" : "csin";
-        else if (strcmp(name, "cos") == 0)
-            mapped = single ? "ccosf" : "ccos";
-    }
-    if (strcmp(name, "max") == 0 || strcmp(name, "min") == 0) {
-        const char *macro = strcmp(name, "max") == 0 ? "F2C_FORTRAN_MAX" : "F2C_FORTRAN_MIN";
-        if (count == 0U) {
-            f2c_buffer_append(&result, "0");
-        } else {
-            f2c_buffer_append(&result, args[0]);
-            for (i = 1U; i < count; ++i) {
-                char *previous = f2c_buffer_take(&result);
-                f2c_buffer_printf(&result, "%s(%s, %s)", macro, previous, args[i]);
-                free(previous);
-            }
-        }
-    } else if (strcmp(name, "real") == 0 && count != 0U &&
-               (argument_types[0] == TYPE_COMPLEX || argument_types[0] == TYPE_DOUBLE_COMPLEX)) {
-        const char *real_type = result_type == TYPE_DOUBLE ? "double" : "float";
-        f2c_buffer_printf(&result, "((%s)%s(%s))", real_type,
-                          argument_types[0] == TYPE_COMPLEX ? "crealf" : "creal", args[0]);
-    } else if (strcmp(name, "dble") == 0 || strcmp(name, "real") == 0 ||
-               strcmp(name, "float") == 0 || strcmp(name, "int") == 0) {
-        const char *cast =
-            strcmp(name, "dble") == 0
-                ? "double"
-                : (strcmp(name, "real") == 0 && result_type == TYPE_DOUBLE
-                       ? "double"
-                       : ((strcmp(name, "real") == 0 || strcmp(name, "float") == 0) ? "float"
-                                                                                    : "int32_t"));
-        f2c_buffer_printf(&result, "((%s)(%s))", cast, count != 0U ? args[0] : "0");
-    } else if (strcmp(name, "cmplx") == 0 || strcmp(name, "dcmplx") == 0) {
-        const int double_precision =
-            strcmp(name, "dcmplx") == 0 || result_type == TYPE_DOUBLE_COMPLEX;
-        if (count >= 2U) {
-            /* Construct the components independently.  The algebraic spelling
-             * `real + imag * I` contaminates the real component when imag is
-             * infinite because IEEE 0*Inf is NaN. */
-            f2c_buffer_printf(&result, "%s((%s)(%s), (%s)(%s))",
-                              double_precision ? "f2c_make_z" : "f2c_make_c",
-                              double_precision ? "double" : "float", args[0],
-                              double_precision ? "double" : "float", args[1]);
-        } else {
-            char *converted = f2c_emit_numeric_conversion(
-                count != 0U ? args[0] : "0", count != 0U ? argument_types[0] : TYPE_INTEGER,
-                double_precision ? TYPE_DOUBLE_COMPLEX : TYPE_COMPLEX);
-            f2c_buffer_append(&result, converted);
-            free(converted);
-        }
-    } else if (strcmp(name, "ichar") == 0) {
-        const char *value = count != 0U ? args[0] : "0";
-        if (value[0] == '"')
-            f2c_buffer_printf(&result, "((int32_t)(unsigned char)%s[0])", value);
-        else
-            f2c_buffer_printf(&result, "((int32_t)(unsigned char)(%s))", value);
-    } else if (strcmp(name, "char") == 0) {
-        f2c_buffer_printf(&result, "((char)(%s))", count != 0U ? args[0] : "0");
-    } else if (strcmp(name, "len") == 0 || strcmp(name, "len_trim") == 0) {
-        const char *value = count != 0U ? args[0] : "\"\"";
-        const size_t length = strlen(value);
-        if (length >= 4U && value[0] == '(' && value[1] == '*' && value[length - 1U] == ')') {
-            f2c_buffer_append(&result, "((int32_t)strlen(");
-            f2c_buffer_append_n(&result, value + 2, length - 3U);
-            f2c_buffer_append(&result, "))");
-        } else {
-            f2c_buffer_printf(&result, "((int32_t)strlen(%s))", value);
-        }
-    } else if (strcmp(name, "alog") == 0) {
-        f2c_buffer_printf(&result, "logf(%s)", count != 0U ? args[0] : "0");
-    } else if (strcmp(name, "log10") == 0) {
-        f2c_buffer_printf(&result, "%s(%s)", mapped, count != 0U ? args[0] : "0");
-    } else if (intrinsic == F2C_INTRINSIC_ISNAN) {
+    const F2cIntrinsicDescriptor *descriptor = f2c_intrinsic_descriptor(intrinsic);
+    const char *callee = descriptor != NULL ? descriptor->canonical_name : name;
+    size_t argument;
+    (void)result_type;
+    if (intrinsic == F2C_INTRINSIC_ISNAN) {
         f2c_buffer_printf(&result, "isnan(%s)", count != 0U ? args[0] : "0");
+    } else if (intrinsic == F2C_INTRINSIC_TRANSFER) {
+        f2c_buffer_printf(&result, "F2C_TRANSFER(%s, %s)", count >= 1U ? args[0] : "0",
+                          count >= 2U ? args[1] : "0");
+    } else if (intrinsic == F2C_INTRINSIC_NULL) {
+        f2c_buffer_append(&result, "NULL");
+    } else if (intrinsic != F2C_INTRINSIC_NONE) {
+        f2c_buffer_printf(&result, "%s(", callee != NULL ? callee : "");
+        for (argument = 0U; argument < count; ++argument)
+            f2c_buffer_printf(&result, "%s%s", argument == 0U ? "" : ", ", args[argument]);
+        f2c_buffer_append(&result, ")");
     } else if (strcmp(name, "cabs1") == 0 || strcmp(name, "abs1") == 0) {
         const char *value = count != 0U ? args[0] : "0";
         const int single = count != 0U && argument_types[0] == TYPE_COMPLEX;
@@ -346,18 +232,10 @@ char *f2c_emit_intrinsic(const char *name, F2cIntrinsicId intrinsic, char **args
         f2c_buffer_append(&result, "0");
     } else if (strcmp(name, "omp_get_num_threads") == 0) {
         f2c_buffer_append(&result, "1");
-    } else if (intrinsic == F2C_INTRINSIC_TRANSFER) {
-        f2c_buffer_printf(&result, "F2C_TRANSFER(%s, %s)", count >= 1U ? args[0] : "0",
-                          count >= 2U ? args[1] : "0");
-    } else if (strcmp(name, "maxloc") == 0 || strcmp(name, "maxval") == 0) {
-        f2c_buffer_printf(&result, "%s(%s)",
-                          strcmp(name, "maxloc") == 0 ? "F2C_MAXLOC" : "F2C_MAXVAL",
-                          count >= 1U ? args[0] : "NULL, 0");
     } else {
-        f2c_buffer_printf(&result, "%s(", mapped);
-        for (i = 0U; i < count; ++i) {
-            f2c_buffer_printf(&result, "%s%s", i == 0U ? "" : ", ", args[i]);
-        }
+        f2c_buffer_printf(&result, "%s(", callee != NULL ? callee : "");
+        for (argument = 0U; argument < count; ++argument)
+            f2c_buffer_printf(&result, "%s%s", argument == 0U ? "" : ", ", args[argument]);
         f2c_buffer_append(&result, ")");
     }
     return f2c_buffer_take(&result);

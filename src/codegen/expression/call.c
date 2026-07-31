@@ -300,7 +300,8 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
                                           : expression->text);
     const int descriptor_result = f2c_expression_has_descriptor_result(expression);
     const int intrinsic_call =
-        expression->text != NULL && f2c_is_intrinsic_name(expression->text) &&
+        (expression->intrinsic != F2C_INTRINSIC_NONE ||
+         (expression->text != NULL && f2c_is_intrinsic_name(expression->text))) &&
         (expression->symbol == NULL || !expression->symbol->external_declared);
     size_t i;
     size_t derived_actual_count = 0U;
