@@ -26,17 +26,18 @@ module mathematical_conversion_constants
 end module mathematical_conversion_constants
 
 program mathematical_conversion_intrinsics
-  use, intrinsic :: iso_fortran_env, only: real32, real64
+  use, intrinsic :: iso_fortran_env, only: working_kind => real32, wide_kind => real64, &
+    tiny_kind => int8, short_kind => int16, default_integer_kind => int32, &
+    long_integer_kind => int64, character_storage_size, error_unit, file_storage_size, &
+    input_unit, iostat_end, iostat_eor, numeric_storage_size, output_unit
   use mathematical_conversion_constants
   implicit none
 
-  integer, parameter :: working_kind = real32
-  integer, parameter :: wide_kind = real64
-  integer(kind=1) :: i1
-  integer(kind=2) :: i2
-  integer(kind=4) :: i4
-  integer(kind=8) :: i8
-  integer(kind=8) :: converted(4)
+  integer(kind=tiny_kind) :: i1
+  integer(kind=short_kind) :: i2
+  integer(kind=default_integer_kind) :: i4
+  integer(kind=long_integer_kind) :: i8
+  integer(kind=long_integer_kind) :: converted(4)
   logical :: flags(4)
   logical(kind=1) :: compact_flags(4)
   logical(kind=8) :: wide_flag
@@ -49,16 +50,19 @@ program mathematical_conversion_intrinsics
   integer, parameter :: folded_legacy_integer = max1(3.75, -2.25)
   real, parameter :: folded_legacy_real = amax0(7, -3)
   logical(kind=1), parameter :: folded_logical = logical(l=.true., kind=1)
+  integer, parameter :: environment_total = character_storage_size + error_unit + &
+    file_storage_size + input_unit + iostat_end + iostat_eor + numeric_storage_size + output_unit
 
   if (folded_integer /= 7 .or. folded_real /= 4.0 .or. &
       folded_legacy_integer /= 3 .or. folded_legacy_real /= 7.0 .or. &
-      .not. folded_logical) error stop 1
+      .not. folded_logical .or. environment_total /= 56) error stop 1
 
-  i1 = int(-12.75, kind=1)
-  i2 = int(a=300.75d0, kind=2)
+  i1 = int(-12.75, kind=tiny_kind)
+  i2 = int(a=300.75d0, kind=short_kind)
   i4 = int(cmplx(-42.5, 99.0))
-  i8 = int(kind=8, a=cmplx(5000000000.75d0, -3.0d0, kind=8))
-  if (i1 /= -12_1 .or. i2 /= 300_2 .or. i4 /= -42 .or. i8 /= 5000000000_8) error stop 2
+  i8 = int(kind=long_integer_kind, a=cmplx(5000000000.75d0, -3.0d0, kind=wide_kind))
+  if (i1 /= -12_tiny_kind .or. i2 /= 300_short_kind .or. &
+      i4 /= -42_default_integer_kind .or. i8 /= 5000000000_long_integer_kind) error stop 2
 
   r4 = real(i8)
   r8 = real(a=cmplx(1.25, -9.0), kind=8) + dble(cmplx(2.5d0, 8.0d0, kind=8))
