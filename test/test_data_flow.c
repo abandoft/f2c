@@ -148,14 +148,11 @@ static int backward_transfer(void *user, size_t node, const F2cBitFlowState *out
 }
 
 static void test_backward_union_fixed_point(void) {
-    F2cControlFlowEdge successors0[] = {{1U, F2C_CFG_EDGE_BRANCH},
-                                        {2U, F2C_CFG_EDGE_BRANCH}};
+    F2cControlFlowEdge successors0[] = {{1U, F2C_CFG_EDGE_BRANCH}, {2U, F2C_CFG_EDGE_BRANCH}};
     F2cControlFlowEdge successors1[] = {{3U, F2C_CFG_EDGE_FALLTHROUGH}};
     F2cControlFlowEdge successors2[] = {{3U, F2C_CFG_EDGE_FALLTHROUGH}};
-    F2cControlFlowEdge successors3[] = {{1U, F2C_CFG_EDGE_LOOP_BACK},
-                                        {4U, F2C_CFG_EDGE_LOOP_EXIT}};
-    F2cControlFlowEdge predecessors1[] = {{0U, F2C_CFG_EDGE_BRANCH},
-                                          {3U, F2C_CFG_EDGE_LOOP_BACK}};
+    F2cControlFlowEdge successors3[] = {{1U, F2C_CFG_EDGE_LOOP_BACK}, {4U, F2C_CFG_EDGE_LOOP_EXIT}};
+    F2cControlFlowEdge predecessors1[] = {{0U, F2C_CFG_EDGE_BRANCH}, {3U, F2C_CFG_EDGE_LOOP_BACK}};
     F2cControlFlowEdge predecessors2[] = {{0U, F2C_CFG_EDGE_BRANCH}};
     F2cControlFlowEdge predecessors3[] = {{1U, F2C_CFG_EDGE_FALLTHROUGH},
                                           {2U, F2C_CFG_EDGE_FALLTHROUGH}};
@@ -183,9 +180,9 @@ static void test_backward_union_fixed_point(void) {
     nodes[4].predecessor_count = 1U;
     graph.nodes = nodes;
     graph.node_count = 5U;
-    expect(f2c_bit_flow_solve_backward(&graph, 1U, NULL, 0U, backward_transfer, NULL, NULL,
-                                       &result),
-           "the backward bitset worklist converges across joins and a loop");
+    expect(
+        f2c_bit_flow_solve_backward(&graph, 1U, NULL, 0U, backward_transfer, NULL, NULL, &result),
+        "the backward bitset worklist converges across joins and a loop");
     if (result.states != NULL) {
         expect(result.states[0].bits[0] == UINT64_C(3),
                "a predecessor sees uses from both branch successors");
@@ -193,8 +190,7 @@ static void test_backward_union_fixed_point(void) {
                "a loop-carried use reaches the prior iteration without sibling-branch facts");
         expect(result.states[2].bits[0] == UINT64_C(1),
                "a loop-carried use reaches the alternate branch successor");
-        expect(result.states[4].bits[0] == 0U,
-               "a terminal node retains the empty exit boundary");
+        expect(result.states[4].bits[0] == 0U, "a terminal node retains the empty exit boundary");
     }
     f2c_bit_flow_free(&result);
 }

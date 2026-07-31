@@ -80,8 +80,7 @@ static void mark_definition(VariableFlowBuilder *builder, const F2cExpr *express
                             int preserve_value) {
     const F2cExpr *value = argument_value(expression);
     const Symbol *symbol = designator_symbol(builder->unit, value);
-    const int whole_name = value != NULL && value->kind == F2C_EXPR_NAME &&
-                           value->symbol == symbol;
+    const int whole_name = value != NULL && value->kind == F2C_EXPR_NAME && value->symbol == symbol;
     if (preserve_value || !whole_name)
         mark_value(builder, value);
     mark_symbol(builder, builder->flow->definitions, symbol);
@@ -111,8 +110,7 @@ static size_t type_bound_parameter(const Symbol *procedure, size_t child) {
         return procedure->type_bound_nopass ? SIZE_MAX : procedure->type_bound_pass_index;
     for (explicit_child = 1U; explicit_child < child; ++explicit_child) {
         ++parameter;
-        if (!procedure->type_bound_nopass &&
-            parameter == procedure->type_bound_pass_index)
+        if (!procedure->type_bound_nopass && parameter == procedure->type_bound_pass_index)
             ++parameter;
     }
     if (!procedure->type_bound_nopass && parameter == procedure->type_bound_pass_index)
@@ -135,8 +133,7 @@ static void mark_call(VariableFlowBuilder *builder, const F2cExpr *expression) {
         intent = expression->resolved_procedure != NULL && !procedure
                      ? definition_intent(expression->resolved_procedure, parameter)
                      : signature_intent(procedure, parameter);
-        if (expression->resolved_procedure != NULL &&
-            (procedure == NULL || !procedure->type_bound))
+        if (expression->resolved_procedure != NULL && (procedure == NULL || !procedure->type_bound))
             intent = definition_intent(expression->resolved_procedure, parameter);
         if (expression->resolved_procedure == NULL && procedure == NULL)
             intent = F2C_INTENT_IN;
@@ -207,9 +204,9 @@ static F2cIntent statement_call_intent(const F2cStatement *statement, const Symb
 }
 
 static void mark_statement_call(VariableFlowBuilder *builder, const F2cStatement *statement) {
-    const Symbol *procedure =
-        statement->expression != NULL ? statement->expression->symbol
-                                      : f2c_find_symbol(builder->unit, statement->name);
+    const Symbol *procedure = statement->expression != NULL
+                                  ? statement->expression->symbol
+                                  : f2c_find_symbol(builder->unit, statement->name);
     size_t argument;
     if (statement->expression != NULL) {
         mark_value(builder, statement->expression);
@@ -225,8 +222,7 @@ static void mark_statement_call(VariableFlowBuilder *builder, const F2cStatement
         if (procedure != NULL && procedure->type_bound && !procedure->type_bound_nopass &&
             parameter >= procedure->type_bound_pass_index)
             ++parameter;
-        mark_actual(builder, actual,
-                    statement_call_intent(statement, procedure, parameter));
+        mark_actual(builder, actual, statement_call_intent(statement, procedure, parameter));
     }
 }
 
@@ -234,8 +230,7 @@ static void mark_statement(VariableFlowBuilder *builder, const F2cStatement *sta
     size_t index;
     if (statement == NULL)
         return;
-    if (statement->kind == F2C_STMT_ASSIGNMENT ||
-        statement->kind == F2C_STMT_POINTER_ASSIGNMENT) {
+    if (statement->kind == F2C_STMT_ASSIGNMENT || statement->kind == F2C_STMT_POINTER_ASSIGNMENT) {
         if (statement->resolved_procedure != NULL) {
             mark_actual(builder, statement->left,
                         definition_intent(statement->resolved_procedure, 0U));
@@ -254,8 +249,7 @@ static void mark_statement(VariableFlowBuilder *builder, const F2cStatement *sta
         mark_statement_call(builder, statement);
     } else if (statement->kind == F2C_STMT_ASSIGN_LABEL) {
         mark_definition(builder, statement->expression, 0);
-    } else if (statement->kind == F2C_STMT_ALLOCATE ||
-        statement->kind == F2C_STMT_DEALLOCATE) {
+    } else if (statement->kind == F2C_STMT_ALLOCATE || statement->kind == F2C_STMT_DEALLOCATE) {
         for (index = 0U; index < statement->item_count; ++index) {
             const F2cExpr *argument =
                 statement->arguments != NULL ? statement->arguments[index] : NULL;
@@ -282,8 +276,7 @@ static void mark_statement(VariableFlowBuilder *builder, const F2cStatement *sta
         mark_value(builder, statement->limit);
         mark_value(builder, statement->step);
         for (index = 0U; index < statement->item_count; ++index)
-            mark_value(builder,
-                       statement->arguments != NULL ? statement->arguments[index] : NULL);
+            mark_value(builder, statement->arguments != NULL ? statement->arguments[index] : NULL);
     }
     mark_value(builder, statement->allocation_character_length);
     for (index = 0U; index < statement->control_count; ++index) {
@@ -294,8 +287,7 @@ static void mark_statement(VariableFlowBuilder *builder, const F2cStatement *sta
             mark_value(builder, control->value);
     }
     for (index = 0U; index < statement->io_item_count; ++index)
-        mark_io_item(builder, &statement->io_items[index],
-                     statement->kind == F2C_STMT_READ);
+        mark_io_item(builder, &statement->io_items[index], statement->kind == F2C_STMT_READ);
     for (index = 0U; index < statement->case_range_count; ++index) {
         mark_value(builder, statement->case_ranges[index].lower);
         mark_value(builder, statement->case_ranges[index].upper);
@@ -355,8 +347,7 @@ failed:
     return 0;
 }
 
-int f2c_variable_flow_analyze(Context *context, Unit *unit,
-                              const F2cControlFlowGraph *graph) {
+int f2c_variable_flow_analyze(Context *context, Unit *unit, const F2cControlFlowGraph *graph) {
     F2cBitFlowResult result;
     F2cVariableFlow *flow;
     VariableFlowBuilder builder;

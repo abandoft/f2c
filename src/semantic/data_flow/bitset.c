@@ -55,8 +55,7 @@ static int allocate_result(size_t node_count, size_t word_count, F2cBitFlowResul
     size_t node;
     if (node_count > SIZE_MAX / sizeof(*result->states) ||
         (word_count != 0U && node_count > SIZE_MAX / word_count) ||
-        (word_count != 0U &&
-         node_count * word_count > SIZE_MAX / sizeof(*result->storage)) ||
+        (word_count != 0U && node_count * word_count > SIZE_MAX / sizeof(*result->storage)) ||
         node_count > SIZE_MAX / sizeof(**queue))
         return 0;
     result->states = (F2cBitFlowState *)calloc(node_count, sizeof(*result->states));
@@ -67,14 +66,13 @@ static int allocate_result(size_t node_count, size_t word_count, F2cBitFlowResul
     *queue = (size_t *)calloc(node_count, sizeof(**queue));
     *queued = (unsigned char *)calloc(node_count, sizeof(**queued));
     if (result->states == NULL ||
-        (word_count != 0U && (result->storage == NULL || *output_bits == NULL)) ||
-        *queue == NULL || *queued == NULL)
+        (word_count != 0U && (result->storage == NULL || *output_bits == NULL)) || *queue == NULL ||
+        *queued == NULL)
         return 0;
     result->state_count = node_count;
     result->word_count = word_count;
     for (node = 0U; node < node_count; ++node)
-        result->states[node].bits =
-            word_count != 0U ? result->storage + node * word_count : NULL;
+        result->states[node].bits = word_count != 0U ? result->storage + node * word_count : NULL;
     return 1;
 }
 
