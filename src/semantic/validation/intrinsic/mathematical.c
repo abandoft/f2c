@@ -200,10 +200,10 @@ static void validate_specific(Context *context, size_t line, const char *stateme
 
 static void validate_dprod(Context *context, size_t line, const char *statement_text,
                            F2cExpr *expression) {
-    static const char *const arguments[] = {"x", "y"};
-    const F2cBoundIntrinsicArguments bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, "DPROD", expression->children, expression->child_count,
-        arguments, 2U, 2U);
+    const F2cIntrinsicArgumentSchema *schema =
+        f2c_intrinsic_argument_schema(F2C_INTRINSIC_DPROD);
+    const F2cBoundIntrinsicArguments bound =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     size_t argument;
     for (argument = 0U; argument < 2U; ++argument)
         if (bound.values[argument] != NULL && (bound.values[argument]->type != TYPE_REAL ||
@@ -211,18 +211,13 @@ static void validate_dprod(Context *context, size_t line, const char *statement_
             f2c_diagnostic_at(
                 context, line,
                 f2c_validation_expression_start_column(statement_text, bound.values[argument]), 1,
-                "DPROD argument %s must be REAL(kind=4)", arguments[argument]);
+                "DPROD argument %s must be REAL(kind=4)", schema->names[argument]);
 }
 
 static void validate_unary(Context *context, Unit *unit, size_t line, const char *statement_text,
                            F2cExpr *expression) {
-    static const char *const abs_arguments[] = {"a"};
-    static const char *const arguments[] = {"x"};
-    const char *const *names =
-        expression->intrinsic == F2C_INTRINSIC_ABS ? abs_arguments : arguments;
-    const F2cBoundIntrinsicArguments bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, display_name(expression->intrinsic), expression->children,
-        expression->child_count, names, 1U, 1U);
+    const F2cBoundIntrinsicArguments bound =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     validate_unary_type(context, line, statement_text, expression->intrinsic, bound.values[0]);
     validate_constant_domain(context, unit, line, statement_text, expression->intrinsic,
                              bound.values[0]);
@@ -231,20 +226,20 @@ static void validate_unary(Context *context, Unit *unit, size_t line, const char
 
 static void validate_atan2(Context *context, size_t line, const char *statement_text,
                            F2cExpr *expression) {
-    static const char *const arguments[] = {"y", "x"};
-    const F2cBoundIntrinsicArguments bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, "ATAN2", expression->children, expression->child_count,
-        arguments, 2U, 2U);
+    const F2cIntrinsicArgumentSchema *schema =
+        f2c_intrinsic_argument_schema(F2C_INTRINSIC_ATAN2);
+    const F2cBoundIntrinsicArguments bound =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     size_t argument;
     for (argument = 0U; argument < 2U; ++argument) {
         if (bound.values[argument] != NULL && !is_real(bound.values[argument]->type))
-            diagnose_type(context, line, statement_text, "ATAN2", arguments[argument],
+            diagnose_type(context, line, statement_text, "ATAN2", schema->names[argument],
                           bound.values[argument], "REAL");
         else if (bound.values[argument] != NULL && !is_supported_numeric(bound.values[argument]))
             f2c_diagnostic_at(
                 context, line,
                 f2c_validation_expression_start_column(statement_text, bound.values[argument]), 1,
-                "ATAN2 argument %s uses unsupported REAL kind %d", arguments[argument],
+                "ATAN2 argument %s uses unsupported REAL kind %d", schema->names[argument],
                 expression_kind(bound.values[argument]));
     }
     if (bound.values[0] != NULL && bound.values[1] != NULL &&

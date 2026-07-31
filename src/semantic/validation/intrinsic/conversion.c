@@ -168,9 +168,6 @@ static void resolve_result(F2cExpr *expression, const F2cExpr *source, int selec
 
 static void validate_single_source(Context *context, Unit *unit, size_t line,
                                    const char *statement_text, F2cExpr *expression) {
-    static const char *const complex_arguments[] = {"z"};
-    static const char *const conversion_arguments[] = {"a", "kind"};
-    static const char *const logical_arguments[] = {"l", "kind"};
     const int complex_operation = expression->intrinsic == F2C_INTRINSIC_AIMAG ||
                                   expression->intrinsic == F2C_INTRINSIC_CONJG;
     const int logical_operation = expression->intrinsic == F2C_INTRINSIC_LOGICAL;
@@ -180,14 +177,9 @@ static void validate_single_source(Context *context, Unit *unit, size_t line,
          expression->intrinsic == F2C_INTRINSIC_LOGICAL) &&
         (strcmp(expression->text, "int") == 0 || strcmp(expression->text, "real") == 0 ||
          strcmp(expression->text, "logical") == 0);
-    const char *const *names = complex_operation   ? complex_arguments
-                               : logical_operation ? logical_arguments
-                                                   : conversion_arguments;
-    const size_t name_count = complex_operation ? 1U : has_kind ? 2U : 1U;
     const char *intrinsic = display_name(expression->intrinsic);
-    const F2cBoundIntrinsicArguments bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, intrinsic, expression->children, expression->child_count,
-        names, name_count, 1U);
+    const F2cBoundIntrinsicArguments bound =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     int selected_kind = 0;
     if (complex_operation) {
         if (bound.values[0] != NULL && !is_complex(bound.values[0]->type))
@@ -214,14 +206,9 @@ static void validate_single_source(Context *context, Unit *unit, size_t line,
 
 static void validate_cmplx(Context *context, Unit *unit, size_t line, const char *statement_text,
                            F2cExpr *expression) {
-    static const char *const generic_arguments[] = {"x", "y", "kind"};
-    static const char *const specific_arguments[] = {"x", "y"};
     const int generic = strcmp(expression->text, "cmplx") == 0;
-    const char *const *names = generic ? generic_arguments : specific_arguments;
-    const size_t count = generic ? 3U : 2U;
-    const F2cBoundIntrinsicArguments bound = f2c_validation_bind_intrinsic_arguments(
-        context, line, statement_text, generic ? "CMPLX" : "DCMPLX", expression->children,
-        expression->child_count, names, count, 1U);
+    const F2cBoundIntrinsicArguments bound =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     int selected_kind = 0;
     require_supported_numeric(context, line, statement_text, generic ? "CMPLX" : "DCMPLX", "X",
                               bound.values[0]);
