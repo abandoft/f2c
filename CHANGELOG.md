@@ -1,3 +1,13 @@
+## 1.33.0
+
+- Added unified typed identities for every supported standard intrinsic, including standard-version, procedure-category, and semantic-family metadata.
+- Unified intrinsic argument schemas for keyword association, required arguments, duplicate arguments, aliases, and variadic rules.
+- Carried typed identities for array inquiries, state inquiries, transformational intrinsics, reductions, and `NULL` pointer values through the AST, semantic analysis, and code generation.
+- Split intrinsic implementation into catalog, identity, and resolution responsibilities, eliminating duplicate keyword tables and source-name dispatch for standard intrinsics.
+- Moved transient expression code-generation state into a dedicated lowering overlay, preserving the validated typed IR.
+- Completed lowering-overlay contracts for growth, cloning, replacement, release, and context cleanup.
+- Added intrinsic-registry and architectural-boundary checks that execute consistently in Debug and Release builds.
+
 ## 1.32.0
 
 - Added a unified semantic catalog of owned temporaries for array function results, transformational intrinsics, array constructors, and elemental array values.
