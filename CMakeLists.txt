@@ -279,6 +279,7 @@ set(
     src/semantic/implicit/symbols.c
     src/semantic/intrinsic/catalog.c
     src/semantic/intrinsic/identity.c
+    src/semantic/intrinsic/resolution.c
     src/semantic/intrinsic.h
     src/semantic/model.h
     src/semantic/numeric_model.c
