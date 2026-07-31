@@ -244,7 +244,8 @@ void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *i
         if (f2c_io_begin_unaligned_input(context, unit, item, depth, &lowered_item,
                                          &lowered_expression)) {
             f2c_io_emit_formatted_item(context, unit, &lowered_item, input, unit_number, depth + 1);
-            f2c_io_end_unaligned_input(context, item->expression->symbol, depth);
+            f2c_io_end_unaligned_input(context, unit, item->expression->symbol, &lowered_expression,
+                                       depth);
             return;
         }
     }

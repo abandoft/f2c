@@ -81,7 +81,8 @@ int f2c_io_emit_unformatted_array(Context *context, Unit *unit, const F2cIoItem 
             goto cleanup;
         f2c_io_emit_unformatted_scalar(context, unit, &lowered_expression, "f2c_unaligned_io_value",
                                        input, stream, status, emitted_depth + 1);
-        f2c_io_end_unaligned_input(context, element->symbol, emitted_depth);
+        f2c_io_end_unaligned_input(context, unit, element->symbol, &lowered_expression,
+                                   emitted_depth);
     } else if (element->type == TYPE_DERIVED && element->derived_type != NULL) {
         f2c_io_emit_unformatted_derived_scalar(context, unit, element->derived_type, value, input,
                                                stream, unit_number, status, emitted_depth);

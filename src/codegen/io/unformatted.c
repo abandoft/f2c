@@ -1,5 +1,7 @@
 #include "codegen/io/unformatted/private.h"
 
+#include "codegen/lowering/private.h"
+
 #include <stdlib.h>
 
 static void emit_binary_operation(Context *context, const char *status, const char *operation,
@@ -143,7 +145,12 @@ static void emit_default_component(Context *context, Unit *unit, Symbol *compone
     expression.value_category = F2C_VALUE_VARIABLE;
     expression.definable = 1;
     expression.shape.kind = F2C_SHAPE_SCALAR;
-    expression.lowered_character_length_c = character_length;
+    if (character_length != NULL &&
+        !f2c_lowering_copy_character_length(unit, &expression, character_length)) {
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
+                            "out of memory lowering unformatted derived-type component");
+        goto cleanup;
+    }
     if (component->rank == 0U) {
         if (component->type == TYPE_DERIVED && component->derived_type != NULL)
             f2c_io_emit_unformatted_derived_scalar(context, unit, component->derived_type,
@@ -177,6 +184,8 @@ static void emit_default_component(Context *context, Unit *unit, Symbol *compone
         f2c_io_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
     }
+cleanup:
+    f2c_lowering_forget(unit, &expression);
     free(base.data);
     free(index_name.data);
     free(count);
@@ -312,7 +321,8 @@ int f2c_io_emit_unformatted_item(Context *context, Unit *unit, const F2cIoItem *
                                          &lowered_expression)) {
             const int result = f2c_io_emit_unformatted_item(context, unit, &lowered_item, input,
                                                             stream, unit_number, status, depth + 1);
-            f2c_io_end_unaligned_input(context, item->expression->symbol, depth);
+            f2c_io_end_unaligned_input(context, unit, item->expression->symbol, &lowered_expression,
+                                       depth);
             return result;
         }
     }

@@ -1,5 +1,7 @@
 #include "codegen/io/private.h"
 
+#include "codegen/lowering/private.h"
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,7 +43,8 @@ int f2c_io_begin_unaligned_input(Context *context, Unit *unit, const F2cIoItem *
     char *address;
     int supported = 1;
     if (context == NULL || unit == NULL || expression == NULL || symbol == NULL ||
-        !symbol->equivalence_unaligned || expression->rank != 0U || expression->lowered_c != NULL ||
+        !symbol->equivalence_unaligned || expression->rank != 0U ||
+        f2c_lowering_code(unit, expression) != NULL ||
         (expression->kind != F2C_EXPR_NAME && expression->kind != F2C_EXPR_ARRAY_REFERENCE))
         return 0;
     suffix = f2c_unaligned_access_suffix(symbol);
@@ -52,7 +55,10 @@ int f2c_io_begin_unaligned_input(Context *context, Unit *unit, const F2cIoItem *
         return 0;
     }
     *lowered_expression = *expression;
-    lowered_expression->lowered_c = "f2c_unaligned_io_value";
+    if (!f2c_lowering_copy_code(unit, lowered_expression, "f2c_unaligned_io_value")) {
+        free(address);
+        return 0;
+    }
     *lowered_item = *item;
     lowered_item->expression = lowered_expression;
     f2c_io_indent(&context->output, depth);
@@ -68,10 +74,13 @@ int f2c_io_begin_unaligned_input(Context *context, Unit *unit, const F2cIoItem *
     return 1;
 }
 
-void f2c_io_end_unaligned_input(Context *context, const Symbol *symbol, int depth) {
+void f2c_io_end_unaligned_input(Context *context, Unit *unit, const Symbol *symbol,
+                                F2cExpr *lowered_expression, int depth) {
     const char *suffix = f2c_unaligned_access_suffix(symbol);
-    if (context == NULL || suffix == NULL)
+    if (context == NULL || suffix == NULL) {
+        f2c_lowering_forget(unit, lowered_expression);
         return;
+    }
     f2c_io_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
                       "f2c_unaligned_store_%s(f2c_unaligned_io_address, "
@@ -79,6 +88,7 @@ void f2c_io_end_unaligned_input(Context *context, const Symbol *symbol, int dept
                       suffix);
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
+    f2c_lowering_forget(unit, lowered_expression);
 }
 
 char *f2c_io_c_string_literal(const char *text, size_t length) {
@@ -244,16 +254,23 @@ static void emit_list_component(Context *context, Unit *unit, const char *file, 
     expression.value_category = F2C_VALUE_VARIABLE;
     expression.definable = 1;
     expression.shape.kind = F2C_SHAPE_SCALAR;
-    expression.lowered_character_length_c = character_length;
+    if (character_length != NULL &&
+        !f2c_lowering_copy_character_length(unit, &expression, character_length)) {
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
+                            "out of memory lowering derived-type I/O component");
+        goto cleanup;
+    }
     item.expression = &expression;
     if (component->rank == 0U) {
-        expression.lowered_c = base.data;
         if (component->type == TYPE_DERIVED && component->derived_type != NULL)
             emit_list_derived(context, unit, file, base.data, component->derived_type, input,
                               status, defined_kind, unit_number, iotype, depth);
-        else
+        else if (f2c_lowering_copy_code(unit, &expression, base.data))
             f2c_io_emit_item(context, unit, file, &item, input, status, 0, defined_kind,
                              unit_number, iotype, depth);
+        else
+            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
+                                "out of memory lowering derived-type I/O component");
     } else {
         f2c_buffer_printf(&index_name, "f2c_list_component_%d", depth);
         f2c_io_indent(&context->output, depth);
@@ -267,18 +284,22 @@ static void emit_list_component(Context *context, Unit *unit, const char *file, 
                                   character_length != NULL ? character_length : "1U");
             else
                 f2c_buffer_printf(&element, "%s[%s]", base.data, index_name.data);
-            expression.lowered_c = element.data;
             if (component->type == TYPE_DERIVED && component->derived_type != NULL)
                 emit_list_derived(context, unit, file, element.data, component->derived_type, input,
                                   status, defined_kind, unit_number, iotype, depth + 1);
-            else
+            else if (f2c_lowering_copy_code(unit, &expression, element.data))
                 f2c_io_emit_item(context, unit, file, &item, input, status, 0, defined_kind,
                                  unit_number, iotype, depth + 1);
+            else
+                f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
+                                    "out of memory lowering derived-type I/O component");
             free(element.data);
         }
         f2c_io_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
     }
+cleanup:
+    f2c_lowering_forget(unit, &expression);
     free(base.data);
     free(index_name.data);
     free(count);
@@ -367,7 +388,8 @@ void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cI
                                          &lowered_expression)) {
             f2c_io_emit_item(context, unit, file, &lowered_item, input, status, record_input,
                              defined_kind, unit_number, iotype, depth + 1);
-            f2c_io_end_unaligned_input(context, item->expression->symbol, depth);
+            f2c_io_end_unaligned_input(context, unit, item->expression->symbol, &lowered_expression,
+                                       depth);
             return;
         }
     }
