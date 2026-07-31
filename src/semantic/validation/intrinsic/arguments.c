@@ -83,19 +83,6 @@ static F2cBoundIntrinsicArguments bind_intrinsic_arguments(
     return bound;
 }
 
-F2cBoundIntrinsicArguments f2c_validation_bind_intrinsic_arguments(
-    Context *context, size_t line, const char *statement_text, const char *intrinsic_name,
-    F2cExpr *const *arguments, size_t argument_count, const char *const *names,
-    size_t name_count, size_t required_count) {
-    unsigned int required_mask;
-    if (required_count > name_count || required_count >= sizeof(required_mask) * 8U)
-        return (F2cBoundIntrinsicArguments){{0}};
-    required_mask =
-        required_count == 0U ? 0U : (1U << (unsigned int)required_count) - 1U;
-    return bind_intrinsic_arguments(context, line, statement_text, intrinsic_name, arguments,
-                                    argument_count, names, name_count, required_mask);
-}
-
 F2cBoundIntrinsicArguments f2c_validation_bind_registered_intrinsic_arguments(
     Context *context, size_t line, const char *statement_text, const char *intrinsic_name,
     F2cIntrinsicId intrinsic, size_t maximum_arguments, F2cExpr *const *arguments,
