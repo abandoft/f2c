@@ -65,6 +65,9 @@ struct F2cExpr {
     size_t statement_nested_temporary_begin;
     size_t lifetime_statement_index;
     int temporary_lifetime_analyzed;
+    size_t owned_temporary_index;
+    F2cOwnedTemporaryKind owned_temporary_kind;
+    int temporary_ownership_analyzed;
     F2cExpr **children;
     size_t child_count;
     size_t child_capacity;

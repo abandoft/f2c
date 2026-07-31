@@ -77,13 +77,22 @@ typedef struct F2cIoItem {
     int data_static_initializer;
 } F2cIoItem;
 
+typedef struct F2cStatementTemporaryPlan {
+    size_t *owned_temporaries;
+    size_t owned_temporary_count;
+    int ownership_analyzed;
+} F2cStatementTemporaryPlan;
+
 typedef struct F2cScopeCleanupPlan {
     Symbol **symbols;
     size_t symbol_count;
+    size_t *released_temporaries;
+    size_t released_temporary_count;
     size_t source_node;
     size_t target_node;
     int control_flow_analyzed;
     int variable_liveness_analyzed;
+    int temporary_liveness_analyzed;
 } F2cScopeCleanupPlan;
 
 typedef struct F2cResolvedBranch {
@@ -222,6 +231,7 @@ struct F2cStatement {
     F2cPointerBoundsKind pointer_bounds;
     struct F2cStatement *construct_owner;
     struct F2cStatement *control_target;
+    F2cStatementTemporaryPlan temporary_plan;
     struct F2cStatement **terminal_loops;
     size_t terminal_loop_count;
     char **labels;

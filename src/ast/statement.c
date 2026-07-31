@@ -319,6 +319,7 @@ void f2c_statement_free(F2cStatement *statement) {
         f2c_expr_free(control->value);
         f2c_format_free(control->format);
         free(control->cleanup.symbols);
+        free(control->cleanup.released_temporaries);
         while (control->resolved_label_count != 0U)
             free(control->resolved_labels[--control->resolved_label_count]);
         free(control->resolved_labels);
@@ -347,8 +348,10 @@ void f2c_statement_free(F2cStatement *statement) {
     f2c_format_free(statement->format);
     if (statement->label_cleanups != NULL) {
         size_t cleanup;
-        for (cleanup = 0U; cleanup < statement->label_count; ++cleanup)
+        for (cleanup = 0U; cleanup < statement->label_count; ++cleanup) {
             free(statement->label_cleanups[cleanup].symbols);
+            free(statement->label_cleanups[cleanup].released_temporaries);
+        }
     }
     free(statement->label_cleanups);
     while (statement->label_count != 0U)
@@ -356,12 +359,15 @@ void f2c_statement_free(F2cStatement *statement) {
     free(statement->labels);
     free(statement->label_spans);
     free(statement->terminal_loops);
+    free(statement->temporary_plan.owned_temporaries);
     free(statement->transfer_cleanup.symbols);
+    free(statement->transfer_cleanup.released_temporaries);
     while (statement->resolved_branch_count != 0U) {
         F2cResolvedBranch *branch =
             &statement->resolved_branches[--statement->resolved_branch_count];
         free(branch->label);
         free(branch->cleanup.symbols);
+        free(branch->cleanup.released_temporaries);
     }
     free(statement->resolved_branches);
     if (statement->nested != NULL) {

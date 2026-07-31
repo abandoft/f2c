@@ -171,6 +171,35 @@ typedef struct F2cVariableFlow {
     int analyzed;
 } F2cVariableFlow;
 
+typedef enum F2cOwnedTemporaryKind {
+    F2C_OWNED_TEMPORARY_NONE,
+    F2C_OWNED_TEMPORARY_ARRAY_FUNCTION_RESULT,
+    F2C_OWNED_TEMPORARY_TRANSFORMATIONAL_RESULT,
+    F2C_OWNED_TEMPORARY_ARRAY_CONSTRUCTOR,
+    F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE
+} F2cOwnedTemporaryKind;
+
+typedef struct F2cOwnedTemporary {
+    F2cOwnedTemporaryKind kind;
+    Type type;
+    int type_kind;
+    size_t rank;
+    size_t owner_statement;
+    F2cSourceSpan span;
+    F2cDerivedType *derived_type;
+    int requires_finalization;
+} F2cOwnedTemporary;
+
+typedef struct F2cTemporaryFlow {
+    uint64_t *created;
+    uint64_t *released;
+    uint64_t *live_in;
+    uint64_t *live_out;
+    size_t node_count;
+    size_t word_count;
+    int analyzed;
+} F2cTemporaryFlow;
+
 typedef enum F2cDefinedIoKind {
     F2C_DEFINED_IO_READ_FORMATTED,
     F2C_DEFINED_IO_WRITE_FORMATTED,
@@ -270,6 +299,10 @@ struct Unit {
     size_t equivalence_group_count;
     size_t equivalence_group_capacity;
     F2cVariableFlow variable_flow;
+    F2cTemporaryFlow temporary_flow;
+    F2cOwnedTemporary *owned_temporaries;
+    size_t owned_temporary_count;
+    size_t owned_temporary_capacity;
     size_t expression_temporary_count;
     size_t statement_function_temporary_count;
     int expression_lifetimes_analyzed;
