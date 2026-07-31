@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+/* Intrinsic source names are registered once here before typed semantic resolution. */
+
 #define ELEMENTAL(name, minimum, maximum, type)                                                    \
     {name,                                                                                         \
      minimum,                                                                                      \
