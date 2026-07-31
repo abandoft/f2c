@@ -70,6 +70,15 @@ typedef struct F2cIntrinsicDescriptor {
     unsigned int families;
 } F2cIntrinsicDescriptor;
 
+#define F2C_INTRINSIC_ARGUMENT_LIMIT 6U
+
+typedef struct F2cIntrinsicArgumentSchema {
+    const char *names[F2C_INTRINSIC_ARGUMENT_LIMIT];
+    unsigned char count;
+    unsigned char required_mask;
+    unsigned char variadic;
+} F2cIntrinsicArgumentSchema;
+
 typedef struct F2cIntrinsicSignature {
     const char *name;
     size_t minimum_arguments;
@@ -82,6 +91,7 @@ typedef struct F2cIntrinsicSignature {
 
 const F2cIntrinsicDescriptor *f2c_intrinsic_descriptor(F2cIntrinsicId intrinsic);
 const F2cIntrinsicDescriptor *f2c_find_intrinsic_descriptor(const char *name);
+const F2cIntrinsicArgumentSchema *f2c_intrinsic_argument_schema(F2cIntrinsicId intrinsic);
 int f2c_intrinsic_has_family(F2cIntrinsicId intrinsic, F2cIntrinsicFamily family);
 size_t f2c_intrinsic_signature_count(void);
 const F2cIntrinsicSignature *f2c_intrinsic_signature_at(size_t index);

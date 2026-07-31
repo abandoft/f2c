@@ -21,12 +21,25 @@ static void test_identity_completeness(void) {
     for (intrinsic = (F2cIntrinsicId)(F2C_INTRINSIC_NONE + 1);
          intrinsic < F2C_INTRINSIC_ID_COUNT; intrinsic = (F2cIntrinsicId)(intrinsic + 1)) {
         const F2cIntrinsicDescriptor *descriptor = f2c_intrinsic_descriptor(intrinsic);
+        const F2cIntrinsicArgumentSchema *schema = f2c_intrinsic_argument_schema(intrinsic);
         F2cIntrinsicId other;
+        size_t argument;
         assert(descriptor != NULL);
+        assert(schema != NULL);
         assert(descriptor->id == intrinsic);
         assert(descriptor->canonical_name != NULL);
         assert(descriptor->canonical_name[0] != '\0');
         assert(f2c_find_intrinsic_descriptor(descriptor->canonical_name) == descriptor);
+        assert(schema->count >= 1U);
+        assert(schema->count <= F2C_INTRINSIC_ARGUMENT_LIMIT);
+        assert((schema->required_mask >> schema->count) == 0U);
+        for (argument = 0U; argument < schema->count; ++argument) {
+            size_t other_argument;
+            assert(schema->names[argument] != NULL);
+            assert(schema->names[argument][0] != '\0');
+            for (other_argument = argument + 1U; other_argument < schema->count; ++other_argument)
+                assert(strcmp(schema->names[argument], schema->names[other_argument]) != 0);
+        }
         for (other = (F2cIntrinsicId)(intrinsic + 1); other < F2C_INTRINSIC_ID_COUNT;
              other = (F2cIntrinsicId)(other + 1)) {
             const F2cIntrinsicDescriptor *candidate = f2c_intrinsic_descriptor(other);
@@ -62,7 +75,11 @@ static void test_signature_identity(void) {
             assert(permitted_untyped_extension(signature->name));
             ++untyped;
         } else {
+            const F2cIntrinsicArgumentSchema *schema =
+                f2c_intrinsic_argument_schema(signature->id);
             assert(f2c_intrinsic_descriptor(signature->id) != NULL);
+            assert(schema != NULL);
+            assert(schema->variadic || signature->maximum_arguments <= schema->count);
         }
     }
     assert(untyped == 6U);

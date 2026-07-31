@@ -148,12 +148,154 @@ static const F2cIntrinsicDescriptor descriptors[F2C_INTRINSIC_ID_COUNT] = {
     FUNCTION(VERIFY, "verify", F90, CHARACTER),
 };
 
+#define ARGS1(id, required, a0)                                                                   \
+    [F2C_INTRINSIC_##id] = {{a0}, 1U, required, 0U}
+#define ARGS2(id, required, a0, a1)                                                               \
+    [F2C_INTRINSIC_##id] = {{a0, a1}, 2U, required, 0U}
+#define ARGS3(id, required, a0, a1, a2)                                                           \
+    [F2C_INTRINSIC_##id] = {{a0, a1, a2}, 3U, required, 0U}
+#define ARGS4(id, required, a0, a1, a2, a3)                                                       \
+    [F2C_INTRINSIC_##id] = {{a0, a1, a2, a3}, 4U, required, 0U}
+#define ARGS5(id, required, a0, a1, a2, a3, a4)                                                   \
+    [F2C_INTRINSIC_##id] = {{a0, a1, a2, a3, a4}, 5U, required, 0U}
+#define ARGS6(id, required, a0, a1, a2, a3, a4, a5)                                               \
+    [F2C_INTRINSIC_##id] = {{a0, a1, a2, a3, a4, a5}, 6U, required, 0U}
+#define VARARGS2(id, a0, a1) [F2C_INTRINSIC_##id] = {{a0, a1}, 2U, 3U, 1U}
+
+static const F2cIntrinsicArgumentSchema argument_schemas[F2C_INTRINSIC_ID_COUNT] = {
+    ARGS1(ABS, 1U, "a"),
+    ARGS1(ACOS, 1U, "x"),
+    ARGS2(ACHAR, 1U, "i", "kind"),
+    ARGS1(ADJUSTL, 1U, "string"),
+    ARGS1(ADJUSTR, 1U, "string"),
+    ARGS2(AINT, 1U, "a", "kind"),
+    ARGS1(AIMAG, 1U, "z"),
+    ARGS2(ALL, 1U, "mask", "dim"),
+    ARGS1(ALLOCATED, 1U, "array"),
+    ARGS2(ANINT, 1U, "a", "kind"),
+    ARGS2(ANY, 1U, "mask", "dim"),
+    ARGS2(ASSOCIATED, 1U, "pointer", "target"),
+    ARGS1(ASIN, 1U, "x"),
+    ARGS1(ATAN, 1U, "x"),
+    ARGS2(ATAN2, 3U, "y", "x"),
+    ARGS1(BIT_SIZE, 1U, "i"),
+    ARGS2(BTEST, 3U, "i", "pos"),
+    ARGS2(CEILING, 1U, "a", "kind"),
+    ARGS2(CHAR, 1U, "i", "kind"),
+    ARGS3(CMPLX, 1U, "x", "y", "kind"),
+    ARGS1(CONJG, 1U, "z"),
+    ARGS1(COS, 1U, "x"),
+    ARGS1(COSH, 1U, "x"),
+    ARGS3(COUNT, 1U, "mask", "dim", "kind"),
+    ARGS1(CPU_TIME, 1U, "time"),
+    ARGS3(CSHIFT, 3U, "array", "shift", "dim"),
+    ARGS4(DATE_AND_TIME, 0U, "date", "time", "zone", "values"),
+    ARGS1(DBLE, 1U, "a"),
+    ARGS1(DIGITS, 1U, "x"),
+    ARGS2(DIM, 3U, "x", "y"),
+    ARGS2(DOT_PRODUCT, 3U, "vector_a", "vector_b"),
+    ARGS2(DPROD, 3U, "x", "y"),
+    ARGS1(EPSILON, 1U, "x"),
+    ARGS4(EOSHIFT, 3U, "array", "shift", "boundary", "dim"),
+    ARGS1(EXP, 1U, "x"),
+    ARGS1(EXPONENT, 1U, "x"),
+    ARGS2(FLOOR, 1U, "a", "kind"),
+    ARGS6(FINDLOC, 3U, "array", "value", "dim", "mask", "kind", "back"),
+    ARGS1(FRACTION, 1U, "x"),
+    ARGS1(HUGE, 1U, "x"),
+    ARGS2(IACHAR, 1U, "c", "kind"),
+    ARGS2(IAND, 3U, "i", "j"),
+    ARGS2(IBCLR, 3U, "i", "pos"),
+    ARGS3(IBITS, 7U, "i", "pos", "len"),
+    ARGS2(IBSET, 3U, "i", "pos"),
+    ARGS2(ICHAR, 1U, "c", "kind"),
+    ARGS2(IEOR, 3U, "i", "j"),
+    ARGS4(INDEX, 3U, "string", "substring", "back", "kind"),
+    ARGS2(IOR, 3U, "i", "j"),
+    ARGS2(ISHFT, 3U, "i", "shift"),
+    ARGS3(ISHFTC, 3U, "i", "shift", "size"),
+    ARGS1(ISNAN, 1U, "x"),
+    ARGS2(INT, 1U, "a", "kind"),
+    ARGS1(KIND, 1U, "x"),
+    ARGS3(LBOUND, 1U, "array", "dim", "kind"),
+    ARGS2(LEN, 1U, "string", "kind"),
+    ARGS2(LEN_TRIM, 1U, "string", "kind"),
+    ARGS2(LGE, 3U, "string_a", "string_b"),
+    ARGS2(LGT, 3U, "string_a", "string_b"),
+    ARGS2(LLE, 3U, "string_a", "string_b"),
+    ARGS2(LLT, 3U, "string_a", "string_b"),
+    ARGS1(LOG, 1U, "x"),
+    ARGS1(LOG10, 1U, "x"),
+    ARGS2(LOGICAL, 1U, "l", "kind"),
+    ARGS2(MATMUL, 3U, "matrix_a", "matrix_b"),
+    ARGS5(MAXLOC, 1U, "array", "dim", "mask", "kind", "back"),
+    ARGS3(MAXVAL, 1U, "array", "dim", "mask"),
+    ARGS1(MAXEXPONENT, 1U, "x"),
+    VARARGS2(MAX, "a1", "a2"),
+    ARGS3(MERGE, 7U, "tsource", "fsource", "mask"),
+    ARGS5(MINLOC, 1U, "array", "dim", "mask", "kind", "back"),
+    ARGS3(MINVAL, 1U, "array", "dim", "mask"),
+    VARARGS2(MIN, "a1", "a2"),
+    ARGS1(MINEXPONENT, 1U, "x"),
+    ARGS2(MOD, 3U, "a", "p"),
+    ARGS2(MODULO, 3U, "a", "p"),
+    ARGS2(NEAREST, 3U, "x", "s"),
+    ARGS2(NINT, 1U, "a", "kind"),
+    ARGS1(NOT, 1U, "i"),
+    ARGS1(NULL, 0U, "mold"),
+    ARGS5(MVBITS, 31U, "from", "frompos", "len", "to", "topos"),
+    ARGS1(PRECISION, 1U, "x"),
+    ARGS3(PACK, 3U, "array", "mask", "vector"),
+    ARGS1(PRESENT, 1U, "a"),
+    ARGS3(PRODUCT, 1U, "array", "dim", "mask"),
+    ARGS1(RANDOM_NUMBER, 1U, "harvest"),
+    ARGS3(RANDOM_SEED, 0U, "size", "put", "get"),
+    ARGS1(RADIX, 1U, "x"),
+    ARGS1(RANGE, 1U, "x"),
+    ARGS2(REAL, 1U, "a", "kind"),
+    ARGS2(REPEAT, 3U, "string", "ncopies"),
+    ARGS4(RESHAPE, 3U, "source", "shape", "pad", "order"),
+    ARGS1(RRSPACING, 1U, "x"),
+    ARGS2(SCALE, 3U, "x", "i"),
+    ARGS4(SCAN, 3U, "string", "set", "back", "kind"),
+    ARGS1(SELECTED_INT_KIND, 1U, "r"),
+    ARGS3(SELECTED_REAL_KIND, 0U, "p", "r", "radix"),
+    ARGS2(SET_EXPONENT, 3U, "x", "i"),
+    ARGS2(SIGN, 3U, "a", "b"),
+    ARGS2(SHAPE, 1U, "source", "kind"),
+    ARGS1(SIN, 1U, "x"),
+    ARGS1(SINH, 1U, "x"),
+    ARGS1(SPACING, 1U, "x"),
+    ARGS3(SPREAD, 7U, "source", "dim", "ncopies"),
+    ARGS1(SQRT, 1U, "x"),
+    ARGS3(SIZE, 1U, "array", "dim", "kind"),
+    ARGS3(SUM, 1U, "array", "dim", "mask"),
+    ARGS3(SYSTEM_CLOCK, 0U, "count", "count_rate", "count_max"),
+    ARGS1(TAN, 1U, "x"),
+    ARGS1(TANH, 1U, "x"),
+    ARGS1(TINY, 1U, "x"),
+    ARGS3(TRANSFER, 3U, "source", "mold", "size"),
+    ARGS1(TRIM, 1U, "string"),
+    ARGS1(TRANSPOSE, 1U, "matrix"),
+    ARGS3(UBOUND, 1U, "array", "dim", "kind"),
+    ARGS3(UNPACK, 7U, "vector", "mask", "field"),
+    ARGS4(VERIFY, 3U, "string", "set", "back", "kind"),
+};
+
 const F2cIntrinsicDescriptor *f2c_intrinsic_descriptor(F2cIntrinsicId intrinsic) {
     const F2cIntrinsicDescriptor *descriptor;
     if (intrinsic <= F2C_INTRINSIC_NONE || intrinsic >= F2C_INTRINSIC_ID_COUNT)
         return NULL;
     descriptor = &descriptors[intrinsic];
     return descriptor->id == intrinsic && descriptor->canonical_name != NULL ? descriptor : NULL;
+}
+
+const F2cIntrinsicArgumentSchema *f2c_intrinsic_argument_schema(F2cIntrinsicId intrinsic) {
+    const F2cIntrinsicArgumentSchema *schema;
+    if (f2c_intrinsic_descriptor(intrinsic) == NULL)
+        return NULL;
+    schema = &argument_schemas[intrinsic];
+    return schema->count != 0U ? schema : NULL;
 }
 
 const F2cIntrinsicDescriptor *f2c_find_intrinsic_descriptor(const char *name) {
@@ -175,6 +317,13 @@ int f2c_intrinsic_has_family(F2cIntrinsicId intrinsic, F2cIntrinsicFamily family
            (descriptor->families & (unsigned int)family) != 0U;
 }
 
+#undef VARARGS2
+#undef ARGS6
+#undef ARGS5
+#undef ARGS4
+#undef ARGS3
+#undef ARGS2
+#undef ARGS1
 #undef NONE
 #undef ASSUMED_SIZE
 #undef ARRAY_INQUIRY
