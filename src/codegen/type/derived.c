@@ -238,6 +238,13 @@ static const char *procedure_parameter_type(const Symbol *procedure, size_t para
                            procedure->external_parameter_kinds[parameter]);
 }
 
+static void emit_parameter_qualifiers(Buffer *output, const Symbol *procedure, size_t parameter) {
+    if (procedure->external_parameter_const[parameter])
+        f2c_buffer_append(output, "const ");
+    if (procedure->external_parameter_volatile[parameter])
+        f2c_buffer_append(output, "volatile ");
+}
+
 static void emit_dispatch_parameter(Buffer *output, const Symbol *procedure, size_t parameter) {
     Symbol *nested = procedure->external_parameter_procedures[parameter];
     if (nested != NULL) {
@@ -249,12 +256,11 @@ static void emit_dispatch_parameter(Buffer *output, const Symbol *procedure, siz
         f2c_buffer_printf(output, "f2c_descriptor *f2c_argument_%zu", parameter);
     } else if (procedure->type_bound && parameter == procedure->type_bound_pass_index &&
                !procedure->type_bound_nopass) {
-        f2c_buffer_printf(output, "%svoid *f2c_argument_%zu",
-                          procedure->external_parameter_const[parameter] ? "const " : "",
-                          parameter);
+        emit_parameter_qualifiers(output, procedure, parameter);
+        f2c_buffer_printf(output, "void *f2c_argument_%zu", parameter);
     } else {
-        f2c_buffer_printf(output, "%s%s *f2c_argument_%zu",
-                          procedure->external_parameter_const[parameter] ? "const " : "",
+        emit_parameter_qualifiers(output, procedure, parameter);
+        f2c_buffer_printf(output, "%s *f2c_argument_%zu",
                           procedure_parameter_type(procedure, parameter), parameter);
     }
 }
@@ -303,10 +309,11 @@ static void emit_dispatch_wrapper(Context *context, F2cDerivedType *dynamic_type
         if (!effective->nopass && parameter == effective->procedure.type_bound_pass_index) {
             F2cDerivedType *passed_type =
                 effective->procedure.external_parameter_derived_types[parameter];
-            f2c_buffer_printf(
-                &context->output, "(%s%s *)f2c_argument_%zu",
-                effective->procedure.external_parameter_const[parameter] ? "const " : "",
-                passed_type != NULL ? passed_type->c_name : dynamic_type->c_name, parameter);
+            f2c_buffer_append(&context->output, "(");
+            emit_parameter_qualifiers(&context->output, &effective->procedure, parameter);
+            f2c_buffer_printf(&context->output, "%s *)f2c_argument_%zu",
+                              passed_type != NULL ? passed_type->c_name : dynamic_type->c_name,
+                              parameter);
         } else {
             f2c_buffer_printf(&context->output, "f2c_argument_%zu", parameter);
         }

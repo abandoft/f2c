@@ -12,6 +12,18 @@ void f2c_unit_indent(Buffer *output, int depth) {
         f2c_buffer_append(output, "    ");
 }
 
+static int restrictable_argument(const Symbol *symbol) {
+    return symbol != NULL && (symbol->value || (!symbol->target && !symbol->asynchronous &&
+                                                !symbol->volatile_entity));
+}
+
+static void emit_parameter_qualifiers(Buffer *output, int constant, int volatile_parameter) {
+    if (constant)
+        f2c_buffer_append(output, "const ");
+    if (volatile_parameter)
+        f2c_buffer_append(output, "volatile ");
+}
+
 Symbol *f2c_unit_function_result(Unit *unit) {
     return unit != NULL && unit->kind == UNIT_FUNCTION && unit->result_name != NULL
                ? f2c_find_symbol(unit, unit->result_name)
@@ -53,17 +65,21 @@ void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, co
         else if (procedure->external_parameter_descriptor[parameter])
             f2c_buffer_append(output, "f2c_descriptor *");
         else if (procedure->type_bound && parameter == procedure->type_bound_pass_index &&
-                 !procedure->type_bound_nopass)
-            f2c_buffer_printf(output, "%svoid *",
-                              procedure->external_parameter_const[parameter] ? "const " : "");
-        else
+                 !procedure->type_bound_nopass) {
+            emit_parameter_qualifiers(output, procedure->external_parameter_const[parameter],
+                                      procedure->external_parameter_volatile[parameter]);
+            f2c_buffer_append(output, "void *");
+        } else {
+            emit_parameter_qualifiers(output, procedure->external_parameter_const[parameter],
+                                      procedure->external_parameter_volatile[parameter]);
             f2c_buffer_printf(
-                output, "%s%s *", procedure->external_parameter_const[parameter] ? "const " : "",
+                output, "%s *",
                 procedure->external_parameter_types[parameter] == TYPE_DERIVED &&
                         procedure->external_parameter_derived_types[parameter] != NULL
                     ? procedure->external_parameter_derived_types[parameter]->c_name
                     : f2c_c_type_kind(procedure->external_parameter_types[parameter],
                                       procedure->external_parameter_kinds[parameter]));
+        }
     }
     for (parameter = 0U; parameter < procedure->external_parameter_count; ++parameter) {
         if (procedure->external_parameter_types[parameter] == TYPE_CHARACTER &&
@@ -100,7 +116,6 @@ void f2c_unit_emit_named_signature(Buffer *output, Unit *unit, const char *name,
     }
     for (i = 0U; i < unit->argument_count; ++i) {
         Symbol *symbol = f2c_find_symbol(unit, unit->arguments[i]);
-        const char *qualifier = symbol != NULL && symbol->intent == F2C_INTENT_IN ? "const " : "";
         if (i != 0U || character_result)
             f2c_buffer_append(output, ", ");
         if (symbol != NULL && symbol->external) {
@@ -109,11 +124,17 @@ void f2c_unit_emit_named_signature(Buffer *output, Unit *unit, const char *name,
             f2c_buffer_printf(output, "f2c_descriptor *f2c_descriptor_%s",
                               f2c_symbol_c_name(unit, symbol));
         } else {
-            f2c_buffer_printf(output, "%s%s *%s%s", qualifier,
-                              symbol != NULL ? f2c_symbol_c_type(symbol) : f2c_c_type(TYPE_REAL),
-                              restricted_arguments && symbol != NULL ? "F2C_RESTRICT " : "",
-                              symbol != NULL ? f2c_symbol_c_name(unit, symbol)
-                                             : unit->arguments[i]);
+            emit_parameter_qualifiers(
+                output, symbol != NULL && (symbol->intent == F2C_INTENT_IN || symbol->value),
+                symbol != NULL && symbol->volatile_entity);
+            f2c_buffer_printf(
+                output, "%s *%s%s",
+                symbol != NULL ? f2c_symbol_c_type(symbol) : f2c_c_type(TYPE_REAL),
+                restricted_arguments && restrictable_argument(symbol) ? "F2C_RESTRICT " : "",
+                restricted_arguments && symbol != NULL && symbol->value ? "f2c_value_argument_"
+                                                                        : "");
+            f2c_buffer_append(output, symbol != NULL ? f2c_symbol_c_name(unit, symbol)
+                                                     : unit->arguments[i]);
         }
     }
     for (i = 0U; i < unit->argument_count; ++i) {
@@ -198,12 +219,18 @@ static void emit_external_prototypes(Context *context) {
                         f2c_emit_procedure_pointer_type(&context->output, procedure, NULL);
                     else if (symbol->external_parameter_descriptor[parameter])
                         f2c_buffer_append(&context->output, "f2c_descriptor *");
-                    else
+                    else {
+                        emit_parameter_qualifiers(&context->output,
+                                                  symbol->external_parameter_const[parameter],
+                                                  symbol->external_parameter_volatile[parameter]);
                         f2c_buffer_printf(
-                            &context->output, "%s%s *",
-                            symbol->external_parameter_const[parameter] ? "const " : "",
-                            f2c_c_type_kind(symbol->external_parameter_types[parameter],
-                                            symbol->external_parameter_kinds[parameter]));
+                            &context->output, "%s *",
+                            symbol->external_parameter_types[parameter] == TYPE_DERIVED &&
+                                    symbol->external_parameter_derived_types[parameter] != NULL
+                                ? symbol->external_parameter_derived_types[parameter]->c_name
+                                : f2c_c_type_kind(symbol->external_parameter_types[parameter],
+                                                  symbol->external_parameter_kinds[parameter]));
+                    }
                 }
                 for (parameter = 0U; parameter < symbol->external_parameter_count; ++parameter) {
                     if (symbol->external_parameter_types[parameter] == TYPE_CHARACTER &&
