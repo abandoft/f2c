@@ -86,6 +86,7 @@ set(
     src/codegen/array/element.c
     src/codegen/array/function.c
     src/codegen/array/inquiry.c
+    src/codegen/array/ownership.c
     src/codegen/array/private.h
     src/codegen/array/temporary.c
     src/codegen/call.c

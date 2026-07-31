@@ -3,6 +3,18 @@
 
 #include "ast/internal.h"
 
+typedef struct F2cArrayCleanupAction {
+    const F2cExpr *expression;
+    size_t temporary;
+    int depth;
+} F2cArrayCleanupAction;
+
+typedef struct F2cArrayCleanupList {
+    F2cArrayCleanupAction *items;
+    size_t count;
+    size_t capacity;
+} F2cArrayCleanupList;
+
 void f2c_array_indent(Buffer *output, int depth);
 char *f2c_array_emit_expression(Unit *unit, const F2cExpr *expression);
 F2cExpr *f2c_array_clone_expression(const F2cExpr *expression);
@@ -13,13 +25,17 @@ char *f2c_array_inquiry_element(Unit *unit, const F2cExpr *call, const char *ord
 char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t dimension);
 int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *expression,
                                        size_t identifier, const char *role, size_t *temporary,
-                                       Buffer *prelude, Buffer *cleanup, int depth);
+                                       Buffer *prelude, F2cArrayCleanupList *cleanup, int depth);
 int f2c_array_function_result_call(const F2cExpr *expression);
 int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_t identifier,
                                           const char *role, size_t *temporary, Buffer *prelude,
-                                          Buffer *cleanup, int depth);
-void f2c_array_append_owned_temporary_cleanup(Buffer *cleanup, const F2cExpr *expression,
-                                              int depth);
+                                          F2cArrayCleanupList *cleanup, int depth);
+int f2c_array_cleanup_append(Unit *unit, F2cArrayCleanupList *list, const F2cExpr *expression,
+                             int depth);
+int f2c_array_owned_temporary_valid(const Unit *unit, const F2cExpr *expression,
+                                    F2cOwnedTemporaryKind expected);
+int f2c_array_cleanup_emit(Buffer *output, Unit *unit, const F2cArrayCleanupList *list);
+void f2c_array_cleanup_clear(F2cArrayCleanupList *list);
 int f2c_array_contains_unmaterialized_value(const F2cExpr *expression);
 int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, const F2cExpr *left,
                                                  const F2cExpr *right, size_t line, int depth);
