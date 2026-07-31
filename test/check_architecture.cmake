@@ -116,7 +116,10 @@ endif()
 
 file(READ "${SOURCE_DIR}/src/semantic/model.h" SEMANTIC_MODEL)
 file(READ "${SOURCE_DIR}/src/ir/expression.h" EXPRESSION_IR)
+file(READ "${SOURCE_DIR}/src/ast/parser.c" EXPRESSION_PARSER)
+file(READ "${SOURCE_DIR}/src/ast/shape.c" EXPRESSION_SHAPE)
 file(READ "${SOURCE_DIR}/src/frontend/procedure.c" PROCEDURE_LOWERING)
+file(READ "${SOURCE_DIR}/src/frontend/declaration/type.c" TYPE_DECLARATIONS)
 file(READ "${SOURCE_DIR}/src/frontend/modules.c" USE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/module/dependency.c" MODULE_DEPENDENCIES)
 file(READ "${SOURCE_DIR}/src/frontend/module/intrinsic.c" INTRINSIC_MODULES)
@@ -126,8 +129,10 @@ file(READ "${SOURCE_DIR}/src/frontend/module/access.c" ACCESS_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/interface.c" INTERFACE_LOWERING)
 file(READ "${SOURCE_DIR}/src/cli/main.c" CLI_MAIN)
 file(READ "${SOURCE_DIR}/src/semantic/validation/expression.c" EXPRESSION_VALIDATION)
+file(READ "${SOURCE_DIR}/src/semantic/constant.c" CONSTANT_SEMANTICS)
 file(READ "${SOURCE_DIR}/src/semantic/validation/statement.c" STATEMENT_VALIDATION)
 file(READ "${SOURCE_DIR}/src/codegen/expression.c" EXPRESSION_CODEGEN)
+file(READ "${SOURCE_DIR}/src/codegen/expression/leaf.c" LEAF_CODEGEN)
 file(READ "${SOURCE_DIR}/src/codegen/statement/assignment.c" ASSIGNMENT_CODEGEN)
 file(READ "${SOURCE_DIR}/src/frontend/declaration/syntax.c" DECLARATION_CLASSIFICATION)
 file(READ "${SOURCE_DIR}/src/codegen/module.c" MODULE_CODEGEN)
@@ -325,6 +330,22 @@ if(
         "USE resolution must distinguish supported intrinsic, project, and explicitly external modules"
     )
 endif()
+foreach(
+    KIND_CONSUMER
+    IN ITEMS
+       "${EXPRESSION_PARSER}"
+       "${EXPRESSION_SHAPE}"
+       "${TYPE_DECLARATIONS}"
+       "${CONSTANT_SEMANTICS}"
+       "${LEAF_CODEGEN}"
+)
+    if(KIND_CONSUMER MATCHES "\"(int8|int16|int32|int64|real32|real64|sp|dp)\"")
+        message(
+            FATAL_ERROR
+            "kind consumers must resolve named constants through symbols, not global spellings"
+        )
+    endif()
+endforeach()
 if(
     NOT CLI_MAIN MATCHES "--external-module"
     OR NOT CLI_MAIN MATCHES
