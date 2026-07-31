@@ -1,3 +1,13 @@
+## 1.32.0
+
+- Added a unified semantic catalog of owned temporaries for array function results, transformational intrinsics, array constructors, and elemental array values.
+- Added procedure-level data flow for temporary creation, release, and per-CFG-node liveness, rejecting escaping or incomplete lifetimes.
+- Attached per-temporary ownership proofs to branch, loop, return, alternate-return, and I/O `ERR/END/EOR` edges.
+- Replaced string-based array cleanup templates with structured actions that release in reverse creation order and finalize derived values from semantic metadata.
+- Made code generation consume only verified temporary plans and reject missing, mismatched, or duplicate cleanup actions.
+- Ensured unformatted array I/O releases statement-owned values before exceptional control transfers.
+- Lowered ordinary and expression calls from private lowering copies, preserving the validated typed IR.
+
 ## 1.31.0
 
 - Added a reusable backward fixed-point data-flow solver that handles branch joins, closed loops, and unreachable control flow.
