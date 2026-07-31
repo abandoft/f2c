@@ -138,7 +138,11 @@
   仍需纳入同一流程。
 - [ ] 将参数、kind、字符长度、数组边界和初始化中的规格表达式全部纳入溢出安全的常量求值器，
   补齐标准允许的 inquiry/specification intrinsic。`SIZE/SHAPE/LBOUND/UBOUND` 现已建立 typed
-  rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级。数值模型 inquiry
+  rank/shape/kind、关键字关联、常量 `DIM/KIND` 约束及溢出安全的 C17 降级。当前已识别的全部
+  标准 intrinsic 具有唯一 typed ID、首次标准版本、过程类别、语义家族和规范参数模式；AST、
+  语义验证与代码生成不再按标准 intrinsic 的源码拼写分派，关键字关联、必选参数和别名最大参数
+  数统一由注册表驱动。六个保留的非标准兼容扩展被显式隔离为未类型化入口，架构门禁禁止标准
+  名称重新进入 emitter 分派。数值模型 inquiry
   `DIGITS/EPSILON/HUGE/KIND/MAXEXPONENT/MINEXPONENT/PRECISION/RADIX/RANGE/TINY` 以及
   `SELECTED_INT_KIND/SELECTED_REAL_KIND` 已进入 typed IR 和同一常量求值器，可用于参数和类型
   kind 选择器；查询实参不会被求值。实数表示 intrinsic
@@ -543,8 +547,10 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   statement function 临时存储、函数结果 ABI 和 host capture 生命周期查询已经归属语义层，
   架构门禁禁止 codegen 回写临时量规划索引。普通调用与表达式调用现在深复制 typed expression
   树后再物化求值顺序、数组转换及其他 lowering 状态，原始 IR 不再被临时改写；架构测试禁止恢复
-  保存/回写式 mutation。其他 codegen 模块仍存在少量源码字符串识别、生成期语义判断，且
-  `lowered_c` 等瞬态字段尚未迁移到独立 lowering overlay，因此本项保持未关闭。
+  保存/回写式 mutation。标准 intrinsic 的 emitter 分派、`NULL()` 指针值、数组 inquiry 和
+  transformational intrinsic 已全部消费 typed ID；源码名称只允许用于六个明确登记的非标准
+  兼容扩展。`lowered_c`、动态 extent、字符长度及临时量状态已经迁移到独立 lowering overlay。
+  其他 codegen 模块仍存在少量非 intrinsic 源码字符串识别和生成期语义判断，因此本项保持未关闭。
 - [ ] 系统审计严格别名、整数溢出、移位、浮点收缩、复数、求值顺序和指针算术，保证生成代码
   不依赖未定义行为或编译器扩展。位操作 intrinsic 已统一使用固定位宽无符号表示和 `memcpy`
   位复制，规避有符号移位、移位量等于位宽及别名未定义行为，并以符号位、完整位宽、零长度和
@@ -600,7 +606,10 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   call/statement/transpile 文件。
   数值模型定义、常量折叠、语义验证、表达式降低和生成端支持也分别位于 `semantic/`、
   `semantic/constant/`、`semantic/validation/intrinsic/`、`codegen/expression/` 和
-  `core/generated/`，未恢复通用调用生成器中的名称分派。
+  `core/generated/`，未恢复通用调用生成器中的标准名称分派。intrinsic 实现进一步拆为
+  `semantic/intrinsic/catalog.c`、`identity.c` 和 `resolution.c`，分别负责源码签名注册、typed
+  身份/参数元数据和 type/rank/kind 解析；参数关联由共享验证器完成，家族验证器不再各自维护
+  重复关键字表。
   transformational intrinsic 的结果分配、元素复制、动态 extent 提交和派生类型销毁已从总控
   emitter 拆入 `codegen/transform/result.c`；数组函数结果的 ABI 判定和调用端物化分别位于
   `semantic/result.c` 与 `codegen/array/function.c`，表达式临时量规划和普通变量存活性分析分别
@@ -649,8 +658,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 
 - [ ] 按 lexer、preprocessor、parser、AST、语义、常量折叠、intrinsic、I/O、生命周期、IR 和
   emitter 建立独立单元测试，并保留项目级端到端测试。preprocessor 已从超大端到端测试拆为独立
-  测试目标；数值模型契约、对应 intrinsic 语义及数组函数结果 ABI/所有权也已有独立测试目标，
-  其他模块仍需继续拆分。
+  测试目标；数值模型契约、intrinsic 注册表完整性/唯一性/参数模式、各 intrinsic 家族语义及数组
+  函数结果 ABI/所有权也已有独立测试目标，架构测试会阻止恢复旧参数绑定器和标准名称分派；其他
+  模块仍需继续拆分。
 - [ ] 建立完整负向语料库，断言错误码、源码范围、恢复位置和输出抑制；禁止只匹配易变英文文本。
 - [ ] 增加行/分支覆盖率门禁和历史趋势，分别统计转译器、生成辅助代码和数值脚本。
 - [ ] 当 `F2C_BUILD_TESTING=ON` 时，数值脚本所需 Python 应成为明确依赖或由独立选项控制；不能
