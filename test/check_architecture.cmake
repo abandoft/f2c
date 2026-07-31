@@ -35,6 +35,15 @@ foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
             "${RELATIVE_FILE} mutates semantic temporary planning during code generation"
         )
     endif()
+    if(
+        PRODUCTION_FILE MATCHES "/src/(ast|frontend|ir|semantic)/"
+        AND CONTENT MATCHES "f2c_lowering_[a-z_]+[ \t\r\n]*\\("
+    )
+        message(
+            FATAL_ERROR
+            "${RELATIVE_FILE} couples typed source/semantic state to code-generation lowering"
+        )
+    endif()
     if(CONTENT MATCHES "f2c_parse_expression_ast[ \t\r\n]*\\(")
         if(
             NOT RELATIVE_FILE STREQUAL "src/ast/parser.c"
@@ -84,6 +93,7 @@ if(ROOT_CMAKE MATCHES "modern_f2c" OR ROOT_CMAKE MATCHES "src/cli/main\\.c[ \t\r
 endif()
 
 file(READ "${SOURCE_DIR}/src/semantic/model.h" SEMANTIC_MODEL)
+file(READ "${SOURCE_DIR}/src/ir/expression.h" EXPRESSION_IR)
 file(READ "${SOURCE_DIR}/src/frontend/procedure.c" PROCEDURE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/modules.c" USE_LOWERING)
 file(READ "${SOURCE_DIR}/src/frontend/module/dependency.c" MODULE_DEPENDENCIES)
@@ -104,16 +114,22 @@ file(READ "${SOURCE_DIR}/src/codegen/array/temporary.c" ARRAY_TEMPORARIES)
 file(READ "${SOURCE_DIR}/src/codegen/array/ownership.c" ARRAY_OWNERSHIP)
 file(READ "${SOURCE_DIR}/src/codegen/call.c" CALL_LOWERING)
 file(READ "${SOURCE_DIR}/src/codegen/expression/call.c" EXPRESSION_CALL_LOWERING)
+if(
+    EXPRESSION_IR MATCHES
+        "(lowered_c|lowered_extent_c|lowered_character_length_c|lowered_array_temporary|ordered_argument_materialized)"
+)
+    message(FATAL_ERROR "typed expression IR must not contain code-generation lowering state")
+endif()
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
 endif()
 if(
     NOT CALL_LOWERING MATCHES
-        "lowering_arguments\\[i\\][ \t]*=[ \t]*f2c_array_clone_expression[ \t\r\n]*\\(argument_expressions\\[i\\]\\)"
+        "lowering_arguments\\[i\\][ \t]*=[ \t]*f2c_array_clone_expression[ \t\r\n]*\\(unit,[ \t\r\n]*argument_expressions\\[i\\]\\)"
     OR NOT CALL_LOWERING MATCHES
         "argument_expressions[ \t]*=[ \t]*lowering_arguments"
     OR NOT EXPRESSION_CALL_LOWERING MATCHES
-        "lowering_expression[ \t]*=[ \t]*f2c_array_clone_expression[ \t\r\n]*\\(expression\\)"
+        "lowering_expression[ \t]*=[ \t]*f2c_array_clone_expression[ \t\r\n]*\\(unit,[ \t\r\n]*expression\\)"
     OR EXPRESSION_CALL_LOWERING MATCHES "restore_ordered_arguments"
 )
     message(
