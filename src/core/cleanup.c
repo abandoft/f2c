@@ -1,5 +1,7 @@
 #include "internal/f2c.h"
 
+#include "semantic/data_flow.h"
+
 #include <stdlib.h>
 
 static void free_symbol(Symbol *symbol) {
@@ -63,6 +65,7 @@ static void free_derived_type(F2cDerivedType *derived) {
 
 void f2c_free_unit(Unit *unit) {
     size_t index;
+    f2c_variable_flow_clear(unit);
     free(unit->name);
     free(unit->fortran_name);
     free(unit->result_name);

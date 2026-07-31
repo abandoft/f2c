@@ -161,6 +161,16 @@ typedef struct F2cEquivalenceGroup {
     size_t member_count;
 } F2cEquivalenceGroup;
 
+typedef struct F2cVariableFlow {
+    uint64_t *uses;
+    uint64_t *definitions;
+    uint64_t *live_in;
+    uint64_t *live_out;
+    size_t node_count;
+    size_t word_count;
+    int analyzed;
+} F2cVariableFlow;
+
 typedef enum F2cDefinedIoKind {
     F2C_DEFINED_IO_READ_FORMATTED,
     F2C_DEFINED_IO_WRITE_FORMATTED,
@@ -259,6 +269,7 @@ struct Unit {
     F2cEquivalenceGroup *equivalence_groups;
     size_t equivalence_group_count;
     size_t equivalence_group_capacity;
+    F2cVariableFlow variable_flow;
     F2cDerivedType *derived_types;
     size_t derived_type_count;
     size_t derived_type_capacity;

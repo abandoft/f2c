@@ -31,4 +31,12 @@ int f2c_bit_flow_solve_backward(const F2cControlFlowGraph *graph, size_t word_co
                                 void *user, F2cBitFlowResult *result);
 void f2c_bit_flow_free(F2cBitFlowResult *result);
 
+int f2c_variable_flow_analyze(Context *context, Unit *unit,
+                              const F2cControlFlowGraph *graph);
+void f2c_variable_flow_clear(Unit *unit);
+int f2c_variable_flow_is_used(const Unit *unit, size_t node, const Symbol *symbol);
+int f2c_variable_flow_is_defined(const Unit *unit, size_t node, const Symbol *symbol);
+int f2c_variable_flow_is_live_in(const Unit *unit, size_t node, const Symbol *symbol);
+int f2c_variable_flow_is_live_out(const Unit *unit, size_t node, const Symbol *symbol);
+
 #endif

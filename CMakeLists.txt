@@ -267,6 +267,7 @@ set(
     src/semantic/constant/real.c
     src/semantic/data_flow.h
     src/semantic/data_flow/bitset.c
+    src/semantic/data_flow/variables.c
     src/semantic/host.c
     src/semantic/implicit.c
     src/semantic/implicit/declaration.c
@@ -639,6 +640,14 @@ if(F2C_BUILD_TESTING)
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     add_test(NAME data_flow_worklist COMMAND f2c_data_flow_tests)
+
+    add_executable(f2c_variable_flow_tests test/test_variable_flow.c)
+    f2c_configure_internal_test_target(f2c_variable_flow_tests)
+    target_include_directories(
+        f2c_variable_flow_tests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    add_test(NAME variable_liveness COMMAND f2c_variable_flow_tests)
 
     add_executable(
         f2c_real_representation_intrinsic_tests
