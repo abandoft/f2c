@@ -89,6 +89,18 @@ foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
     if(CONTENT MATCHES "netlib-f2c")
         message(FATAL_ERROR "${RELATIVE_FILE} references the archived netlib-f2c tree")
     endif()
+    if(CONTENT MATCHES "f2c_validation_bind_intrinsic_arguments[ \t\r\n]*\\(")
+        message(
+            FATAL_ERROR
+            "${RELATIVE_FILE} bypasses registered intrinsic argument schemas"
+        )
+    endif()
+    if(
+        CONTENT MATCHES
+            "strcmp[ \t\r\n]*\\([^\\n]*,[ \t\r\n]*\"null\"[ \t\r\n]*\\)"
+    )
+        message(FATAL_ERROR "${RELATIVE_FILE} dispatches NULL by source spelling")
+    endif()
 endforeach()
 
 file(READ "${SOURCE_DIR}/CMakeLists.txt" ROOT_CMAKE)
@@ -124,11 +136,25 @@ file(READ "${SOURCE_DIR}/src/codegen/array/temporary.c" ARRAY_TEMPORARIES)
 file(READ "${SOURCE_DIR}/src/codegen/array/ownership.c" ARRAY_OWNERSHIP)
 file(READ "${SOURCE_DIR}/src/codegen/call.c" CALL_LOWERING)
 file(READ "${SOURCE_DIR}/src/codegen/expression/call.c" EXPRESSION_CALL_LOWERING)
+file(READ "${SOURCE_DIR}/src/codegen/lowering.c" INTRINSIC_EMISSION)
+file(READ "${SOURCE_DIR}/src/semantic/intrinsic/catalog.c" INTRINSIC_CATALOG)
 if(
     EXPRESSION_IR MATCHES
         "(lowered_c|lowered_extent_c|lowered_character_length_c|lowered_array_temporary|ordered_argument_materialized)"
 )
     message(FATAL_ERROR "typed expression IR must not contain code-generation lowering state")
+endif()
+if(
+    INTRINSIC_EMISSION MATCHES
+        "strcmp[ \t\r\n]*\\([^\\n]*,[ \t\r\n]*\"(abs|dabs|dsqrt|dexp|dlog|dsin|dcos|conjg|dconjg|aimag|dimag|dreal|cabs|cdabs|sqrt|sin|cos|tan|exp|log|log10|atan|asin|acos|atan2|max|min|real|dble|float|int|cmplx|dcmplx|ichar|char|len|len_trim|alog|maxloc|maxval)\"[ \t\r\n]*\\)"
+)
+    message(FATAL_ERROR "standard intrinsic emission must dispatch by typed identity")
+endif()
+if(
+    INTRINSIC_CATALOG MATCHES
+        "f2c_resolve_intrinsic_(type|rank|kind)[ \t\r\n]*\\("
+)
+    message(FATAL_ERROR "intrinsic catalog must not absorb typed result resolution")
 endif()
 if(SEMANTIC_MODEL MATCHES "external_parameter_[a-z_]+[ \t\r\n]*\\[[0-9]+\\]")
     message(FATAL_ERROR "procedure signatures must use dynamic parameter storage")
