@@ -86,6 +86,13 @@ static void resolve_intrinsic_type(F2cExpr *expression, const F2cIntrinsicSignat
             : TYPE_UNKNOWN;
     free(argument_types);
 
+    if (signature != NULL && signature->id == F2C_INTRINSIC_TRANSFER) {
+        const F2cExpr *mold =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "mold", 1U);
+        if (mold != NULL)
+            expression->type = mold->type;
+    }
+
     if (signature != NULL && (f2c_intrinsic_is_mathematical(signature->id) ||
                               f2c_intrinsic_is_conversion(signature->id))) {
         const F2cExpr *primary = typed_intrinsic_primary(expression, signature);
@@ -152,10 +159,10 @@ static void resolve_intrinsic_type(F2cExpr *expression, const F2cIntrinsicSignat
 static void resolve_intrinsic_shape(AstParser *parser, F2cExpr *expression,
                                     const F2cIntrinsicSignature *signature) {
     size_t argument;
-    expression->rank =
-        signature != NULL ? f2c_resolve_intrinsic_rank(signature->name, expression->children,
-                                                       expression->child_count)
-                          : 0U;
+    expression->rank = signature != NULL
+                           ? f2c_resolve_intrinsic_rank(signature->name, expression->children,
+                                                        expression->child_count)
+                           : 0U;
     if (signature == NULL) {
         for (argument = 0U; argument < expression->child_count; ++argument) {
             if (expression->children[argument]->rank > expression->rank)
@@ -216,6 +223,15 @@ static void resolve_intrinsic_kind(F2cExpr *expression, const F2cIntrinsicSignat
     }
     if (expression->intrinsic == F2C_INTRINSIC_MATMUL)
         expression->type_kind = matmul_result_kind(expression);
+    if (signature != NULL && signature->id == F2C_INTRINSIC_TRANSFER) {
+        const F2cExpr *mold =
+            f2c_intrinsic_argument(expression->children, expression->child_count, "mold", 1U);
+        if (mold != NULL) {
+            expression->type_kind =
+                mold->type_kind != 0 ? mold->type_kind : f2c_default_kind(mold->type);
+            expression->derived_type = mold->derived_type;
+        }
+    }
     if (signature != NULL && signature->id == F2C_INTRINSIC_MERGE) {
         const F2cExpr *source =
             f2c_intrinsic_argument(expression->children, expression->child_count, "tsource", 0U);

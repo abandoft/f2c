@@ -125,6 +125,58 @@ const F2cExpr *f2c_ast_intrinsic_argument(const F2cExpr *call, const char *keywo
     return NULL;
 }
 
+static int transfer_element_bytes(Unit *unit, const F2cExpr *expression, uint64_t *bytes) {
+    int kind;
+    int64_t length;
+    if (expression == NULL || bytes == NULL)
+        return 0;
+    kind = expression->type_kind != 0 ? expression->type_kind : f2c_default_kind(expression->type);
+    switch (expression->type) {
+    case TYPE_INTEGER:
+    case TYPE_LOGICAL:
+    case TYPE_REAL:
+    case TYPE_DOUBLE:
+        if (kind != 1 && kind != 2 && kind != 4 && kind != 8 && kind != 16)
+            return 0;
+        *bytes = (uint64_t)kind;
+        return 1;
+    case TYPE_COMPLEX:
+    case TYPE_DOUBLE_COMPLEX:
+        if (kind != 4 && kind != 8 && kind != 16)
+            return 0;
+        *bytes = (uint64_t)kind * UINT64_C(2);
+        return 1;
+    case TYPE_CHARACTER:
+        if (kind != 1 || expression->symbol == NULL ||
+            expression->symbol->character_length_expression == NULL ||
+            !f2c_evaluate_integer_constant(unit, expression->symbol->character_length_expression,
+                                           &length) ||
+            length < 0)
+            return 0;
+        *bytes = (uint64_t)length;
+        return 1;
+    case TYPE_DERIVED:
+    case TYPE_UNKNOWN:
+    default:
+        return 0;
+    }
+}
+
+static int transfer_storage_bytes(Unit *unit, const F2cExpr *expression, uint64_t *bytes) {
+    uint64_t elements = UINT64_C(1);
+    uint64_t element_bytes;
+    size_t dimension;
+    if (!transfer_element_bytes(unit, expression, &element_bytes))
+        return 0;
+    for (dimension = 0U; dimension < expression->rank; ++dimension) {
+        const F2cShapeDimension *shape = &expression->shape.dimensions[dimension];
+        if (!shape->extent_known ||
+            !constructor_extent_multiply(elements, shape->extent, &elements))
+            return 0;
+    }
+    return constructor_extent_multiply(elements, element_bytes, bytes);
+}
+
 void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expression) {
     const F2cExpr *source;
     const F2cExpr *shape;
@@ -176,6 +228,35 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
             if (source != NULL) {
                 expression->shape.dimensions[0].extent_known = 1;
                 expression->shape.dimensions[0].extent = source->rank;
+            }
+        }
+        return;
+    }
+    if (expression->intrinsic == F2C_INTRINSIC_TRANSFER) {
+        const F2cExpr *mold = f2c_ast_intrinsic_argument(expression, "mold", 1U);
+        const F2cExpr *size = f2c_ast_intrinsic_argument(expression, "size", 2U);
+        source = f2c_ast_intrinsic_argument(expression, "source", 0U);
+        f2c_ast_set_expression_shape(expression, expression->rank,
+                                     expression->rank == 0U ? F2C_SHAPE_SCALAR
+                                                            : F2C_SHAPE_EXPRESSION);
+        if (expression->rank == 1U) {
+            F2cShapeDimension *result = &expression->shape.dimensions[0];
+            result->lower_known = 1;
+            result->lower = 1;
+            if (size != NULL &&
+                f2c_evaluate_integer_constant(parser->unit, size, &dimension_value) &&
+                dimension_value >= 0) {
+                result->extent_known = 1;
+                result->extent = (uint64_t)dimension_value;
+            } else if (size == NULL && mold != NULL && mold->rank != 0U && source != NULL) {
+                uint64_t source_bytes;
+                uint64_t mold_bytes;
+                if (transfer_storage_bytes(parser->unit, source, &source_bytes) &&
+                    transfer_element_bytes(parser->unit, mold, &mold_bytes) && mold_bytes != 0U) {
+                    result->extent_known = 1;
+                    result->extent = source_bytes / mold_bytes +
+                                     (source_bytes % mold_bytes != 0U ? UINT64_C(1) : UINT64_C(0));
+                }
             }
         }
         return;
@@ -597,7 +678,6 @@ int f2c_ast_is_generated_c_intrinsic(const char *name) {
                                         "ccosf",
                                         "ccos",
                                         "F2C_ABS",
-                                        "F2C_TRANSFER",
                                         "F2C_FORTRAN_MAX",
                                         "F2C_FORTRAN_MIN"};
     size_t i;
