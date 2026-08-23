@@ -505,13 +505,15 @@ static F2cExpr *parse_primary(AstParser *parser) {
             int extent_known;
             expression->type = element_type;
             expression->derived_type = element_derived_type;
-            expression->type_kind = f2c_default_kind(element_type);
+            expression->type_kind = 0;
             for (size_t element_index = 0U; element_index < expression->child_count;
                  ++element_index) {
                 if (expression->children[element_index]->type == element_type &&
-                    expression->children[element_index]->type_kind > expression->type_kind)
+                    expression->type_kind == 0)
                     expression->type_kind = expression->children[element_index]->type_kind;
             }
+            if (expression->type_kind == 0)
+                expression->type_kind = f2c_default_kind(element_type);
             f2c_ast_set_expression_shape(expression, 1U, F2C_SHAPE_EXPRESSION);
             expression->shape.dimensions[0].kind = F2C_DIMENSION_EXPLICIT;
             expression->shape.dimensions[0].lower_known = 1;
