@@ -31,6 +31,7 @@ static void test_typed_identities(void) {
     expect_intrinsic("reshape", F2C_INTRINSIC_RESHAPE);
     expect_intrinsic("spread", F2C_INTRINSIC_SPREAD);
     expect_intrinsic("transpose", F2C_INTRINSIC_TRANSPOSE);
+    expect_intrinsic("transfer", F2C_INTRINSIC_TRANSFER);
     expect_intrinsic("unpack", F2C_INTRINSIC_UNPACK);
     expect(f2c_intrinsic_is_transformational(F2C_INTRINSIC_SUM),
            "array-valued reductions share the transformational pipeline");
@@ -90,6 +91,21 @@ static void test_argument_contracts(void) {
                       "RESHAPE SHAPE extents must not be negative");
     expect_diagnostic("  integer :: values(4)\n", "reshape(values, [2, 2], order=[1, 1])",
                       "RESHAPE ORDER must be a permutation of result dimensions");
+    expect_diagnostic("  integer :: values(4), mold\n", "transfer(values, mold, -1)",
+                      "TRANSFER SIZE must not be negative");
+    expect_diagnostic("  integer :: values(4), mold\n", "transfer(values, mold, 1.0)",
+                      "TRANSFER argument SIZE must be a scalar INTEGER expression");
+    expect_diagnostic("  integer :: values(4), mold, counts(2)\n", "transfer(values, mold, counts)",
+                      "TRANSFER argument SIZE must be a scalar INTEGER expression");
+    expect_diagnostic("", "[1_4, 2_8]",
+                      "array-constructor values must have the same type and kind");
+    expect_diagnostic("  character(kind=4, len=1) :: wide\n  integer :: mold\n",
+                      "transfer(wide, mold)",
+                      "TRANSFER argument SOURCE uses an unsupported kind 4");
+    expect_diagnostic("  type :: base\n    integer :: value\n  end type base\n"
+                      "  class(base), allocatable :: dynamic\n  type(base) :: mold\n",
+                      "transfer(dynamic, mold)",
+                      "TRANSFER of a polymorphic SOURCE or MOLD is not yet supported");
 }
 
 static void test_nested_lowering(void) {
@@ -137,8 +153,9 @@ static void test_transfer_mold_is_not_materialized(void) {
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
     expect(result.code != NULL && result.error_count == 0U,
            "TRANSFER array-constructor mold produces typed C17");
-    expect(result.code != NULL && strstr(result.code, "f2c_transfer_") != NULL,
-           "TRANSFER array actual uses owned bit-transfer storage");
+    expect(result.code != NULL && strstr(result.code, "f2c_transfer_copy") != NULL &&
+               strstr(result.code, "F2C_TRANSFER") == NULL,
+           "TRANSFER uses typed portable bit-copy support without a scalar-only macro");
     expect(result.code != NULL && strstr(result.code, "f2c_array_call_constructor_") == NULL,
            "TRANSFER does not evaluate or materialize its MOLD argument");
     f2c_result_free(&result);
