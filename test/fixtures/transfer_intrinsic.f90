@@ -95,6 +95,8 @@ program transfer_intrinsic
   character_target = transfer(character_source, ['xx'])
   if (character_target(1) /= 'ab ') stop 16
   if (character_target(2) /= 'cd ') stop 17
+  allocate(character(len=2) :: dynamic_character_target(1))
+  dynamic_character_target = 'zz'
   dynamic_character_target = transfer(character_source, ['x'])
   if (len(dynamic_character_target) /= 1 .or. size(dynamic_character_target) /= 4) stop 32
   if (any(dynamic_character_target /= ['a', 'b', 'c', 'd'])) stop 33
