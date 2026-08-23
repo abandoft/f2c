@@ -32,7 +32,7 @@ cmake -E remove_directory "$WORK"
 cmake -E make_directory "$WORK"
 
 for fixture in transform_intrinsics transform_character_derived nested_transform_intrinsics \
-    transfer_mold; do
+    transfer_mold transfer_intrinsic; do
     case_work=$WORK/$fixture
     source=$ROOT/test/fixtures/$fixture.f90
     cmake -E make_directory "$case_work"
@@ -54,6 +54,19 @@ for fixture in transform_intrinsics transform_character_derived nested_transform
 
     "$case_work/generated" > "$case_work/generated.out"
     "$case_work/native" > "$case_work/native.out"
+
+    if [ "$fixture" = transfer_intrinsic ]; then
+        "$CC" -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+            -Wstrict-prototypes -Wmissing-prototypes -Werror \
+            -fsanitize=address,undefined -fno-sanitize-recover=all \
+            "$case_work/generated.c" -lm -o "$case_work/generated-sanitized"
+        "$case_work/generated-sanitized" > "$case_work/generated-sanitized.out"
+        if ! cmp -s "$case_work/generated.out" "$case_work/generated-sanitized.out"; then
+            echo "$fixture optimized/sanitized output mismatch" >&2
+            diff -u "$case_work/generated.out" "$case_work/generated-sanitized.out" >&2 || true
+            exit 1
+        fi
+    fi
 
     if ! cmp -s "$case_work/generated.out" "$case_work/native.out"; then
         echo "$fixture generated/native transformational intrinsic output mismatch" >&2
