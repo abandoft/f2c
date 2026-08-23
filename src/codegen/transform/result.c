@@ -18,6 +18,13 @@ void f2c_transform_emit_result_count(Context *context, size_t rank, int depth) {
 
 void f2c_transform_emit_result_allocation(Context *context, Unit *unit, const Symbol *target,
                                           const F2cExpr *element_source, int depth) {
+    size_t dimension;
+    for (dimension = 0U; dimension < target->rank; ++dimension) {
+        f2c_transform_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output,
+                          "if (f2c_transform_result_extent_%zu > (size_t)INT32_MAX) abort();\n",
+                          dimension + 1U);
+    }
     if (target->type == TYPE_CHARACTER) {
         char *length = target->deferred_character
                            ? f2c_character_length_expression(unit, element_source)
