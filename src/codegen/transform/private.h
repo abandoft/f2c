@@ -37,5 +37,7 @@ int f2c_transform_emit_reduction(Context *context, Unit *unit, Symbol *target, c
                                  size_t line, int depth);
 int f2c_transform_emit_matrix(Context *context, Unit *unit, Symbol *target, const F2cExpr *call,
                               size_t line, int depth);
+int f2c_transform_emit_transfer(Context *context, Unit *unit, Symbol *target, const F2cExpr *call,
+                                size_t line, int depth);
 
 #endif

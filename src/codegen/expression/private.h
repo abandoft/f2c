@@ -43,5 +43,6 @@ char *f2c_expression_relation_reduction(Unit *unit, const F2cExpr *expression, i
                                         int *matched);
 char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_statement_function(Unit *unit, const F2cExpr *expression, int *supported);
+char *f2c_expression_transfer_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 
 #endif

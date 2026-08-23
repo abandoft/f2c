@@ -122,6 +122,7 @@ set(
     src/codegen/expression/representation.c
     src/codegen/expression/reduction.c
     src/codegen/expression/statement_function.c
+    src/codegen/expression/transfer.c
     src/codegen/expression/view.c
     src/codegen/io.c
     src/codegen/io/control/common.c
@@ -174,6 +175,7 @@ set(
     src/codegen/transform/matrix.c
     src/codegen/transform/reduction.c
     src/codegen/transform/result.c
+    src/codegen/transform/transfer.c
     src/codegen/transform/private.h
     src/codegen/transform/view.c
     src/codegen/type/derived.c
@@ -205,6 +207,7 @@ set(
     src/core/generated/relation.c
     src/core/generated/stream.c
     src/core/generated/time.c
+    src/core/generated/transfer.c
     src/core/support.c
     src/core/transpile.c
     src/frontend/analyze.c
