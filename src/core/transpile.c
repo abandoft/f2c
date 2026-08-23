@@ -387,6 +387,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                               "F2C_DEFINE_UNALIGNED_ACCESS(c8, f2c_complex_double)\n"
                               "F2C_DEFINE_UNALIGNED_ACCESS(c16, f2c_complex_long_double)\n");
         f2c_buffer_append(&context.output, "#undef F2C_DEFINE_UNALIGNED_ACCESS\n");
+        if (needs_transfer)
+            f2c_emit_transfer_support(&context.output, needs_complex);
         f2c_buffer_append(
             &context.output,
             "static inline F2C_UNUSED void f2c_store_message(char *target, size_t length, "
@@ -629,21 +631,6 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             "}\n"
             "static inline F2C_UNUSED double f2c_square_d(double value) { return value * value; "
             "}\n");
-        if (needs_complex && needs_transfer) {
-            f2c_buffer_append(
-                &context.output,
-                "static inline F2C_UNUSED f2c_complex_float f2c_transfer_c(const void *p) { "
-                "f2c_complex_float r; "
-                "memcpy(&r, p, sizeof(r)); return r; }\n"
-                "static inline F2C_UNUSED f2c_complex_double f2c_transfer_z(const void *p) { "
-                "f2c_complex_double r; "
-                "memcpy(&r, p, sizeof(r)); return r; }\n"
-                "static inline F2C_UNUSED int32_t f2c_transfer_i32(const void *p) { int32_t r; "
-                "memcpy(&r, p, sizeof(r)); return r; }\n"
-                "#define F2C_TRANSFER(source, mold) _Generic((mold), f2c_complex_float: "
-                "f2c_transfer_c, f2c_complex_double: f2c_transfer_z, int32_t: "
-                "f2c_transfer_i32)(&(source))\n");
-        }
         f2c_buffer_append(
             &context.output,
             "static inline F2C_UNUSED int8_t f2c_abs_i8(int8_t value) { return value == "
@@ -683,12 +670,33 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                 "_Cbuild(real_part, imag_part);\n#else\ndouble parts[2] = {real_part, imag_part}; "
                 "f2c_complex_double value; memcpy(&value, parts, sizeof(value)); return value;\n"
                 "#endif\n}\n"
+                "static inline F2C_UNUSED f2c_complex_long_double f2c_make_q(long double "
+                "real_part, long double imag_part) {\n#if defined(_MSC_VER) && "
+                "!defined(__clang__)\nreturn _LCbuild(real_part, imag_part);\n#else\nlong double "
+                "parts[2] = {real_part, imag_part}; f2c_complex_long_double value; "
+                "memcpy(&value, parts, sizeof(value)); return value;\n#endif\n}\n"
                 "static inline F2C_UNUSED f2c_complex_double "
                 "f2c_c_to_z(f2c_complex_float value) { return f2c_make_z((double)crealf(value), "
                 "(double)cimagf(value)); }\n"
                 "static inline F2C_UNUSED f2c_complex_float "
                 "f2c_z_to_c(f2c_complex_double value) { return f2c_make_c((float)creal(value), "
                 "(float)cimag(value)); }\n"
+                "static inline F2C_UNUSED f2c_complex_long_double "
+                "f2c_c_to_q(f2c_complex_float value) { return f2c_make_q((long "
+                "double)crealf(value), "
+                "(long double)cimagf(value)); }\n"
+                "static inline F2C_UNUSED f2c_complex_long_double "
+                "f2c_z_to_q(f2c_complex_double value) { return f2c_make_q((long "
+                "double)creal(value), "
+                "(long double)cimag(value)); }\n"
+                "static inline F2C_UNUSED f2c_complex_float "
+                "f2c_q_to_c(f2c_complex_long_double value) { return "
+                "f2c_make_c((float)creall(value), "
+                "(float)cimagl(value)); }\n"
+                "static inline F2C_UNUSED f2c_complex_double "
+                "f2c_q_to_z(f2c_complex_long_double value) { return "
+                "f2c_make_z((double)creall(value), "
+                "(double)cimagl(value)); }\n"
                 "static inline F2C_UNUSED f2c_complex_float f2c_cadd(f2c_complex_float a, "
                 "f2c_complex_float b) { return f2c_make_c(crealf(a) + crealf(b), cimagf(a) + "
                 "cimagf(b)); }\n"
@@ -842,7 +850,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
         }
         f2c_buffer_append(&context.output, "\n");
         f2c_emit_common_blocks(&context);
-        f2c_emit_derived_types(&context);
+        f2c_emit_derived_types(&context, needs_transfer);
         f2c_emit_project_modules(&context);
         f2c_emit_prototypes(&context);
         f2c_emit_interface_header(&context);

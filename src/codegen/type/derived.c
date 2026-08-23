@@ -732,7 +732,34 @@ static void emit_dynamic_destroy_definitions(Context *context, Units *units) {
     }
 }
 
-void f2c_emit_derived_types(Context *context) {
+static void emit_transfer_wrappers(Context *context, Units *units) {
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < units->count; ++unit_index) {
+        Unit *unit = &units->items[unit_index];
+        size_t type_index;
+        for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
+            const F2cDerivedType *derived = &unit->derived_types[type_index];
+            f2c_buffer_printf(&context->output,
+                              "static inline F2C_UNUSED %s f2c_transfer_%s("
+                              "const void *source, size_t source_size) { %s raw; %s result = {0}; "
+                              "f2c_transfer_copy(&raw, sizeof(raw), source, source_size); "
+                              "f2c_initialize_%s(&result); f2c_clone_%s(&result, &raw); "
+                              "return result; }\n"
+                              "static inline F2C_UNUSED void f2c_transfer_destroy_%s("
+                              "void *source) { f2c_destroy_%s((%s *)source); }\n"
+                              "static inline F2C_UNUSED %s f2c_transfer_%s_owned("
+                              "void *source, size_t source_size, void (*release)(void *)) { "
+                              "%s result = f2c_transfer_%s(source, source_size); "
+                              "if (release == NULL) abort(); release(source); return result; }\n",
+                              derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                              derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                              derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                              derived->c_name);
+        }
+    }
+}
+
+void f2c_emit_derived_types(Context *context, int needs_transfer) {
     uint64_t next_identifier = UINT64_C(1);
     emit_type_identifiers(context, &context->modules, &next_identifier);
     emit_type_identifiers(context, &context->units, &next_identifier);
@@ -744,6 +771,10 @@ void f2c_emit_derived_types(Context *context) {
     emit_unit_types(context, &context->units);
     emit_lifecycle_prototypes(context, &context->modules);
     emit_lifecycle_prototypes(context, &context->units);
+    if (needs_transfer) {
+        emit_transfer_wrappers(context, &context->modules);
+        emit_transfer_wrappers(context, &context->units);
+    }
     f2c_buffer_append(&context->output, "\n");
     emit_dispatch_wrappers(context, &context->modules);
     emit_dispatch_wrappers(context, &context->units);

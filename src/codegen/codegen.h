@@ -5,7 +5,7 @@
 
 void f2c_emit_supported_modules(Context *context);
 void f2c_emit_project_modules(Context *context);
-void f2c_emit_derived_types(Context *context);
+void f2c_emit_derived_types(Context *context, int needs_transfer);
 void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, const char *name);
 int f2c_emit_host_capture_statement_descriptors(Buffer *prelude, Buffer *postlude, Unit *caller,
                                                 const Unit *procedure, int depth);
