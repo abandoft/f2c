@@ -17,6 +17,8 @@ static void emit_unit_model(Buffer *output) {
         "f2c_unit_access access; f2c_unit_action action; f2c_unit_form form; "
         "f2c_unit_blank blank; f2c_unit_delim delim; bool pad; bool scratch; bool internal; "
         "struct f2c_unit_entry *next; } f2c_unit_entry;\n"
+        "typedef struct f2c_unit_override { int32_t unit; f2c_io_stream *stream; struct "
+        "f2c_unit_override *previous; } f2c_unit_override;\n"
         "typedef struct f2c_inquiry { bool exist; bool opened; bool named; int32_t number; "
         "int32_t recl; int32_t nextrec; const char *name; const char *access; "
         "const char *sequential; const char *direct; const char *form; "
@@ -25,6 +27,7 @@ static void emit_unit_model(Buffer *output) {
         "const char *readwrite; const char *delim; const char *pad; char *owned_name; } "
         "f2c_inquiry;\n"
         "static _Thread_local f2c_unit_entry *f2c_unit_list;\n"
+        "static _Thread_local f2c_unit_override *f2c_unit_override_top;\n"
         "static _Thread_local int32_t f2c_internal_unit_next = -1;\n"
         "static _Thread_local unsigned f2c_child_io_depth;\n"
         "static inline F2C_UNUSED bool f2c_backspace_unformatted(f2c_unit_entry *entry);\n");
@@ -158,6 +161,18 @@ static void emit_unit_open_close(Buffer *output) {
 static void emit_unit_connection(Buffer *output) {
     f2c_buffer_append(
         output,
+        "static inline F2C_UNUSED bool f2c_push_unit_override(f2c_unit_override *override, "
+        "int32_t unit, f2c_io_stream *stream) { if (override == NULL || stream == NULL) return "
+        "false; override->unit = unit; override->stream = stream; override->previous = "
+        "f2c_unit_override_top; f2c_unit_override_top = override; return true; }\n"
+        "static inline F2C_UNUSED bool f2c_pop_unit_override(f2c_unit_override *override) { if "
+        "(override == NULL || f2c_unit_override_top != override) return false; "
+        "f2c_unit_override_top = override->previous; override->stream = NULL; "
+        "override->previous = NULL; return true; }\n"
+        "static inline F2C_UNUSED f2c_io_stream *f2c_unit_override_stream(int32_t unit) { "
+        "f2c_unit_override *override; for (override = f2c_unit_override_top; override != NULL; "
+        "override = override->previous) if (override->unit == unit) return override->stream; "
+        "return NULL; }\n"
         "static inline F2C_UNUSED f2c_io_stream *f2c_unit_stream(int32_t unit, bool input) { "
         "static _Thread_local f2c_io_stream standard_input, standard_output, standard_error; "
         "f2c_unit_entry *entry = f2c_find_unit(unit); if (entry != NULL) { if ((input && "
