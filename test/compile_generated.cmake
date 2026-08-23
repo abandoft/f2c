@@ -67,6 +67,9 @@ foreach(
        pointer_section
        pointer_bounds_once
        pointer_allocation
+       allocation_model
+       allocation_model_rich
+       allocation_model_guard
        pointer_deallocation_errors
        pointer_dummy
        procedure_pointer
