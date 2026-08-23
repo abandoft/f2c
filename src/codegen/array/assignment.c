@@ -63,8 +63,9 @@ int f2c_array_emit_derived_scalar_broadcast(Context *context, Unit *unit, Symbol
     return 1;
 }
 
-int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *target,
-                                        const F2cExpr *right, size_t line, int depth) {
+static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *target,
+                                     const F2cExpr *right, size_t line, int depth,
+                                     int skip_root_transfer) {
     char *target_extents[F2C_MAX_RANK] = {0};
     char *right_extents[F2C_MAX_RANK] = {0};
     char ordinal_storage[F2C_MAX_RANK][48];
@@ -93,8 +94,12 @@ int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *ta
     }
     prepared_right = f2c_array_clone_expression(unit, right);
     if (prepared_right == NULL ||
-        !f2c_array_materialize_constructors(context, unit, prepared_right, line, "assignment",
-                                            &temporary, &prelude, &cleanup, depth + 1))
+        !(skip_root_transfer ? f2c_array_materialize_without_root_transfer(
+                                   context, unit, prepared_right, line, "assignment", &temporary,
+                                   &prelude, &cleanup, depth + 1)
+                             : f2c_array_materialize_constructors(context, unit, prepared_right,
+                                                                  line, "assignment", &temporary,
+                                                                  &prelude, &cleanup, depth + 1)))
         goto unsupported;
     right = prepared_right;
     for (dimension = 0U; dimension < target->rank; ++dimension) {
@@ -325,4 +330,14 @@ emission_failed:
     f2c_diagnostic(context, line, 1,
                    "CHARACTER array expression assignment cannot lower an element value");
     return 1;
+}
+
+int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *target,
+                                        const F2cExpr *right, size_t line, int depth) {
+    return emit_elemental_assignment(context, unit, target, right, line, depth, 0);
+}
+
+int f2c_array_emit_transfer_source_assignment(Context *context, Unit *unit, Symbol *target,
+                                              const F2cExpr *right, size_t line, int depth) {
+    return emit_elemental_assignment(context, unit, target, right, line, depth, 1);
 }

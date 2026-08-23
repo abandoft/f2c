@@ -37,6 +37,10 @@ int f2c_array_owned_temporary_valid(const Unit *unit, const F2cExpr *expression,
 int f2c_array_cleanup_emit(Buffer *output, Unit *unit, const F2cArrayCleanupList *list);
 void f2c_array_cleanup_clear(F2cArrayCleanupList *list);
 int f2c_array_contains_unmaterialized_value(const Unit *unit, const F2cExpr *expression);
+int f2c_array_materialize_without_root_transfer(Context *context, Unit *unit, F2cExpr *expression,
+                                                size_t identifier, const char *role,
+                                                size_t *temporary, Buffer *prelude,
+                                                F2cArrayCleanupList *cleanup, int depth);
 int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, const F2cExpr *left,
                                                  const F2cExpr *right, size_t line, int depth);
 int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_t identifier,
@@ -44,6 +48,8 @@ int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_
                                           int depth, int root);
 int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *target,
                                         const F2cExpr *right, size_t line, int depth);
+int f2c_array_emit_transfer_source_assignment(Context *context, Unit *unit, Symbol *target,
+                                              const F2cExpr *right, size_t line, int depth);
 int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cExpr *target,
                                         const F2cExpr *right, size_t line, int depth);
 int f2c_array_emit_derived_scalar_broadcast(Context *context, Unit *unit, Symbol *target,
