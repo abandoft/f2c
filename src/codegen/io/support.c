@@ -130,4 +130,5 @@ void f2c_emit_namelist_support(Context *context) {
         "i < length; ++i) { (void)f2c_stream_putc((unsigned char)value[i], file); if "
         "(value[i] == '\\'') (void)f2c_stream_putc('\\'', file); } "
         "(void)f2c_stream_putc('\\'', file); }\n");
+    f2c_emit_namelist_parser_support(context);
 }

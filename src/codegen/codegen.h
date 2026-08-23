@@ -114,6 +114,7 @@ int f2c_emit_move_alloc_statement(Context *context, Unit *unit, const F2cStateme
 int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                   int input, int depth);
 void f2c_emit_namelist_support(Context *context);
+void f2c_emit_namelist_parser_support(Context *context);
 void f2c_emit_namelist_transaction_support(Context *context);
 void f2c_emit_namelist_type_prototypes(Context *context);
 void f2c_emit_namelist_type_definitions(Context *context);

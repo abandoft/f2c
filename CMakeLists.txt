@@ -140,6 +140,7 @@ set(
     src/codegen/io/format_control.c
     src/codegen/io/formatted.c
     src/codegen/io/namelist.c
+    src/codegen/io/namelist/parser.c
     src/codegen/io/namelist/support.c
     src/codegen/io/namelist/transaction.c
     src/codegen/io/private.h
@@ -859,6 +860,16 @@ if(F2C_BUILD_TESTING)
             )
             find_program(F2C_GFORTRAN_EXECUTABLE gfortran)
             if(F2C_GFORTRAN_EXECUTABLE)
+                add_test(
+                    NAME namelist_ordered_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/namelist_ordered_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
                 add_test(
                     NAME array_section_differential
                     COMMAND
