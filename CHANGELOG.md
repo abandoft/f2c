@@ -1,3 +1,14 @@
+## 1.35.0
+
+- Added complete support for multiple allocation targets in one `ALLOCATE(SOURCE=/MOLD=)` statement, sharing a single model evaluation across every target.
+- Accepted array sections, array constructors, elemental and transformational expressions, and array function results as `SOURCE` or `MOLD` models.
+- Preserved or derived lower bounds and per-dimension extents by array-expression category, with dynamic conformance checks before committing explicitly shaped target storage.
+- Evaluated scalar `SOURCE` expressions exactly once and safely broadcast them to arbitrary explicitly shaped targets without repeating calls or other side effects.
+- Completed deferred-length `CHARACTER` array copying and element-wise deep copies for derived arrays with allocatable components, including temporary cleanup.
+- Rejected `SOURCE/MOLD`, type parameters, bounds, and allocate-object designators that depend on an object allocated by the same statement.
+- Checked allocatable and pointer operands before reading a model and reported unavailable models transactionally through `STAT/ERRMSG`.
+- Added shared array-value view, materialization, and cleanup interfaces, and corrected scalar allocatable value loads and `ALLOCATED` storage queries.
+
 ## 1.34.0
 
 - Unified the canonical specification catalog, argument schemas, and typed-identity binding for every supported standard intrinsic, removing dispersed name dispatch and duplicate keyword rules.

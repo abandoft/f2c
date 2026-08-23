@@ -1,3 +1,14 @@
+## 1.35.0
+
+- 完整支持在同一条 `ALLOCATE(SOURCE=/MOLD=)` 语句中分配多个目标，并为全部目标共享一次模型求值。
+- 支持数组段、数组构造器、elemental/transformational 表达式及数组函数结果作为 `SOURCE` 或 `MOLD` 模型。
+- 按数组表达式类别保留或推导下界与逐维 extent，并在提交存储前检查显式目标 shape 的动态合形性。
+- 让标量 `SOURCE` 只求值一次并安全广播到任意显式形状目标，避免函数调用和其他副作用重复执行。
+- 完善 deferred-length `CHARACTER` 数组复制，以及含可分配组件派生类型数组的逐元素深复制和临时值清理。
+- 拒绝 `SOURCE/MOLD`、类型参数、边界或 allocate-object designator 依赖同一语句中的待分配对象。
+- 在读取模型前检查可分配或指针操作数的状态，并通过 `STAT/ERRMSG` 无提交地报告不可用模型。
+- 建立通用数组值视图、物化和清理接口，并修正标量可分配值读取及 `ALLOCATED` 存储查询。
+
 ## 1.34.0
 
 - 统一全部已支持标准 intrinsic 的规范目录、参数模式和 typed identity 绑定，消除分散的名称分派与重复关键字规则。
