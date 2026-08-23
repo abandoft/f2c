@@ -1,3 +1,13 @@
+## 1.38.0
+
+- Completed NAMELIST array-section input with actual declared bounds for omitted endpoints, including multidimensional, reverse, and non-unit-stride combinations.
+- Inferred shapes for unallocated arrays of any rank from complete subscripts or explicit sections in the same group, with atomic rollback when no unique shape can be derived.
+- Added ordered NAMELIST input for complete derived arrays, derived-array component sections, per-element dynamic components, and shared pointer targets.
+- Preserved the original connected `UNIT` for defined formatted I/O while restricting child I/O to the current NAMELIST assignment value range.
+- Added dynamic-type-aware deep copies, dispatch, commit, alias restoration, and failure rollback for root polymorphic pointers and polymorphic derived components.
+- Rejected vector subscripts, zero-sized objects, and zero-length character designators in NAMELIST input as required by Fortran, without modifying original values.
+- Corrected scope-exit handling for derived-type pointers and improved type safety for generated polymorphic arguments, components, and pointer associations.
+
 ## 1.37.0
 
 - Reworked NAMELIST input as a structured, single-pass assignment stream instead of repeatedly rescanning the input for every member.
