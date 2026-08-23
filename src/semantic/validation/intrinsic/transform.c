@@ -23,6 +23,8 @@ static const char *transform_name(F2cIntrinsicId intrinsic) {
         return "SPREAD";
     case F2C_INTRINSIC_TRANSPOSE:
         return "TRANSPOSE";
+    case F2C_INTRINSIC_TRANSFER:
+        return "TRANSFER";
     case F2C_INTRINSIC_UNPACK:
         return "UNPACK";
     case F2C_INTRINSIC_NONE:
@@ -82,6 +84,7 @@ static F2cBoundIntrinsicArguments bind_arguments(Context *context, size_t line,
     case F2C_INTRINSIC_RESHAPE:
     case F2C_INTRINSIC_SPREAD:
     case F2C_INTRINSIC_TRANSPOSE:
+    case F2C_INTRINSIC_TRANSFER:
     case F2C_INTRINSIC_UNPACK:
         return f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     case F2C_INTRINSIC_NONE:
@@ -347,6 +350,67 @@ static void validate_findloc(Context *context, Unit *unit, size_t line, const ch
                           "a scalar LOGICAL expression");
 }
 
+static int transfer_polymorphic(const F2cExpr *expression) {
+    Symbol *result;
+    if (expression == NULL)
+        return 0;
+    if (expression->symbol != NULL &&
+        (expression->symbol->polymorphic || expression->symbol->external_result_polymorphic))
+        return 1;
+    if (expression->resolved_procedure == NULL ||
+        expression->resolved_procedure->kind != UNIT_FUNCTION ||
+        expression->resolved_procedure->result_name == NULL)
+        return 0;
+    result = f2c_find_symbol(expression->resolved_procedure,
+                             expression->resolved_procedure->result_name);
+    return result != NULL && result->polymorphic;
+}
+
+static void validate_transfer(Context *context, Unit *unit, size_t line, const char *statement_text,
+                              const F2cBoundIntrinsicArguments *arguments) {
+    const F2cExpr *source = arguments->values[0];
+    const F2cExpr *mold = arguments->values[1];
+    const F2cExpr *size = arguments->values[2];
+    int64_t constant;
+    const F2cExpr *values[2] = {source, mold};
+    const char *const names[2] = {"SOURCE", "MOLD"};
+    if (source != NULL && source->type == TYPE_UNKNOWN)
+        diagnose_argument(context, line, statement_text, "TRANSFER", "SOURCE", source,
+                          "a typed scalar or array data expression");
+    if (mold != NULL && mold->type == TYPE_UNKNOWN)
+        diagnose_argument(context, line, statement_text, "TRANSFER", "MOLD", mold,
+                          "a typed scalar or array data expression");
+    for (size_t argument = 0U; argument < 2U; ++argument) {
+        const F2cExpr *value = values[argument];
+        const int kind = value != NULL && value->type_kind != 0
+                             ? value->type_kind
+                             : f2c_default_kind(value != NULL ? value->type : TYPE_UNKNOWN);
+        const int supported =
+            value == NULL || value->type == TYPE_DERIVED ||
+            ((value->type == TYPE_INTEGER || value->type == TYPE_LOGICAL) &&
+             (kind == 1 || kind == 2 || kind == 4 || kind == 8)) ||
+            ((value->type == TYPE_REAL || value->type == TYPE_DOUBLE ||
+              value->type == TYPE_COMPLEX || value->type == TYPE_DOUBLE_COMPLEX) &&
+             (kind == 4 || kind == 8 || kind == 16)) ||
+            (value->type == TYPE_CHARACTER && kind == 1) || value->type == TYPE_UNKNOWN;
+        if (!supported)
+            f2c_diagnostic_at(
+                context, line, f2c_validation_expression_start_column(statement_text, value), 1,
+                "TRANSFER argument %s uses an unsupported kind %d", names[argument], kind);
+    }
+    validate_scalar_integer(context, line, statement_text, "TRANSFER", "SIZE", size);
+    if (size != NULL && size->type == TYPE_INTEGER && size->rank == 0U &&
+        f2c_evaluate_integer_constant(unit, size, &constant) && constant < 0)
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, size), 1,
+                          "TRANSFER SIZE must not be negative");
+    if (transfer_polymorphic(source) || transfer_polymorphic(mold))
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(
+                              statement_text, transfer_polymorphic(source) ? source : mold),
+                          1, "TRANSFER of a polymorphic SOURCE or MOLD is not yet supported");
+}
+
 void f2c_validation_transform_intrinsic(Context *context, Unit *unit, size_t line,
                                         const char *statement_text, F2cExpr *expression) {
     F2cBoundIntrinsicArguments arguments;
@@ -357,6 +421,7 @@ void f2c_validation_transform_intrinsic(Context *context, Unit *unit, size_t lin
                                expression->intrinsic != F2C_INTRINSIC_PACK &&
                                expression->intrinsic != F2C_INTRINSIC_RESHAPE &&
                                expression->intrinsic != F2C_INTRINSIC_SPREAD &&
+                               expression->intrinsic != F2C_INTRINSIC_TRANSFER &&
                                expression->intrinsic != F2C_INTRINSIC_TRANSPOSE &&
                                expression->intrinsic != F2C_INTRINSIC_UNPACK))
         return;
@@ -384,6 +449,9 @@ void f2c_validation_transform_intrinsic(Context *context, Unit *unit, size_t lin
         break;
     case F2C_INTRINSIC_FINDLOC:
         validate_findloc(context, unit, line, statement_text, &arguments);
+        break;
+    case F2C_INTRINSIC_TRANSFER:
+        validate_transfer(context, unit, line, statement_text, &arguments);
         break;
     case F2C_INTRINSIC_NONE:
     default:
