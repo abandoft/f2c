@@ -456,6 +456,8 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
     }
     if (f2c_intrinsic_is_reduction(expression->intrinsic))
         return f2c_expression_reduction_intrinsic(unit, expression, supported);
+    if (intrinsic_call && expression->intrinsic == F2C_INTRINSIC_TRANSFER && expression->rank == 0U)
+        return f2c_expression_transfer_intrinsic(unit, expression, supported);
     if (!f2c_expression_children(unit, expression, &arguments, &types)) {
         *supported = 0;
         return NULL;
@@ -665,9 +667,15 @@ char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported)
     for (argument = 0U; argument < lowering_expression->child_count; ++argument) {
         F2cExpr *actual =
             (F2cExpr *)intrinsic_argument_value(lowering_expression->children[argument]);
+        const F2cExpr *mold =
+            lowering_expression->intrinsic == F2C_INTRINSIC_TRANSFER
+                ? f2c_intrinsic_argument(lowering_expression->children,
+                                         lowering_expression->child_count, "mold", 1U)
+                : NULL;
         Buffer name = {0};
         char *code;
-        if (actual == NULL || actual->ordered_argument_temporary_index == SIZE_MAX ||
+        if (actual == NULL || actual == mold ||
+            actual->ordered_argument_temporary_index == SIZE_MAX ||
             f2c_lowering_argument_materialized(unit, actual))
             continue;
         code = f2c_expression_emit(unit, actual, supported);
