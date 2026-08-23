@@ -152,6 +152,9 @@ file(READ "${SOURCE_DIR}/src/codegen/unit/temporary.c" TEMPORARY_DECLARATIONS)
 file(READ "${SOURCE_DIR}/src/codegen/array/function.c" ARRAY_FUNCTION_RESULTS)
 file(READ "${SOURCE_DIR}/src/codegen/array/temporary.c" ARRAY_TEMPORARIES)
 file(READ "${SOURCE_DIR}/src/codegen/array/ownership.c" ARRAY_OWNERSHIP)
+file(READ "${SOURCE_DIR}/src/codegen/allocation/private.h" ALLOCATION_PRIVATE)
+file(READ "${SOURCE_DIR}/src/codegen/allocation/model.c" ALLOCATION_MODEL)
+file(READ "${SOURCE_DIR}/src/semantic/validation/allocation.c" ALLOCATION_VALIDATION)
 file(READ "${SOURCE_DIR}/src/codegen/call.c" CALL_LOWERING)
 file(READ "${SOURCE_DIR}/src/codegen/expression/call.c" EXPRESSION_CALL_LOWERING)
 file(READ "${SOURCE_DIR}/src/codegen/lowering.c" INTRINSIC_EMISSION)
@@ -162,6 +165,21 @@ file(READ
      "${SOURCE_DIR}/src/semantic/validation/intrinsic/statement.c"
      INTRINSIC_STATEMENT_VALIDATION
 )
+if(ALLOCATION_PRIVATE MATCHES "codegen/transform/private\\.h")
+    message(FATAL_ERROR "ALLOCATE lowering must use the shared array-value boundary")
+endif()
+if(
+    NOT ALLOCATION_MODEL MATCHES "f2c_array_value_(view|materialize)"
+    OR NOT ALLOCATION_MODEL MATCHES "f2c_allocation_model_emit_source"
+)
+    message(FATAL_ERROR "ALLOCATE SOURCE/MOLD bypasses typed array-value materialization")
+endif()
+if(
+    ALLOCATION_VALIDATION MATCHES "currently requires (a whole named array|exactly one target)"
+    OR NOT ALLOCATION_VALIDATION MATCHES "must not depend on allocate-object"
+)
+    message(FATAL_ERROR "ALLOCATE retains a legacy model restriction or lacks dependency checks")
+endif()
 if(
     EXPRESSION_IR MATCHES
         "(lowered_c|lowered_extent_c|lowered_character_length_c|lowered_array_temporary|ordered_argument_materialized)"
