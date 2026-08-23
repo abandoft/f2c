@@ -5,7 +5,7 @@ program allocation_model_rich
     end type box
 
     character(len=4) :: words(3)
-    character(len=:), allocatable :: first(:), second(:)
+    character(len=4), allocatable :: first(:), second(:)
     type(box) :: templates(2)
     type(box), allocatable :: copies(:), again(:)
 
