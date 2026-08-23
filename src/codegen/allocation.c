@@ -1,4 +1,4 @@
-#include "internal/f2c.h"
+#include "codegen/allocation/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -130,153 +130,41 @@ static void emit_operation_failure(Buffer *output, const char *success,
     }
 }
 
-static Symbol *whole_array_symbol(const F2cExpr *expression) {
-    if (expression == NULL || expression->kind != F2C_EXPR_NAME || expression->symbol == NULL ||
-        expression->rank == 0U)
-        return NULL;
-    return expression->symbol;
-}
-
-static int emit_source_initialization(Context *context, Unit *unit, const Symbol *target,
-                                      const F2cExpr *source, int depth) {
-    Symbol *source_symbol;
-    char *source_code;
-    if (source == NULL)
-        return 1;
-    source_symbol = source->kind == F2C_EXPR_NAME ? source->symbol : NULL;
-    if (source->rank != 0U) {
-        if (source_symbol == NULL)
-            return 0;
-        if (target->type == TYPE_DERIVED && target->derived_type != NULL) {
-            indent(&context->output, depth);
-            f2c_buffer_append(&context->output,
-                              "for (size_t f2c_alloc_index = 0U; f2c_alloc_index < "
-                              "f2c_alloc_count; ++f2c_alloc_index)\n");
-            indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "f2c_copy_%s(&f2c_alloc_storage[f2c_alloc_index], "
-                              "&%s[f2c_alloc_index]);\n",
-                              target->derived_type->c_name, f2c_symbol_c_name(unit, source_symbol));
-            return 1;
-        }
-        if (target->type == TYPE_CHARACTER) {
-            char *source_length = f2c_symbol_character_length(unit, source_symbol);
-            if (source_length == NULL)
-                return 0;
-            indent(&context->output, depth);
-            f2c_buffer_printf(&context->output,
-                              "const size_t f2c_alloc_source_length = (size_t)(%s);\n",
-                              source_length);
-            indent(&context->output, depth);
-            f2c_buffer_append(&context->output,
-                              "const size_t f2c_alloc_copy_length = "
-                              "F2C_MIN(f2c_alloc_char_len, f2c_alloc_source_length);\n");
-            indent(&context->output, depth);
-            f2c_buffer_append(&context->output,
-                              "for (size_t f2c_alloc_index = 0U; f2c_alloc_index < "
-                              "f2c_alloc_count; ++f2c_alloc_index) {\n");
-            indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "if (f2c_alloc_copy_length != 0U) "
-                              "memmove(f2c_alloc_storage + f2c_alloc_index * "
-                              "f2c_alloc_char_len, %s + f2c_alloc_index * "
-                              "f2c_alloc_source_length, f2c_alloc_copy_length);\n",
-                              f2c_symbol_c_name(unit, source_symbol));
-            indent(&context->output, depth + 1);
-            f2c_buffer_append(&context->output, "if (f2c_alloc_char_len > f2c_alloc_copy_length) "
-                                                "memset(f2c_alloc_storage + f2c_alloc_index * "
-                                                "f2c_alloc_char_len + f2c_alloc_copy_length, ' ', "
-                                                "f2c_alloc_char_len - f2c_alloc_copy_length);\n");
-            indent(&context->output, depth);
-            f2c_buffer_append(&context->output, "}\n");
-            free(source_length);
-            return 1;
-        }
-        indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "for (size_t f2c_alloc_index = 0U; f2c_alloc_index < "
-                                            "f2c_alloc_count; ++f2c_alloc_index)\n");
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output,
-                          "f2c_alloc_storage[f2c_alloc_index] = (%s)%s[f2c_alloc_index];\n",
-                          f2c_symbol_c_type(target), f2c_symbol_c_name(unit, source_symbol));
-        return 1;
-    }
-    source_code = emit_expression(unit, source);
-    if (source_code == NULL)
-        return 0;
-    if (target->type == TYPE_CHARACTER) {
-        indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "if (f2c_alloc_count != 0U) {\n");
-        if (!f2c_emit_character_storage_assignment(context, unit, "f2c_alloc_storage",
-                                                   "f2c_alloc_char_len", source, source_code,
-                                                   depth + 1)) {
-            free(source_code);
-            return 0;
-        }
-        indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output,
-                          "for (size_t f2c_alloc_index = 1U; f2c_alloc_index < "
-                          "f2c_alloc_count; ++f2c_alloc_index) "
-                          "if (f2c_alloc_char_len != 0U) "
-                          "memmove(f2c_alloc_storage + f2c_alloc_index * "
-                          "f2c_alloc_char_len, f2c_alloc_storage, f2c_alloc_char_len);\n");
-        indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "}\n");
-    } else if (target->type == TYPE_DERIVED && target->derived_type != NULL) {
-        const int owning_temporary =
-            source->kind == F2C_EXPR_CALL || source->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR;
-        indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "%s f2c_alloc_source_value = %s;\n",
-                          target->derived_type->c_name, source_code);
-        if (source->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR) {
-            indent(&context->output, depth);
-            f2c_buffer_printf(&context->output, "f2c_initialize_%s(&f2c_alloc_source_value);\n",
-                              target->derived_type->c_name);
-        }
-        indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "for (size_t f2c_alloc_index = 0U; f2c_alloc_index < "
-                                            "f2c_alloc_count; ++f2c_alloc_index)\n");
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output,
-                          "f2c_copy_%s(&f2c_alloc_storage[f2c_alloc_index], "
-                          "&f2c_alloc_source_value);\n",
-                          target->derived_type->c_name);
-        if (owning_temporary) {
-            indent(&context->output, depth);
-            f2c_buffer_printf(&context->output, "f2c_destroy_%s(&f2c_alloc_source_value);\n",
-                              target->derived_type->c_name);
-        }
-    } else {
-        indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "const %s f2c_alloc_source_value = (%s)(%s);\n",
-                          f2c_symbol_c_type(target), f2c_symbol_c_type(target), source_code);
-        indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "for (size_t f2c_alloc_index = 0U; f2c_alloc_index < "
-                                            "f2c_alloc_count; ++f2c_alloc_index)\n");
-        indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output,
-                          "f2c_alloc_storage[f2c_alloc_index] = f2c_alloc_source_value;\n");
-    }
-    free(source_code);
-    return 1;
-}
-
 int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                 int depth) {
     const F2cExpr *source_expression = keyword_value(statement, "source");
     const F2cExpr *mold_expression = keyword_value(statement, "mold");
     const F2cExpr *model_expression =
         source_expression != NULL ? source_expression : mold_expression;
-    Symbol *model_symbol = whole_array_symbol(model_expression);
     AllocationControls controls;
+    F2cAllocationModel model = {0};
+    const int has_model = model_expression != NULL;
+    const int outer_depth = depth;
     size_t i;
     if (statement->arguments == NULL && statement->item_count != 0U)
         return 0;
     if (!allocation_controls_init(unit, statement, &controls))
         return 0;
+    if (has_model) {
+        indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "{\n");
+        ++depth;
+    }
     if (controls.status != NULL) {
         indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "%s = 0;\n", controls.status);
+    }
+    if (!f2c_allocation_model_prepare(context, unit, statement, model_expression,
+                                      source_expression != NULL, depth, &model)) {
+        f2c_allocation_model_clear(unit, &model);
+        allocation_controls_free(&controls);
+        return 0;
+    }
+    if (model.guarded)
+        ++depth;
+    if (has_model) {
+        indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "bool f2c_alloc_statement_ok = true;\n");
     }
     for (i = 0U; i < statement->item_count; ++i) {
         const F2cExpr *target = statement->arguments[i];
@@ -304,16 +192,20 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
         }
         free(target_prelude.data);
         indent(&context->output, depth + 1);
-        if (symbol->pointer)
-            f2c_buffer_append(&context->output, "bool f2c_alloc_ok = true;\n");
-        else
-            f2c_buffer_printf(&context->output, "bool f2c_alloc_ok = %s == NULL;\n", target_name);
-        if (model_expression != NULL && model_expression->symbol != NULL &&
-            (model_expression->symbol->allocatable || model_expression->symbol->pointer) &&
-            (model_expression->rank != 0U || model_expression->symbol->deferred_character)) {
+        if (has_model) {
+            f2c_buffer_append(&context->output,
+                              "const bool f2c_alloc_attempt = f2c_alloc_statement_ok;\n");
             indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output, "if (%s == NULL) f2c_alloc_ok = false;\n",
-                              f2c_symbol_c_name(unit, model_expression->symbol));
+            if (symbol->pointer)
+                f2c_buffer_append(&context->output, "bool f2c_alloc_ok = f2c_alloc_attempt;\n");
+            else
+                f2c_buffer_printf(&context->output,
+                                  "bool f2c_alloc_ok = f2c_alloc_attempt && %s == NULL;\n",
+                                  target_name);
+        } else if (symbol->pointer) {
+            f2c_buffer_append(&context->output, "bool f2c_alloc_ok = true;\n");
+        } else {
+            f2c_buffer_printf(&context->output, "bool f2c_alloc_ok = %s == NULL;\n", target_name);
         }
         indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "size_t f2c_alloc_count = 1U;\n");
@@ -325,12 +217,13 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
                     ? target->children[d + 1U]
                     : NULL;
             char *lower = bound != NULL ? emit_lower_bound(unit, bound)
-                                        : f2c_symbol_dimension_lower(unit, model_symbol, d);
+                                        : f2c_allocation_model_lower(unit, &model, d);
             char *upper = bound != NULL ? emit_upper_bound(unit, bound)
-                                        : f2c_symbol_dimension_upper(unit, model_symbol, d);
+                                        : f2c_allocation_model_upper(unit, &model, d);
             if (lower == NULL || upper == NULL) {
                 free(lower);
                 free(upper);
+                f2c_allocation_model_clear(unit, &model);
                 allocation_controls_free(&controls);
                 return 0;
             }
@@ -367,11 +260,11 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
                               "f2c_alloc_extent_%zu, &f2c_alloc_count)) f2c_alloc_ok = false;\n",
                               d + 1U);
             if (source_expression != NULL && source_expression->rank != 0U && bound != NULL) {
-                char *source_extent =
-                    f2c_symbol_dimension_extent(unit, source_expression->symbol, d);
+                char *source_extent = f2c_allocation_model_extent(&model, d);
                 if (source_extent == NULL) {
                     free(lower);
                     free(upper);
+                    f2c_allocation_model_clear(unit, &model);
                     allocation_controls_free(&controls);
                     return 0;
                 }
@@ -390,9 +283,10 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
                 symbol->deferred_character
                     ? (statement->allocation_character_length != NULL
                            ? emit_expression(unit, statement->allocation_character_length)
-                           : f2c_character_length_expression(unit, model_expression))
+                           : f2c_allocation_model_character_length(unit, &model))
                     : f2c_symbol_character_length(unit, symbol);
             if (length == NULL) {
+                f2c_allocation_model_clear(unit, &model);
                 allocation_controls_free(&controls);
                 return 0;
             }
@@ -427,8 +321,9 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
                                                 "f2c_alloc_ok = false;\n");
             indent(&context->output, depth + 1);
             f2c_buffer_append(&context->output, "if (f2c_alloc_ok) {\n");
-            if (!emit_source_initialization(context, unit, symbol, source_expression, depth + 2)) {
+            if (!f2c_allocation_model_emit_source(context, symbol, &model, depth + 2)) {
                 free(length);
+                f2c_allocation_model_clear(unit, &model);
                 allocation_controls_free(&controls);
                 return 0;
             }
@@ -468,7 +363,8 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
                                   "f2c_initialize_%s(&f2c_alloc_storage[f2c_alloc_index]);\n",
                                   symbol->derived_type->c_name);
             }
-            if (!emit_source_initialization(context, unit, symbol, source_expression, depth + 2)) {
+            if (!f2c_allocation_model_emit_source(context, symbol, &model, depth + 2)) {
+                f2c_allocation_model_clear(unit, &model);
                 allocation_controls_free(&controls);
                 return 0;
             }
@@ -500,11 +396,34 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
         }
         indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "}\n");
-        emit_operation_failure(&context->output, "f2c_alloc_ok", &controls, "allocation failed",
-                               depth + 1);
+        if (has_model) {
+            indent(&context->output, depth + 1);
+            f2c_buffer_append(&context->output, "if (f2c_alloc_attempt && !f2c_alloc_ok) "
+                                                "f2c_alloc_statement_ok = false;\n");
+            emit_operation_failure(&context->output, "(!f2c_alloc_attempt || f2c_alloc_ok)",
+                                   &controls, "allocation failed", depth + 1);
+        } else {
+            emit_operation_failure(&context->output, "f2c_alloc_ok", &controls, "allocation failed",
+                                   depth + 1);
+        }
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
         free(target_name);
+    }
+    f2c_allocation_model_emit_cleanup(context, unit, &model, depth);
+    if (model.guarded) {
+        --depth;
+        indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "} else {\n");
+        emit_operation_failure(&context->output, model.availability, &controls,
+                               "SOURCE/MOLD object is not allocated or associated", depth + 1);
+        indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
+    }
+    f2c_allocation_model_clear(unit, &model);
+    if (has_model) {
+        indent(&context->output, outer_depth);
+        f2c_buffer_append(&context->output, "}\n");
     }
     allocation_controls_free(&controls);
     return 1;
