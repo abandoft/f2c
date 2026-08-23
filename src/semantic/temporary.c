@@ -103,7 +103,9 @@ int f2c_expression_is_character_temporary(const F2cExpr *expression) {
                                (expression->intrinsic == F2C_INTRINSIC_ADJUSTL ||
                                 expression->intrinsic == F2C_INTRINSIC_ADJUSTR ||
                                 expression->intrinsic == F2C_INTRINSIC_REPEAT ||
-                                expression->intrinsic == F2C_INTRINSIC_TRIM);
+                                expression->intrinsic == F2C_INTRINSIC_TRIM ||
+                                (expression->intrinsic == F2C_INTRINSIC_TRANSFER &&
+                                 expression->type == TYPE_CHARACTER && expression->rank == 0U));
     const int concatenation = expression != NULL && expression->kind == F2C_EXPR_BINARY &&
                               expression->type == TYPE_CHARACTER && expression->text != NULL &&
                               strcmp(expression->text, "//") == 0;
@@ -183,6 +185,20 @@ static int actual_guaranteed_contiguous(const F2cExpr *actual) {
     if (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol)))
         return symbol->contiguous;
     return 1;
+}
+
+static F2cExpr *transfer_source_requiring_temporary(F2cExpr *expression) {
+    F2cExpr *source;
+    if (expression == NULL || expression->kind != F2C_EXPR_CALL ||
+        expression->intrinsic != F2C_INTRINSIC_TRANSFER)
+        return NULL;
+    source = (F2cExpr *)f2c_intrinsic_argument(expression->children, expression->child_count,
+                                               "source", 0U);
+    if (source == NULL || source->rank == 0U ||
+        source->owned_temporary_kind != F2C_OWNED_TEMPORARY_NONE ||
+        actual_guaranteed_contiguous(source))
+        return NULL;
+    return source;
 }
 
 static void assign_contiguous_actual(ExpressionTemporaryAssigner *assigner, F2cExpr *actual,
@@ -339,6 +355,15 @@ static int call_uses_argument_values(const F2cExpr *expression) {
     }
 }
 
+static int transfer_mold_child(const F2cExpr *expression, size_t child) {
+    const F2cExpr *mold;
+    if (expression == NULL || expression->intrinsic != F2C_INTRINSIC_TRANSFER ||
+        child >= expression->child_count)
+        return 0;
+    mold = f2c_intrinsic_argument(expression->children, expression->child_count, "mold", 1U);
+    return actual_value(expression->children[child]) == mold;
+}
+
 static void assign_ordered_call_arguments(ExpressionTemporaryAssigner *assigner,
                                           F2cExpr *expression) {
     const size_t first =
@@ -352,6 +377,8 @@ static void assign_ordered_call_arguments(ExpressionTemporaryAssigner *assigner,
     for (child = first; child < expression->child_count; ++child) {
         F2cExpr *actual = expression->children[child];
         size_t temporary;
+        if (transfer_mold_child(expression, child))
+            continue;
         if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
             actual->child_count == 1U)
             actual = actual->children[0];
@@ -435,7 +462,7 @@ static void assign_expression_temporary(F2cExpr *expression, void *state) {
     expression->has_order_sensitive_call = user_procedure_call(expression);
     if (call_uses_argument_values(expression))
         for (child = 0U; child < expression->child_count; ++child)
-            if (expression->children[child] != NULL &&
+            if (!transfer_mold_child(expression, child) && expression->children[child] != NULL &&
                 expression->children[child]->has_order_sensitive_call)
                 expression->has_order_sensitive_call = 1;
     if (expression->ordered_temporary_index == SIZE_MAX &&
@@ -447,6 +474,17 @@ static void assign_expression_temporary(F2cExpr *expression, void *state) {
         f2c_diagnostic_span_code(assigner->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &expression->span,
                                  1, "out of memory while planning owned expression temporaries");
         assigner->failed = 1;
+    }
+    {
+        F2cExpr *transfer_source = transfer_source_requiring_temporary(expression);
+        if (transfer_source != NULL &&
+            !append_statement_owned_temporary(assigner, transfer_source,
+                                              F2C_OWNED_TEMPORARY_TRANSFER_SOURCE)) {
+            f2c_diagnostic_span_code(assigner->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY,
+                                     &transfer_source->span, 1,
+                                     "out of memory while planning TRANSFER source storage");
+            assigner->failed = 1;
+        }
     }
     expression->lifetime_statement_index = assigner->statement;
     expression->temporary_lifetime_analyzed = !assigner->failed;
