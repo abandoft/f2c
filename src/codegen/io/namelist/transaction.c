@@ -48,13 +48,6 @@ static void emit_target_reference(Context *context, Unit *unit, const Symbol *sy
                           "&f2c_char_len_%s;\n",
                           member, name);
     }
-    if (pointer_storage(symbol)) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output,
-                          "bool *f2c_namelist_target_deallocatable_%zu = "
-                          "&%s_deallocatable;\n",
-                          member, name);
-    }
     for (dimension = 0U; dimension < symbol->rank; ++dimension) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
@@ -121,13 +114,6 @@ static void emit_dynamic_metadata(Context *context, Unit *unit, const Symbol *sy
         f2c_buffer_printf(&context->output,
                           "size_t f2c_char_len_%s = "
                           "*f2c_namelist_target_character_length_%zu;\n",
-                          name, member);
-    }
-    if (pointer_storage(symbol)) {
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output,
-                          "bool %s_deallocatable = "
-                          "*f2c_namelist_target_deallocatable_%zu;\n",
                           name, member);
     }
     for (dimension = 0U; dimension < symbol->rank; ++dimension) {
@@ -218,6 +204,13 @@ static void emit_stage(Context *context, Unit *unit, const Symbol *symbol, size_
                 "memmove(%s, *f2c_namelist_target_%zu, bytes); }\n",
                 member, length != NULL ? length : "0U", status, name, type, name, status, name,
                 member);
+        } else if (derived_storage(symbol) && symbol->polymorphic) {
+            f2c_io_indent(&context->output, depth + 1);
+            f2c_buffer_printf(&context->output,
+                              "%s = f2c_clone_dynamic_%s(*f2c_namelist_target_%zu, "
+                              "f2c_namelist_original_count_%zu); if (%s == NULL) %s = "
+                              "F2C_IO_STATUS_RECORD;\n",
+                              name, symbol->derived_type->c_name, member, member, name, status);
         } else {
             f2c_io_indent(&context->output, depth + 1);
             f2c_buffer_printf(&context->output,
@@ -344,7 +337,7 @@ static void emit_root_binding(Context *context, Unit *unit, const Symbol *symbol
             "%s = F2C_IO_STATUS_RECORD;\n",
             status, original, name, original, name, status);
     }
-    if (!derived_storage(symbol))
+    if (!derived_storage(symbol) || symbol->polymorphic)
         return;
     f2c_io_indent(&context->output, depth);
     f2c_buffer_printf(
@@ -371,6 +364,16 @@ static void emit_stage_fields(Context *context, Unit *unit, const Symbol *symbol
     else
         (void)snprintf(original_buffer, sizeof(original_buffer), "f2c_namelist_target_%zu", member);
     original = original_buffer;
+    if (symbol->polymorphic) {
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output,
+                          "if (%s == F2C_IO_STATUS_OK && %s != NULL && %s != NULL && "
+                          "!f2c_namelist_stage_dynamic_%s(%s, %s, f2c_namelist_original_count_%zu, "
+                          "&f2c_namelist_transaction_state)) %s = F2C_IO_STATUS_RECORD;\n",
+                          status, original, name, symbol->derived_type->c_name, name, original,
+                          member, status);
+        return;
+    }
     if (symbol->rank == 0U && !dynamic_storage(symbol)) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
@@ -477,6 +480,16 @@ static void emit_rebind_root(Context *context, Unit *unit, const Symbol *symbol,
     else
         (void)snprintf(original_buffer, sizeof(original_buffer), "f2c_namelist_target_%zu", member);
     original = original_buffer;
+    if (symbol->polymorphic) {
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_printf(
+            &context->output,
+            "if (%s == F2C_IO_STATUS_OK && %s != NULL && %s != NULL) "
+            "f2c_namelist_rebind_dynamic_%s(%s, %s, f2c_namelist_finish_count_%zu, %zuU);\n",
+            status, original, name, symbol->derived_type->c_name, name, original, member,
+            symbol->rank);
+        return;
+    }
     if (symbol->rank == 0U && !dynamic_storage(symbol)) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
@@ -532,9 +545,11 @@ static void emit_commit_root(Context *context, Unit *unit, const Symbol *symbol,
         if (derived_storage(symbol)) {
             f2c_io_indent(&context->output, depth);
             f2c_buffer_printf(&context->output,
-                              "if (*f2c_namelist_target_%zu != NULL) f2c_destroy_array_%s("
+                              "if (*f2c_namelist_target_%zu != NULL) %s_%s("
                               "*f2c_namelist_target_%zu, f2c_namelist_original_count_%zu, %zuU);\n",
-                              member, symbol->derived_type->c_name, member, member, symbol->rank);
+                              member,
+                              symbol->polymorphic ? "f2c_destroy_dynamic" : "f2c_destroy_array",
+                              symbol->derived_type->c_name, member, member, symbol->rank);
         }
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
@@ -564,10 +579,16 @@ static void emit_commit_root(Context *context, Unit *unit, const Symbol *symbol,
                           "if (%s != NULL && *f2c_namelist_target_%zu != NULL) {\n", name, member);
         if (derived_storage(symbol)) {
             f2c_io_indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "for (size_t i = 0U; i < f2c_namelist_finish_count_%zu; ++i) "
-                              "f2c_copy_%s(&(*f2c_namelist_target_%zu)[i], &%s[i]);\n",
-                              member, symbol->derived_type->c_name, member, name);
+            if (symbol->polymorphic)
+                f2c_buffer_printf(&context->output,
+                                  "f2c_copy_dynamic_%s(*f2c_namelist_target_%zu, %s, "
+                                  "f2c_namelist_finish_count_%zu);\n",
+                                  symbol->derived_type->c_name, member, name, member);
+            else
+                f2c_buffer_printf(&context->output,
+                                  "for (size_t i = 0U; i < f2c_namelist_finish_count_%zu; ++i) "
+                                  "f2c_copy_%s(&(*f2c_namelist_target_%zu)[i], &%s[i]);\n",
+                                  member, symbol->derived_type->c_name, member, name);
         } else if (character_storage(symbol)) {
             char *length = stage_character_length(unit, symbol, member);
             f2c_io_indent(&context->output, depth + 1);
@@ -592,19 +613,30 @@ static void emit_commit_root(Context *context, Unit *unit, const Symbol *symbol,
     }
     if (symbol->rank == 0U && !character_storage(symbol)) {
         f2c_io_indent(&context->output, depth);
-        if (derived_storage(symbol))
-            f2c_buffer_printf(&context->output, "f2c_copy_%s(f2c_namelist_target_%zu, &%s);\n",
-                              symbol->derived_type->c_name, member, name);
-        else
+        if (derived_storage(symbol)) {
+            if (symbol->polymorphic)
+                f2c_buffer_printf(&context->output,
+                                  "f2c_copy_dynamic_%s(f2c_namelist_target_%zu, &%s, 1U);\n",
+                                  symbol->derived_type->c_name, member, name);
+            else
+                f2c_buffer_printf(&context->output, "f2c_copy_%s(f2c_namelist_target_%zu, &%s);\n",
+                                  symbol->derived_type->c_name, member, name);
+        } else
             f2c_buffer_printf(&context->output, "*f2c_namelist_target_%zu = %s;\n", member, name);
         return;
     }
     f2c_io_indent(&context->output, depth);
     if (derived_storage(symbol)) {
-        f2c_buffer_printf(&context->output,
-                          "for (size_t i = 0U; i < f2c_namelist_finish_count_%zu; ++i) "
-                          "f2c_copy_%s(&f2c_namelist_target_%zu[i], &%s[i]);\n",
-                          member, symbol->derived_type->c_name, member, name);
+        if (symbol->polymorphic)
+            f2c_buffer_printf(&context->output,
+                              "f2c_copy_dynamic_%s(f2c_namelist_target_%zu, %s, "
+                              "f2c_namelist_finish_count_%zu);\n",
+                              symbol->derived_type->c_name, member, name, member);
+        else
+            f2c_buffer_printf(&context->output,
+                              "for (size_t i = 0U; i < f2c_namelist_finish_count_%zu; ++i) "
+                              "f2c_copy_%s(&f2c_namelist_target_%zu[i], &%s[i]);\n",
+                              member, symbol->derived_type->c_name, member, name);
     } else if (character_storage(symbol)) {
         char *length = stage_character_length(unit, symbol, member);
         f2c_buffer_printf(&context->output,
@@ -639,9 +671,10 @@ static void emit_cleanup_root(Context *context, Unit *unit, const Symbol *symbol
     if (derived_storage(symbol)) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
-                          "if (%s != NULL) f2c_destroy_array_%s(%s, f2c_namelist_finish_count_%zu, "
+                          "if (%s != NULL) %s_%s(%s, f2c_namelist_finish_count_%zu, "
                           "%zuU);\n",
-                          name, symbol->derived_type->c_name, name, member, symbol->rank);
+                          name, symbol->polymorphic ? "f2c_destroy_dynamic" : "f2c_destroy_array",
+                          symbol->derived_type->c_name, name, member, symbol->rank);
     }
     f2c_io_indent(&context->output, depth);
     f2c_buffer_printf(&context->output, "free(%s);\n", name);

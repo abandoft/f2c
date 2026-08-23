@@ -2,6 +2,15 @@
 
 #include <stdlib.h>
 
+static int type_extends(const F2cDerivedType *candidate, const F2cDerivedType *ancestor) {
+    while (candidate != NULL) {
+        if (candidate == ancestor)
+            return 1;
+        candidate = candidate->parent;
+    }
+    return 0;
+}
+
 static char *component_count(Unit *unit, const Symbol *component, const char *object) {
     Buffer result = {0};
     size_t dimension;
@@ -49,7 +58,16 @@ static void emit_type_prototypes(Context *context, Units *units) {
                 "static F2C_UNUSED void f2c_namelist_commit_%s(void *original, const void "
                 "*stage, size_t count, size_t rank);\n"
                 "static F2C_UNUSED void f2c_namelist_destroy_%s(void *stage, size_t count, "
-                "size_t rank);\n",
+                "size_t rank);\n"
+                "static F2C_UNUSED bool f2c_namelist_stage_dynamic_%s(%s *stage, const %s "
+                "*original, size_t count, f2c_namelist_transaction *transaction);\n"
+                "static F2C_UNUSED void f2c_namelist_rebind_dynamic_%s(void *stage, const void "
+                "*original, size_t count, size_t rank);\n"
+                "static F2C_UNUSED void f2c_namelist_commit_dynamic_%s(void *original, const "
+                "void *stage, size_t count, size_t rank);\n"
+                "static F2C_UNUSED void f2c_namelist_destroy_dynamic_%s(void *stage, size_t "
+                "count, size_t rank);\n",
+                derived->c_name, derived->c_name, derived->c_name, derived->c_name, derived->c_name,
                 derived->c_name, derived->c_name, derived->c_name, derived->c_name, derived->c_name,
                 derived->c_name, derived->c_name, derived->c_name, derived->c_name,
                 derived->c_name);
@@ -89,6 +107,21 @@ static void emit_stage_pointer(Context *context, Unit *unit, const Symbol *compo
                           "{ free(copy); return false; }\n",
                           character_length != NULL ? character_length : "0U", type, type, name,
                           name, component->rank);
+    } else if (component->type == TYPE_DERIVED && component->derived_type != NULL &&
+               component->polymorphic) {
+        const char *derived = component->derived_type->c_name;
+        f2c_buffer_printf(
+            &context->output,
+            "            %s *copy = f2c_clone_dynamic_%s(original->%s, count);\n"
+            "            if (copy == NULL) return false;\n"
+            "            if (!f2c_namelist_transaction_own(transaction, original->%s, copy, "
+            "count, original->%s->f2c_dynamic_size, %zuU, f2c_namelist_rebind_dynamic_%s, "
+            "f2c_namelist_commit_dynamic_%s, f2c_namelist_destroy_dynamic_%s)) { "
+            "f2c_destroy_dynamic_%s(copy, count, %zuU); free(copy); return false; }\n"
+            "            if (!f2c_namelist_stage_dynamic_%s(copy, original->%s, count, "
+            "transaction)) return false;\n",
+            type, derived, name, name, name, component->rank, derived, derived, derived, derived,
+            component->rank, derived, name);
     } else if (component->type == TYPE_DERIVED && component->derived_type != NULL) {
         const char *derived = component->derived_type->c_name;
         f2c_buffer_printf(&context->output,
@@ -136,7 +169,13 @@ static void emit_stage_owned_derived(Context *context, Unit *unit, const Symbol 
     const char *name = f2c_symbol_c_name(unit, component);
     const char *derived = component->derived_type->c_name;
     char *count = component_count(unit, component, "original");
-    if (component->rank == 0U) {
+    if (component->polymorphic) {
+        f2c_buffer_printf(&context->output,
+                          "    if (original->%s != NULL && stage->%s != NULL && "
+                          "!f2c_namelist_stage_dynamic_%s(stage->%s, original->%s, "
+                          "(size_t)(%s), transaction)) return false;\n",
+                          name, name, derived, name, name, count != NULL ? count : "0U");
+    } else if (component->rank == 0U) {
         f2c_buffer_printf(&context->output,
                           "    if (!f2c_namelist_stage_fields_%s(&stage->%s, &original->%s, "
                           "transaction)) return false;\n",
@@ -187,7 +226,14 @@ static void emit_rebind_owned_derived(Context *context, Unit *unit, const Symbol
     const char *name = f2c_symbol_c_name(unit, component);
     const char *derived = component->derived_type->c_name;
     char *count = component_count(unit, component, "original");
-    if (component->rank == 0U) {
+    if (component->polymorphic) {
+        f2c_buffer_printf(&context->output,
+                          "    if (original->%s != NULL && stage->%s != NULL) "
+                          "f2c_namelist_rebind_dynamic_%s(stage->%s, original->%s, "
+                          "(size_t)(%s), %zuU);\n",
+                          name, name, derived, name, name, count != NULL ? count : "0U",
+                          component->rank);
+    } else if (component->rank == 0U) {
         f2c_buffer_printf(&context->output,
                           "    f2c_namelist_rebind_fields_%s(&stage->%s, &original->%s);\n",
                           derived, name, name);
@@ -254,6 +300,100 @@ static void emit_rebind_definitions(Context *context, Unit *unit, F2cDerivedType
                       derived->c_name, derived->c_name, derived->c_name, derived->c_name);
 }
 
+static void emit_dynamic_stage_cases(Context *context, Units *units,
+                                     F2cDerivedType *declared_type) {
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < units->count; ++unit_index) {
+        Unit *unit = &units->items[unit_index];
+        size_t type_index;
+        for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
+            F2cDerivedType *candidate = &unit->derived_types[type_index];
+            if (!type_extends(candidate, declared_type))
+                continue;
+            f2c_buffer_printf(
+                &context->output,
+                "    case F2C_TYPE_ID_%s: { if (original->f2c_dynamic_size != sizeof(%s) || "
+                "stage->f2c_dynamic_size != sizeof(%s)) return false; %s *stage_objects = "
+                "(%s *)(void *)stage; const %s *original_objects = (const %s *)(const void "
+                "*)original; for (size_t i = 0U; i < count; ++i) if "
+                "(!f2c_namelist_stage_fields_%s(&stage_objects[i], &original_objects[i], "
+                "transaction)) return false; return true; }\n",
+                candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name,
+                candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name);
+        }
+    }
+}
+
+static void emit_dynamic_rebind_cases(Context *context, Units *units,
+                                      F2cDerivedType *declared_type) {
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < units->count; ++unit_index) {
+        Unit *unit = &units->items[unit_index];
+        size_t type_index;
+        for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
+            F2cDerivedType *candidate = &unit->derived_types[type_index];
+            if (!type_extends(candidate, declared_type))
+                continue;
+            f2c_buffer_printf(
+                &context->output,
+                "    case F2C_TYPE_ID_%s: { if (original->f2c_dynamic_size != sizeof(%s) || "
+                "stage->f2c_dynamic_size != sizeof(%s)) abort(); %s *stage_objects = (%s "
+                "*)(void *)stage; const %s *original_objects = (const %s *)(const void "
+                "*)original; for (size_t i = 0U; i < count; ++i) "
+                "f2c_namelist_rebind_fields_%s(&stage_objects[i], &original_objects[i]); "
+                "return; }\n",
+                candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name,
+                candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name);
+        }
+    }
+}
+
+static void emit_dynamic_definitions(Context *context, Units *units) {
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < units->count; ++unit_index) {
+        Unit *unit = &units->items[unit_index];
+        size_t type_index;
+        for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
+            F2cDerivedType *derived = &unit->derived_types[type_index];
+            f2c_buffer_printf(
+                &context->output,
+                "static F2C_UNUSED bool f2c_namelist_stage_dynamic_%s(%s *stage, const %s "
+                "*original, size_t count, f2c_namelist_transaction *transaction) {\n"
+                "    if (count == 0U) return true; if (stage == NULL || original == NULL || "
+                "stage->f2c_type_tag != original->f2c_type_tag || stage->f2c_dynamic_size != "
+                "original->f2c_dynamic_size) return false;\n"
+                "    switch (original->f2c_type_tag) {\n",
+                derived->c_name, derived->c_name, derived->c_name);
+            emit_dynamic_stage_cases(context, &context->modules, derived);
+            emit_dynamic_stage_cases(context, &context->units, derived);
+            f2c_buffer_append(&context->output, "    default: return false;\n    }\n}\n");
+            f2c_buffer_printf(
+                &context->output,
+                "static F2C_UNUSED void f2c_namelist_rebind_dynamic_%s(void *stage_value, "
+                "const void *original_value, size_t count, size_t rank) {\n"
+                "    %s *stage = (%s *)stage_value; const %s *original = (const %s "
+                "*)original_value; (void)rank; if (count == 0U) return; if (stage == NULL || "
+                "original == NULL || stage->f2c_type_tag != original->f2c_type_tag || "
+                "stage->f2c_dynamic_size != original->f2c_dynamic_size) abort();\n"
+                "    switch (original->f2c_type_tag) {\n",
+                derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                derived->c_name);
+            emit_dynamic_rebind_cases(context, &context->modules, derived);
+            emit_dynamic_rebind_cases(context, &context->units, derived);
+            f2c_buffer_append(&context->output, "    default: abort();\n    }\n}\n");
+            f2c_buffer_printf(
+                &context->output,
+                "static F2C_UNUSED void f2c_namelist_commit_dynamic_%s(void *original, const "
+                "void *stage, size_t count, size_t rank) { (void)rank; "
+                "f2c_copy_dynamic_%s((%s *)original, (const %s *)stage, count); }\n"
+                "static F2C_UNUSED void f2c_namelist_destroy_dynamic_%s(void *stage, size_t "
+                "count, size_t rank) { f2c_destroy_dynamic_%s((%s *)stage, count, rank); }\n",
+                derived->c_name, derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                derived->c_name, derived->c_name);
+        }
+    }
+}
+
 static void emit_type_definitions(Context *context, Units *units) {
     size_t unit_index;
     for (unit_index = 0U; unit_index < units->count; ++unit_index) {
@@ -270,4 +410,6 @@ static void emit_type_definitions(Context *context, Units *units) {
 void f2c_emit_namelist_type_definitions(Context *context) {
     emit_type_definitions(context, &context->modules);
     emit_type_definitions(context, &context->units);
+    emit_dynamic_definitions(context, &context->modules);
+    emit_dynamic_definitions(context, &context->units);
 }
