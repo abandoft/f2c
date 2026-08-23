@@ -10,7 +10,6 @@ F2C=$1
 CC=${CC:-cc}
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 WORK=$ROOT/build/transform-ownership
-SOURCE=$ROOT/test/fixtures/nested_transform_derived_ownership.f90
 
 if ! command -v "$CC" >/dev/null 2>&1; then
     echo "C compiler not found: $CC" >&2
@@ -20,15 +19,21 @@ fi
 cmake -E remove_directory "$WORK"
 cmake -E make_directory "$WORK"
 
-"$F2C" "$SOURCE" -o "$WORK/generated.c"
-"$CC" -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
-    -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
-    -fno-omit-frame-pointer "$WORK/generated.c" -lm -o "$WORK/generated"
 asan_leaks=1
 if [ "$(uname -s)" = Darwin ]; then
     asan_leaks=0
 fi
-ASAN_OPTIONS=detect_leaks=$asan_leaks:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-    "$WORK/generated"
 
-echo "nested derived transform ownership passed"
+for fixture in nested_transform_derived_ownership transfer_derived_ownership; do
+    source=$ROOT/test/fixtures/$fixture.f90
+    case_work=$WORK/$fixture
+    cmake -E make_directory "$case_work"
+    "$F2C" "$source" -o "$case_work/generated.c"
+    "$CC" -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+        -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
+        -fno-omit-frame-pointer "$case_work/generated.c" -lm -o "$case_work/generated"
+    ASAN_OPTIONS=detect_leaks=$asan_leaks:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
+        "$case_work/generated"
+done
+
+echo "derived transform ownership passed"
