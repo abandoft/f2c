@@ -184,13 +184,19 @@ static void emit_lifecycle_prototypes(Context *context, Units *units) {
                               "count, size_t rank);\n"
                               "static F2C_UNUSED void f2c_initialize_dynamic_%s(%s *value, "
                               "size_t count);\n"
+                              "static F2C_UNUSED %s *f2c_clone_dynamic_%s(const %s *source, "
+                              "size_t count);\n"
+                              "static F2C_UNUSED void f2c_copy_dynamic_%s(%s *target, const %s "
+                              "*source, size_t count);\n"
                               "static F2C_UNUSED void f2c_clone_%s(%s *target, const %s *source);\n"
                               "static F2C_UNUSED void f2c_copy_%s(%s *target, const %s *source);\n",
                               derived->c_name, derived->c_name, derived->c_name, derived->c_name,
                               derived->c_name, derived->c_name, derived->c_name, derived->c_name,
                               derived->c_name, derived->c_name, derived->c_name, derived->c_name,
                               derived->c_name, derived->c_name, derived->c_name, derived->c_name,
-                              derived->c_name, derived->c_name, derived->c_name, derived->c_name);
+                              derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                              derived->c_name, derived->c_name, derived->c_name, derived->c_name,
+                              derived->c_name, derived->c_name);
             f2c_buffer_printf(
                 &context->output,
                 "static F2C_UNUSED %s *f2c_materialize_copy_%s(%s *target, bool *live, "
@@ -414,11 +420,13 @@ static void emit_component_finalization(Context *context, Unit *unit, F2cDerived
         if (component->allocatable) {
             if (component->type == TYPE_DERIVED && component->derived_type != NULL) {
                 char *count = component_count(unit, component, "value");
-                f2c_buffer_printf(&context->output,
-                                  "    if (value->%s != NULL) "
-                                  "f2c_destroy_array_%s(value->%s, %s, %zuU);\n",
-                                  name, component->derived_type->c_name, name,
-                                  count != NULL ? count : "0U", component->rank);
+                f2c_buffer_printf(
+                    &context->output,
+                    "    if (value->%s != NULL) "
+                    "%s_%s(value->%s, %s, %zuU);\n",
+                    name, component->polymorphic ? "f2c_destroy_dynamic" : "f2c_destroy_array",
+                    component->derived_type->c_name, name, count != NULL ? count : "0U",
+                    component->rank);
                 free(count);
             }
             f2c_buffer_printf(&context->output, "    free(value->%s); value->%s = NULL;\n", name,
@@ -594,6 +602,15 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                             count != NULL ? count : "0U",
                             character_length != NULL ? character_length : "0U", name,
                             f2c_symbol_c_type(component), name, name, name);
+                    } else if (component->type == TYPE_DERIVED && component->derived_type != NULL &&
+                               component->polymorphic) {
+                        f2c_buffer_printf(
+                            &context->output,
+                            "        const size_t count = %s; temporary.%s = "
+                            "f2c_clone_dynamic_%s(source->%s, count); if (temporary.%s == NULL) "
+                            "abort();\n",
+                            count != NULL ? count : "0U", name, component->derived_type->c_name,
+                            name, name);
                     } else {
                         f2c_buffer_printf(
                             &context->output,
@@ -603,17 +620,17 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                             "abort();\n",
                             count != NULL ? count : "0U", f2c_symbol_c_type(component), name,
                             f2c_symbol_c_type(component), f2c_symbol_c_type(component), name);
+                        if (component->type == TYPE_DERIVED && component->derived_type != NULL)
+                            f2c_buffer_printf(&context->output,
+                                              "        for (size_t i = 0U; i < count; ++i) "
+                                              "f2c_clone_%s(&temporary.%s[i], &source->%s[i]);\n",
+                                              component->derived_type->c_name, name, name);
+                        else
+                            f2c_buffer_printf(&context->output,
+                                              "        if (count != 0U) memmove(temporary.%s, "
+                                              "source->%s, count * sizeof(%s));\n",
+                                              name, name, f2c_symbol_c_type(component));
                     }
-                    if (component->type == TYPE_DERIVED && component->derived_type != NULL)
-                        f2c_buffer_printf(&context->output,
-                                          "        for (size_t i = 0U; i < count; ++i) "
-                                          "f2c_clone_%s(&temporary.%s[i], &source->%s[i]);\n",
-                                          component->derived_type->c_name, name, name);
-                    else if (component->type != TYPE_CHARACTER)
-                        f2c_buffer_printf(&context->output,
-                                          "        if (count != 0U) memmove(temporary.%s, "
-                                          "source->%s, count * sizeof(%s));\n",
-                                          name, name, f2c_symbol_c_type(component));
                     f2c_buffer_append(&context->output, "    }\n");
                     free(count);
                     free(character_length);
@@ -733,6 +750,51 @@ static void emit_dynamic_initialize_cases(Context *context, Units *units,
     }
 }
 
+static void emit_dynamic_clone_cases(Context *context, Units *units,
+                                     F2cDerivedType *declared_type) {
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < units->count; ++unit_index) {
+        Unit *unit = &units->items[unit_index];
+        size_t type_index;
+        for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
+            F2cDerivedType *candidate = &unit->derived_types[type_index];
+            if (!type_extends(candidate, declared_type))
+                continue;
+            f2c_buffer_printf(
+                &context->output,
+                "    case F2C_TYPE_ID_%s: { if (source->f2c_dynamic_size != sizeof(%s)) "
+                "abort(); if (count > SIZE_MAX / sizeof(%s)) return NULL; %s *copy = (%s *)"
+                "calloc(count == 0U ? 1U : count, sizeof(*copy)); if (copy == NULL) return "
+                "NULL; const %s *objects = (const %s *)(const void *)source; for (size_t i = "
+                "0U; i < count; ++i) f2c_clone_%s(&copy[i], &objects[i]); return (%s *)(void "
+                "*)copy; }\n",
+                candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name,
+                candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name,
+                declared_type->c_name);
+        }
+    }
+}
+
+static void emit_dynamic_copy_cases(Context *context, Units *units, F2cDerivedType *declared_type) {
+    size_t unit_index;
+    for (unit_index = 0U; unit_index < units->count; ++unit_index) {
+        Unit *unit = &units->items[unit_index];
+        size_t type_index;
+        for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
+            F2cDerivedType *candidate = &unit->derived_types[type_index];
+            if (!type_extends(candidate, declared_type))
+                continue;
+            f2c_buffer_printf(
+                &context->output,
+                "    case F2C_TYPE_ID_%s: { %s *targets = (%s *)(void *)target; const %s "
+                "*sources = (const %s *)(const void *)source; for (size_t i = 0U; i < count; "
+                "++i) f2c_copy_%s(&targets[i], &sources[i]); return; }\n",
+                candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name,
+                candidate->c_name, candidate->c_name);
+        }
+    }
+}
+
 static void emit_dynamic_destroy_definitions(Context *context, Units *units) {
     size_t unit_index;
     for (unit_index = 0U; unit_index < units->count; ++unit_index) {
@@ -757,6 +819,27 @@ static void emit_dynamic_destroy_definitions(Context *context, Units *units) {
                               derived->c_name, derived->c_name);
             emit_dynamic_initialize_cases(context, &context->modules, derived);
             emit_dynamic_initialize_cases(context, &context->units, derived);
+            f2c_buffer_append(&context->output, "    default: abort();\n    }\n}\n");
+            f2c_buffer_printf(&context->output,
+                              "static F2C_UNUSED %s *f2c_clone_dynamic_%s(const %s *source, "
+                              "size_t count) {\n"
+                              "    if (source == NULL) return NULL;\n"
+                              "    switch (source->f2c_type_tag) {\n",
+                              derived->c_name, derived->c_name, derived->c_name);
+            emit_dynamic_clone_cases(context, &context->modules, derived);
+            emit_dynamic_clone_cases(context, &context->units, derived);
+            f2c_buffer_append(&context->output, "    default: abort();\n    }\n}\n");
+            f2c_buffer_printf(
+                &context->output,
+                "static F2C_UNUSED void f2c_copy_dynamic_%s(%s *target, const %s *source, "
+                "size_t count) {\n"
+                "    if (count == 0U || target == source) return; if (target == NULL || source "
+                "== NULL || target->f2c_type_tag != source->f2c_type_tag || "
+                "target->f2c_dynamic_size != source->f2c_dynamic_size) abort();\n"
+                "    switch (source->f2c_type_tag) {\n",
+                derived->c_name, derived->c_name, derived->c_name);
+            emit_dynamic_copy_cases(context, &context->modules, derived);
+            emit_dynamic_copy_cases(context, &context->units, derived);
             f2c_buffer_append(&context->output, "    default: abort();\n    }\n}\n");
         }
     }

@@ -624,11 +624,12 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
             if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL) {
                 char *count = f2c_symbol_element_count(unit, symbol);
                 f2c_buffer_printf(output,
-                                  "if (%s != NULL) f2c_destroy_array_%s(%s, (size_t)(%s), "
+                                  "if (%s != NULL) %s_%s(%s, (size_t)(%s), "
                                   "%zuU);\n",
-                                  f2c_symbol_c_name(unit, symbol), symbol->derived_type->c_name,
-                                  f2c_symbol_c_name(unit, symbol), count != NULL ? count : "0U",
-                                  symbol->rank);
+                                  f2c_symbol_c_name(unit, symbol),
+                                  symbol->polymorphic ? "f2c_destroy_dynamic" : "f2c_destroy_array",
+                                  symbol->derived_type->c_name, f2c_symbol_c_name(unit, symbol),
+                                  count != NULL ? count : "0U", symbol->rank);
                 f2c_unit_indent(output, depth);
                 free(count);
             }
@@ -636,7 +637,7 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
             continue;
         }
         if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL && !symbol->argument &&
-            !symbol->module_entity && !unit->save_all && !symbol->saved &&
+            !symbol->pointer && !symbol->module_entity && !unit->save_all && !symbol->saved &&
             symbol->initializer == NULL) {
             f2c_unit_indent(output, depth);
             if (symbol->scope_begin_line != 0U) {

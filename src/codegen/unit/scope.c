@@ -6,7 +6,8 @@
 
 static int block_scoped_symbol(const Unit *unit, const Symbol *symbol) {
     return symbol->scope_begin_line != 0U && !unit->save_all && !symbol->saved &&
-           symbol->initializer == NULL && !symbol->argument && !symbol->module_entity;
+           symbol->initializer == NULL && !symbol->argument && !symbol->module_entity &&
+           !symbol->pointer;
 }
 
 static void emit_block_symbol_cleanup(Buffer *output, Unit *unit, Symbol *symbol, int depth) {
@@ -22,7 +23,8 @@ static void emit_block_symbol_cleanup(Buffer *output, Unit *unit, Symbol *symbol
         if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL) {
             char *count = f2c_symbol_element_count(unit, symbol);
             f2c_unit_indent(output, depth + 1);
-            f2c_buffer_printf(output, "f2c_destroy_array_%s(%s, (size_t)(%s), %zuU);\n",
+            f2c_buffer_printf(output, "%s_%s(%s, (size_t)(%s), %zuU);\n",
+                              symbol->polymorphic ? "f2c_destroy_dynamic" : "f2c_destroy_array",
                               symbol->derived_type->c_name, name, count != NULL ? count : "0U",
                               symbol->rank);
             free(count);
