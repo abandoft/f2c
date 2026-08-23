@@ -100,8 +100,8 @@ static void emit_stage_pointer(Context *context, Unit *unit, const Symbol *compo
                           "(!f2c_namelist_size_product(count, (size_t)(%s), &bytes)) return "
                           "false;\n"
                           "            %s *copy = (%s *)malloc(bytes == 0U ? 1U : bytes);\n"
-                          "            if (copy == NULL) return false; if (bytes != 0U) "
-                          "memmove(copy, original->%s, bytes);\n"
+                          "            if (copy == NULL) return false;\n"
+                          "            if (bytes != 0U) memmove(copy, original->%s, bytes);\n"
                           "            if (!f2c_namelist_transaction_own(transaction, "
                           "original->%s, copy, bytes, sizeof(*copy), %zuU, NULL, NULL, NULL)) "
                           "{ free(copy); return false; }\n",
@@ -149,8 +149,9 @@ static void emit_stage_pointer(Context *context, Unit *unit, const Symbol *compo
                           "            if (count > SIZE_MAX / sizeof(%s)) return false;\n"
                           "            %s *copy = (%s *)malloc(count == 0U ? 1U : count * "
                           "sizeof(*copy));\n"
-                          "            if (copy == NULL) return false; if (count != 0U) "
-                          "memmove(copy, original->%s, count * sizeof(*copy));\n"
+                          "            if (copy == NULL) return false;\n"
+                          "            if (count != 0U) memmove(copy, original->%s, count * "
+                          "sizeof(*copy));\n"
                           "            if (!f2c_namelist_transaction_own(transaction, "
                           "original->%s, copy, count, sizeof(*copy), %zuU, NULL, NULL, NULL)) "
                           "{ free(copy); return false; }\n",
@@ -312,12 +313,17 @@ static void emit_dynamic_stage_cases(Context *context, Units *units,
                 continue;
             f2c_buffer_printf(
                 &context->output,
-                "    case F2C_TYPE_ID_%s: { if (original->f2c_dynamic_size != sizeof(%s) || "
-                "stage->f2c_dynamic_size != sizeof(%s)) return false; %s *stage_objects = "
-                "(%s *)(void *)stage; const %s *original_objects = (const %s *)(const void "
-                "*)original; for (size_t i = 0U; i < count; ++i) if "
-                "(!f2c_namelist_stage_fields_%s(&stage_objects[i], &original_objects[i], "
-                "transaction)) return false; return true; }\n",
+                "    case F2C_TYPE_ID_%s: {\n"
+                "        if (original->f2c_dynamic_size != sizeof(%s) || "
+                "stage->f2c_dynamic_size != sizeof(%s)) return false;\n"
+                "        %s *stage_objects = (%s *)(void *)stage;\n"
+                "        const %s *original_objects = (const %s *)(const void *)original;\n"
+                "        for (size_t i = 0U; i < count; ++i) {\n"
+                "            if (!f2c_namelist_stage_fields_%s(&stage_objects[i], "
+                "&original_objects[i], transaction)) return false;\n"
+                "        }\n"
+                "        return true;\n"
+                "    }\n",
                 candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name,
                 candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name);
         }
@@ -336,12 +342,15 @@ static void emit_dynamic_rebind_cases(Context *context, Units *units,
                 continue;
             f2c_buffer_printf(
                 &context->output,
-                "    case F2C_TYPE_ID_%s: { if (original->f2c_dynamic_size != sizeof(%s) || "
-                "stage->f2c_dynamic_size != sizeof(%s)) abort(); %s *stage_objects = (%s "
-                "*)(void *)stage; const %s *original_objects = (const %s *)(const void "
-                "*)original; for (size_t i = 0U; i < count; ++i) "
-                "f2c_namelist_rebind_fields_%s(&stage_objects[i], &original_objects[i]); "
-                "return; }\n",
+                "    case F2C_TYPE_ID_%s: {\n"
+                "        if (original->f2c_dynamic_size != sizeof(%s) || "
+                "stage->f2c_dynamic_size != sizeof(%s)) abort();\n"
+                "        %s *stage_objects = (%s *)(void *)stage;\n"
+                "        const %s *original_objects = (const %s *)(const void *)original;\n"
+                "        for (size_t i = 0U; i < count; ++i) "
+                "f2c_namelist_rebind_fields_%s(&stage_objects[i], &original_objects[i]);\n"
+                "        return;\n"
+                "    }\n",
                 candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name,
                 candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name);
         }
@@ -359,7 +368,8 @@ static void emit_dynamic_definitions(Context *context, Units *units) {
                 &context->output,
                 "static F2C_UNUSED bool f2c_namelist_stage_dynamic_%s(%s *stage, const %s "
                 "*original, size_t count, f2c_namelist_transaction *transaction) {\n"
-                "    if (count == 0U) return true; if (stage == NULL || original == NULL || "
+                "    if (count == 0U) return true;\n"
+                "    if (stage == NULL || original == NULL || "
                 "stage->f2c_type_tag != original->f2c_type_tag || stage->f2c_dynamic_size != "
                 "original->f2c_dynamic_size) return false;\n"
                 "    switch (original->f2c_type_tag) {\n",
@@ -372,7 +382,10 @@ static void emit_dynamic_definitions(Context *context, Units *units) {
                 "static F2C_UNUSED void f2c_namelist_rebind_dynamic_%s(void *stage_value, "
                 "const void *original_value, size_t count, size_t rank) {\n"
                 "    %s *stage = (%s *)stage_value; const %s *original = (const %s "
-                "*)original_value; (void)rank; if (count == 0U) return; if (stage == NULL || "
+                "*)original_value;\n"
+                "    (void)rank;\n"
+                "    if (count == 0U) return;\n"
+                "    if (stage == NULL || "
                 "original == NULL || stage->f2c_type_tag != original->f2c_type_tag || "
                 "stage->f2c_dynamic_size != original->f2c_dynamic_size) abort();\n"
                 "    switch (original->f2c_type_tag) {\n",

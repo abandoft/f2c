@@ -762,12 +762,16 @@ static void emit_dynamic_clone_cases(Context *context, Units *units,
                 continue;
             f2c_buffer_printf(
                 &context->output,
-                "    case F2C_TYPE_ID_%s: { if (source->f2c_dynamic_size != sizeof(%s)) "
-                "abort(); if (count > SIZE_MAX / sizeof(%s)) return NULL; %s *copy = (%s *)"
-                "calloc(count == 0U ? 1U : count, sizeof(*copy)); if (copy == NULL) return "
-                "NULL; const %s *objects = (const %s *)(const void *)source; for (size_t i = "
-                "0U; i < count; ++i) f2c_clone_%s(&copy[i], &objects[i]); return (%s *)(void "
-                "*)copy; }\n",
+                "    case F2C_TYPE_ID_%s: {\n"
+                "        if (source->f2c_dynamic_size != sizeof(%s)) abort();\n"
+                "        if (count > SIZE_MAX / sizeof(%s)) return NULL;\n"
+                "        %s *copy = (%s *)calloc(count == 0U ? 1U : count, sizeof(*copy));\n"
+                "        if (copy == NULL) return NULL;\n"
+                "        const %s *objects = (const %s *)(const void *)source;\n"
+                "        for (size_t i = 0U; i < count; ++i) "
+                "f2c_clone_%s(&copy[i], &objects[i]);\n"
+                "        return (%s *)(void *)copy;\n"
+                "    }\n",
                 candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name,
                 candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name,
                 declared_type->c_name);
@@ -784,13 +788,16 @@ static void emit_dynamic_copy_cases(Context *context, Units *units, F2cDerivedTy
             F2cDerivedType *candidate = &unit->derived_types[type_index];
             if (!type_extends(candidate, declared_type))
                 continue;
-            f2c_buffer_printf(
-                &context->output,
-                "    case F2C_TYPE_ID_%s: { %s *targets = (%s *)(void *)target; const %s "
-                "*sources = (const %s *)(const void *)source; for (size_t i = 0U; i < count; "
-                "++i) f2c_copy_%s(&targets[i], &sources[i]); return; }\n",
-                candidate->c_name, candidate->c_name, candidate->c_name, candidate->c_name,
-                candidate->c_name, candidate->c_name);
+            f2c_buffer_printf(&context->output,
+                              "    case F2C_TYPE_ID_%s: {\n"
+                              "        %s *targets = (%s *)(void *)target;\n"
+                              "        const %s *sources = (const %s *)(const void *)source;\n"
+                              "        for (size_t i = 0U; i < count; ++i) "
+                              "f2c_copy_%s(&targets[i], &sources[i]);\n"
+                              "        return;\n"
+                              "    }\n",
+                              candidate->c_name, candidate->c_name, candidate->c_name,
+                              candidate->c_name, candidate->c_name, candidate->c_name);
         }
     }
 }
@@ -833,8 +840,9 @@ static void emit_dynamic_destroy_definitions(Context *context, Units *units) {
                 &context->output,
                 "static F2C_UNUSED void f2c_copy_dynamic_%s(%s *target, const %s *source, "
                 "size_t count) {\n"
-                "    if (count == 0U || target == source) return; if (target == NULL || source "
-                "== NULL || target->f2c_type_tag != source->f2c_type_tag || "
+                "    if (count == 0U || target == source) return;\n"
+                "    if (target == NULL || source == NULL || "
+                "target->f2c_type_tag != source->f2c_type_tag || "
                 "target->f2c_dynamic_size != source->f2c_dynamic_size) abort();\n"
                 "    switch (source->f2c_type_tag) {\n",
                 derived->c_name, derived->c_name, derived->c_name);
