@@ -344,8 +344,9 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         (expression->children[0]->kind == F2C_EXPR_NAME ||
          expression->children[0]->kind == F2C_EXPR_COMPONENT) &&
         expression->children[0]->symbol != NULL && expression->children[0]->symbol->allocatable) {
-        char *storage = f2c_expression_emit(unit, expression->children[0], supported);
-        if (!*supported || storage == NULL) {
+        char *storage = f2c_descriptor_storage_designator(unit, expression->children[0]);
+        if (storage == NULL) {
+            *supported = 0;
             free(storage);
             return NULL;
         }
