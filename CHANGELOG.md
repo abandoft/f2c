@@ -1,3 +1,14 @@
+## 1.37.0
+
+- Reworked NAMELIST input as a structured, single-pass assignment stream instead of repeatedly rescanning the input for every member.
+- Applied repeated designators in source order so later assignments override earlier results with Fortran semantics.
+- Added repetition factors and null values for numeric, logical, complex, and character data while preserving existing object values at null positions.
+- Added input for complete intrinsic arrays, array elements, explicitly bounded multidimensional sections, scalar substrings, and character-array element substrings.
+- Consumed array-section values in column-major order with the direction of each positive or negative stride, including reverse non-unit-stride combinations.
+- Inferred one-dimensional unallocated-array sizes from whole-array values and included automatic allocation in the same transactional commit and rollback path.
+- Added legacy `$GROUP ... $END` NAMELIST input while retaining the standard `/` terminator.
+- Rejected zero-stride sections, out-of-bounds substrings, excess array values, and invalid repetition factors without partially modifying target objects.
+
 ## 1.36.0
 
 - Added transactional staging, atomic commit, and complete rollback for NAMELIST input so invalid input no longer partially modifies program objects.
