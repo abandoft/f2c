@@ -40,5 +40,9 @@ program namelist_ordered
   if (any(flags .neqv. [.true., .true., .false.])) stop 9
   if (abs(phases(1) - cmplx(1.0, 2.0)) > 1.0e-6) stop 10
   if (abs(phases(2) - cmplx(1.0, 2.0)) > 1.0e-6) stop 11
+
+  record = '$sample scalar=77 $end'
+  read(record, nml=sample, iostat=status)
+  if (status /= 0 .or. scalar /= 77) stop 12
   write(*, '(A)') 'ordered-ok'
 end program namelist_ordered
