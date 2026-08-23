@@ -193,7 +193,17 @@ static void emit_value_cursor(Context *context) {
         "static inline F2C_UNUSED bool f2c_namelist_cursor_consumed("
         "f2c_namelist_value_cursor *cursor) { f2c_io_stream ignored; "
         "f2c_namelist_item_status item = f2c_namelist_cursor_next(cursor, &ignored); return item "
-        "== F2C_NAMELIST_ITEM_END; }\n");
+        "== F2C_NAMELIST_ITEM_END; }\n"
+        "static inline F2C_UNUSED bool f2c_namelist_assignment_value_count(const "
+        "f2c_namelist_input *input, size_t index, size_t *count) { f2c_namelist_value_cursor "
+        "cursor; f2c_io_stream ignored; f2c_namelist_item_status item; size_t total = 0U; if "
+        "(count == NULL || !f2c_namelist_cursor_initialize(input, index, &cursor)) return false; "
+        "for (;;) { item = f2c_namelist_cursor_next(&cursor, &ignored); if (item == "
+        "F2C_NAMELIST_ITEM_END) { *count = total; return true; } if (item == "
+        "F2C_NAMELIST_ITEM_ERROR) return false; if (total == SIZE_MAX || "
+        "cursor.repeat_remaining > SIZE_MAX - total - 1U) return false; total += "
+        "(size_t)cursor.repeat_remaining + 1U; "
+        "cursor.repeat_remaining = 0U; } }\n");
 }
 
 static void emit_selector_parser(Context *context) {
@@ -265,6 +275,26 @@ static void emit_substring_parser(Context *context) {
         "return true; }\n");
 }
 
+static void emit_section_direction(Context *context) {
+    f2c_buffer_append(
+        &context->output,
+        "static inline F2C_UNUSED bool f2c_namelist_dimension_descends(const "
+        "f2c_namelist_input *input, size_t index, const char *base, size_t dimension) { const "
+        "char *cursor, *end, *first, *second; size_t current = 0U, base_length; int64_t stride; "
+        "if (input == NULL || index >= input->count || base == NULL) return false; cursor = "
+        "input->assignments[index].designator; base_length = strlen(base); for (size_t i = 0U; "
+        "i < base_length; ++i) if (cursor[i] == '\\0' || "
+        "tolower((unsigned char)cursor[i]) != tolower((unsigned char)base[i])) return false; "
+        "cursor += base_length; if (*cursor != '(') return false; ++cursor; while (*cursor != "
+        "'\\0' && current < dimension) { while (*cursor != '\\0' && *cursor != ',' && "
+        "*cursor != ')') ++cursor; if (*cursor != ',') return false; ++cursor; ++current; } if "
+        "(current != dimension) return false; end = cursor; while (*end != '\\0' && *end != "
+        "',' && *end != ')') ++end; first = memchr(cursor, ':', (size_t)(end - cursor)); if "
+        "(first == NULL) return false; second = memchr(first + 1, ':', (size_t)(end - first - "
+        "1)); return second != NULL && f2c_namelist_parse_index(second + 1, end, &stride) && "
+        "stride < 0; }\n");
+}
+
 void f2c_emit_namelist_parser_support(Context *context) {
     emit_input_model(context);
     emit_designator_parser(context);
@@ -273,4 +303,5 @@ void f2c_emit_namelist_parser_support(Context *context) {
     emit_value_cursor(context);
     emit_selector_parser(context);
     emit_substring_parser(context);
+    emit_section_direction(context);
 }

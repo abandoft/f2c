@@ -160,10 +160,14 @@ static void emit_namelist_autoallocation(Context *context, Unit *unit, const cha
                       value);
     if (symbol->rank == 0U)
         f2c_buffer_printf(&context->output,
-                          "f2c_namelist_designator_prefix(%s, f2c_namelist_group_start, %s)) {\n",
-                          file, path);
+                          "f2c_namelist_assignment_root_is(&f2c_namelist_parsed_input, "
+                          "f2c_namelist_assignment_index, %s)) {\n",
+                          path);
     else
-        f2c_buffer_append(&context->output, "true) {\n");
+        f2c_buffer_printf(&context->output,
+                          "f2c_namelist_assignment_root_is(&f2c_namelist_parsed_input, "
+                          "f2c_namelist_assignment_index, %s)) {\n",
+                          path);
     if (symbol->rank != 0U) {
         f2c_io_indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output,
@@ -172,10 +176,31 @@ static void emit_namelist_autoallocation(Context *context, Unit *unit, const cha
                           (size_t)depth, symbol->rank, (size_t)depth, symbol->rank);
         f2c_io_indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output,
-                          "if (f2c_namelist_designator_bounds(%s, "
+                          "bool f2c_namelist_have_bounds_%zu = "
+                          "f2c_namelist_designator_bounds(%s, "
                           "f2c_namelist_group_start, %s, %zuU, f2c_namelist_lower_%zu, "
-                          "f2c_namelist_upper_%zu)) {\n",
-                          file, path, symbol->rank, (size_t)depth, (size_t)depth);
+                          "f2c_namelist_upper_%zu);\n",
+                          (size_t)depth, file, path, symbol->rank, (size_t)depth, (size_t)depth);
+        if (symbol->rank == 1U) {
+            f2c_io_indent(&context->output, depth + 1);
+            f2c_buffer_printf(
+                &context->output,
+                "if (!f2c_namelist_have_bounds_%zu && "
+                "f2c_namelist_assignment_is(&f2c_namelist_parsed_input, "
+                "f2c_namelist_assignment_index, %s)) { size_t f2c_namelist_inferred_%zu = "
+                "0U; if (!f2c_namelist_assignment_value_count(&f2c_namelist_parsed_input, "
+                "f2c_namelist_assignment_index, &f2c_namelist_inferred_%zu) || "
+                "f2c_namelist_inferred_%zu == 0U || f2c_namelist_inferred_%zu > "
+                "(size_t)INT32_MAX) %s = F2C_IO_STATUS_RECORD; else { "
+                "f2c_namelist_lower_%zu[0] = 1; f2c_namelist_upper_%zu[0] = "
+                "(int64_t)f2c_namelist_inferred_%zu; f2c_namelist_have_bounds_%zu = true; } }\n",
+                (size_t)depth, path, (size_t)depth, (size_t)depth, (size_t)depth,
+                (size_t)depth, status, (size_t)depth, (size_t)depth, (size_t)depth,
+                (size_t)depth);
+        }
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output, "if (f2c_namelist_have_bounds_%zu) {\n",
+                          (size_t)depth);
         f2c_io_indent(&context->output, body_depth);
         f2c_buffer_printf(&context->output,
                           "size_t f2c_namelist_extents_%zu[%zu] = {0U}; "
@@ -443,6 +468,81 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *scan_
                           "++f2c_namelist_index_%zu) {\n",
                           path_id, path_id, path_id, path_id);
         f2c_io_indent(&context->output, depth + 2);
+        if (input) {
+            f2c_buffer_printf(&context->output,
+                              "size_t f2c_namelist_physical_%zu = 0U;\n", path_id);
+            for (dimension = 0U; dimension < symbol->rank; ++dimension) {
+                char *extent;
+                if ((symbol->allocatable || symbol->pointer) && owner != NULL) {
+                    Buffer dynamic = {0};
+                    f2c_buffer_printf(&dynamic, "(size_t)(%s).%s_extent_%zu", owner,
+                                      f2c_symbol_c_name(unit, symbol), dimension + 1U);
+                    extent = f2c_buffer_take(&dynamic);
+                } else {
+                    extent = f2c_symbol_dimension_extent(unit, symbol, dimension);
+                }
+                f2c_io_indent(&context->output, depth + 2);
+                f2c_buffer_printf(&context->output,
+                                  "size_t f2c_namelist_coordinate_%zu_%zu = "
+                                  "(f2c_namelist_index_%zu / (size_t)(",
+                                  path_id, dimension, path_id);
+                for (size_t prior = 0U; prior < dimension; ++prior) {
+                    char *prior_extent;
+                    if ((symbol->allocatable || symbol->pointer) && owner != NULL) {
+                        Buffer dynamic = {0};
+                        f2c_buffer_printf(&dynamic, "(size_t)(%s).%s_extent_%zu", owner,
+                                          f2c_symbol_c_name(unit, symbol), prior + 1U);
+                        prior_extent = f2c_buffer_take(&dynamic);
+                    } else {
+                        prior_extent = f2c_symbol_dimension_extent(unit, symbol, prior);
+                    }
+                    f2c_buffer_printf(&context->output, "%s(%s)", prior == 0U ? "" : " * ",
+                                      prior_extent != NULL ? prior_extent : "1U");
+                    free(prior_extent);
+                }
+                if (dimension == 0U)
+                    f2c_buffer_append(&context->output, "1U");
+                f2c_buffer_printf(&context->output, ")) %% (size_t)(%s);\n",
+                                  extent != NULL ? extent : "1U");
+                f2c_io_indent(&context->output, depth + 2);
+                f2c_buffer_printf(&context->output,
+                                  "if (f2c_namelist_dimension_descends("
+                                  "&f2c_namelist_parsed_input, f2c_namelist_assignment_index, "
+                                  "%s, %zuU)) f2c_namelist_coordinate_%zu_%zu = "
+                                  "(size_t)(%s) - 1U - f2c_namelist_coordinate_%zu_%zu;\n",
+                                  path, dimension, path_id, dimension,
+                                  extent != NULL ? extent : "1U", path_id, dimension);
+                f2c_io_indent(&context->output, depth + 2);
+                f2c_buffer_printf(&context->output,
+                                  "f2c_namelist_physical_%zu += "
+                                  "f2c_namelist_coordinate_%zu_%zu * (size_t)(",
+                                  path_id, path_id, dimension);
+                for (size_t prior = 0U; prior < dimension; ++prior) {
+                    char *prior_extent;
+                    if ((symbol->allocatable || symbol->pointer) && owner != NULL) {
+                        Buffer dynamic = {0};
+                        f2c_buffer_printf(&dynamic, "(size_t)(%s).%s_extent_%zu", owner,
+                                          f2c_symbol_c_name(unit, symbol), prior + 1U);
+                        prior_extent = f2c_buffer_take(&dynamic);
+                    } else {
+                        prior_extent = f2c_symbol_dimension_extent(unit, symbol, prior);
+                    }
+                    f2c_buffer_printf(&context->output, "%s(%s)", prior == 0U ? "" : " * ",
+                                      prior_extent != NULL ? prior_extent : "1U");
+                    free(prior_extent);
+                }
+                if (dimension == 0U)
+                    f2c_buffer_append(&context->output, "1U");
+                f2c_buffer_append(&context->output, ");\n");
+                free(extent);
+            }
+        } else {
+            f2c_buffer_printf(&context->output,
+                              "const size_t f2c_namelist_physical_%zu = "
+                              "f2c_namelist_index_%zu;\n",
+                              path_id, path_id);
+        }
+        f2c_io_indent(&context->output, depth + 2);
         f2c_buffer_printf(&context->output, "char f2c_namelist_path_%zu[512];\n", path_id);
         f2c_io_indent(&context->output, depth + 2);
         f2c_buffer_printf(&context->output,
@@ -470,7 +570,7 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *scan_
             }
             f2c_buffer_printf(&context->output,
                               ", (long long)((int64_t)(%s) + "
-                              "(int64_t)((f2c_namelist_index_%zu / (size_t)(",
+                              "(int64_t)((f2c_namelist_physical_%zu / (size_t)(",
                               lower != NULL ? lower : "1", path_id);
             for (size_t prior = 0U; prior < dimension; ++prior) {
                 char *prior_extent;
@@ -499,11 +599,11 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *scan_
             Buffer element_path = {0};
             if (symbol->type == TYPE_CHARACTER) {
                 char *length = namelist_character_length(unit, symbol, owner);
-                f2c_buffer_printf(&element, "%s + f2c_namelist_index_%zu * (size_t)(%s)", value,
+                f2c_buffer_printf(&element, "%s + f2c_namelist_physical_%zu * (size_t)(%s)", value,
                                   path_id, length != NULL ? length : "0U");
                 free(length);
             } else {
-                f2c_buffer_printf(&element, "%s[f2c_namelist_index_%zu]", value, path_id);
+                f2c_buffer_printf(&element, "%s[f2c_namelist_physical_%zu]", value, path_id);
             }
             f2c_buffer_printf(&element_path, "f2c_namelist_path_%zu", path_id);
             emit_namelist_object(context, unit, scan_file, file, symbol, element.data, owner,
