@@ -629,7 +629,8 @@ static void validate_group(Context *context, Unit *unit, F2cStatement *statement
     validation.values.group = group;
     valid = validate_values(&validation);
     for (index = 0U; index < group->target_count; ++index) {
-        f2c_validation_io_item(context, statement->line, statement->text, &group->targets[index]);
+        f2c_validation_io_item(context, unit, statement->line, statement->text,
+                               &group->targets[index]);
         f2c_validation_io_item_calls(context, unit, statement->line, statement->text,
                                      &group->targets[index]);
         valid &= validate_target(&validation, &group->targets[index]);

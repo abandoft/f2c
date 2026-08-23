@@ -20,7 +20,7 @@ int f2c_validation_symbol_shape_mismatch(const Symbol *left, const F2cExpr *righ
 void f2c_validation_intrinsic_assignment(Context *context, const F2cStatement *statement);
 void f2c_validation_constructor_assignment(Context *context, Unit *unit,
                                            const F2cStatement *statement);
-void f2c_validation_io_item(Context *context, size_t line, const char *statement_text,
+void f2c_validation_io_item(Context *context, Unit *unit, size_t line, const char *statement_text,
                             const F2cIoItem *item);
 void f2c_validation_io_statement(Context *context, Unit *unit, F2cStatement *statement);
 const char *f2c_validation_type_name(Type type);

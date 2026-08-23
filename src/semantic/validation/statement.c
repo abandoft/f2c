@@ -508,7 +508,8 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         f2c_validation_expression_calls(context, unit, statement->line, statement->text,
                                         statement->io_controls[i].value);
     for (i = 0U; i < statement->io_item_count; ++i) {
-        f2c_validation_io_item(context, statement->line, statement->text, &statement->io_items[i]);
+        f2c_validation_io_item(context, unit, statement->line, statement->text,
+                               &statement->io_items[i]);
         f2c_validation_io_item_calls(context, unit, statement->line, statement->text,
                                      &statement->io_items[i]);
     }

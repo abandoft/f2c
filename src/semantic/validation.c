@@ -104,6 +104,20 @@ static void validate_constructor_semantics_impl(Context *context, Unit *unit, si
             }
         }
     }
+    if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && expression->type != TYPE_UNKNOWN) {
+        const int constructor_kind =
+            expression->type_kind != 0 ? expression->type_kind : f2c_default_kind(expression->type);
+        for (i = 0U; i < expression->child_count; ++i) {
+            const F2cExpr *value = expression->children[i];
+            const int value_kind =
+                value->type_kind != 0 ? value->type_kind : f2c_default_kind(value->type);
+            if (value->type != TYPE_UNKNOWN &&
+                (value->type != expression->type || value_kind != constructor_kind))
+                f2c_diagnostic_at(context, line,
+                                  f2c_validation_expression_column(statement_text, value), 1,
+                                  "array-constructor values must have the same type and kind");
+        }
+    }
     if (expression->kind == F2C_EXPR_IMPLIED_DO) {
         int64_t step;
         const size_t value_count =
