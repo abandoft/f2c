@@ -1,20 +1,9 @@
 #ifndef F2C_CODEGEN_TRANSFORM_PRIVATE_H
 #define F2C_CODEGEN_TRANSFORM_PRIVATE_H
 
-#include "internal/f2c.h"
+#include "codegen/array/value.h"
 
-typedef struct TransformArray {
-    const F2cExpr *expression;
-    Symbol *symbol;
-    Type type;
-    F2cDerivedType *derived_type;
-    char *pointer;
-    char *count;
-    char *element_length;
-    char *extents[F2C_MAX_RANK];
-    size_t rank;
-    int temporary;
-} TransformArray;
+typedef F2cArrayValue TransformArray;
 
 void f2c_transform_indent(Buffer *output, int depth);
 const F2cExpr *f2c_transform_argument_value(const F2cExpr *argument);
