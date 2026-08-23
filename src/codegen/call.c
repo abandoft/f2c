@@ -11,7 +11,6 @@
 
 typedef struct LoweredCall {
     char **arguments;
-    unsigned char *owned_transfers;
     size_t argument_count;
     Buffer prelude;
     Buffer postlude;
@@ -102,6 +101,8 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
         return NULL;
     if (ast->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
+    if (ast->rank != 0U && f2c_lowering_code(unit, ast) != NULL)
+        return f2c_strdup(f2c_lowering_code(unit, ast));
     if (ast->symbol != NULL && ast->symbol->equivalence_unaligned && ast->rank != 0U &&
         ast->kind == F2C_EXPR_NAME) {
         const F2cIntent intent = parameter_intent(callee, index);
@@ -276,77 +277,6 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
     }
 }
 
-static char *lower_transfer_actual(LoweredCall *call, Unit *unit, const F2cExpr *expression,
-                                   size_t index, int depth) {
-    const F2cExpr *source;
-    const F2cExpr *mold;
-    const F2cExpr *count;
-    const F2cExpr *section;
-    char *source_reference = NULL;
-    char *element_count = NULL;
-    char *lower = NULL;
-    char *result = NULL;
-    Symbol *source_symbol;
-    Type target_type;
-    int supported = 1;
-    if (expression != NULL && expression->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
-        expression->child_count == 1U)
-        expression = expression->children[0];
-    if (expression == NULL || expression->kind != F2C_EXPR_CALL ||
-        expression->intrinsic != F2C_INTRINSIC_TRANSFER || expression->child_count < 3U)
-        goto done;
-    source = expression->children[0];
-    mold = expression->children[1];
-    count = expression->children[2];
-    source_symbol = source != NULL ? source->symbol : NULL;
-    if (source == NULL || source->kind != F2C_EXPR_ARRAY_REFERENCE || source_symbol == NULL ||
-        source_symbol->rank != 1U || source->child_count != 1U ||
-        source->children[0]->kind != F2C_EXPR_ARRAY_SECTION ||
-        source->children[0]->child_count != 3U || mold == NULL ||
-        mold->kind != F2C_EXPR_ARRAY_CONSTRUCTOR)
-        goto done;
-    if (source_symbol->type != TYPE_REAL && source_symbol->type != TYPE_DOUBLE)
-        goto done;
-    section = source->children[0];
-    if (section->children[0]->kind == F2C_EXPR_INVALID)
-        lower = f2c_symbol_dimension_lower(unit, source_symbol, 0U);
-    else
-        lower = f2c_emit_expression_ast(unit, section->children[0], &supported);
-    element_count = f2c_emit_expression_ast(unit, count, &supported);
-    if (!supported || lower == NULL || element_count == NULL)
-        goto done;
-    {
-        char *indices[1] = {lower};
-        source_reference = f2c_emit_array_reference(unit, source_symbol, indices, 1U);
-    }
-    if (source_reference == NULL ||
-        (source_symbol->type != TYPE_REAL && source_symbol->type != TYPE_DOUBLE))
-        goto done;
-    target_type = source_symbol->type == TYPE_DOUBLE ? TYPE_DOUBLE_COMPLEX : TYPE_COMPLEX;
-    emit_indent(&call->prelude, depth);
-    f2c_buffer_printf(&call->prelude,
-                      "%s *f2c_transfer_%zu = (%s *)malloc(sizeof(%s) * "
-                      "(size_t)F2C_MAX(1, (%s)));\n",
-                      f2c_c_type(target_type), index, f2c_c_type(target_type),
-                      f2c_c_type(target_type), element_count);
-    emit_indent(&call->prelude, depth);
-    f2c_buffer_printf(&call->prelude, "if (f2c_transfer_%zu == NULL) abort();\n", index);
-    emit_indent(&call->prelude, depth);
-    f2c_buffer_printf(&call->prelude, "memcpy(f2c_transfer_%zu, &%s, sizeof(%s) * (size_t)(%s));\n",
-                      index, source_reference, f2c_c_type(target_type), element_count);
-    {
-        Buffer name = {0};
-        f2c_buffer_printf(&name, "f2c_transfer_%zu", index);
-        result = f2c_buffer_take(&name);
-    }
-
-done:
-    free(lower);
-    free(source_reference);
-    free(element_count);
-    return result;
-}
-
 static int lower_call(LoweredCall *lowered, Unit *unit, const Symbol *callee,
                       F2cExpr *const *argument_expressions, size_t count, int depth) {
     size_t i;
@@ -354,8 +284,7 @@ static int lower_call(LoweredCall *lowered, Unit *unit, const Symbol *callee,
     if (count == 0U)
         return 1;
     lowered->arguments = (char **)calloc(count, sizeof(*lowered->arguments));
-    lowered->owned_transfers = (unsigned char *)calloc(count, sizeof(*lowered->owned_transfers));
-    if (lowered->arguments == NULL || lowered->owned_transfers == NULL)
+    if (lowered->arguments == NULL)
         return 0;
     for (i = 0U; i < count; ++i) {
         F2cExpr *expression = argument_expressions != NULL ? argument_expressions[i] : NULL;
@@ -366,12 +295,8 @@ static int lower_call(LoweredCall *lowered, Unit *unit, const Symbol *callee,
                 return 0;
             continue;
         }
-        lowered->arguments[i] = lower_transfer_actual(lowered, unit, expression, i, depth + 1);
-        lowered->owned_transfers[i] = lowered->arguments[i] != NULL;
-        lowered->has_transfers |= lowered->owned_transfers[i];
-        if (lowered->arguments[i] == NULL)
-            lowered->arguments[i] =
-                lower_scalar_actual(lowered, unit, callee, expression, i, depth + 1);
+        lowered->arguments[i] =
+            lower_scalar_actual(lowered, unit, callee, expression, i, depth + 1);
         if (lowered->arguments[i] == NULL)
             return 0;
     }
@@ -439,7 +364,6 @@ static int prepare_array_conversions(LoweredCall *call, Unit *unit, F2cExpr *exp
 
 static void lowered_call_free(LoweredCall *call) {
     free_string_list(call->arguments, call->argument_count);
-    free(call->owned_transfers);
     free(f2c_buffer_take(&call->prelude));
     free(f2c_buffer_take(&call->postlude));
     memset(call, 0, sizeof(*call));
@@ -735,12 +659,6 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
     if (has_scope) {
         if (call.postlude.data != NULL)
             f2c_buffer_append(output, call.postlude.data);
-        for (i = 0U; i < count; ++i) {
-            if (!call.owned_transfers[i])
-                continue;
-            emit_indent(output, depth + 1);
-            f2c_buffer_printf(output, "free(f2c_transfer_%zu);\n", i);
-        }
         for (i = 0U; i < call.array_conversion_count; ++i) {
             emit_indent(output, depth + 1);
             f2c_buffer_printf(output, "free(f2c_array_conversion_%zu);\n", i);

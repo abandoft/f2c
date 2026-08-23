@@ -201,9 +201,6 @@ char *f2c_emit_intrinsic(const char *name, F2cIntrinsicId intrinsic, char **args
     (void)result_type;
     if (intrinsic == F2C_INTRINSIC_ISNAN) {
         f2c_buffer_printf(&result, "isnan(%s)", count != 0U ? args[0] : "0");
-    } else if (intrinsic == F2C_INTRINSIC_TRANSFER) {
-        f2c_buffer_printf(&result, "F2C_TRANSFER(%s, %s)", count >= 1U ? args[0] : "0",
-                          count >= 2U ? args[1] : "0");
     } else if (intrinsic == F2C_INTRINSIC_NULL) {
         f2c_buffer_append(&result, "NULL");
     } else if (intrinsic != F2C_INTRINSIC_NONE) {
