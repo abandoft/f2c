@@ -446,6 +446,19 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   `BACK/KIND`、可分配结果、任意已支持 rank、非连续/反向段、零大小维度和标准空集单位元；
   数组结果可嵌套在 elemental 表达式及另一归约中。严格 C17、生成端 ASan/UBSan 和原生 gfortran
   逐结果差分已进入默认 CTest。
+  `TRANSFER` 已从旧的标量 `_Generic` 特例迁入统一 typed intrinsic 与 transformational 管线：
+  结果 type/kind/派生类型、`SIZE` 决定的 rank-one 结果和数组 `MOLD` 的最小 extent 均保存在 AST
+  shape 中，关键字重排、负或非标量 `SIZE`、未知类型、未支持 kind 和多态实参在生成前诊断。
+  标量、数组、函数结果、数组构造器及反向非连续段 `SOURCE` 均按 Fortran 元素顺序只物化一次，
+  `SIZE` 只求值一次，`MOLD` 不作为值物化；零大小结果、大小乘法和 C/IR extent 范围均有显式保护。
+  标量与 rank-one 结果覆盖 INTEGER/LOGICAL kind 1/2/4/8、REAL/COMPLEX 已建模 kind、默认
+  CHARACTER、固定及延迟长度字符和派生类型；数组路径先按 `MOLD` 构造位传输结果，再执行目标数组
+  的 kind/类型转换或字符长度调整，避免把目标 C 类型误当成 intrinsic 结果表示。含可分配组件的
+  派生类型在普通赋值、过程实参、函数 `SOURCE`、嵌套 `MERGE` 和数组结果中统一深拷贝并按所有权
+  终结，代码生成不回写语义临时量规划。窄 kind 数组构造器同时改为保留首元素 kind，混合
+  type/kind 构造器会在普通语句及递归 I/O 项中硬失败。上述路径已由严格 C17、原生 gfortran
+  逐结果差分、ASan/UBSan、架构门禁及全量 CTest 覆盖。多态 `SOURCE/MOLD` 和非默认 CHARACTER
+  kind 当前仍明确硬失败，REAL/COMPLEX kind 16 还需完整目标 ABI 差分，因此本项保持未关闭。
   显式 `EXTERNAL` 的同名过程优先于内建函数。其他 F90 intrinsic 尚未全部完成，因此本项保持未关闭。
 - [ ] 让 `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/TRANSPOSE/MATMUL` 等支持任意合法数组
   表达式、所有已支持 kind/rank、零大小数组和非默认下界，而不是只接受具名整数组。上述 intrinsic
