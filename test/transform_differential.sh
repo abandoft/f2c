@@ -41,16 +41,19 @@ for fixture in transform_intrinsics transform_character_derived nested_transform
     "$CC" -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
         -Wstrict-prototypes -Wmissing-prototypes -Werror "$case_work/generated.c" -lm \
         -o "$case_work/generated"
-    if [ "$fixture" = transform_character_derived ] && [ "$GNU_FORTRAN_13" = true ]; then
-        # GNU Fortran 13 incorrectly diagnoses an initialized deferred-length character array
-        # when its BLOCK scope is finalized. Keep the diagnostic visible without weakening any
-        # other warning or any other compiler configuration.
-        "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror \
-            -Wno-error=uninitialized -J "$case_work" "$source" -o "$case_work/native"
-    else
-        "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -J "$case_work" "$source" \
-            -o "$case_work/native"
-    fi
+    case "$fixture:$GNU_FORTRAN_13" in
+        transform_character_derived:true|transfer_intrinsic:true)
+            # GNU Fortran 13 incorrectly diagnoses initialized deferred-length character arrays
+            # when their scope is finalized. Keep the diagnostic visible without weakening any
+            # other warning or any other compiler configuration.
+            "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror \
+                -Wno-error=uninitialized -J "$case_work" "$source" -o "$case_work/native"
+            ;;
+        *)
+            "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -J "$case_work" \
+                "$source" -o "$case_work/native"
+            ;;
+    esac
 
     "$case_work/generated" > "$case_work/generated.out"
     "$case_work/native" > "$case_work/native.out"
