@@ -78,6 +78,8 @@ set(
     src/ast/unit.h
     src/ast/visit.c
     src/codegen/allocation.c
+    src/codegen/allocation/model.c
+    src/codegen/allocation/private.h
     src/codegen/array.c
     src/codegen/array/assignment.c
     src/codegen/array/call.c
@@ -89,6 +91,8 @@ set(
     src/codegen/array/ownership.c
     src/codegen/array/private.h
     src/codegen/array/temporary.c
+    src/codegen/array/value.c
+    src/codegen/array/value.h
     src/codegen/call.c
     src/codegen/character.c
     src/codegen/codegen.h
@@ -648,6 +652,10 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_pointer_allocation_tests)
     add_test(NAME pointer_allocation_semantics COMMAND f2c_pointer_allocation_tests)
 
+    add_executable(f2c_allocation_model_tests test/test_allocation_model.c)
+    f2c_configure_test_target(f2c_allocation_model_tests)
+    add_test(NAME allocation_model_semantics COMMAND f2c_allocation_model_tests)
+
     add_executable(f2c_function_result_tests test/test_function_result.c)
     f2c_configure_test_target(f2c_function_result_tests)
     add_test(NAME function_result_semantics COMMAND f2c_function_result_tests)
@@ -844,6 +852,16 @@ if(F2C_BUILD_TESTING)
                         FC=${F2C_GFORTRAN_EXECUTABLE}
                         ${F2C_SH_EXECUTABLE}
                         ${CMAKE_CURRENT_SOURCE_DIR}/test/array_section_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
+                add_test(
+                    NAME allocation_model_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/allocation_model_differential.sh
                         $<TARGET_FILE:f2c>
                 )
                 add_test(
