@@ -66,6 +66,68 @@ static int allocation_type_compatible(const Symbol *target, const F2cExpr *value
            (target->kind == 0 || value->type_kind == 0 || target->kind == value->type_kind);
 }
 
+static int same_designator(const F2cExpr *left, const F2cExpr *right) {
+    size_t child;
+    if (left == NULL || right == NULL || left->kind != right->kind ||
+        left->child_count != right->child_count)
+        return 0;
+    if (left->symbol != NULL || right->symbol != NULL) {
+        if (left->symbol != right->symbol)
+            return 0;
+    } else if ((left->text == NULL) != (right->text == NULL) ||
+               (left->text != NULL && strcmp(left->text, right->text) != 0)) {
+        return 0;
+    }
+    for (child = 0U; child < left->child_count; ++child)
+        if (!same_designator(left->children[child], right->children[child]))
+            return 0;
+    return 1;
+}
+
+static int same_allocation_object(const F2cExpr *candidate, const F2cExpr *target) {
+    if (candidate == NULL || target == NULL || candidate->symbol == NULL ||
+        target->symbol == NULL || candidate->symbol != target->symbol)
+        return 0;
+    if (target->kind != F2C_EXPR_COMPONENT)
+        return candidate->kind == F2C_EXPR_NAME || candidate->kind == F2C_EXPR_ARRAY_REFERENCE;
+    return candidate->kind == F2C_EXPR_COMPONENT && candidate->child_count != 0U &&
+           target->child_count != 0U &&
+           same_designator(candidate->children[0], target->children[0]);
+}
+
+static const F2cExpr *allocation_object_reference(const F2cExpr *expression,
+                                                  const F2cStatement *statement) {
+    size_t item;
+    size_t child;
+    if (expression == NULL || statement == NULL)
+        return NULL;
+    for (item = 0U; item < statement->item_count; ++item) {
+        const F2cExpr *target = statement->arguments != NULL ? statement->arguments[item] : NULL;
+        if (target != NULL && target->kind != F2C_EXPR_KEYWORD_ARGUMENT &&
+            same_allocation_object(expression, target))
+            return target;
+    }
+    for (child = 0U; child < expression->child_count; ++child) {
+        const F2cExpr *reference =
+            allocation_object_reference(expression->children[child], statement);
+        if (reference != NULL)
+            return reference;
+    }
+    return NULL;
+}
+
+static void validate_allocation_dependency(Context *context, const F2cStatement *statement,
+                                           const F2cExpr *expression, const char *role) {
+    const F2cExpr *target = allocation_object_reference(expression, statement);
+    if (target == NULL)
+        return;
+    f2c_diagnostic_at(context, statement->line,
+                      f2c_validation_expression_start_column(statement->text, expression), 1,
+                      "%s in ALLOCATE must not depend on allocate-object '%s' in the same "
+                      "statement",
+                      role, target->symbol != NULL ? target->symbol->name : "<unknown>");
+}
+
 void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *statement) {
     const int allocating = statement->kind == F2C_STMT_ALLOCATE;
     F2cExpr *source = allocating ? allocation_keyword_value(statement, "source") : NULL;
@@ -82,7 +144,7 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
         f2c_diagnostic_at(context, statement->line, 1U, 1,
                           "ALLOCATE cannot specify both SOURCE= and MOLD=");
     }
-    if (model != NULL && statement->allocation_character_length != NULL) {
+    if (model != NULL && statement->allocation_has_type_spec) {
         f2c_diagnostic_at(context, statement->line, 1U, 1,
                           "ALLOCATE type specification cannot be combined with SOURCE=/MOLD=");
     }
@@ -165,11 +227,6 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
                         context, statement->line,
                         f2c_validation_expression_start_column(statement->text, argument), 1,
                         "%s= in ALLOCATE requires an expression", keyword);
-                } else if (value->rank != 0U && value->kind != F2C_EXPR_NAME) {
-                    f2c_diagnostic_at(
-                        context, statement->line,
-                        f2c_validation_expression_start_column(statement->text, value), 1,
-                        "array %s= currently requires a whole named array", keyword);
                 }
             } else {
                 f2c_diagnostic_at(context, statement->line,
@@ -220,7 +277,7 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
                               target->child_count, symbol->rank);
         }
         if (allocating && target->kind == F2C_EXPR_COMPONENT && symbol->rank != 0U &&
-            target->child_count != symbol->rank + 1U) {
+            target->child_count != 1U && target->child_count != symbol->rank + 1U) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, target), 1,
                               "ALLOCATE component '%s' has %zu bounds but rank %zu", symbol->name,
@@ -253,14 +310,18 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
                                   f2c_validation_expression_start_column(statement->text, model), 1,
                                   "%s= rank %zu is incompatible with scalar target '%s'",
                                   source != NULL ? "SOURCE" : "MOLD", model->rank, symbol->name);
-            } else if (symbol->rank != 0U && target->kind == F2C_EXPR_NAME &&
+            } else if (symbol->rank != 0U &&
+                       (target->kind == F2C_EXPR_NAME ||
+                        (target->kind == F2C_EXPR_COMPONENT && target->child_count == 1U)) &&
                        model->rank != symbol->rank) {
                 f2c_diagnostic_at(context, statement->line,
                                   f2c_validation_expression_start_column(statement->text, model), 1,
                                   "%s= must provide rank-%zu shape for target '%s' without "
                                   "explicit bounds",
                                   source != NULL ? "SOURCE" : "MOLD", symbol->rank, symbol->name);
-            } else if (symbol->rank != 0U && target->kind == F2C_EXPR_ARRAY_REFERENCE &&
+            } else if (symbol->rank != 0U &&
+                       (target->kind == F2C_EXPR_ARRAY_REFERENCE ||
+                        (target->kind == F2C_EXPR_COMPONENT && target->child_count > 1U)) &&
                        model->rank != 0U && model->rank != symbol->rank) {
                 f2c_diagnostic_at(context, statement->line,
                                   f2c_validation_expression_start_column(statement->text, model), 1,
@@ -289,9 +350,27 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
         f2c_diagnostic_at(context, statement->line, 1U, 1, "%s requires at least one target",
                           allocating ? "ALLOCATE" : "DEALLOCATE");
     }
-    if (model != NULL && target_count != 1U) {
-        f2c_diagnostic_at(context, statement->line, 1U, 1,
-                          "ALLOCATE with SOURCE=/MOLD= currently requires exactly one target");
+    if (model != NULL)
+        validate_allocation_dependency(context, statement, model,
+                                       source != NULL ? "SOURCE= expression" : "MOLD= expression");
+    if (statement->allocation_character_length != NULL)
+        validate_allocation_dependency(context, statement, statement->allocation_character_length,
+                                       "type parameter expression");
+    for (i = 0U; i < statement->item_count; ++i) {
+        const F2cExpr *target = statement->arguments != NULL ? statement->arguments[i] : NULL;
+        size_t first_bound;
+        size_t bound;
+        if (target == NULL || target->kind == F2C_EXPR_KEYWORD_ARGUMENT)
+            continue;
+        first_bound = target->kind == F2C_EXPR_COMPONENT ? 1U : 0U;
+        if (target->kind != F2C_EXPR_ARRAY_REFERENCE && target->kind != F2C_EXPR_COMPONENT)
+            continue;
+        for (bound = first_bound; bound < target->child_count; ++bound)
+            validate_allocation_dependency(context, statement, target->children[bound],
+                                           "bound expression");
+        if (target->kind == F2C_EXPR_COMPONENT && target->child_count != 0U)
+            validate_allocation_dependency(context, statement, target->children[0],
+                                           "allocate-object designator");
     }
     if (errmsg != NULL && stat_count == 0U) {
         f2c_diagnostic_at(context, statement->line,
