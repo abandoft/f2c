@@ -296,7 +296,7 @@ int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStateme
     ++depth;
     if (namelist_group != NULL) {
         if (!f2c_io_emit_namelist(context, unit, "f2c_io_file", namelist_group, input,
-                                  "f2c_io_unit", depth))
+                                  "f2c_io_unit", "f2c_io_status", depth))
             goto cleanup;
     } else if (explicit_format) {
         if (!f2c_io_emit_formatted_transfer(context, unit, statement, format_control, "f2c_io_file",

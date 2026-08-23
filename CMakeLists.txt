@@ -140,6 +140,8 @@ set(
     src/codegen/io/format_control.c
     src/codegen/io/formatted.c
     src/codegen/io/namelist.c
+    src/codegen/io/namelist/support.c
+    src/codegen/io/namelist/transaction.c
     src/codegen/io/private.h
     src/codegen/io/program.c
     src/codegen/io/support.c
@@ -179,6 +181,7 @@ set(
     src/codegen/transform/private.h
     src/codegen/transform/view.c
     src/codegen/type/derived.c
+    src/codegen/type/namelist.c
     src/codegen/unit.c
     src/codegen/unit/automatic.c
     src/codegen/unit/data.c

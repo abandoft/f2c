@@ -221,7 +221,10 @@ int f2c_io_emit_defined_io_call(Context *context, const char *value, F2cDerivedT
     }
     if (status != NULL) {
         f2c_io_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "if (f2c_dtio_iostat != 0) %s = 0;\n", status);
+        f2c_buffer_printf(&context->output,
+                          "if (f2c_dtio_iostat != 0) %s = f2c_dtio_iostat == -1 ? EOF : "
+                          "f2c_dtio_iostat < 0 ? -2 : F2C_IO_STATUS_RECORD;\n",
+                          status);
     }
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
@@ -461,7 +464,8 @@ void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cI
                                       "f2c_unaligned_io_address);\n",
                                       f2c_symbol_c_type(symbol), suffix);
                     f2c_io_emit_namelist_value(context, unit, file, symbol,
-                                               "f2c_unaligned_io_value", NULL, 1, depth + 2);
+                                               "f2c_unaligned_io_value", NULL, 1, status,
+                                               depth + 2);
                     f2c_io_indent(&context->output, depth + 2);
                     f2c_buffer_printf(&context->output,
                                       "f2c_unaligned_store_%s(f2c_unaligned_io_address, "
@@ -473,7 +477,7 @@ void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cI
                     f2c_io_emit_namelist_value(context, unit, file, symbol,
                                                value.data != NULL ? value.data
                                                                   : f2c_symbol_c_name(unit, symbol),
-                                               NULL, 1, depth + 1);
+                                               NULL, 1, status, depth + 1);
                 }
                 free(unaligned_address);
                 free(value.data);

@@ -30,10 +30,15 @@ const F2cIoControl *f2c_io_control(const F2cStatement *statement, F2cIoControlKi
                                    size_t positional);
 void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
                                 const Symbol *symbol, const char *value,
-                                const char *character_length_override, int input, int depth);
+                                const char *character_length_override, int input,
+                                const char *status, int depth);
 int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
                          const F2cNamelistGroup *group, int input, const char *unit_number,
-                         int depth);
+                         const char *status, int depth);
+int f2c_io_begin_namelist_transaction(Context *context, Unit *unit, const F2cNamelistGroup *group,
+                                      const char *status, int depth);
+int f2c_io_end_namelist_transaction(Context *context, Unit *unit, const F2cNamelistGroup *group,
+                                    const char *status, int depth);
 void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *item, int input,
                                 const char *unit_number, int depth);
 int f2c_io_emit_formatted_transfer(Context *context, Unit *unit, const F2cStatement *statement,

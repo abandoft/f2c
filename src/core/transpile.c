@@ -21,6 +21,7 @@ static int extension_equals(const char *extension, const char *expected) {
 typedef struct F2cRequiredFeatures {
     int complex_values;
     int transfer;
+    int namelist;
     int maxloc;
     int maxval;
     int reduction;
@@ -105,6 +106,8 @@ static void collect_unit_features(Unit *unit, F2cRequiredFeatures *features) {
     size_t dimension;
     if (unit->return_type == TYPE_COMPLEX || unit->return_type == TYPE_DOUBLE_COMPLEX)
         features->complex_values = 1;
+    if (unit->namelist_count != 0U)
+        features->namelist = 1;
     for (i = 0U; i < unit->symbol_count; ++i) {
         Symbol *symbol = &unit->symbols[i];
         if (symbol->type == TYPE_COMPLEX || symbol->type == TYPE_DOUBLE_COMPLEX)
@@ -255,6 +258,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             features.complex_values = 1;
         const int needs_complex = features.complex_values;
         const int needs_transfer = features.transfer;
+        const int needs_namelist = features.namelist;
         const int needs_maxloc = features.maxloc;
         const int needs_maxval = features.maxval;
         const int needs_reduction = features.reduction;
@@ -275,16 +279,16 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             f2c_buffer_append(&context.output, "#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)\n"
                                                "#define _POSIX_C_SOURCE 200809L\n"
                                                "#endif\n");
-        f2c_buffer_append(
-            &context.output,
-            "#if !defined(__STDC_VERSION__) || __STDC_VERSION__ < 201710L\n"
-            "#error \"f2c-generated code requires ISO C17 or newer\"\n"
-            "#endif\n"
-            "#include <stdbool.h>\n#include <stddef.h>\n#include "
-            "<stdint.h>\n#include <stdio.h>\n#include <limits.h>\n#include <stdarg.h>\n#include "
-            "<ctype.h>\n#include "
-            "<stdlib.h>\n#include <string.h>\n#include <float.h>\n#include <time.h>\n"
-            "#include <math.h>\n");
+        f2c_buffer_append(&context.output,
+                          "#if !defined(__STDC_VERSION__) || __STDC_VERSION__ < 201710L\n"
+                          "#error \"f2c-generated code requires ISO C17 or newer\"\n"
+                          "#endif\n"
+                          "#include <stdbool.h>\n#include <stddef.h>\n#include "
+                          "<stdint.h>\n#include <stdio.h>\n#include <limits.h>\n#include "
+                          "<errno.h>\n#include <stdarg.h>\n#include "
+                          "<ctype.h>\n#include "
+                          "<stdlib.h>\n#include <string.h>\n#include <float.h>\n#include <time.h>\n"
+                          "#include <math.h>\n");
         if (needs_complex) {
             f2c_buffer_append(&context.output, "#include <complex.h>\n");
         }
@@ -846,11 +850,13 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             f2c_emit_record_io_support(&context.output);
             f2c_emit_list_io_support(&context.output, needs_complex);
             f2c_emit_namelist_support(&context);
+            if (needs_namelist)
+                f2c_emit_namelist_transaction_support(&context);
             f2c_emit_format_support(&context);
         }
         f2c_buffer_append(&context.output, "\n");
         f2c_emit_common_blocks(&context);
-        f2c_emit_derived_types(&context, needs_transfer);
+        f2c_emit_derived_types(&context, needs_transfer, needs_namelist);
         f2c_emit_project_modules(&context);
         f2c_emit_prototypes(&context);
         f2c_emit_interface_header(&context);

@@ -5,7 +5,7 @@
 
 void f2c_emit_supported_modules(Context *context);
 void f2c_emit_project_modules(Context *context);
-void f2c_emit_derived_types(Context *context, int needs_transfer);
+void f2c_emit_derived_types(Context *context, int needs_transfer, int needs_namelist);
 void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, const char *name);
 int f2c_emit_host_capture_statement_descriptors(Buffer *prelude, Buffer *postlude, Unit *caller,
                                                 const Unit *procedure, int depth);
@@ -114,6 +114,9 @@ int f2c_emit_move_alloc_statement(Context *context, Unit *unit, const F2cStateme
 int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                   int input, int depth);
 void f2c_emit_namelist_support(Context *context);
+void f2c_emit_namelist_transaction_support(Context *context);
+void f2c_emit_namelist_type_prototypes(Context *context);
+void f2c_emit_namelist_type_definitions(Context *context);
 void f2c_emit_format_support(Context *context);
 int f2c_emit_print_statement(Context *context, Unit *unit, const F2cStatement *statement,
                              int depth);
