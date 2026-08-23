@@ -230,6 +230,16 @@ static char *component_count(Unit *unit, Symbol *component, const char *object) 
     return f2c_buffer_take(&result);
 }
 
+static char *component_character_length(Unit *unit, const Symbol *component, const char *object) {
+    Buffer result = {0};
+    if (component->deferred_character) {
+        f2c_buffer_printf(&result, "(size_t)%s->%s_character_length", object,
+                          f2c_symbol_c_name(unit, component));
+        return f2c_buffer_take(&result);
+    }
+    return f2c_symbol_character_length(unit, component);
+}
+
 static const char *procedure_parameter_type(const Symbol *procedure, size_t parameter) {
     if (procedure->external_parameter_types[parameter] == TYPE_DERIVED &&
         procedure->external_parameter_derived_types[parameter] != NULL)
@@ -555,6 +565,10 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                 const char *name = f2c_symbol_c_name(unit, component);
                 if (component->allocatable) {
                     char *count = component_count(unit, component, "source");
+                    char *character_length =
+                        component->type == TYPE_CHARACTER
+                            ? component_character_length(unit, component, "source")
+                            : NULL;
                     f2c_buffer_printf(&context->output, "    if (source->%s != NULL) {\n", name);
                     for (size_t dimension = 0U; dimension < component->rank; ++dimension)
                         f2c_buffer_printf(&context->output,
@@ -568,25 +582,41 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                                           "        temporary.%s_character_length = "
                                           "source->%s_character_length;\n",
                                           name, name);
-                    f2c_buffer_printf(
-                        &context->output,
-                        "        const size_t count = %s; if (count > SIZE_MAX / sizeof(%s)) "
-                        "abort(); temporary.%s = (%s *)calloc(count == 0U ? 1U : count, "
-                        "sizeof(%s)); if (temporary.%s == NULL) abort();\n",
-                        count != NULL ? count : "0U", f2c_symbol_c_type(component), name,
-                        f2c_symbol_c_type(component), f2c_symbol_c_type(component), name);
+                    if (component->type == TYPE_CHARACTER) {
+                        f2c_buffer_printf(
+                            &context->output,
+                            "        const size_t count = %s; const size_t length = "
+                            "(size_t)(%s); if (length != 0U && count > SIZE_MAX / length) "
+                            "abort(); const size_t bytes = count * length; temporary.%s = "
+                            "(%s *)malloc(bytes == 0U ? 1U : bytes); if (temporary.%s == NULL) "
+                            "abort(); if (bytes != 0U) memmove(temporary.%s, source->%s, "
+                            "bytes);\n",
+                            count != NULL ? count : "0U",
+                            character_length != NULL ? character_length : "0U", name,
+                            f2c_symbol_c_type(component), name, name, name);
+                    } else {
+                        f2c_buffer_printf(
+                            &context->output,
+                            "        const size_t count = %s; if (count > SIZE_MAX / "
+                            "sizeof(%s)) abort(); temporary.%s = (%s *)calloc("
+                            "count == 0U ? 1U : count, sizeof(%s)); if (temporary.%s == NULL) "
+                            "abort();\n",
+                            count != NULL ? count : "0U", f2c_symbol_c_type(component), name,
+                            f2c_symbol_c_type(component), f2c_symbol_c_type(component), name);
+                    }
                     if (component->type == TYPE_DERIVED && component->derived_type != NULL)
                         f2c_buffer_printf(&context->output,
                                           "        for (size_t i = 0U; i < count; ++i) "
                                           "f2c_clone_%s(&temporary.%s[i], &source->%s[i]);\n",
                                           component->derived_type->c_name, name, name);
-                    else
+                    else if (component->type != TYPE_CHARACTER)
                         f2c_buffer_printf(&context->output,
                                           "        if (count != 0U) memmove(temporary.%s, "
                                           "source->%s, count * sizeof(%s));\n",
                                           name, name, f2c_symbol_c_type(component));
                     f2c_buffer_append(&context->output, "    }\n");
                     free(count);
+                    free(character_length);
                 } else if (component->pointer) {
                     f2c_buffer_printf(&context->output, "    temporary.%s = source->%s;\n", name,
                                       name);
@@ -759,7 +789,7 @@ static void emit_transfer_wrappers(Context *context, Units *units) {
     }
 }
 
-void f2c_emit_derived_types(Context *context, int needs_transfer) {
+void f2c_emit_derived_types(Context *context, int needs_transfer, int needs_namelist) {
     uint64_t next_identifier = UINT64_C(1);
     emit_type_identifiers(context, &context->modules, &next_identifier);
     emit_type_identifiers(context, &context->units, &next_identifier);
@@ -771,6 +801,8 @@ void f2c_emit_derived_types(Context *context, int needs_transfer) {
     emit_unit_types(context, &context->units);
     emit_lifecycle_prototypes(context, &context->modules);
     emit_lifecycle_prototypes(context, &context->units);
+    if (needs_namelist)
+        f2c_emit_namelist_type_prototypes(context);
     if (needs_transfer) {
         emit_transfer_wrappers(context, &context->modules);
         emit_transfer_wrappers(context, &context->units);
@@ -783,4 +815,6 @@ void f2c_emit_derived_types(Context *context, int needs_transfer) {
     emit_lifecycle_definitions(context, &context->units);
     emit_dynamic_destroy_definitions(context, &context->modules);
     emit_dynamic_destroy_definitions(context, &context->units);
+    if (needs_namelist)
+        f2c_emit_namelist_type_definitions(context);
 }
