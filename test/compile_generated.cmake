@@ -83,6 +83,7 @@ foreach(
        derived_namelist
        dynamic_derived_namelist
        namelist_auto_allocate
+       namelist_whole_auto_allocate
        namelist_transaction
        nonadvancing_io
        file_control

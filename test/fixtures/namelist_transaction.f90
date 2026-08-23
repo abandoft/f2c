@@ -79,6 +79,18 @@ program namelist_transaction
   read(record, nml=snapshot, iostat=status)
   if (status == 0 .or. state%code /= 10 .or. allocated(vacant)) stop 20
 
+  record = '&snapshot state%code=115, numbers(2:1:0)=1,2 /'
+  read(record, nml=snapshot, iostat=status)
+  if (status == 0 .or. state%code /= 10 .or. any(numbers /= [40, 41])) stop 23
+
+  record = "&snapshot state%code=116, state%label(2:99)='broken' /"
+  read(record, nml=snapshot, iostat=status)
+  if (status == 0 .or. state%code /= 10 .or. state%label /= 'safe') stop 24
+
+  record = '&snapshot state%code=117, numbers=1,2,3 /'
+  read(record, nml=snapshot, iostat=status)
+  if (status == 0 .or. state%code /= 10 .or. any(numbers /= [40, 41])) stop 25
+
   record = '&snapshot state%code=210, state%items(1)%id=220, ' // &
            'state%items(1)%values(1)=221, state%items(1)%values(2)=222, ' // &
            'state%link%id=230, state%link%values(1)=231, ' // &
