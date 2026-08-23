@@ -52,8 +52,6 @@ Type f2c_resolve_intrinsic_type(const char *name, const Type *arguments, size_t 
         Type generated = generated_intrinsic_type(name, result);
         if (generated != TYPE_UNKNOWN)
             return generated;
-        if (strcmp(name, "F2C_TRANSFER") == 0)
-            return count >= 2U && arguments != NULL ? arguments[1] : TYPE_UNKNOWN;
         if (strcmp(name, "F2C_FORTRAN_MAX") == 0 || strcmp(name, "F2C_FORTRAN_MIN") == 0) {
             for (argument = 1U; argument < count; ++argument)
                 result = f2c_common_numeric_type(result, arguments[argument]);
@@ -153,8 +151,9 @@ size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, s
         return first != NULL ? first->rank : 0U;
     }
     if (signature->rank_rule == F2C_INTRINSIC_RANK_MOLD) {
-        const F2cExpr *mold = count >= 2U ? argument_value(arguments[1]) : NULL;
-        return count >= 3U ? 1U : (mold != NULL ? mold->rank : 0U);
+        const F2cExpr *mold = f2c_intrinsic_argument(arguments, count, "mold", 1U);
+        const F2cExpr *size = f2c_intrinsic_argument(arguments, count, "size", 2U);
+        return size != NULL || (mold != NULL && mold->rank != 0U) ? 1U : 0U;
     }
     for (argument = 0U; argument < count; ++argument) {
         const F2cExpr *value = argument_value(arguments[argument]);
@@ -228,6 +227,12 @@ int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size
     const F2cExpr *first;
     if (signature == NULL)
         return 0;
+    if (signature->id == F2C_INTRINSIC_TRANSFER) {
+        const F2cExpr *mold = f2c_intrinsic_argument(arguments, count, "mold", 1U);
+        return mold != NULL
+                   ? (mold->type_kind != 0 ? mold->type_kind : f2c_default_kind(mold->type))
+                   : 0;
+    }
     if (signature->kind_rule == F2C_INTRINSIC_KIND_DEFAULT)
         return f2c_default_kind(f2c_resolve_intrinsic_type(name, NULL, 0U));
     if (signature->kind_rule == F2C_INTRINSIC_KIND_OPTIONAL)
