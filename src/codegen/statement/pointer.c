@@ -332,6 +332,18 @@ cleanup:
     return success;
 }
 
+static void emit_scalar_pointer_store(Context *context, const F2cStatement *statement,
+                                      const char *pointer_name, const char *target_address,
+                                      int depth) {
+    const Symbol *pointer = statement->left != NULL ? statement->left->symbol : NULL;
+    indent(&context->output, depth);
+    if (pointer != NULL && pointer->polymorphic && pointer->type == TYPE_DERIVED)
+        f2c_buffer_printf(&context->output, "%s = (%s *)(void *)(%s);\n", pointer_name,
+                          f2c_symbol_c_type(pointer), target_address);
+    else
+        f2c_buffer_printf(&context->output, "%s = %s;\n", pointer_name, target_address);
+}
+
 static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
                                           const F2cStatement *statement, const char *pointer_name,
                                           size_t line, int depth) {
@@ -359,13 +371,17 @@ static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
         free(target_deallocatable);
         return 0;
     }
-    indent(&context->output, depth);
     if (null_target) {
+        indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "%s = NULL;\n", pointer_name);
     } else if (target_code != NULL) {
-        f2c_buffer_printf(&context->output, "%s = &(%s);\n", pointer_name, target_code);
+        Buffer target_address = {0};
+        f2c_buffer_printf(&target_address, "&(%s)", target_code);
+        emit_scalar_pointer_store(context, statement, pointer_name, target_address.data, depth);
+        free(target_address.data);
     } else if (target_expression != NULL && target_expression->kind == F2C_EXPR_COMPONENT) {
         char *target_designator = f2c_descriptor_storage_designator(unit, target_expression);
+        Buffer target_address = {0};
         if (target_designator == NULL) {
             free(target_code);
             free(deallocatable_name);
@@ -373,17 +389,22 @@ static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
             return 0;
         }
         f2c_buffer_printf(
-            &context->output, "%s = %s%s;\n", pointer_name,
+            &target_address, "%s%s",
             target->pointer || target->allocatable || target->type == TYPE_CHARACTER ? "" : "&",
             target_designator);
+        emit_scalar_pointer_store(context, statement, pointer_name, target_address.data, depth);
+        free(target_address.data);
         free(target_designator);
     } else if (target != NULL) {
-        f2c_buffer_printf(&context->output, "%s = %s%s;\n", pointer_name,
+        Buffer target_address = {0};
+        f2c_buffer_printf(&target_address, "%s%s",
                           target->pointer || target->allocatable || target->argument ||
                                   target->type == TYPE_CHARACTER
                               ? ""
                               : "&",
                           f2c_symbol_c_name(unit, target));
+        emit_scalar_pointer_store(context, statement, pointer_name, target_address.data, depth);
+        free(target_address.data);
     } else {
         free(target_code);
         free(deallocatable_name);

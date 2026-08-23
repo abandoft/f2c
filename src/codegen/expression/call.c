@@ -39,6 +39,15 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
         return NULL;
     if (actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
+    symbol = actual->symbol;
+    if (symbol != NULL && actual->type == TYPE_DERIVED && actual->rank == 0U &&
+        (symbol->pointer || symbol->allocatable) &&
+        (actual->kind == F2C_EXPR_NAME || actual->kind == F2C_EXPR_COMPONENT)) {
+        char *storage = f2c_descriptor_storage_designator(unit, actual);
+        if (storage == NULL)
+            *supported = 0;
+        return storage;
+    }
     if (f2c_lowering_argument_materialized(unit, actual)) {
         if (actual->rank != 0U || actual->type == TYPE_DERIVED || actual->type == TYPE_UNKNOWN) {
             *supported = 0;
@@ -49,7 +58,6 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
         f2c_buffer_printf(&result, "&%s", code);
         return f2c_buffer_take(&result);
     }
-    symbol = actual->symbol;
     if (symbol != NULL && symbol->equivalence_unaligned) {
         if (actual->rank != 0U ||
             (actual->kind != F2C_EXPR_NAME && actual->kind != F2C_EXPR_ARRAY_REFERENCE)) {
@@ -91,6 +99,10 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
     }
     if (actual->type == TYPE_CHARACTER)
         return f2c_strdup(code);
+    if (actual->type == TYPE_DERIVED && actual->definable) {
+        f2c_buffer_printf(&result, "&(%s)", code);
+        return f2c_buffer_take(&result);
+    }
     if (actual->type == TYPE_DERIVED && !actual->definable)
         return f2c_expression_derived_actual_pointer(unit, actual, supported);
     return f2c_emit_scalar_temporary_address(
@@ -404,7 +416,8 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
                 f2c_buffer_printf(&result, "((size_t)(%s) == (size_t)(%s) && %s == %s)",
                                   pointer_length, target_length, pointer_storage, target_storage);
             } else {
-                f2c_buffer_printf(&result, "(%s == %s)", pointer_storage, target_storage);
+                f2c_buffer_printf(&result, "((const void *)(%s) == (const void *)(%s))",
+                                  pointer_storage, target_storage);
             }
             free(pointer_length);
             free(target_length);

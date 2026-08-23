@@ -210,6 +210,11 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
         call->has_temporaries = 1;
         return f2c_buffer_take(&reference);
     }
+    if (ast->type == TYPE_DERIVED && ast->rank == 0U && ast->symbol != NULL &&
+        (ast->symbol->pointer || ast->symbol->allocatable) &&
+        (ast->kind == F2C_EXPR_NAME || ast->kind == F2C_EXPR_COMPONENT)) {
+        return f2c_descriptor_storage_designator(unit, ast);
+    }
     if (ast->type == TYPE_DERIVED && ast->derived_type != NULL && !ast->definable) {
         Buffer name = {0};
         Buffer reference = {0};
@@ -263,6 +268,8 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
                 f2c_buffer_printf(&lowered, "&%s", code);
         } else if (ast->type == TYPE_CHARACTER) {
             result = f2c_strdup(code);
+        } else if (ast->type == TYPE_DERIVED && ast->definable) {
+            f2c_buffer_printf(&lowered, "&(%s)", code);
         } else {
             result = f2c_emit_scalar_temporary_address(
                 ast->type != TYPE_UNKNOWN ? f2c_expression_c_type(ast) : f2c_c_type(TYPE_REAL),
