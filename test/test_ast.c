@@ -63,7 +63,7 @@ cleanup:
 }
 
 static void test_kind_shape_and_value_category(void) {
-    Symbol symbols[3];
+    Symbol symbols[4];
     Unit unit;
     Unit function;
     F2cExpr *expression;
@@ -86,8 +86,10 @@ static void test_kind_shape_and_value_category(void) {
     symbols[1].value_category = F2C_VALUE_CONSTANT;
     add_symbol(symbols, 2U, "wide", TYPE_REAL, 0U, 0);
     symbols[2].kind = 16;
+    add_symbol(symbols, 3U, "narrow_logical", TYPE_LOGICAL, 0U, 0);
+    symbols[3].kind = 1;
     unit.symbols = symbols;
-    unit.symbol_count = 3U;
+    unit.symbol_count = 4U;
 
     expect(symbols[0].shape.kind == F2C_SHAPE_ASSUMED_SHAPE && symbols[0].shape.rank == 2U,
            "symbol shape distinguishes assumed-shape from explicit-shape arrays");
@@ -109,6 +111,12 @@ static void test_kind_shape_and_value_category(void) {
                expression->children[0]->value_category == F2C_VALUE_VARIABLE &&
                expression->children[1]->value_category == F2C_VALUE_CONSTANT,
            "AST distinguishes variables, named constants, and temporary values");
+    f2c_expr_free(expression);
+
+    expression = f2c_parse_expression_ast(&unit, "[narrow_logical]", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->type == TYPE_LOGICAL &&
+               expression->type_kind == 1,
+           "array constructors preserve kinds narrower than the default kind");
     f2c_expr_free(expression);
 
     expression = f2c_parse_expression_ast(&unit, "matrix(2:5, 1) + wide", &error_at);
