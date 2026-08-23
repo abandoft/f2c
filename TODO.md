@@ -220,7 +220,14 @@
   再次分配已关联指针会按标准创建新目标，完整目标别名继承释放能力，而普通 `TARGET`、可分配实体、
   数组元素和数组段不会被错误交给 `free`。`STAT/ERRMSG`、重复释放、跨过程回写、rank-specific FINAL、
   派生类型 `SOURCE=` 深复制和 deferred CHARACTER 定长赋值均有严格 C17、sanitizer 与 gfortran
-  差分。数组指针左侧现支持逐维 bounds specification 和跨 rank bounds remapping；下界与上界只
+  差分。`ALLOCATE(SOURCE=/MOLD=)` 已移除“单目标/完整命名数组”限制：多目标会共享一次求值的
+  模型快照，数组段、数组构造器、elemental/transformational 表达式和数组函数结果统一携带逐维
+  extent，完整数组保留原下界而其他数组表达式使用标准下界 1；标量 `SOURCE` 广播、CHARACTER
+  元素长度、含可分配组件派生数组的逐元素深复制、动态显式 shape 合形检查及未分配/未关联模型的
+  `STAT/ERRMSG` 无提交失败均已覆盖。语义分析会按具体父对象区分派生组件，并拒绝模型、类型参数、
+  bounds 或 allocate-object designator 依赖同一语句内任一待分配对象。严格 C17、ASan/UBSan 和
+  原生 gfortran 差分覆盖数值、字符、派生类型、反向段、`PACK`、数组函数及未定义值 `MOLD`。
+  数组指针左侧现支持逐维 bounds specification 和跨 rank bounds remapping；下界与上界只
   求值一次，目标元素数、连续性、整数范围及 stride 溢出均受保护。`CONTIGUOUS` 已进入声明、模块
   导入、显式接口兼容、描述符入口、指针关联和过程调用契约；普通 `CALL` 覆盖现有可物化类型，函数
   表达式覆盖数值及 CHARACTER 数组段。`ASSOCIATED(pointer,target)` 已支持关键字参数、标量元素、
@@ -765,7 +772,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 完成标量和数组的所有 FINAL 过程选择、父子类型终结顺序、可分配/指针组件递归清理，以及
   正常返回、错误分支、重分配、赋值、构造和跨作用域跳转的全部终结时机。
 - [ ] 完成可分配哑实参/函数结果、可分配派生组件、动态多态分配、`SOURCE/MOLD`、`MOVE_ALLOC`
-  和深复制/移动的异常安全语义。
+  和深复制/移动的异常安全语义。非多态 `SOURCE/MOLD` 的多目标、完整表达式 shape/value 快照、
+  CHARACTER 长度、派生动态组件深复制、对象依赖约束和不可用模型状态恢复已经完成；仍需把动态
+  类型标签/延迟类型参数、可注入分配失败以及部分成功后的逐对象回滚纳入统一 typed cleanup plan。
 - [ ] 完成定义 I/O、完整派生类型 NAMELIST、`FLUSH`、异步 I/O、`WAIT`、stream access、
   `NEWUNIT` 和外部文件非前进 I/O 的全部边界语义。当前定义格式化/非格式化绑定已接入统一记录
   状态机，未定义 I/O 的静态组件派生对象可按声明顺序传输；动态组件必须使用适用绑定并在生成前
