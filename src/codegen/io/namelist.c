@@ -8,6 +8,31 @@ void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
                                 const Symbol *symbol, const char *value,
                                 const char *character_length_override, int input,
                                 const char *status, int depth) {
+    const char *io_file = file;
+    if (input) {
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "{\n");
+        ++depth;
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output,
+                          "f2c_io_stream f2c_namelist_item_file;\n");
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output,
+                          "const f2c_namelist_item_status f2c_namelist_item = "
+                          "f2c_namelist_cursor_next(&f2c_namelist_cursor, "
+                          "&f2c_namelist_item_file);\n");
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output,
+                          "if (%s == F2C_IO_STATUS_OK && (f2c_namelist_item == "
+                          "F2C_NAMELIST_ITEM_ERROR || f2c_namelist_item == "
+                          "F2C_NAMELIST_ITEM_END)) %s = F2C_IO_STATUS_RECORD;\n",
+                          status, status);
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output,
+                          "if (f2c_namelist_item == F2C_NAMELIST_ITEM_VALUE) {\n");
+        ++depth;
+        io_file = "&f2c_namelist_item_file";
+    }
     if (symbol->type == TYPE_CHARACTER) {
         char *owned_length =
             character_length_override == NULL ? f2c_symbol_character_length(unit, symbol) : NULL;
@@ -19,7 +44,7 @@ void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
             f2c_buffer_printf(&context->output,
                               "%s = f2c_namelist_read_status("
                               "f2c_read_character(%s, %s, (size_t)(%s)));\n",
-                              status, file, value, length);
+                              status, io_file, value, length);
         } else {
             f2c_buffer_printf(&context->output,
                               "f2c_namelist_write_character(%s, %s, (size_t)(%s));\n", file, value,
@@ -35,7 +60,7 @@ void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
                               "f2c_read_bool(%s, &f2c_namelist_logical); %s = "
                               "f2c_namelist_read_status(f2c_namelist_read); if ("
                               "f2c_namelist_read > 0) %s = f2c_namelist_logical ? 1 : 0; }\n",
-                              file, status, value);
+                              io_file, status, value);
         } else {
             f2c_buffer_printf(&context->output, "f2c_write_bool(%s, (%s) != 0);\n", file, value);
         }
@@ -43,10 +68,24 @@ void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
         f2c_io_indent(&context->output, depth);
         if (input)
             f2c_buffer_printf(&context->output,
-                              "%s = f2c_namelist_read_status(F2C_READ(%s, &%s));\n", status, file,
-                              value);
+                              "%s = f2c_namelist_read_status(F2C_READ(%s, &%s));\n", status,
+                              io_file, value);
         else
             f2c_buffer_printf(&context->output, "F2C_WRITE(%s, (%s));\n", file, value);
+    }
+    if (input) {
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output,
+                          "if (%s == F2C_IO_STATUS_OK && "
+                          "!f2c_namelist_value_consumed(&f2c_namelist_item_file)) "
+                          "%s = F2C_IO_STATUS_RECORD;\n",
+                          status, status);
+        --depth;
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
+        --depth;
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
     }
 }
 
@@ -276,15 +315,55 @@ static void emit_namelist_autoallocation(Context *context, Unit *unit, const cha
     f2c_buffer_append(&context->output, "}\n");
 }
 
-static void emit_namelist_object(Context *context, Unit *unit, const char *file,
-                                 const Symbol *symbol, const char *value, const char *owner,
-                                 const char *path, int input, const char *unit_number,
-                                 const char *status, int depth, int scalarized, int indirect) {
+static void emit_intrinsic_array_assignment(Context *context, Unit *unit, const char *file,
+                                            const Symbol *symbol, const char *value,
+                                            const char *owner, const char *path,
+                                            const char *status, int depth) {
+    const size_t path_id = (size_t)depth;
+    char *element_count = namelist_component_count(unit, symbol, owner);
+    char *character_length =
+        symbol->type == TYPE_CHARACTER ? namelist_character_length(unit, symbol, owner) : NULL;
+    f2c_io_indent(&context->output, depth);
+    f2c_buffer_printf(&context->output,
+                      "if (%s == F2C_IO_STATUS_OK && f2c_namelist_assignment_is("
+                      "&f2c_namelist_parsed_input, f2c_namelist_assignment_index, %s)) {\n",
+                      status, path);
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output, "f2c_namelist_assignment_matched = true;\n");
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_printf(&context->output,
+                      "for (size_t f2c_namelist_whole_%zu = 0U; "
+                      "f2c_namelist_whole_%zu < %s; ++f2c_namelist_whole_%zu) {\n",
+                      path_id, path_id, element_count != NULL ? element_count : "0U", path_id);
+    {
+        Buffer element = {0};
+        if (symbol->type == TYPE_CHARACTER)
+            f2c_buffer_printf(&element, "%s + f2c_namelist_whole_%zu * (size_t)(%s)", value,
+                              path_id, character_length != NULL ? character_length : "1U");
+        else
+            f2c_buffer_printf(&element, "%s[f2c_namelist_whole_%zu]", value, path_id);
+        f2c_io_emit_namelist_value(context, unit, file, symbol, element.data, character_length, 1,
+                                   status, depth + 2);
+        free(element.data);
+    }
+    f2c_io_indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output, "}\n");
+    f2c_io_indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+    free(element_count);
+    free(character_length);
+}
+
+static void emit_namelist_object(Context *context, Unit *unit, const char *scan_file,
+                                 const char *file, const Symbol *symbol, const char *value,
+                                 const char *owner, const char *path, int input,
+                                 const char *unit_number, const char *status, int depth,
+                                 int scalarized, int indirect) {
     const size_t path_id = (size_t)depth;
     const F2cDefinedIoKind namelist_kind =
         input ? F2C_DEFINED_IO_READ_FORMATTED : F2C_DEFINED_IO_WRITE_FORMATTED;
     if (input && !scalarized)
-        emit_namelist_autoallocation(context, unit, file, symbol, value, owner, path, status,
+        emit_namelist_autoallocation(context, unit, scan_file, symbol, value, owner, path, status,
                                      depth);
     if (!scalarized && symbol->type == TYPE_DERIVED && symbol->derived_type != NULL &&
         f2c_io_defined_binding(symbol->derived_type, namelist_kind) != NULL) {
@@ -292,12 +371,15 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
         if (input) {
             f2c_io_indent(&context->output, depth);
             f2c_buffer_printf(&context->output,
-                              "if (%s == F2C_IO_STATUS_OK && f2c_namelist_member("
-                              "%s, f2c_namelist_group_start, %s)) {\n",
-                              status, file, path);
+                              "if (%s == F2C_IO_STATUS_OK && f2c_namelist_assignment_is("
+                              "&f2c_namelist_parsed_input, f2c_namelist_assignment_index, %s)) "
+                              "{\n",
+                              status, path);
             ++depth;
             f2c_io_indent(&context->output, depth);
-            f2c_buffer_append(&context->output, "++f2c_namelist_matched_designators;\n");
+            f2c_buffer_append(&context->output, "f2c_namelist_assignment_matched = true;\n");
+            f2c_io_indent(&context->output, depth);
+            f2c_buffer_append(&context->output, "f2c_namelist_used_raw_value = true;\n");
         } else {
             f2c_io_indent(&context->output, depth);
             f2c_buffer_printf(&context->output,
@@ -341,8 +423,12 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
         free(count);
         return;
     }
+    if (input && !scalarized && symbol->rank != 0U && symbol->type != TYPE_DERIVED)
+        emit_intrinsic_array_assignment(context, unit, file, symbol, value, owner, path, status,
+                                        depth);
     if (!scalarized && symbol->rank != 0U &&
-        ((symbol->type == TYPE_DERIVED && symbol->derived_type != NULL) || symbol->allocatable)) {
+        (input || (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL) ||
+         symbol->allocatable)) {
         char *count = namelist_component_count(unit, symbol, owner);
         size_t dimension;
         f2c_io_indent(&context->output, depth);
@@ -420,7 +506,7 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
                 f2c_buffer_printf(&element, "%s[f2c_namelist_index_%zu]", value, path_id);
             }
             f2c_buffer_printf(&element_path, "f2c_namelist_path_%zu", path_id);
-            emit_namelist_object(context, unit, file, symbol, element.data, owner,
+            emit_namelist_object(context, unit, scan_file, file, symbol, element.data, owner,
                                  element_path.data, input, unit_number, status, depth + 2, 1, 0);
             free(element.data);
             free(element_path.data);
@@ -457,14 +543,15 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
                               f2c_symbol_c_name(unit, component));
             f2c_buffer_printf(&component_path, "f2c_namelist_path_%zu", path_id);
             if (input && component->allocatable)
-                emit_namelist_autoallocation(context, unit, file, component, component_value.data,
-                                             object.data, component_path.data, status, depth + 1);
+                emit_namelist_autoallocation(context, unit, scan_file, component,
+                                             component_value.data, object.data,
+                                             component_path.data, status, depth + 1);
             if (component->allocatable || component->pointer) {
                 f2c_io_indent(&context->output, depth + 1);
                 f2c_buffer_printf(&context->output, "if (%s != NULL) {\n", component_value.data);
             }
             emit_namelist_object(
-                context, unit, file, component, component_value.data, object.data,
+                context, unit, scan_file, file, component, component_value.data, object.data,
                 component_path.data, input, unit_number, status,
                 depth + 1 + ((component->allocatable || component->pointer) ? 1 : 0), 0,
                 component->rank == 0U && (component->allocatable || component->pointer) &&
@@ -482,14 +569,44 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
         return;
     }
     if (input) {
+        if (symbol->type == TYPE_CHARACTER) {
+            char *selection_length = namelist_character_length(unit, symbol, owner);
+            f2c_io_indent(&context->output, depth);
+            f2c_buffer_append(&context->output, "{\n");
+            ++depth;
+            f2c_io_indent(&context->output, depth);
+            f2c_buffer_printf(&context->output,
+                              "size_t f2c_namelist_substring_offset_%zu = 0U, "
+                              "f2c_namelist_substring_length_%zu = 0U;\n",
+                              path_id, path_id);
+            f2c_io_indent(&context->output, depth);
+            f2c_buffer_printf(
+                &context->output,
+                "const bool f2c_namelist_has_substring_%zu = "
+                "f2c_namelist_assignment_substring(&f2c_namelist_parsed_input, "
+                "f2c_namelist_assignment_index, %s, (size_t)(%s), "
+                "&f2c_namelist_substring_offset_%zu, &f2c_namelist_substring_length_%zu);\n",
+                path_id, path, selection_length != NULL ? selection_length : "0U", path_id,
+                path_id);
+            free(selection_length);
+        }
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output,
-                          "if (%s == F2C_IO_STATUS_OK && f2c_namelist_member("
-                          "%s, f2c_namelist_group_start, %s)) {\n",
-                          status, file, path);
+        if (symbol->type == TYPE_CHARACTER)
+            f2c_buffer_printf(
+                &context->output,
+                "if (%s == F2C_IO_STATUS_OK && (f2c_namelist_has_substring_%zu || "
+                "f2c_namelist_assignment_selects(&f2c_namelist_parsed_input, "
+                "f2c_namelist_assignment_index, %s))) {\n",
+                status, path_id, path);
+        else
+            f2c_buffer_printf(&context->output,
+                              "if (%s == F2C_IO_STATUS_OK && f2c_namelist_assignment_selects("
+                              "&f2c_namelist_parsed_input, f2c_namelist_assignment_index, %s)) "
+                              "{\n",
+                              status, path);
         ++depth;
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "++f2c_namelist_matched_designators;\n");
+        f2c_buffer_append(&context->output, "f2c_namelist_assignment_matched = true;\n");
     } else {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
@@ -509,8 +626,20 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
                                                     status, depth);
         } else if (indirect && symbol->type != TYPE_CHARACTER)
             f2c_buffer_printf(&scalar, "*(%s)", value);
+        else if (input && symbol->type == TYPE_CHARACTER)
+            f2c_buffer_printf(&scalar, "%s + f2c_namelist_substring_offset_%zu", value, path_id);
         else
             f2c_buffer_append(&scalar, value);
+        if (input && symbol->type == TYPE_CHARACTER) {
+            Buffer selected_length = {0};
+            f2c_buffer_printf(&selected_length,
+                              "f2c_namelist_has_substring_%zu ? "
+                              "f2c_namelist_substring_length_%zu : (size_t)(%s)",
+                              path_id, path_id,
+                              character_length != NULL ? character_length : "0U");
+            free(character_length);
+            character_length = f2c_buffer_take(&selected_length);
+        }
         if (!(symbol->equivalence_unaligned && symbol->rank == 0U && !scalarized && !input))
             f2c_io_emit_namelist_value(context, unit, file, symbol, scalar.data, character_length,
                                        input, status, depth);
@@ -555,6 +684,11 @@ static void emit_namelist_object(Context *context, Unit *unit, const char *file,
         --depth;
         f2c_io_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
+        if (symbol->type == TYPE_CHARACTER) {
+            --depth;
+            f2c_io_indent(&context->output, depth);
+            f2c_buffer_append(&context->output, "}\n");
+        }
     }
 }
 
@@ -562,6 +696,9 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
                          const F2cNamelistGroup *group, int input, const char *unit_number,
                          const char *status, int depth) {
     size_t i;
+    int object_depth = depth;
+    const char *value_file = file;
+    const char *object_unit = unit_number;
     if (group == NULL)
         return 0;
     if (input) {
@@ -577,27 +714,62 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
                           "F2C_IO_STATUS_RECORD;\n",
                           status);
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "static const char *const f2c_namelist_members[] = {");
-        for (i = 0U; i < group->member_count; ++i) {
-            char *member = f2c_io_c_string_literal(group->members[i], strlen(group->members[i]));
-            f2c_buffer_printf(&context->output, "%s%s", i == 0U ? "" : ", ",
-                              member != NULL ? member : "\"\"");
-            free(member);
-        }
-        f2c_buffer_append(&context->output, "};\n");
-        f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "size_t f2c_namelist_designator_count = 0U, "
-                                            "f2c_namelist_matched_designators = 0U;\n");
+        f2c_buffer_append(&context->output,
+                          "f2c_namelist_input f2c_namelist_parsed_input = {0};\n");
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
-                          "if (%s == F2C_IO_STATUS_OK && !f2c_namelist_validate_members("
-                          "%s, f2c_namelist_group_start, f2c_namelist_members, "
-                          "sizeof(f2c_namelist_members) / sizeof(f2c_namelist_members[0]), "
-                          "&f2c_namelist_designator_count)) "
+                          "if (%s == F2C_IO_STATUS_OK && !f2c_namelist_input_parse("
+                          "%s, f2c_namelist_group_start, &f2c_namelist_parsed_input)) "
                           "%s = F2C_IO_STATUS_RECORD;\n",
                           status, file, status);
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output,
+                          "long f2c_namelist_end_position = f2c_stream_tell(%s);\n", file);
         if (!f2c_io_begin_namelist_transaction(context, unit, group, status, depth))
             return 0;
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output,
+                          "for (size_t f2c_namelist_assignment_index = 0U; "
+                          "%s == F2C_IO_STATUS_OK && f2c_namelist_assignment_index < "
+                          "f2c_namelist_parsed_input.count; "
+                          "++f2c_namelist_assignment_index) {\n",
+                          status);
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output,
+                          "f2c_io_stream f2c_namelist_value_file;\n");
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output,
+                          "f2c_namelist_value_cursor f2c_namelist_cursor;\n");
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output,
+                          "bool f2c_namelist_assignment_matched = false;\n"
+                          "bool f2c_namelist_used_raw_value = false;\n");
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output,
+                          "int32_t f2c_namelist_value_unit = 0;\n"
+                          "bool f2c_namelist_value_unit_registered = false;\n");
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output,
+                          "if (!f2c_namelist_value_stream(&f2c_namelist_parsed_input, "
+                          "f2c_namelist_assignment_index, &f2c_namelist_value_file)) "
+                          "%s = F2C_IO_STATUS_RECORD;\n",
+                          status);
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output,
+                          "if (%s == F2C_IO_STATUS_OK && "
+                          "!f2c_namelist_cursor_initialize(&f2c_namelist_parsed_input, "
+                          "f2c_namelist_assignment_index, &f2c_namelist_cursor)) "
+                          "%s = F2C_IO_STATUS_RECORD;\n",
+                          status, status);
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output,
+                          "if (%s == F2C_IO_STATUS_OK) { f2c_namelist_value_unit = "
+                          "f2c_register_internal_unit(&f2c_namelist_value_file); "
+                          "f2c_namelist_value_unit_registered = true; }\n",
+                          status);
+        object_depth = depth + 1;
+        value_file = "&f2c_namelist_value_file";
+        object_unit = "f2c_namelist_value_unit";
     } else {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "f2c_stream_write_string(%s, \"&%s\");\n", file,
@@ -621,8 +793,9 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
             name = f2c_symbol_c_name(unit, symbol);
         }
         path = f2c_io_c_string_literal(group->members[i], strlen(group->members[i]));
-        emit_namelist_object(context, unit, file, symbol, name, NULL, path != NULL ? path : "\"\"",
-                             input, unit_number, status, depth, 0,
+        emit_namelist_object(context, unit, file, value_file, symbol, name, NULL,
+                             path != NULL ? path : "\"\"", input, object_unit, status,
+                             object_depth, 0,
                              symbol->rank == 0U && (symbol->allocatable || symbol->pointer) &&
                                  symbol->type != TYPE_CHARACTER);
         free(path);
@@ -630,15 +803,32 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
     f2c_io_indent(&context->output, depth);
     if (input) {
         f2c_buffer_printf(&context->output,
-                          "if (%s == F2C_IO_STATUS_OK && "
-                          "f2c_namelist_matched_designators != "
-                          "f2c_namelist_designator_count) %s = F2C_IO_STATUS_RECORD;\n",
+                          "if (%s == F2C_IO_STATUS_OK && !f2c_namelist_assignment_matched) "
+                          "%s = F2C_IO_STATUS_RECORD;\n",
                           status, status);
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_printf(&context->output,
+                          "if (%s == F2C_IO_STATUS_OK && "
+                          "(f2c_namelist_used_raw_value ? "
+                          "!f2c_namelist_value_consumed(&f2c_namelist_value_file) : "
+                          "!f2c_namelist_cursor_consumed(&f2c_namelist_cursor))) "
+                          "%s = F2C_IO_STATUS_RECORD;\n",
+                          status, status);
+        f2c_io_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output,
+                          "if (f2c_namelist_value_unit_registered) "
+                          "f2c_unregister_internal_unit(f2c_namelist_value_unit);\n");
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
         f2c_io_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
-                          "if (!f2c_namelist_end(%s, f2c_namelist_group_start)) %s = "
+                          "if (f2c_namelist_end_position < 0L || f2c_stream_seek(%s, "
+                          "f2c_namelist_end_position, SEEK_SET) != 0) %s = "
                           "F2C_IO_STATUS_RECORD;\n",
                           file, status);
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output,
+                          "f2c_namelist_input_destroy(&f2c_namelist_parsed_input);\n");
         if (!f2c_io_end_namelist_transaction(context, unit, group, status, depth))
             return 0;
     } else {
