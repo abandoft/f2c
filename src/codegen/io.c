@@ -464,7 +464,7 @@ void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cI
                                       "f2c_unaligned_io_address);\n",
                                       f2c_symbol_c_type(symbol), suffix);
                     f2c_io_emit_namelist_value(context, unit, file, symbol,
-                                               "f2c_unaligned_io_value", NULL, 1, status,
+                                               "f2c_unaligned_io_value", NULL, 1, 0, status,
                                                depth + 2);
                     f2c_io_indent(&context->output, depth + 2);
                     f2c_buffer_printf(&context->output,
@@ -477,7 +477,7 @@ void f2c_io_emit_item(Context *context, Unit *unit, const char *file, const F2cI
                     f2c_io_emit_namelist_value(context, unit, file, symbol,
                                                value.data != NULL ? value.data
                                                                   : f2c_symbol_c_name(unit, symbol),
-                                               NULL, 1, status, depth + 1);
+                                               NULL, 1, 0, status, depth + 1);
                 }
                 free(unaligned_address);
                 free(value.data);

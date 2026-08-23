@@ -31,7 +31,7 @@ const F2cIoControl *f2c_io_control(const F2cStatement *statement, F2cIoControlKi
 void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
                                 const Symbol *symbol, const char *value,
                                 const char *character_length_override, int input,
-                                const char *status, int depth);
+                                int structured_input, const char *status, int depth);
 int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
                          const F2cNamelistGroup *group, int input, const char *unit_number,
                          const char *status, int depth);
