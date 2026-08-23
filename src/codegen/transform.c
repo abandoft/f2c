@@ -17,8 +17,7 @@ static char *vector_element(Unit *unit, const F2cExpr *vector, size_t index) {
         return f2c_buffer_take(&result);
     }
     if (value->kind == F2C_EXPR_CALL && value->rank == 1U &&
-        (value->intrinsic == F2C_INTRINSIC_SHAPE ||
-         value->intrinsic == F2C_INTRINSIC_LBOUND ||
+        (value->intrinsic == F2C_INTRINSIC_SHAPE || value->intrinsic == F2C_INTRINSIC_LBOUND ||
          value->intrinsic == F2C_INTRINSIC_UBOUND))
         return f2c_transform_inquiry_element(unit, value, index);
     if (value->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
@@ -765,8 +764,7 @@ int f2c_emit_transform_assignment(Context *context, Unit *unit, const F2cExpr *l
     if (f2c_intrinsic_is_reduction(right->intrinsic) &&
         right->intrinsic != F2C_INTRINSIC_DOT_PRODUCT && right->rank != 0U)
         return f2c_transform_emit_reduction(context, unit, target, right, line, depth);
-    if (right->intrinsic == F2C_INTRINSIC_SHAPE ||
-        right->intrinsic == F2C_INTRINSIC_LBOUND ||
+    if (right->intrinsic == F2C_INTRINSIC_SHAPE || right->intrinsic == F2C_INTRINSIC_LBOUND ||
         right->intrinsic == F2C_INTRINSIC_UBOUND)
         return f2c_transform_emit_inquiry(context, unit, left, right, line, depth);
     if (!f2c_intrinsic_is_transformational(right->intrinsic))
@@ -780,6 +778,8 @@ int f2c_emit_transform_assignment(Context *context, Unit *unit, const F2cExpr *l
         return f2c_transform_emit_matrix(context, unit, target, right, line, depth);
     if (right->intrinsic == F2C_INTRINSIC_RESHAPE)
         return emit_reshape(context, unit, target, right, line, depth);
+    if (right->intrinsic == F2C_INTRINSIC_TRANSFER)
+        return f2c_transform_emit_transfer(context, unit, target, right, line, depth);
     if (right->intrinsic == F2C_INTRINSIC_PACK)
         return emit_pack(context, unit, target, right, line, depth);
     if (right->intrinsic == F2C_INTRINSIC_UNPACK)
