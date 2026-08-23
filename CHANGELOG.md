@@ -1,3 +1,13 @@
+## 1.36.0
+
+- Added transactional staging, atomic commit, and complete rollback for NAMELIST input so invalid input no longer partially modifies program objects.
+- Added safe staging and ownership cleanup for allocatable derived arrays, deferred-length character values, and nested dynamic components.
+- Preserved pointer associations and shared-target aliases when committing staged derived object graphs, preventing staging addresses from escaping into program state.
+- Added strict validation for integer, real, complex, and logical input values, and rejected unknown members, invalid components, out-of-bounds elements, and missing terminators.
+- Converted NAMELIST auto-allocation bound, size-overflow, and memory failures into `IOSTAT` errors instead of terminating the process.
+- Corrected defined-I/O `IOSTAT` propagation so EOF, EOR, and record errors enter the unified I/O state machine.
+- Corrected deep-copy byte counts for allocatable `CHARACTER` derived components, preserving complete arrays and dynamic character lengths.
+
 ## 1.35.0
 
 - Added complete support for multiple allocation targets in one `ALLOCATE(SOURCE=/MOLD=)` statement, sharing a single model evaluation across every target.
