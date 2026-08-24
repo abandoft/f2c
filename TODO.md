@@ -554,13 +554,16 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 完成 F90 `OPEN`/`CLOSE` 全部控制项，以及 `INQUIRE`、`BACKSPACE` 和 `ENDFILE`。外部文件
   形式现已进入统一 token → AST → typed IR → emitter 流程；生成端用线程局部文件单元状态机实现
   `OLD/NEW/SCRATCH/REPLACE/UNKNOWN`、`KEEP/DELETE`、顺序记录倒退、标准 C17 物理 `ENDFILE`
-  截断，以及按 `UNIT/FILE` 查询连接和文件属性。`INQUIRE(IOLENGTH=)` 已使用独立 typed IR 控制项
+  截断，以及按 `UNIT/FILE` 查询连接和文件属性。格式化连接现保存并查询 `DECIMAL/ROUND/SIGN`，
+  对动态值执行有界校验，语句级覆盖只作用于当前传输并在结束时恢复连接默认值。
+  `INQUIRE(IOLENGTH=)` 已使用独立 typed IR 控制项
   和无文件系统计数流复用真实无格式 wire-size 规则，覆盖所有整数结果 kind、零大小数组、数组段、
   向量下标、数组构造器、数组表达式、隐式 DO、复数/逻辑/字符和静态组件派生对象；结果可直接作为
   同类型/参数/shape/order 输出列表的直接无格式 `RECL`。正负向语义、严格 C17 执行、ASan/UBSan 和
   gfortran 差分已进入测试与 CI；更完整错误分类及后续标准控制项仍未完成。
 - [ ] 完成顺序/直接访问、格式化/非格式化记录、`REC`、`RECL`、`ACCESS`、`ACTION`、`STATUS`、
-  `BLANK`、`PAD`、`DELIM`、`POSITION` 和所有对应 `IOSTAT/IOMSG/ERR/END/EOR` 状态。连接状态现保存
+  `BLANK`、`PAD`、`DELIM`、`POSITION`、`DECIMAL`、`ROUND`、`SIGN` 和所有对应
+  `IOSTAT/IOMSG/ERR/END/EOR` 状态。连接状态现保存
   上述属性，记录传输路径已经覆盖直接访问 `READ/WRITE REC=`、定长记录边界、动作/格式/访问
   不匹配的无崩溃错误传播，以及顺序非格式化记录协议。仍需补齐所有控制项和错误状态的标准组合、
   非元素化数组函数结果和其他嵌套 transformational 结果的无格式传输，以及 stream access、异步
@@ -586,8 +589,12 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 - [ ] 补齐 `I/B/O/Z/F/E/EN/ES/D/G/L/A` 的宽度、精度、指数位数、舍入、符号、比例因子和
   星号溢出规则，并逐字段对比不同原生编译器。当前原生差分矩阵已覆盖整数基数、`F/E/D/G`、
   符号、比例、小数点/小数逗号、定位、嵌套、动态和标签格式；`E/D` 的 0P 规范化、三位指数省略
-  标记、极大/极小双精度和 `G` 有效数字/尾随空白已经匹配 gfortran。仍需完成所有 `EN/ES`、显式
-  指数位、六种 ROUND 模式、舍入进位边界、特殊值、超宽输入字段及全部描述符交叉组合。
+  标记、`EN/ES` 工程与科学计数、显式指数位、极大/极小双精度、`G/G0` 的 kind 感知有效数字和
+  尾随空白已经匹配 gfortran。实数输出已覆盖 `RU/RD/RZ/RN/RC/RP`、正负舍入进位、signed zero、
+  `NaN/Infinity`、字段星号溢出和紧凑前导零；实数输入按目标 kind 单次转换，覆盖定向舍入、隐含
+  小数点、比例因子、特殊值及动态分配的超宽字段。连接默认值、语句级动态覆盖、非法值错误传播和
+  浮点环境恢复也已进入同一状态机。仍需完成其余描述符交叉组合、`RC` 十进制到二进制精确中点输入
+  及第二种原生 Fortran 编译器的逐字段差分。
   标准规定的最右嵌套组 FORMAT 回转点及其与非前进 I/O、冒号和无限组的全部组合也尚需逐项差分。
 - [x] 用统一、可定位的内存记录引擎实现内部文件，不再通过 `tmpfile()` 模拟或结束时回读复制。
   字符标量和一维记录数组直接绑定原存储，覆盖多记录、默认 PAD、`T/TL/TR/X` 定位、已写记录
