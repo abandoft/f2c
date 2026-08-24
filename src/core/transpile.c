@@ -287,7 +287,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                           "<stdint.h>\n#include <stdio.h>\n#include <limits.h>\n#include "
                           "<errno.h>\n#include <stdarg.h>\n#include "
                           "<ctype.h>\n#include "
-                          "<stdlib.h>\n#include <string.h>\n#include <float.h>\n#include <time.h>\n"
+                          "<stdlib.h>\n#include <string.h>\n#include <float.h>\n#include <fenv.h>\n"
+                          "#include <locale.h>\n#include <time.h>\n"
                           "#include <math.h>\n");
         if (needs_complex) {
             f2c_buffer_append(&context.output, "#include <complex.h>\n");

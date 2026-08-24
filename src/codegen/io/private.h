@@ -14,6 +14,7 @@ char *f2c_io_c_string_literal(const char *text, size_t length);
 void f2c_io_emit_format_state_support(Context *context);
 void f2c_io_emit_format_program_support(Context *context);
 void f2c_io_emit_format_text_parser_support(Context *context);
+void f2c_io_emit_format_round_support(Context *context);
 void f2c_io_emit_format_real_support(Context *context);
 int f2c_io_emit_format_program(Context *context, const F2cFormat *format, const char *name,
                                int depth);
