@@ -3,9 +3,11 @@ program file_control
   integer :: status, value, number
   logical :: exist, opened, named
   character(64) :: name, message
+  character(16) :: formatted_record
   character(8) :: dynamic_status
   character(16) :: access, sequential, direct, form, formatted, unformatted
   character(16) :: blank, position, action, readable, writable, readwrite, delim, pad
+  character(20) :: decimal, round_mode, sign_mode
   character(20), parameter :: path = 'f2c-file-control.tmp'
 
   inquire(file=path, exist=exist, opened=opened, iostat=status, iomsg=message)
@@ -40,7 +42,8 @@ program file_control
           name=name, access=access, sequential=sequential, direct=direct, &
           form=form, formatted=formatted, unformatted=unformatted, blank=blank, &
           position=position, action=action, &
-          read=readable, write=writable, readwrite=readwrite, delim=delim, pad=pad, &
+          read=readable, write=writable, readwrite=readwrite, decimal=decimal, &
+          round=round_mode, sign=sign_mode, delim=delim, pad=pad, &
           iostat=status, iomsg=message)
   if (status /= 0 .or. .not. exist .or. .not. opened .or. number /= 21) error stop
   if (.not. named .or. name /= path) error stop
@@ -50,6 +53,8 @@ program file_control
   if (position /= 'APPEND') error stop
   if (readable /= 'YES' .or. writable /= 'YES' .or. readwrite /= 'YES') error stop
   if (delim /= 'QUOTE' .or. pad /= 'YES') error stop
+  if (decimal /= 'POINT' .or. round_mode /= 'PROCESSOR_DEFINED') error stop
+  if (sign_mode /= 'PROCESSOR_DEFINED') error stop
 
   close(unit=21, status='delete', iostat=status, iomsg=message)
   if (status /= 0) error stop
@@ -81,6 +86,23 @@ program file_control
        iostat=status, iomsg=message)
   if (status /= 0) error stop
   close(24, status='delete', iostat=status, iomsg=message)
+  if (status /= 0) error stop
+
+  open(unit=26, file='f2c-file-format-controls.tmp', status='replace', &
+       action='readwrite', form='formatted', decimal='comma', round='up', &
+       sign='plus', iostat=status, iomsg=message)
+  if (status /= 0) error stop
+  write(26, '(F8.1)', iostat=status, iomsg=message) 1.25d0
+  if (status /= 0) error stop
+  rewind(26, iostat=status, iomsg=message)
+  if (status /= 0) error stop
+  read(26, '(A)', iostat=status, iomsg=message) formatted_record
+  if (status /= 0 .or. formatted_record /= '    +1,3') error stop
+  inquire(unit=26, decimal=decimal, round=round_mode, sign=sign_mode, &
+          iostat=status, iomsg=message)
+  if (status /= 0 .or. decimal /= 'COMMA' .or. round_mode /= 'UP') error stop
+  if (sign_mode /= 'PLUS') error stop
+  close(26, status='delete', iostat=status, iomsg=message)
   if (status /= 0) error stop
 
   dynamic_status = 'invalid'

@@ -27,6 +27,9 @@ static void test_file_control_semantics(void) {
                                  "  open(unit=unit, access='sequential', recl=16)\n"
                                  "  open(unit=unit, file='bad.tmp', status='scratch')\n"
                                  "  open(unit=unit, status='invalid')\n"
+                                 "  open(unit=unit, decimal='period')\n"
+                                 "  open(unit=unit, form='unformatted', round='up')\n"
+                                 "  write(*, fmt='(F8.1)', round='sideways') value\n"
                                  "  close(unit=unit, status='erase')\n"
                                  "  inquire(unit=unit, file='bad.tmp', opened=flag)\n"
                                  "  inquire(opened=flag)\n"
@@ -46,6 +49,13 @@ static void test_file_control_semantics(void) {
                     "scratch files reject an external file name");
     expect_contains(result.diagnostics, "OPEN STATUS= has invalid value 'invalid'",
                     "OPEN rejects invalid constant STATUS values");
+    expect_contains(result.diagnostics, "OPEN DECIMAL= has invalid value 'period'",
+                    "OPEN rejects invalid constant DECIMAL values");
+    expect_contains(result.diagnostics,
+                    "OPEN formatted connection controls require FORM='FORMATTED'",
+                    "unformatted connections reject formatting defaults");
+    expect_contains(result.diagnostics, "WRITE ROUND= has invalid value 'sideways'",
+                    "formatted transfers reject invalid constant ROUND values");
     expect_contains(result.diagnostics, "CLOSE STATUS= has invalid value 'erase'",
                     "CLOSE rejects invalid constant STATUS values");
     expect_contains(result.diagnostics, "INQUIRE requires exactly one of UNIT= or FILE=",
@@ -76,7 +86,10 @@ static void test_file_control_codegen(void) {
         "  character(32) :: message, name\n"
         "  open(12, file='sample.tmp', status='replace', access='sequential', "
         "action='readwrite', form='formatted', blank='zero', position='append', "
-        "delim='quote', pad='no', iostat=status, iomsg=message, err=90)\n"
+        "decimal='comma', round='up', sign='plus', delim='quote', pad='no', "
+        "iostat=status, iomsg=message, err=90)\n"
+        "  write(12, fmt='(F8.1)', decimal='point', round='nearest', "
+        "sign='suppress', iostat=status) 1.25\n"
         "  backspace(12, iostat=status, iomsg=message, err=90)\n"
         "  endfile(12, iostat=status, iomsg=message, err=90)\n"
         "  inquire(unit=12, opened=opened, number=number, name=name, recl=recl, "
@@ -91,6 +104,10 @@ static void test_file_control_codegen(void) {
     expect(result.error_count == 0U, "complete file controls lower without diagnostics");
     expect_contains(result.code, "f2c_open_unit_full",
                     "OPEN lowers every connection property through the file-unit model");
+    expect_contains(result.code, "\"comma\", (size_t)(5U), \"up\", (size_t)(2U), \"plus\"",
+                    "OPEN lowers DECIMAL, ROUND, and SIGN connection defaults");
+    expect_contains(result.code, "f2c_format_apply_statement_controls",
+                    "formatted transfers apply statement-level DECIMAL, ROUND, and SIGN values");
     expect_contains(result.code, "size_t expected_length = strlen(expected)",
                     "dynamic file-control options compare against bounded literal lengths");
     expect_contains(result.code, "f2c_backspace_unit",
