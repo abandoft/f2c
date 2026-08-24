@@ -8,7 +8,8 @@ void f2c_io_emit_format_program_support(Context *context) {
         "memset(descriptor, 0, sizeof(*descriptor)); descriptor->code[0] = "
         "instruction->code[0]; descriptor->code[1] = instruction->code[1]; descriptor->width "
         "= instruction->width; descriptor->digits = instruction->digits; descriptor->exponent "
-        "= instruction->exponent; if (instruction->code[0] == 'D' && "
+        "= instruction->exponent; descriptor->has_exponent = instruction->has_exponent; if "
+        "(instruction->code[0] == 'D' && "
         "instruction->code[1] == 'T') { descriptor->iotype = instruction->text != NULL ? "
         "instruction->text : \"DT\"; descriptor->iotype_length = instruction->text != NULL ? "
         "instruction->text_length : 2U; descriptor->v_list = instruction->v_list; "
@@ -49,7 +50,7 @@ void f2c_io_emit_format_program_support(Context *context) {
         "F2C_FORMAT_OP_BLANK: state->blank_zero = instruction->control != 0; "
         "++state->program_position; break; case F2C_FORMAT_OP_DECIMAL: state->decimal_comma = "
         "instruction->control != 0; ++state->program_position; break; case "
-        "F2C_FORMAT_OP_ROUND: state->rounding = instruction->control; "
+        "F2C_FORMAT_OP_ROUND: state->rounding = (f2c_format_round_mode)instruction->control; "
         "++state->program_position; break; default: state->status = 0; return 0; } if "
         "(state->status == 0 || state->status == EOF) return 0; } }\n");
 }

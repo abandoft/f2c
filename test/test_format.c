@@ -110,6 +110,33 @@ static void test_character_literal_and_dynamic_v_list(void) {
     f2c_format_free(format);
 }
 
+static void test_real_descriptor_metadata(void) {
+    F2cFormatError error;
+    F2cFormat *format = parse("(E12.4E0,ES13.5E3,EN14.6,RU,RD,RZ,RN,RC,RP)", &error);
+    expect(format != NULL && error.code == F2C_FORMAT_ERROR_NONE,
+           "real edit descriptors and every rounding control parse into typed FORMAT nodes");
+    if (format == NULL)
+        return;
+    expect(format->root.child_count == 9U,
+           "real descriptor FORMAT preserves all data and control nodes");
+    expect(format->root.children[0].kind == F2C_FORMAT_DATA &&
+               format->root.children[0].code[0] == 'E' && format->root.children[0].has_exponent &&
+               format->root.children[0].exponent == 0,
+           "an explicit zero exponent width remains distinct from an omitted exponent width");
+    expect(format->root.children[1].code[0] == 'E' && format->root.children[1].code[1] == 'S' &&
+               format->root.children[1].has_exponent && format->root.children[1].exponent == 3,
+           "ES descriptors retain their subtype and explicit exponent width");
+    expect(format->root.children[2].code[0] == 'E' && format->root.children[2].code[1] == 'N' &&
+               !format->root.children[2].has_exponent,
+           "EN descriptors retain an omitted exponent-width state");
+    expect(format->root.children[3].kind == F2C_FORMAT_ROUND &&
+               format->root.children[3].control == F2C_FORMAT_ROUND_UP &&
+               format->root.children[8].kind == F2C_FORMAT_ROUND &&
+               format->root.children[8].control == F2C_FORMAT_ROUND_PROCESSOR,
+           "rounding controls preserve their typed mode from RU through RP");
+    f2c_format_free(format);
+}
+
 static void expect_error(const char *source, F2cFormatErrorCode expected, const char *message) {
     F2cFormatError error;
     F2cFormat *format = parse(source, &error);
@@ -139,6 +166,7 @@ int main(void) {
     test_complete_descriptor_tree();
     test_unlimited_and_legacy_literals();
     test_character_literal_and_dynamic_v_list();
+    test_real_descriptor_metadata();
     test_invalid_formats();
     if (failures != 0) {
         fprintf(stderr, "%d FORMAT AST test(s) failed\n", failures);
