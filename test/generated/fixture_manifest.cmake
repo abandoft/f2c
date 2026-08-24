@@ -4,6 +4,8 @@ set(
     action_statements
     legacy_control
     print_formats
+    format_matrix
+    format_real_matrix
     formatted_internal
     formatted_record_input
     namelist_internal
