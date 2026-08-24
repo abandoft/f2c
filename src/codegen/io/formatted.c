@@ -3,10 +3,20 @@
 #include <stdlib.h>
 #include <string.h>
 
+static int formatted_scalar_kind(const F2cExpr *expression, const Symbol *symbol, Type type) {
+    if (expression != NULL && expression->type_kind > 0)
+        return expression->type_kind;
+    if (symbol != NULL && symbol->kind > 0)
+        return symbol->kind;
+    return f2c_default_kind(type);
+}
+
 static void emit_formatted_scalar(Context *context, Unit *unit, const F2cExpr *expression,
                                   const Symbol *symbol, const char *value, int input, int depth) {
     Type type =
         expression != NULL ? expression->type : (symbol != NULL ? symbol->type : TYPE_UNKNOWN);
+    const int scalar_kind = formatted_scalar_kind(expression, symbol, type);
+    const char *decimal_digits = scalar_kind == 4 ? "FLT_DECIMAL_DIG" : "DBL_DECIMAL_DIG";
     f2c_io_indent(&context->output, depth);
     if (type == TYPE_CHARACTER) {
         char *length = expression != NULL ? f2c_character_length_expression(unit, expression)
@@ -54,30 +64,32 @@ static void emit_formatted_scalar(Context *context, Unit *unit, const F2cExpr *e
             f2c_buffer_append(&context->output,
                               "{ double f2c_formatted_real, f2c_formatted_imaginary; ");
             f2c_buffer_printf(&context->output,
-                              "if (f2c_format_read_real(&f2c_io_format, &f2c_formatted_real) > "
-                              "0 && f2c_format_read_real(&f2c_io_format, "
-                              "&f2c_formatted_imaginary) > 0) %s = %s(f2c_formatted_real, "
+                              "if (f2c_format_read_real(&f2c_io_format, &f2c_formatted_real, %d) "
+                              "> 0 && f2c_format_read_real(&f2c_io_format, "
+                              "&f2c_formatted_imaginary, %d) > 0) %s = %s(f2c_formatted_real, "
                               "f2c_formatted_imaginary); }\n",
-                              value, type == TYPE_COMPLEX ? "f2c_make_c" : "f2c_make_z");
+                              scalar_kind, scalar_kind, value,
+                              type == TYPE_COMPLEX ? "f2c_make_c" : "f2c_make_z");
         } else {
             f2c_buffer_printf(&context->output,
-                              "f2c_format_write_real(&f2c_io_format, (double)%s(%s)); "
-                              "f2c_format_write_real(&f2c_io_format, (double)%s(%s));\n",
-                              type == TYPE_COMPLEX ? "crealf" : "creal", value,
-                              type == TYPE_COMPLEX ? "cimagf" : "cimag", value);
+                              "f2c_format_write_real(&f2c_io_format, (double)%s(%s), %s); "
+                              "f2c_format_write_real(&f2c_io_format, (double)%s(%s), %s);\n",
+                              type == TYPE_COMPLEX ? "crealf" : "creal", value, decimal_digits,
+                              type == TYPE_COMPLEX ? "cimagf" : "cimag", value, decimal_digits);
         }
     } else {
         if (input) {
             f2c_buffer_append(&context->output, "{ double f2c_formatted_value; ");
             f2c_buffer_printf(&context->output,
                               "if (f2c_format_read_real(&f2c_io_format, "
-                              "&f2c_formatted_value) > 0) %s = (%s)f2c_formatted_value; }\n",
-                              value,
+                              "&f2c_formatted_value, %d) > 0) %s = (%s)f2c_formatted_value; }\n",
+                              scalar_kind, value,
                               symbol != NULL ? f2c_symbol_c_type(symbol)
                                              : f2c_expression_c_type(expression));
         } else {
             f2c_buffer_printf(&context->output,
-                              "f2c_format_write_real(&f2c_io_format, (double)(%s));\n", value);
+                              "f2c_format_write_real(&f2c_io_format, (double)(%s), %s);\n", value,
+                              decimal_digits);
         }
     }
 }

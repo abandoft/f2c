@@ -65,6 +65,7 @@ void f2c_emit_format_support(Context *context) {
         "state->column = target; } }\n");
     f2c_io_emit_format_program_support(context);
     f2c_io_emit_format_text_parser_support(context);
+    f2c_io_emit_format_round_support(context);
     f2c_io_emit_format_real_support(context);
     f2c_buffer_append(
         &context->output,
@@ -109,10 +110,12 @@ void f2c_emit_format_support(Context *context) {
         "(length != 0U) field[i++] = digits[--length]; f2c_format_field(state, field, i, "
         "descriptor.width); } }\n"
         "static inline F2C_UNUSED void f2c_format_write_real(f2c_format_state *state, double "
-        "value) { f2c_format_descriptor descriptor; char *field; size_t length; if "
+        "value, int significant_digits) { f2c_format_descriptor descriptor; char *field; size_t "
+        "length; if "
         "(!f2c_format_next(state, &descriptor)) return; if "
         "(!f2c_format_real_descriptor(&descriptor)) { state->status = 0; return; } field = "
-        "f2c_format_render_real(state, &descriptor, value, &length); if (field == NULL) return; "
+        "f2c_format_render_real(state, &descriptor, value, significant_digits, &length); if "
+        "(field == NULL) return; "
         "f2c_format_field(state, field, length, descriptor.width); free(field); }\n");
     f2c_buffer_append(
         &context->output,
@@ -143,7 +146,13 @@ void f2c_emit_format_support(Context *context) {
         "char *field) { size_t read = 0U, write = 0U; while (field[read] != '\\0') { char c = "
         "field[read++]; if (c == ' ') { if (state->blank_zero) c = '0'; else continue; } if (c "
         "== 'd' || c == 'D') c = 'e'; if (state->decimal_comma && c == ',') c = '.'; "
-        "field[write++] = c; } field[write] = '\\0'; }\n");
+        "field[write++] = c; } field[write] = '\\0'; }\n"
+        "static inline F2C_UNUSED char *f2c_format_read_allocated_field(f2c_format_state *state, "
+        "int width, int *status) { size_t capacity = width > 0 ? (size_t)width + 1U : 4096U; "
+        "char *field; if (capacity == 0U || capacity > 16777217U) { state->status = 0; *status = "
+        "0; return NULL; } field = (char *)malloc(capacity); if (field == NULL) { state->status = "
+        "0; *status = 0; return NULL; } *status = f2c_format_read_field(state, field, capacity, "
+        "width); if (*status <= 0) { free(field); return NULL; } return field; }\n");
     f2c_buffer_append(
         &context->output,
         "static inline F2C_UNUSED int f2c_format_read_integer(f2c_format_state *state, int64_t "
@@ -155,18 +164,37 @@ void f2c_emit_format_support(Context *context) {
         "return state->status = status; f2c_format_normalize_number(state, field); if "
         "(descriptor.code[0] == 'B') base = 2; else if (descriptor.code[0] == 'O') base = 8; "
         "else if (descriptor.code[0] == 'Z') base = 16; *value = (int64_t)strtoll(field, NULL, "
-        "base); return 1; }\n"
+        "base); return 1; }\n");
+    f2c_buffer_append(
+        &context->output,
         "static inline F2C_UNUSED int f2c_format_read_real(f2c_format_state *state, double "
-        "*value) { f2c_format_descriptor descriptor; char field[256]; int status; if "
-        "(!f2c_format_next(state, &descriptor)) return 0; if "
-        "(!f2c_format_real_descriptor(&descriptor)) return state->status = 0; status = "
-        "f2c_format_read_field(state, "
-        "field, sizeof(field), descriptor.width); if (status <= 0) return state->status = "
-        "status; f2c_format_normalize_number(state, field); *value = strtod(field, NULL); if "
-        "(strchr(field, '.') == NULL && strchr(field, 'e') == NULL && strchr(field, 'E') == NULL "
-        "&& descriptor.digits > 0) *value /= pow(10.0, (double)descriptor.digits); if "
-        "(strchr(field, 'e') == NULL && strchr(field, 'E') == NULL) *value /= pow(10.0, "
-        "(double)state->scale); return 1; }\n"
+        "*value, int kind) { f2c_format_descriptor descriptor; char *field; char *replacement; "
+        "char *end; char suffix[32]; size_t length; int status; int adjustment = 0; int saved; "
+        "bool has_exponent; "
+        "bool has_decimal; bool special; double parsed; if (!f2c_format_next(state, &descriptor)) "
+        "return 0; "
+        "if (!f2c_format_real_descriptor(&descriptor)) return state->status = 0; "
+        "field = f2c_format_read_allocated_field(state, descriptor.width, &status); if (field == "
+        "NULL) return state->status = status; f2c_format_normalize_number(state, field); "
+        "has_exponent "
+        "= strchr(field, 'e') != NULL || strchr(field, 'E') != NULL; has_decimal = "
+        "strchr(field, '.') != NULL; special = isalpha((unsigned char)field[0]) || "
+        "((field[0] == '+' || field[0] == '-') && isalpha((unsigned char)field[1])); if "
+        "(!has_exponent && !special) { adjustment = state->scale + "
+        "(has_decimal ? 0 : descriptor.digits); if (adjustment != 0) { int appended = "
+        "snprintf(suffix, sizeof(suffix), \"e%+d\", -adjustment); length = strlen(field); if "
+        "(appended < 0 || (size_t)appended >= sizeof(suffix) || length > SIZE_MAX - "
+        "(size_t)appended - 1U) { free(field); return state->status = 0; } replacement = (char "
+        "*)realloc(field, length + (size_t)appended + 1U); if (replacement == NULL) { "
+        "free(field); return state->status = 0; } field = replacement; memcpy(field + length, "
+        "suffix, (size_t)appended + 1U); } } errno = 0; if "
+        "(!f2c_format_begin_rounding(state, 0.0, 0, &saved)) { free(field); return 0; } if (kind "
+        "== 4) { float narrow = strtof(field, &end); parsed = (double)narrow; } else parsed = "
+        "strtod(field, &end); f2c_format_end_rounding(saved); if (end == field || *end != '\\0' "
+        "|| (errno == ERANGE && isinf(parsed))) { free(field); return state->status = 0; } free("
+        "field); *value = parsed; return 1; }\n");
+    f2c_buffer_append(
+        &context->output,
         "static inline F2C_UNUSED int f2c_format_read_logical(f2c_format_state *state, bool "
         "*value) { f2c_format_descriptor descriptor; char field[64]; int status; size_t i; if "
         "(!f2c_format_next(state, &descriptor)) return 0; if "
