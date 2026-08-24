@@ -1,3 +1,12 @@
+## 1.39.0
+
+- Completed engineering, scientific, and general real formatting for `EN`, `ES`, `E`, `D`, `G`, and kind-aware `G0` edit descriptors.
+- Added explicit exponent widths, scale handling, carry renormalization, compact leading zeros, field overflow markers, signed zero, infinity, and NaN output.
+- Implemented `RU`, `RD`, `RZ`, `RN`, `RC`, and `RP` output rounding while preserving the caller's floating-point environment.
+- Made formatted real input target-kind-aware, including directed rounding, implicit decimal points, scale factors, special values, and dynamically allocated wide fields.
+- Added `DECIMAL`, `ROUND`, and `SIGN` connection defaults and statement-level overrides with validation and scoped restoration.
+- Added `OPEN` and `INQUIRE` support for formatted connection controls, including dynamic-value error reporting.
+
 ## 1.38.0
 
 - Completed NAMELIST array-section input with actual declared bounds for omitted endpoints, including multidimensional, reverse, and non-unit-stride combinations.
