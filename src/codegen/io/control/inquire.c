@@ -23,6 +23,9 @@ static const char *inquiry_result_field(F2cIoControlKind kind) {
         [F2C_IO_CONTROL_READ] = "read",
         [F2C_IO_CONTROL_WRITE] = "write",
         [F2C_IO_CONTROL_READWRITE] = "readwrite",
+        [F2C_IO_CONTROL_DECIMAL] = "decimal",
+        [F2C_IO_CONTROL_ROUND] = "round",
+        [F2C_IO_CONTROL_SIGN] = "sign",
         [F2C_IO_CONTROL_DELIM] = "delim",
         [F2C_IO_CONTROL_PAD] = "pad",
     };
