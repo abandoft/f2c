@@ -115,12 +115,15 @@ static int io_control_supported(F2cStatementKind statement_kind, F2cIoControlKin
                control_kind == F2C_IO_CONTROL_EOR || control_kind == F2C_IO_CONTROL_ERR ||
                control_kind == F2C_IO_CONTROL_IOSTAT || control_kind == F2C_IO_CONTROL_IOMSG ||
                control_kind == F2C_IO_CONTROL_SIZE || control_kind == F2C_IO_CONTROL_ADVANCE ||
-               control_kind == F2C_IO_CONTROL_REC;
+               control_kind == F2C_IO_CONTROL_REC || control_kind == F2C_IO_CONTROL_DECIMAL ||
+               control_kind == F2C_IO_CONTROL_ROUND || control_kind == F2C_IO_CONTROL_SIGN;
     if (statement_kind == F2C_STMT_WRITE)
         return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_FMT ||
                control_kind == F2C_IO_CONTROL_NML || control_kind == F2C_IO_CONTROL_ERR ||
                control_kind == F2C_IO_CONTROL_IOSTAT || control_kind == F2C_IO_CONTROL_IOMSG ||
-               control_kind == F2C_IO_CONTROL_ADVANCE || control_kind == F2C_IO_CONTROL_REC;
+               control_kind == F2C_IO_CONTROL_ADVANCE || control_kind == F2C_IO_CONTROL_REC ||
+               control_kind == F2C_IO_CONTROL_DECIMAL || control_kind == F2C_IO_CONTROL_ROUND ||
+               control_kind == F2C_IO_CONTROL_SIGN;
     if (statement_kind == F2C_STMT_OPEN)
         return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_FILE ||
                control_kind == F2C_IO_CONTROL_STATUS || control_kind == F2C_IO_CONTROL_ERR ||
@@ -128,7 +131,9 @@ static int io_control_supported(F2cStatementKind statement_kind, F2cIoControlKin
                control_kind == F2C_IO_CONTROL_ACCESS || control_kind == F2C_IO_CONTROL_ACTION ||
                control_kind == F2C_IO_CONTROL_FORM || control_kind == F2C_IO_CONTROL_RECL ||
                control_kind == F2C_IO_CONTROL_BLANK || control_kind == F2C_IO_CONTROL_POSITION ||
-               control_kind == F2C_IO_CONTROL_DELIM || control_kind == F2C_IO_CONTROL_PAD;
+               control_kind == F2C_IO_CONTROL_DECIMAL || control_kind == F2C_IO_CONTROL_ROUND ||
+               control_kind == F2C_IO_CONTROL_SIGN || control_kind == F2C_IO_CONTROL_DELIM ||
+               control_kind == F2C_IO_CONTROL_PAD;
     if (statement_kind == F2C_STMT_CLOSE)
         return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_STATUS ||
                control_kind == F2C_IO_CONTROL_ERR || control_kind == F2C_IO_CONTROL_IOSTAT ||
@@ -151,7 +156,8 @@ static int io_control_supported(F2cStatementKind statement_kind, F2cIoControlKin
                control_kind == F2C_IO_CONTROL_POSITION || control_kind == F2C_IO_CONTROL_ACTION ||
                control_kind == F2C_IO_CONTROL_READ || control_kind == F2C_IO_CONTROL_WRITE ||
                control_kind == F2C_IO_CONTROL_READWRITE || control_kind == F2C_IO_CONTROL_DELIM ||
-               control_kind == F2C_IO_CONTROL_PAD;
+               control_kind == F2C_IO_CONTROL_PAD || control_kind == F2C_IO_CONTROL_DECIMAL ||
+               control_kind == F2C_IO_CONTROL_ROUND || control_kind == F2C_IO_CONTROL_SIGN;
     return 0;
 }
 
@@ -264,7 +270,8 @@ static int inquiry_character_result(F2cIoControlKind kind) {
            kind == F2C_IO_CONTROL_POSITION || kind == F2C_IO_CONTROL_ACTION ||
            kind == F2C_IO_CONTROL_READ || kind == F2C_IO_CONTROL_WRITE ||
            kind == F2C_IO_CONTROL_READWRITE || kind == F2C_IO_CONTROL_DELIM ||
-           kind == F2C_IO_CONTROL_PAD;
+           kind == F2C_IO_CONTROL_PAD || kind == F2C_IO_CONTROL_DECIMAL ||
+           kind == F2C_IO_CONTROL_ROUND || kind == F2C_IO_CONTROL_SIGN;
 }
 
 static void validate_io_control_type(Context *context, Unit *unit, const F2cStatement *statement,
@@ -387,7 +394,9 @@ static void validate_io_control_type(Context *context, Unit *unit, const F2cStat
                semantic_kind == F2C_IO_CONTROL_STATUS || semantic_kind == F2C_IO_CONTROL_FORM ||
                semantic_kind == F2C_IO_CONTROL_ACCESS || semantic_kind == F2C_IO_CONTROL_ACTION ||
                semantic_kind == F2C_IO_CONTROL_BLANK || semantic_kind == F2C_IO_CONTROL_POSITION ||
-               semantic_kind == F2C_IO_CONTROL_DELIM || semantic_kind == F2C_IO_CONTROL_PAD) {
+               semantic_kind == F2C_IO_CONTROL_DECIMAL || semantic_kind == F2C_IO_CONTROL_ROUND ||
+               semantic_kind == F2C_IO_CONTROL_SIGN || semantic_kind == F2C_IO_CONTROL_DELIM ||
+               semantic_kind == F2C_IO_CONTROL_PAD) {
         if (control->asterisk || !scalar_type(value, TYPE_CHARACTER)) {
             f2c_diagnostic_at(context, statement->line, column, 1,
                               "%s %s= must be a scalar CHARACTER expression", statement_name,
@@ -518,14 +527,20 @@ static void validate_file_control_relations(Context *context, Unit *unit,
     static const char *const action[] = {"read", "write", "readwrite"};
     static const char *const form[] = {"formatted", "unformatted"};
     static const char *const blank[] = {"null", "zero"};
+    static const char *const decimal[] = {"point", "comma"};
+    static const char *const round[] = {"up",      "down",       "zero",
+                                        "nearest", "compatible", "processor_defined"};
+    static const char *const sign[] = {"plus", "suppress", "processor_defined"};
     static const char *const position[] = {"asis", "rewind", "append"};
     static const char *const delim[] = {"apostrophe", "quote", "none"};
     static const char *const yes_no[] = {"yes", "no"};
     const F2cIoControl *status = find_io_control(statement, F2C_IO_CONTROL_STATUS);
     const F2cIoControl *access_control = find_io_control(statement, F2C_IO_CONTROL_ACCESS);
+    const F2cIoControl *form_control = find_io_control(statement, F2C_IO_CONTROL_FORM);
     const F2cIoControl *recl = find_io_control(statement, F2C_IO_CONTROL_RECL);
     char status_value[32];
     char access_value[32];
+    char form_value[32];
     int64_t recl_value;
     if (statement->kind == F2C_STMT_CLOSE) {
         validate_character_choices(context, statement, F2C_IO_CONTROL_STATUS, close_status,
@@ -544,6 +559,12 @@ static void validate_file_control_relations(Context *context, Unit *unit,
                                sizeof(form) / sizeof(form[0]));
     validate_character_choices(context, statement, F2C_IO_CONTROL_BLANK, blank,
                                sizeof(blank) / sizeof(blank[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_DECIMAL, decimal,
+                               sizeof(decimal) / sizeof(decimal[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_ROUND, round,
+                               sizeof(round) / sizeof(round[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_SIGN, sign,
+                               sizeof(sign) / sizeof(sign[0]));
     validate_character_choices(context, statement, F2C_IO_CONTROL_POSITION, position,
                                sizeof(position) / sizeof(position[0]));
     validate_character_choices(context, statement, F2C_IO_CONTROL_DELIM, delim,
@@ -569,11 +590,23 @@ static void validate_file_control_relations(Context *context, Unit *unit,
             f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &access_control->span, 1,
                                      "OPEN RECL= is valid only with ACCESS='DIRECT'");
     }
+    if (form_control != NULL &&
+        character_control_value(form_control, form_value, sizeof(form_value)) &&
+        strcmp(form_value, "unformatted") == 0 &&
+        (seen[F2C_IO_CONTROL_BLANK] || seen[F2C_IO_CONTROL_DECIMAL] || seen[F2C_IO_CONTROL_ROUND] ||
+         seen[F2C_IO_CONTROL_SIGN] || seen[F2C_IO_CONTROL_DELIM] || seen[F2C_IO_CONTROL_PAD])) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &form_control->span, 1,
+                                 "OPEN formatted connection controls require FORM='FORMATTED'");
+    }
 }
 
 static void validate_transfer_relations(Context *context, Unit *unit, const F2cStatement *statement,
                                         const unsigned char *seen) {
     static const char *const yes_no[] = {"yes", "no"};
+    static const char *const decimal[] = {"point", "comma"};
+    static const char *const round[] = {"up",      "down",       "zero",
+                                        "nearest", "compatible", "processor_defined"};
+    static const char *const sign[] = {"plus", "suppress", "processor_defined"};
     const F2cIoControl *unit_control;
     const F2cIoControl *record;
     const F2cIoControl *format;
@@ -591,6 +624,12 @@ static void validate_transfer_relations(Context *context, Unit *unit, const F2cS
     internal = unit_control != NULL && unit_control->value != NULL &&
                unit_control->value->type == TYPE_CHARACTER;
     formatted = seen[F2C_IO_CONTROL_FMT] || seen[F2C_IO_CONTROL_NML];
+    validate_character_choices(context, statement, F2C_IO_CONTROL_DECIMAL, decimal,
+                               sizeof(decimal) / sizeof(decimal[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_ROUND, round,
+                               sizeof(round) / sizeof(round[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_SIGN, sign,
+                               sizeof(sign) / sizeof(sign[0]));
     if (advance != NULL) {
         validate_character_choices(context, statement, F2C_IO_CONTROL_ADVANCE, yes_no,
                                    sizeof(yes_no) / sizeof(yes_no[0]));
@@ -605,6 +644,12 @@ static void validate_transfer_relations(Context *context, Unit *unit, const F2cS
         (seen[F2C_IO_CONTROL_ADVANCE] || seen[F2C_IO_CONTROL_EOR] || seen[F2C_IO_CONTROL_SIZE])) {
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &statement->span, 1,
                                  "unformatted %s cannot use ADVANCE=, EOR=, or SIZE=",
+                                 io_statement_name(statement->kind));
+    }
+    if (!formatted &&
+        (seen[F2C_IO_CONTROL_DECIMAL] || seen[F2C_IO_CONTROL_ROUND] || seen[F2C_IO_CONTROL_SIGN])) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &statement->span, 1,
+                                 "unformatted %s cannot use DECIMAL=, ROUND=, or SIGN=",
                                  io_statement_name(statement->kind));
     }
     if (record == NULL)
