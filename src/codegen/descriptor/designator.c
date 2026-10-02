@@ -163,7 +163,7 @@ static char *component_offset(Unit *unit, const F2cExpr *expression, char **indi
             f2c_buffer_append(&result, " + (");
             for (prior = 0U; prior < dimension; ++prior) {
                 char *extent = f2c_descriptor_dimension_extent(unit, expression, prior);
-                f2c_buffer_printf(&result, "%s(size_t)(%s)", prior == 0U ? "" : " * ",
+                f2c_buffer_printf(&result, "%s(int64_t)(%s)", prior == 0U ? "" : " * ",
                                   extent != NULL ? extent : "0");
                 free(extent);
             }
