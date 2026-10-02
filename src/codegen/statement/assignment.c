@@ -19,6 +19,7 @@ static int numeric_type(Type type) {
 
 static int emit_derived_assignment(Context *context, const F2cStatement *statement,
                                    const char *left, const char *right, int depth) {
+    const F2cExpr *source = f2c_expr_value_source(statement->right);
     if (statement->left == NULL || statement->right == NULL ||
         statement->left->type != TYPE_DERIVED || statement->right->type != TYPE_DERIVED ||
         statement->left->rank != 0U || statement->right->rank != 0U ||
@@ -26,7 +27,7 @@ static int emit_derived_assignment(Context *context, const F2cStatement *stateme
         statement->left->derived_type != statement->right->derived_type)
         return 0;
     indent(&context->output, depth);
-    if (statement->right->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR) {
+    if (source->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR) {
         f2c_buffer_printf(&context->output, "{ %s f2c_assignment_temporary = %s;\n",
                           statement->right->derived_type->c_name, right);
         indent(&context->output, depth + 1);
@@ -40,9 +41,8 @@ static int emit_derived_assignment(Context *context, const F2cStatement *stateme
                           statement->right->derived_type->c_name);
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
-    } else if ((statement->right->kind == F2C_EXPR_CALL &&
-                statement->right->intrinsic != F2C_INTRINSIC_MERGE) ||
-               statement->right->resolved_procedure != NULL) {
+    } else if ((source->kind == F2C_EXPR_CALL && source->intrinsic != F2C_INTRINSIC_MERGE) ||
+               source->resolved_procedure != NULL) {
         f2c_buffer_printf(&context->output, "{ %s f2c_assignment_result = %s;\n",
                           statement->right->derived_type->c_name, right);
         indent(&context->output, depth + 1);
@@ -64,7 +64,7 @@ static int emit_derived_merge_assignment(Context *context, Unit *unit,
                                          const F2cStatement *statement, int depth,
                                          size_t merge_depth) {
     const size_t output_start = context != NULL ? context->output.length : 0U;
-    const F2cExpr *merge = statement != NULL ? statement->right : NULL;
+    const F2cExpr *merge = f2c_expr_value_source(statement != NULL ? statement->right : NULL);
     const F2cExpr *true_source;
     const F2cExpr *false_source;
     const F2cExpr *mask;
@@ -106,7 +106,8 @@ static int emit_derived_merge_assignment(Context *context, Unit *unit,
     indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output, "if (f2c_merge_mask_%zu) {\n", merge_depth);
     branch.right = (F2cExpr *)true_source;
-    if (true_source->kind == F2C_EXPR_CALL && true_source->intrinsic == F2C_INTRINSIC_MERGE) {
+    if (f2c_expr_value_source(true_source)->kind == F2C_EXPR_CALL &&
+        f2c_expr_value_source(true_source)->intrinsic == F2C_INTRINSIC_MERGE) {
         if (!emit_derived_merge_assignment(context, unit, &branch, depth + 2, merge_depth + 1U))
             goto failed;
     } else if (!emit_derived_assignment(context, &branch, left, true_code, depth + 2)) {
@@ -115,7 +116,8 @@ static int emit_derived_merge_assignment(Context *context, Unit *unit,
     indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "} else {\n");
     branch.right = (F2cExpr *)false_source;
-    if (false_source->kind == F2C_EXPR_CALL && false_source->intrinsic == F2C_INTRINSIC_MERGE) {
+    if (f2c_expr_value_source(false_source)->kind == F2C_EXPR_CALL &&
+        f2c_expr_value_source(false_source)->intrinsic == F2C_INTRINSIC_MERGE) {
         if (!emit_derived_merge_assignment(context, unit, &branch, depth + 2, merge_depth + 1U))
             goto failed;
     } else if (!emit_derived_assignment(context, &branch, left, false_code, depth + 2)) {
