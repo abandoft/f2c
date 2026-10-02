@@ -107,18 +107,7 @@ static int known_character_length(Unit *unit, const F2cExpr *expression, int64_t
     free(constant);
     if (expression->symbol == NULL)
         return 0;
-    if (expression->symbol->character_length_expression != NULL)
-        return f2c_evaluate_integer_constant(unit, expression->symbol->character_length_expression,
-                                             length);
-    if (expression->symbol->character_length_syntax.count != 0U)
-        return f2c_evaluate_integer_syntax(unit, expression->symbol->character_length_syntax,
-                                           length);
-    if (expression->symbol->character_length == NULL ||
-        strcmp(expression->symbol->character_length, "1") == 0) {
-        *length = 1;
-        return 1;
-    }
-    return 0;
+    return f2c_character_declaration_length(unit, expression->symbol, length);
 }
 
 static void require_same_type(Context *context, Unit *unit, size_t line, const char *statement_text,
@@ -194,8 +183,7 @@ static void validate_rounding(Context *context, Unit *unit, size_t line, const c
 
 static void validate_binary_numeric(Context *context, Unit *unit, size_t line,
                                     const char *statement_text, F2cExpr *expression) {
-    const F2cIntrinsicArgumentSchema *schema =
-        f2c_intrinsic_argument_schema(expression->intrinsic);
+    const F2cIntrinsicArgumentSchema *schema = f2c_intrinsic_argument_schema(expression->intrinsic);
     const char *name = display_name(expression->intrinsic);
     const F2cBoundIntrinsicArguments bound =
         f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);

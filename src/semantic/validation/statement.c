@@ -115,12 +115,7 @@ static int character_length_constant(Unit *unit, const Symbol *symbol, int64_t *
     if (unit == NULL || symbol == NULL || length == NULL || symbol->type != TYPE_CHARACTER ||
         symbol->deferred_character)
         return 0;
-    if (symbol->character_length_expression != NULL)
-        return f2c_evaluate_integer_constant(unit, symbol->character_length_expression, length);
-    if (symbol->character_length_syntax.count != 0U)
-        return f2c_evaluate_integer_syntax(unit, symbol->character_length_syntax, length);
-    *length = 1;
-    return 1;
+    return f2c_character_declaration_length(unit, symbol, length);
 }
 
 static void validate_action_statement(Context *context, const Unit *unit,

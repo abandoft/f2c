@@ -506,9 +506,8 @@ static int same_move_alloc_character_length(Unit *unit, const Symbol *from, cons
     int64_t to_length;
     if (from->deferred_character || to->deferred_character)
         return from->deferred_character == to->deferred_character;
-    if (from->character_length_expression != NULL && to->character_length_expression != NULL &&
-        f2c_evaluate_integer_constant(unit, from->character_length_expression, &from_length) &&
-        f2c_evaluate_integer_constant(unit, to->character_length_expression, &to_length))
+    if (f2c_character_declaration_length(unit, from, &from_length) &&
+        f2c_character_declaration_length(unit, to, &to_length))
         return from_length == to_length;
     if (from->character_length == NULL || to->character_length == NULL)
         return from->character_length == to->character_length;
