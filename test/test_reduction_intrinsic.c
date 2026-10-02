@@ -49,12 +49,10 @@ static void test_argument_contracts(void) {
                       "SUM argument DIM must be a scalar INTEGER expression");
     expect_diagnostic("  real :: values(2,2)\n", "sum(values, dim=3)",
                       "DIM in SUM must be between 1 and array rank 2");
-    expect_diagnostic("  real :: values(4)\n  integer :: mask(4)\n",
-                      "sum(values, mask=mask)",
+    expect_diagnostic("  real :: values(4)\n  integer :: mask(4)\n", "sum(values, mask=mask)",
                       "SUM argument MASK must be a LOGICAL scalar or an array conformable with "
                       "ARRAY");
-    expect_diagnostic("  real :: values(4)\n  logical :: mask(3)\n",
-                      "sum(values, mask=mask)",
+    expect_diagnostic("  real :: values(4)\n  logical :: mask(3)\n", "sum(values, mask=mask)",
                       "MASK in SUM is not conformable with ARRAY in dimension 1");
     expect_diagnostic("  logical :: values(4)\n  integer :: selected_kind\n",
                       "count(values, kind=selected_kind)",
@@ -82,8 +80,7 @@ static void test_dot_product_contracts(void) {
                       "DOT_PRODUCT vectors must both be numeric or both be LOGICAL");
     expect_diagnostic("  real :: left(2), right(3)\n", "dot_product(left, right)",
                       "DOT_PRODUCT vectors are not conformable");
-    expect_diagnostic("  real :: left(2), right(2)\n",
-                      "dot_product(vector_a=left, vector_a=right)",
+    expect_diagnostic("  real :: left(2), right(2)\n", "dot_product(vector_a=left, vector_a=right)",
                       "DOT_PRODUCT argument 'vector_a' is specified more than once");
 }
 
@@ -110,8 +107,7 @@ static void test_typed_scalar_lowering(void) {
         "end subroutine reduction_valid\n";
     F2cOptions options = {"reduction_valid.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
-    expect(result.code != NULL && result.error_count == 0U,
-           "valid reductions produce typed C17");
+    expect(result.code != NULL && result.error_count == 0U, "valid reductions produce typed C17");
     expect(result.code != NULL && strstr(result.code, "F2C_SUM(") != NULL &&
                strstr(result.code, "F2C_PRODUCT(") != NULL &&
                strstr(result.code, "F2C_MAXIMUM(") != NULL &&
@@ -156,8 +152,7 @@ static void test_mixed_and_complex_lowering(void) {
            "mixed-kind and complex reductions produce portable C17");
     expect(result.code != NULL && strstr(result.code, "f2c_sum_c") != NULL &&
                strstr(result.code, "f2c_product_z") != NULL &&
-               strstr(result.code, "f2c_dot_c") != NULL &&
-               strstr(result.code, "f2c_dot_z") != NULL,
+               strstr(result.code, "f2c_dot_c") != NULL && strstr(result.code, "f2c_dot_z") != NULL,
            "complex SUM, PRODUCT, and DOT_PRODUCT use kind-specific helpers");
     expect(result.code != NULL && strstr(result.code, "f2c_dot_f") != NULL &&
                strstr(result.code, "f2c_dot_l") != NULL &&
@@ -251,7 +246,26 @@ static void test_portable_complex_storage(void) {
     f2c_result_free(&result);
 }
 
+static void test_direct_relation_reduction(void) {
+    static const char source[] = "subroutine direct_relation(values, limit, answer)\n"
+                                 "  implicit none\n"
+                                 "  real, intent(in) :: values(20), limit\n"
+                                 "  logical, intent(out) :: answer\n"
+                                 "  answer = any(values > limit)\n"
+                                 "end subroutine direct_relation\n";
+    F2cOptions options = {"direct_relation.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "direct array and scalar relations translate");
+    expect(result.code != NULL && strstr(result.code, "F2C_RELATION_REDUCE(values") != NULL,
+           "simple relations keep the allocation-free fused reduction path");
+    expect(result.code != NULL && strstr(result.code, "f2c_array_scalar_elemental") == NULL,
+           "simple relations do not materialize a logical mask array");
+    f2c_result_free(&result);
+}
+
 int main(void) {
+    test_direct_relation_reduction();
     test_argument_contracts();
     test_dot_product_contracts();
     test_typed_scalar_lowering();

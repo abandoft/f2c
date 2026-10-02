@@ -880,7 +880,7 @@ static void test_lapack_f90_semantics(void) {
                     "MAXLOC array sections lower to a typed strided C17 reduction");
     expect_contains(result.code, "float *F2C_RESTRICT sum",
                     "a declared array shadows an intrinsic with the same name");
-    expect_contains(result.code, "memmove((&name[f2c_substring_offset",
+    expect_contains(result.code, "f2c_substring_offset((size_t)(12)",
                     "character substring assignment uses checked typed-AST bounds");
     expect_contains(result.code, "int32_t f2c_row, f2c_column",
                     "rank-two array section assignment lowers to column-major loops");
@@ -2286,11 +2286,10 @@ static void test_unsupported_semantics_are_errors(void) {
                                          0};
         F2cResult expression_result =
             f2c_transpile(expression_source, sizeof(expression_source) - 1U, &expression_options);
-        expect(expression_result.error_count != 0U && expression_result.code == NULL,
-               "unsupported typed statement expressions cannot silently become false");
-        expect_contains(expression_result.diagnostics,
-                        "code generation does not support this typed statement expression",
-                        "unsupported typed statement expressions report a hard diagnostic");
+        expect(expression_result.error_count == 0U && expression_result.code != NULL,
+               "nested inquiry and constructor reductions now have typed lowering");
+        expect_contains(expression_result.code, "f2c_any_l(",
+                        "nested inquiry comparisons generate a real logical reduction");
         f2c_result_free(&expression_result);
     }
 }
@@ -2747,12 +2746,13 @@ static void test_character_shape_diagnostics(void) {
                                            "  result = value(1:3:2)\n"
                                            "  result = value(0:2)\n"
                                            "  result = value(1:5)\n"
-                                           "  result = value(4:2)\n"
                                            "end subroutine invalid_substrings\n";
     static const char empty_substring_source[] = "subroutine empty_substring(value, result)\n"
                                                  "  implicit none\n"
                                                  "  character(len=4) :: value, result\n"
                                                  "  result = value(1:0)\n"
+                                                 "  result = value(4:2)\n"
+                                                 "  result = value(100:-100)\n"
                                                  "end subroutine empty_substring\n";
     static const char intent_source[] = "subroutine invalid_intent_targets(number, text)\n"
                                         "  implicit none\n"
@@ -2780,7 +2780,7 @@ static void test_character_shape_diagnostics(void) {
                     "character declaration initializer shape mismatch is diagnosed");
     f2c_result_free(&result);
     result = f2c_transpile(substring_source, strlen(substring_source), &options);
-    expect(result.error_count == 5U,
+    expect(result.error_count == 4U,
            "invalid CHARACTER substring bounds are rejected before code generation");
     expect(result.code == NULL, "invalid substring semantics suppress generated C17");
     expect_contains(result.diagnostics, "lower bound must be a scalar INTEGER",
@@ -2791,12 +2791,10 @@ static void test_character_shape_diagnostics(void) {
                     "substring lower bounds enforce Fortran one-based indexing");
     expect_contains(result.diagnostics, "upper bound exceeds declared length 4",
                     "constant substring upper bounds are checked against declared length");
-    expect_contains(result.diagnostics, "may exceed the upper bound by at most one",
-                    "substring ranges reject invalid reversed intervals");
     f2c_result_free(&result);
     result = f2c_transpile(empty_substring_source, strlen(empty_substring_source), &options);
     expect(result.error_count == 0U,
-           "a lower bound exactly one past the upper bound is a legal empty substring");
+           "reversed endpoints denote empty substrings even outside the parent bounds");
     f2c_result_free(&result);
     result = f2c_transpile(intent_source, strlen(intent_source), &options);
     expect(result.error_count == 3U,
