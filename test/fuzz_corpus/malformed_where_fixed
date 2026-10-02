@@ -1,0 +1,5 @@
+1      subroutine fixed(a,n)
+      integer n
+      real a(n)
+      where do 10 i=1,(i)=i+()a1.0
+      end
