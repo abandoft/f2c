@@ -19,7 +19,8 @@ enum F2cDeclarationAttributeFlag {
     F2C_DECL_CONTIGUOUS = 1U << 11,
     F2C_DECL_VALUE = 1U << 12,
     F2C_DECL_ASYNCHRONOUS = 1U << 13,
-    F2C_DECL_VOLATILE = 1U << 14
+    F2C_DECL_VOLATILE = 1U << 14,
+    F2C_DECL_INTRINSIC = 1U << 15
 };
 
 typedef struct F2cDeclarationAttributes {
@@ -82,6 +83,8 @@ static unsigned int simple_attribute_flag(const F2cToken *token) {
         return F2C_DECL_ALLOCATABLE;
     if (f2c_token_equals(token, "external"))
         return F2C_DECL_EXTERNAL;
+    if (f2c_token_equals(token, "intrinsic"))
+        return F2C_DECL_INTRINSIC;
     if (f2c_token_equals(token, "optional"))
         return F2C_DECL_OPTIONAL;
     if (f2c_token_equals(token, "parameter"))
@@ -417,6 +420,8 @@ static int apply_entity(Context *context, Unit *unit, const Line *line,
     } else if (symbol->external) {
         symbol->external_subroutine = 0;
     }
+    if ((flags & F2C_DECL_INTRINSIC) != 0U)
+        f2c_bind_intrinsic_declaration(context, unit, line, &line->tokens[entity->begin]);
     if (type_spec->type == TYPE_DERIVED &&
         !configure_derived_type(context, unit, line, type_spec, symbol))
         return 0;

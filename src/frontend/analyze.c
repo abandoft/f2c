@@ -46,6 +46,7 @@ void f2c_analyze_module(Context *context, Unit *unit) {
         f2c_parse_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_entity_attribute_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_dimension_declaration(context, unit, &context->lines.items[i]);
+        f2c_parse_intrinsic_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_parameter_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_save_declaration(context, unit, &context->lines.items[i]);
     }
@@ -56,10 +57,11 @@ void f2c_analyze_module(Context *context, Unit *unit) {
     }
     f2c_parse_access_statements(context, unit);
     f2c_finalize_module_accessibility(context, unit);
+    f2c_validate_intrinsic_declarations(context, unit);
     for (i = 0U; i < unit->symbol_count; ++i) {
         Symbol *symbol = &unit->symbols[i];
         Buffer c_name = {0};
-        if (symbol->external)
+        if (symbol->external || symbol->intrinsic != NULL)
             continue;
         if (symbol->association != F2C_ASSOCIATION_LOCAL)
             continue;
@@ -142,6 +144,7 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
         f2c_parse_entity_attribute_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_dimension_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_external_declaration(context, unit, &context->lines.items[i]);
+        f2c_parse_intrinsic_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_procedure_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_parameter_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_save_declaration(context, unit, &context->lines.items[i]);
@@ -226,8 +229,11 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
             }
         }
     }
+    f2c_validate_intrinsic_declarations(context, unit);
     for (i = 0U; i < unit->symbol_count; ++i) {
         Symbol *symbol = &unit->symbols[i];
+        if (symbol->intrinsic != NULL)
+            continue;
         const int is_function_result = unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
                                        strcmp(symbol->name, unit->result_name) == 0;
         if (symbol->optional && !symbol->argument) {

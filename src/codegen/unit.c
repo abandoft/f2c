@@ -151,10 +151,10 @@ static void emit_declarations(Context *context, Unit *unit) {
             f2c_buffer_append(output, " = NULL;\n");
             continue;
         }
-        if (symbol->argument || symbol->parameter || symbol->external || symbol->module_entity ||
-            symbol->host_associated || symbol->common_block != NULL ||
-            symbol->equivalence_associated || symbol->alias_to != NULL ||
-            symbol->statement_function ||
+        if (symbol->argument || symbol->parameter || symbol->external ||
+            symbol->intrinsic != NULL || symbol->module_entity || symbol->host_associated ||
+            symbol->common_block != NULL || symbol->equivalence_associated ||
+            symbol->alias_to != NULL || symbol->statement_function ||
             (unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
              strcmp(symbol->name, unit->result_name) == 0)) {
             continue;
@@ -413,10 +413,10 @@ static void emit_declarations(Context *context, Unit *unit) {
 }
 
 static int has_local_declaration(Unit *unit, Symbol *symbol) {
-    return !symbol->argument && !symbol->parameter && !symbol->external && !symbol->module_entity &&
-           !symbol->host_associated && symbol->common_block == NULL &&
-           !symbol->equivalence_associated && symbol->alias_to == NULL &&
-           !symbol->statement_function &&
+    return !symbol->argument && !symbol->parameter && !symbol->external &&
+           symbol->intrinsic == NULL && !symbol->module_entity && !symbol->host_associated &&
+           symbol->common_block == NULL && !symbol->equivalence_associated &&
+           symbol->alias_to == NULL && !symbol->statement_function &&
            !(unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
              strcmp(symbol->name, unit->result_name) == 0);
 }
@@ -564,7 +564,7 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
         size_t dimension;
         if (symbol->host_associated && !symbol->host_capture)
             continue;
-        if (symbol == function_result || symbol->external)
+        if (symbol == function_result || symbol->external || symbol->intrinsic != NULL)
             continue;
         if ((symbol->allocatable || symbol->pointer) && symbol->argument) {
             const char *name = f2c_symbol_c_name(unit, symbol);

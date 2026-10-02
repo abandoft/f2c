@@ -260,6 +260,7 @@ set(
     src/frontend/declaration/symbol.c
     src/frontend/declaration/symbol.h
     src/frontend/declaration/bindings.c
+    src/frontend/declaration/intrinsic.c
     src/frontend/declaration/type.c
     src/frontend/derived.c
     src/frontend/host.c

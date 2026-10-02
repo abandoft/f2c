@@ -12,6 +12,10 @@ void f2c_parse_declaration(Context *context, Unit *unit, Line *source_line);
 void f2c_parse_entity_attribute_declaration(Context *context, Unit *unit, Line *source_line);
 void f2c_parse_derived_type_definitions(Context *context, Unit *unit);
 void f2c_parse_external_declaration(Context *context, Unit *unit, Line *source_line);
+void f2c_parse_intrinsic_declaration(Context *context, Unit *unit, const Line *line);
+void f2c_bind_intrinsic_declaration(Context *context, Unit *unit, const Line *line,
+                                    const F2cToken *name);
+void f2c_validate_intrinsic_declarations(Context *context, Unit *unit);
 void f2c_parse_dimension_declaration(Context *context, Unit *unit, Line *source_line);
 void f2c_parse_parameter_declaration(Context *context, Unit *unit, Line *source_line);
 void f2c_parse_save_declaration(Context *context, Unit *unit, Line *source_line);
