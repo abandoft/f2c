@@ -9,6 +9,21 @@ int f2c_generated_character_length_main(void);
 
 int main(void) {
     size_t length = 99U;
+    size_t bytes = 99U;
+    size_t calls = 0U;
+    if (f2c_character_copy_length(++calls, 0U) != 0U || calls != 1U ||
+        f2c_character_copy_length(0U, SIZE_MAX) != 0U ||
+        f2c_character_copy_length(SIZE_MAX, SIZE_MAX) != SIZE_MAX)
+        return 30;
+    if (!f2c_size_multiply(SIZE_MAX, 0U, &bytes) || bytes != 0U)
+        return 27;
+    bytes = 99U;
+    if (f2c_size_multiply(SIZE_MAX, 2U, &bytes) || bytes != 99U)
+        return 28;
+    if (f2c_size_multiply_checked(0U, SIZE_MAX) != 0U ||
+        f2c_size_multiply_checked(SIZE_MAX, 0U) != 0U ||
+        f2c_size_multiply_checked(SIZE_MAX, 1U) != SIZE_MAX)
+        return 29;
     if (!f2c_character_parameter_size(INT64_MIN, &length) || length != 0U)
         return 20;
     if (!f2c_character_parameter_size(INT64_C(0), &length) || length != 0U)
