@@ -148,13 +148,16 @@ The currently tested implementation includes:
   results, and the gfortran-compatible trailing-length ABI used by the validation corpus;
 - structured and legacy control flow, formatted and list-directed I/O, internal files, nonadvancing
   I/O, defined I/O, and recursive NAMELIST handling on the documented paths;
+- shared `DECIMAL/ROUND/SIGN/DELIM` scopes, binary32/64-aware exact input rounding, escaped
+  list-directed CHARACTER output, and inherited DT child controls and record positions;
 - `RESHAPE`, `PACK`, `UNPACK`, `SPREAD`, `CSHIFT`, `EOSHIFT`, and `FINDLOC` lowering for the tested
   numeric, CHARACTER, and derived-type combinations.
 
 Important remaining work includes complete token-stream coverage for declarations and modules,
 all kind/rank and arbitrary-array-expression combinations, complete module generics and submodules,
 dynamic polymorphic allocation, named/association construct finalization boundaries, every
-formatted-I/O layout rule, pointer reassociation during NAMELIST input, and multi-compiler ABI
+formatted-I/O layout rule, complete list-directed null/repeat/slash input combinations,
+pointer reassociation during NAMELIST input, and multi-compiler ABI
 certification. Unsupported semantics must produce diagnostics rather than plausible but incorrect
 C. The detailed checklist is maintained in [TODO.md](TODO.md).
 

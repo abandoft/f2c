@@ -133,11 +133,14 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
   尾随长度 ABI；
 - 结构化/旧式控制流、格式化和列表导向 I/O、内部文件、非前进 I/O、定义 I/O，以及文档化路径上的
   递归 NAMELIST；
+- 统一的 `DECIMAL/ROUND/SIGN/DELIM` 作用域、感知 binary32/64 的精确输入舍入、列表导向字符
+  引号转义输出，以及 DT 子 I/O 控制继承和记录位置同步；
 - 测试覆盖的数值、字符和派生类型组合中的 `RESHAPE`、`PACK`、`UNPACK`、`SPREAD`、
   `CSHIFT`、`EOSHIFT` 和 `FINDLOC` 降级。
 
 重要剩余工作包括：声明/模块的完整 token 流覆盖，所有 kind/rank 与任意数组表达式组合，完整模块
-泛型和子模块，动态多态分配，命名/关联构造的终结边界，全部格式化 I/O 布局规则，NAMELIST 输入
+泛型和子模块，动态多态分配，命名/关联构造的终结边界，全部格式化 I/O 布局规则，列表导向输入的
+完整空值/重复因子/斜杠组合，NAMELIST 输入
 中的指针重关联，以及多编译器 ABI 认证。不支持的语义必须产生诊断，不能生成看似合理但错误的 C。
 详细清单维护在 [TODO.md](TODO.md)。
 
