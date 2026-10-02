@@ -112,7 +112,8 @@ void f2c_emit_project_modules(Context *context) {
             char *initializer =
                 symbol->data_initializer || symbol->data_element_initializers != NULL ||
                         symbol->rank != 0U || symbol->type == TYPE_COMPLEX ||
-                        symbol->type == TYPE_DOUBLE_COMPLEX
+                        symbol->type == TYPE_DOUBLE_COMPLEX ||
+                        (symbol->type == TYPE_CHARACTER && !symbol->allocatable && !symbol->pointer)
                     ? f2c_unit_static_storage_initializer(module, symbol)
                 : symbol->initializer_expression != NULL
                     ? f2c_emit_typed_expression(module, symbol->initializer_expression)
@@ -166,7 +167,8 @@ void f2c_emit_project_modules(Context *context) {
                 f2c_buffer_printf(&context->output, "[(%s) + 1]", length);
                 free(length);
             } else if (symbol->rank != 0U) {
-                f2c_buffer_append(&context->output, "[");
+                f2c_buffer_append(&context->output,
+                                  symbol->type == TYPE_CHARACTER ? "[F2C_MAX(1, " : "[");
                 if (symbol->type == TYPE_CHARACTER) {
                     char *length = f2c_symbol_character_length(module, symbol);
                     if (length == NULL) {
@@ -200,7 +202,7 @@ void f2c_emit_project_modules(Context *context) {
                     free(lower);
                     free(upper);
                 }
-                f2c_buffer_append(&context->output, "]");
+                f2c_buffer_append(&context->output, symbol->type == TYPE_CHARACTER ? ")]" : "]");
             }
             if (initializer != NULL)
                 f2c_buffer_printf(&context->output, " = %s", initializer);
