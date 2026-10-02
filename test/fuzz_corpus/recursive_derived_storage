@@ -1,0 +1,5 @@
+module invalid_recursive_storage
+  type :: node
+    type(node) :: next
+  end type
+end module

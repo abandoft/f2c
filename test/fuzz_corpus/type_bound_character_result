@@ -1,0 +1,24 @@
+module bound_result
+  type :: box
+    integer :: width = 2
+  contains
+    procedure, pass(self) :: make
+  end type
+contains
+  function make(n,self,extra) result(text)
+    integer, intent(inout) :: n
+    class(box), intent(inout) :: self
+    integer, optional :: extra
+    character(n+self%width) :: text
+    text = 'x'
+    n = n+1
+  end function
+end module
+program bound_result_use
+  use bound_result
+  type(box) :: value
+  integer :: n
+  character(:), allocatable :: text
+  n = 1
+  text = value%make(n=n)
+end program

@@ -1,0 +1,5 @@
+module large_default
+  type :: data
+    integer :: values(1000000000) = 1
+  end type
+end module
