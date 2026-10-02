@@ -3,6 +3,8 @@
 
 #include "internal/f2c.h"
 #include "semantic/control_flow.h"
+void f2c_validation_etime(Context *context, Unit *unit, size_t line, const char *statement_text,
+                          F2cExpr *expression);
 
 const char *f2c_validation_unit_line(const Context *context, const Unit *unit, size_t line);
 size_t f2c_validation_expression_column(const char *statement_text, const F2cExpr *expression);

@@ -140,3 +140,31 @@ void f2c_validation_time_intrinsic(Context *context, F2cStatement *statement) {
     else if (statement->intrinsic == F2C_INTRINSIC_CPU_TIME)
         validate_cpu_time(context, statement);
 }
+
+void f2c_validation_etime(Context *context, Unit *unit, size_t line, const char *statement_text,
+                          F2cExpr *expression) {
+    F2cBoundIntrinsicArguments bound =
+        f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
+    const F2cExpr *values = bound.values[0];
+    if (unit->pure)
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &expression->span, 1,
+                                 "impure ETIME invocation is not permitted in a PURE procedure");
+    if (values == NULL)
+        return;
+    if (values->type != TYPE_REAL || resolved_kind(values) != 4 || values->rank != 1U ||
+        !values->definable) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &values->span, 1,
+                                 "ETIME VALUES must be a definable rank-one REAL(4) array");
+        return;
+    }
+    if (values->shape.dimensions[0].extent_known &&
+        values->shape.dimensions[0].extent < UINT64_C(2))
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &values->span, 1,
+                                 "ETIME VALUES must contain at least two elements");
+    if (values->kind != F2C_EXPR_NAME || values->symbol == NULL ||
+        !values->shape.dimensions[0].extent_known ||
+        (values->symbol != NULL && values->symbol->equivalence_unaligned))
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_UNSUPPORTED, &values->span, 1,
+            "ETIME currently requires an aligned named array with a known extent");
+}

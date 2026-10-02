@@ -541,6 +541,14 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
     int operator_handled;
     if (expression == NULL)
         return;
+    if (expression->kind == F2C_EXPR_NAME && expression->symbol != NULL &&
+        expression->symbol->intrinsic != NULL) {
+        f2c_diagnostic_span_code(
+            context, F2C_DIAGNOSTIC_UNSUPPORTED, &expression->span, 1,
+            "INTRINSIC procedure '%s' as a procedure value requires an unsupported ABI adapter",
+            expression->symbol->name);
+        return;
+    }
     validate_assumed_size_operands(context, line, statement_text, expression);
     for (i = 0U; i < expression->child_count; ++i)
         f2c_validation_expression_calls(context, unit, line, statement_text,
@@ -629,6 +637,8 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                (expression->symbol == NULL || !expression->symbol->external_declared)) {
         const F2cIntrinsicSignature *signature = f2c_find_intrinsic(expression->text);
         validate_intrinsic_arity(context, line, statement_text, expression);
+        if (expression->intrinsic == F2C_INTRINSIC_ETIME)
+            f2c_validation_etime(context, unit, line, statement_text, expression);
         f2c_validation_bit_intrinsic(context, unit, line, statement_text, expression);
         f2c_validation_character_intrinsic(context, unit, line, statement_text, expression);
         f2c_validation_conversion_intrinsic(context, unit, line, statement_text, expression);
