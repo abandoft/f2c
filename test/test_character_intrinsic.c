@@ -235,6 +235,9 @@ static void test_character_array_allocation_guards(void) {
                                    "f2c_element_count * f2c_element_length;") != NULL,
            "fortified compilers can relate allocation bytes to iteration bounds");
     expect(result.code != NULL &&
+               strstr(result.code, "if (f2c_element_linear >= f2c_element_count) abort();") != NULL,
+           "character snapshot writes explicitly respect the allocated element count");
+    expect(result.code != NULL &&
                strstr(result.code, "malloc(f2c_element_count == 0U || "
                                    "f2c_element_length == 0U ? 1U : "
                                    "f2c_element_bytes)") != NULL &&
