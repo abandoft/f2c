@@ -111,8 +111,8 @@ void f2c_emit_project_modules(Context *context) {
             size_t dimension;
             char *initializer =
                 symbol->data_initializer || symbol->data_element_initializers != NULL ||
-                        symbol->rank != 0U || symbol->type == TYPE_COMPLEX ||
-                        symbol->type == TYPE_DOUBLE_COMPLEX ||
+                        symbol->rank != 0U || symbol->type == TYPE_DERIVED ||
+                        symbol->type == TYPE_COMPLEX || symbol->type == TYPE_DOUBLE_COMPLEX ||
                         (symbol->type == TYPE_CHARACTER && !symbol->allocatable && !symbol->pointer)
                     ? f2c_unit_static_storage_initializer(module, symbol)
                 : symbol->initializer_expression != NULL
