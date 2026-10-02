@@ -1,9 +1,9 @@
 ## 1.41.0
 
 - Unified character substring designators for array elements, sections, and derived-type components.
-- Completed omitted endpoints, reversed empty substrings, and declared-length padding, truncation, and embedded NUL handling for character constants.
+- Normalized negative declared character lengths to zero and completed omitted endpoints, reversed empty substrings, declared-length padding/truncation, and embedded NUL handling.
 - Added substring assignment for multidimensional character arrays and derived-array components, including reverse sections, scalar broadcasting, and overlapping reads and writes.
-- Improved substring pointer association, inherited component `TARGET` attributes, and `ASSOCIATED` checks without corrupting parent strings through alias writes.
+- Improved substring pointer association, inherited component `TARGET` attributes, and `ASSOCIATED` checks, correctly handling zero-length character targets while protecting parent strings.
 - Evaluated index and bound functions once on supported substring assignment, argument, and scalar pointer-association paths.
 - Lowered nested array constructors, `ABS`, `RESHAPE/SHAPE`, and `ANY/ALL/COUNT/SUM` expressions, including value snapshots for derived array components and noncontiguous reduction operands.
 - Retained direct reductions for simple array/scalar comparisons without allocating a complete logical mask.
@@ -12,7 +12,7 @@
 - Fixed 32-bit character-length checks and extended strict filesystem-free WebAssembly compilation and execution coverage.
 - Unified copy-in/copy-out for noncontiguous character substring arguments in subroutine and function calls, covering explicit/assumed shapes, dynamic lengths, derived components, and character and derived-type function results.
 - Resolved character function result lengths in their procedure scope, substituted actual arguments into typed specification expressions, and evaluated specification arguments once.
-- Completed strict code generation for empty arrays and zero-length arguments and rejected illegal allocatable/pointer components following array references.
+- Completed strict code generation for empty arrays and zero-length arguments, updated allocatable character array lengths on scalar assignment, and rejected illegal allocatable/pointer components following array references.
 - Improved portable numeric component assignment, scalar argument addresses, and procedure pointer argument interface checks; lowering failures report hard, source-located errors and roll back incomplete output.
 - Fixed a memory leak in invalid construct-prefix and branch-name combinations.
 
