@@ -740,7 +740,12 @@ static void validate_procedure_actual(Context *context, Unit *caller, const Unit
     if (value->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return;
     if (dummy->external) {
-        const Symbol *procedure = value->kind == F2C_EXPR_NAME ? value->symbol : NULL;
+        const Symbol *procedure =
+            value->kind == F2C_EXPR_NAME ||
+                    (value->kind == F2C_EXPR_COMPONENT && value->rank == 0U &&
+                     value->symbol != NULL && value->symbol->procedure_pointer)
+                ? value->symbol
+                : NULL;
         if (procedure == NULL || !procedure->external) {
             f2c_diagnostic_at(context, line, column, 1,
                               "argument %zu of procedure '%s' must be a procedure", index + 1U,

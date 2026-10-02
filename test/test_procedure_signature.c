@@ -211,6 +211,30 @@ static void test_equivalent_complete_signature(void) {
     f2c_result_free(&result);
 }
 
+static void test_component_procedure_signature(void) {
+    static const char source[] = "program component_signature_mismatch\n"
+                                 "  abstract interface\n"
+                                 "    subroutine expected(item)\n"
+                                 "      integer(kind=4), intent(in) :: item\n"
+                                 "    end subroutine expected\n"
+                                 "    subroutine actual(item)\n"
+                                 "      integer(kind=8), intent(in) :: item\n"
+                                 "    end subroutine actual\n"
+                                 "  end interface\n"
+                                 "  type :: holder\n"
+                                 "    procedure(actual), pointer, nopass :: action\n"
+                                 "  end type\n"
+                                 "  type(holder) :: callback\n"
+                                 "  call accept(callback%action)\n"
+                                 "contains\n"
+                                 "  subroutine accept(operation)\n"
+                                 "    procedure(expected) :: operation\n"
+                                 "  end subroutine accept\n"
+                                 "end program\n";
+    expect_incompatible(source, "procedure-component-signature-mismatch.f90",
+                        "procedure pointer component actuals retain full signature checks");
+}
+
 int main(void) {
     test_parameter_kind_mismatch();
     test_result_kind_mismatch();
@@ -220,6 +244,7 @@ int main(void) {
     test_procedure_attribute_mismatch();
     test_pure_actual_relaxation();
     test_equivalent_complete_signature();
+    test_component_procedure_signature();
     if (failures != 0)
         fprintf(stderr, "%d procedure-signature test(s) failed\n", failures);
     return failures == 0 ? 0 : 1;
