@@ -472,15 +472,9 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         }
     } else if (statement->kind == F2C_STMT_CALL && statement->expression != NULL &&
                statement->expression->symbol != NULL && statement->expression->symbol->type_bound) {
-        const Symbol *binding = statement->expression->symbol;
-        const size_t expected =
-            binding->external_parameter_count -
-            ((!binding->type_bound_nopass && binding->external_parameter_count != 0U) ? 1U : 0U);
-        if (statement->item_count != expected)
-            f2c_diagnostic(context, statement->line, 1,
-                           "type-bound subroutine '%s' expects %zu explicit arguments but has "
-                           "%zu",
-                           statement->expression->text, expected, statement->item_count);
+        (void)f2c_validation_bound_arguments(context, unit, statement->line, statement->text,
+                                             statement->expression, &statement->arguments,
+                                             &statement->items, &statement->item_count, 1);
     }
     for (i = 0U; i < statement->control_count; ++i)
         f2c_validation_report_parse_error(context, statement->line, statement->text,
@@ -605,25 +599,12 @@ static void validate_entity_attributes(Context *context, Unit *unit, const Symbo
                           symbol->name);
 }
 
-static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *symbol) {
-    size_t dimension;
+static void validate_character_length_expression(Context *context, Unit *unit, Symbol *symbol) {
     Unit *length_scope =
         symbol->character_length_scope != NULL ? symbol->character_length_scope : unit;
     const size_t line = symbol->declaration_line != 0U ? symbol->declaration_line
                                                        : context->lines.items[unit->begin].number;
     const char *source_line = f2c_validation_unit_line(context, unit, line);
-    if (symbol->initializer_syntax.count != 0U) {
-        f2c_expr_free(symbol->initializer_expression);
-        symbol->initializer_expression = parse_specification_syntax(
-            context, unit, line, symbol->initializer_syntax, "declaration initializer");
-    } else if (symbol->initializer == NULL) {
-        f2c_expr_free(symbol->initializer_expression);
-        symbol->initializer_expression = NULL;
-    } else if (symbol->initializer_expression == NULL) {
-        f2c_diagnostic_at_code(context, F2C_DIAGNOSTIC_INTERNAL, line, 1U, 1,
-                               "compiler-synthesized initializer for '%s' has no typed AST",
-                               symbol->name);
-    }
     f2c_expr_free(symbol->character_length_expression);
     symbol->character_length_expression = NULL;
     if (symbol->type == TYPE_CHARACTER && symbol->character_length_syntax.count != 0U &&
@@ -643,6 +624,30 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
                                "CHARACTER length for '%s' has no canonical token range",
                                symbol->name);
     }
+    f2c_validation_expression_calls(context, length_scope, line, source_line,
+                                    symbol->character_length_expression);
+    validate_integer_specification(context, line, source_line, symbol->character_length_expression,
+                                   "character length");
+}
+
+static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *symbol) {
+    size_t dimension;
+    const size_t line = symbol->declaration_line != 0U ? symbol->declaration_line
+                                                       : context->lines.items[unit->begin].number;
+    const char *source_line = f2c_validation_unit_line(context, unit, line);
+    if (symbol->initializer_syntax.count != 0U) {
+        f2c_expr_free(symbol->initializer_expression);
+        symbol->initializer_expression = parse_specification_syntax(
+            context, unit, line, symbol->initializer_syntax, "declaration initializer");
+    } else if (symbol->initializer == NULL) {
+        f2c_expr_free(symbol->initializer_expression);
+        symbol->initializer_expression = NULL;
+    } else if (symbol->initializer_expression == NULL) {
+        f2c_diagnostic_at_code(context, F2C_DIAGNOSTIC_INTERNAL, line, 1U, 1,
+                               "compiler-synthesized initializer for '%s' has no typed AST",
+                               symbol->name);
+    }
+    validate_character_length_expression(context, unit, symbol);
     f2c_expr_free(symbol->statement_function_expression);
     symbol->statement_function_expression =
         symbol->statement_function
@@ -652,8 +657,6 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
             : NULL;
     f2c_validation_expression_calls(context, unit, line, source_line,
                                     symbol->initializer_expression);
-    f2c_validation_expression_calls(context, length_scope, line, source_line,
-                                    symbol->character_length_expression);
     if (symbol->statement_function_expression != NULL) {
         const char *statement_source =
             f2c_validation_unit_line(context, unit, symbol->statement_function_line);
@@ -671,8 +674,6 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
                               "declaration",
                               symbol->name);
     }
-    validate_integer_specification(context, line, source_line, symbol->character_length_expression,
-                                   "character length");
     validate_declaration_initializer(context, line, source_line, symbol);
     for (dimension = 0U; dimension < symbol->rank; ++dimension) {
         Dimension *shape = &symbol->dimensions[dimension];
@@ -749,4 +750,25 @@ void f2c_validate_unit_expressions(Context *context, Unit *unit) {
     f2c_validation_select_case_constructs(context, unit);
     f2c_validation_branches(context, unit);
     f2c_validation_lifetimes(context, unit);
+}
+
+void f2c_validate_binding_specifications(Context *context) {
+    size_t collection;
+    for (collection = 0U; collection < 2U; ++collection) {
+        Units *units = collection == 0U ? &context->modules : &context->units;
+        size_t index;
+        for (index = 0U; index < units->count; ++index) {
+            Unit *unit = &units->items[index];
+            size_t type_index;
+            context->options = &unit->options;
+            for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
+                F2cDerivedType *derived = &unit->derived_types[type_index];
+                size_t binding;
+                for (binding = 0U; binding < derived->binding_count; ++binding)
+                    if (derived->bindings[binding].procedure.type == TYPE_CHARACTER)
+                        validate_character_length_expression(context, unit,
+                                                             &derived->bindings[binding].procedure);
+            }
+        }
+    }
 }

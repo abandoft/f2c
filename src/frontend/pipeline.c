@@ -85,6 +85,10 @@ int f2c_build_typed_program(Context *context) {
                             "out of memory while building procedure registry");
     if (context->result.error_count == 0U)
         f2c_resolve_derived_semantics(context);
+    if (context->result.error_count == 0U)
+        f2c_validate_derived_storage(context);
+    if (context->result.error_count == 0U)
+        f2c_validate_binding_specifications(context);
     if (context->result.error_count == 0U) {
         for (index = 0U; index < context->units.count; ++index) {
             context->options = &context->units.items[index].options;

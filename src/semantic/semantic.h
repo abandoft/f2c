@@ -9,6 +9,8 @@ void f2c_validate_project_storage(Context *context);
 int f2c_finalize_host_association(Context *context);
 void f2c_resolve_equivalence_storage(Context *context, Unit *unit);
 void f2c_resolve_derived_semantics(Context *context);
+void f2c_validate_binding_specifications(Context *context);
+void f2c_validate_derived_storage(Context *context);
 int f2c_symbol_resize_external_parameters(Symbol *symbol, size_t count);
 int f2c_set_external_parameter_signature(Symbol *symbol, size_t parameter, const Symbol *dummy);
 int f2c_symbol_character_length_constant(const Symbol *symbol, int64_t *length);
