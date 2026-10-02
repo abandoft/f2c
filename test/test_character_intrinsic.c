@@ -246,6 +246,36 @@ static void test_character_array_allocation_guards(void) {
     f2c_result_free(&result);
 }
 
+static void test_zero_length_result_is_evaluated(void) {
+    static const char source[] = "program zero_length_result\n"
+                                 "  implicit none\n"
+                                 "  character(:), allocatable :: text\n"
+                                 "  integer :: n, calls\n"
+                                 "  n = 0\n"
+                                 "  calls = 0\n"
+                                 "  text = make_text(n)\n"
+                                 "contains\n"
+                                 "  function make_text(length) result(value)\n"
+                                 "    integer, intent(in) :: length\n"
+                                 "    character(length) :: value\n"
+                                 "    calls = calls + 1\n"
+                                 "    value = 'x'\n"
+                                 "  end function\n"
+                                 "end program\n";
+    F2cOptions options = {"zero_length_result.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    const char *source_evaluation =
+        result.code != NULL ? strstr(result.code, "const char *f2c_deferred_source = (") : NULL;
+    const char *conditional_copy =
+        result.code != NULL ? strstr(result.code, "if (f2c_deferred_length != 0U) memmove") : NULL;
+    expect(result.code != NULL && result.error_count == 0U,
+           "zero-length character function result assignment reaches code generation");
+    expect(source_evaluation != NULL && conditional_copy != NULL &&
+               source_evaluation < conditional_copy,
+           "function result evaluation is outside the zero-length copy guard");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_unit_length_substrings();
     test_type_and_length_diagnostics();
@@ -256,5 +286,6 @@ int main(void) {
     test_vector_substring_out_constraints();
     test_target_actual_requires_affine_storage();
     test_character_array_allocation_guards();
+    test_zero_length_result_is_evaluated();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
