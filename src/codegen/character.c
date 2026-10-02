@@ -89,7 +89,7 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
     if (evaluated_length > 0 && (uint64_t)evaluated_length > SIZE_MAX)
         return NULL;
     element_length = evaluated_length > 0 ? (size_t)evaluated_length : 0U;
-    initializer = symbol->initializer_expression;
+    initializer = f2c_expr_value_source(symbol->initializer_expression);
     if (symbol->rank != 0U && initializer->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
         values = (const F2cExpr *const *)initializer->children;
         value_count = initializer->child_count;
@@ -172,6 +172,8 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
     lowered_length = f2c_lowering_character_length(unit, expression);
     if (lowered_length != NULL)
         return f2c_strdup(lowered_length);
+    if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
+        return f2c_character_length_expression(unit, expression->children[0]);
     if (expression->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("0U");
     if (expression->kind == F2C_EXPR_STRING_LITERAL) {
@@ -345,6 +347,8 @@ char *f2c_character_source_pointer(Unit *unit, const F2cExpr *right, const char 
     const Symbol *symbol = right != NULL ? right->symbol : NULL;
     if (right == NULL || right_code == NULL)
         return NULL;
+    if (right->kind == F2C_EXPR_PARENTHESIZED)
+        return f2c_strdup(right_code);
     if (f2c_lowering_code(unit, right) != NULL &&
         f2c_lowering_character_length(unit, right) != NULL)
         return f2c_strdup(right_code);
