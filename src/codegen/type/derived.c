@@ -1,3 +1,4 @@
+#include "codegen/type/initialization.h"
 #include "internal/f2c.h"
 
 #include <stdlib.h>
@@ -172,6 +173,9 @@ static void emit_lifecycle_prototypes(Context *context, Units *units) {
         size_t type_index;
         for (type_index = 0U; type_index < unit->derived_type_count; ++type_index) {
             F2cDerivedType *derived = &unit->derived_types[type_index];
+            f2c_buffer_printf(&context->output,
+                              "static F2C_UNUSED void f2c_refresh_%s(%s *value);\n",
+                              derived->c_name, derived->c_name);
             f2c_buffer_printf(&context->output,
                               "static F2C_UNUSED void f2c_initialize_%s(%s *value);\n"
                               "static F2C_UNUSED void f2c_destroy_own_components_%s(%s *value);\n"
@@ -389,7 +393,7 @@ static void emit_dynamic_binding_initialization(Context *context, F2cDerivedType
     }
 }
 
-static void emit_component_initialization(Context *context, Unit *unit, F2cDerivedType *derived) {
+static void emit_component_refresh(Context *context, Unit *unit, F2cDerivedType *derived) {
     size_t component_index;
     for (component_index = 0U; component_index < derived->component_count; ++component_index) {
         Symbol *component = &derived->components[component_index];
@@ -398,13 +402,13 @@ static void emit_component_initialization(Context *context, Unit *unit, F2cDeriv
             component->derived_type == NULL)
             continue;
         if (component->rank == 0U) {
-            f2c_buffer_printf(&context->output, "    f2c_initialize_%s(&value->%s);\n",
+            f2c_buffer_printf(&context->output, "    f2c_refresh_%s(&value->%s);\n",
                               component->derived_type->c_name, name);
         } else {
             char *count = component_count(unit, component, "value");
             f2c_buffer_printf(&context->output,
                               "    for (size_t i = 0U; i < %s; ++i) "
-                              "f2c_initialize_%s(&value->%s[i]);\n",
+                              "f2c_refresh_%s(&value->%s[i]);\n",
                               count != NULL ? count : "0U", component->derived_type->c_name, name);
             free(count);
         }
@@ -464,7 +468,7 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
             F2cDerivedType *ancestor;
             Buffer parent_path = {0};
             f2c_buffer_printf(&context->output,
-                              "static F2C_UNUSED void f2c_initialize_%s(%s *value) {\n",
+                              "static F2C_UNUSED void f2c_refresh_%s(%s *value) {\n",
                               derived->c_name, derived->c_name);
             ancestor = derived;
             while (ancestor != NULL) {
@@ -487,8 +491,22 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
             }
             free(parent_path.data);
             emit_dynamic_binding_initialization(context, derived, "value", 4);
-            emit_component_initialization(context, unit, derived);
+            emit_component_refresh(context, unit, derived);
             f2c_buffer_append(&context->output, "}\n");
+            {
+                char *initializer = f2c_derived_storage_initializer(unit, derived);
+                if (initializer == NULL) {
+                    f2c_diagnostic(context, context->lines.items[derived->begin].number, 1,
+                                   "default initialization of derived type '%s' cannot be emitted",
+                                   derived->name);
+                    return;
+                }
+                f2c_buffer_printf(&context->output,
+                                  "static F2C_UNUSED void f2c_initialize_%s(%s *value) {\n"
+                                  "    *value = (%s)%s;\n}\n",
+                                  derived->c_name, derived->c_name, derived->c_name, initializer);
+                free(initializer);
+            }
             f2c_buffer_printf(&context->output,
                               "static F2C_UNUSED void f2c_destroy_own_components_%s(%s *value) {\n"
                               "    (void)value;\n",
@@ -664,7 +682,7 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                 }
             }
             f2c_buffer_printf(&context->output,
-                              "    f2c_initialize_%s(&temporary);\n"
+                              "    f2c_refresh_%s(&temporary);\n"
                               "    *target = temporary;\n}\n"
                               "static F2C_UNUSED void f2c_copy_%s(%s *target, const %s *source) "
                               "{\n    %s temporary;\n"
@@ -686,7 +704,7 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                 "%s source) {\n"
                 "    if (*live) f2c_destroy_%s(target);\n"
                 "    *target = source;\n"
-                "    f2c_initialize_%s(target);\n"
+                "    f2c_refresh_%s(target);\n"
                 "    *live = true;\n"
                 "    return target;\n"
                 "}\n"
