@@ -194,6 +194,10 @@ set(
     src/codegen/transform/private.h
     src/codegen/transform/view.c
     src/codegen/type/derived.c
+    src/codegen/call/address.c
+    src/codegen/call/binding.c
+    src/codegen/type/initialization.c
+    src/codegen/type/initialization.h
     src/codegen/type/namelist.c
     src/codegen/unit.c
     src/codegen/unit/automatic.c
@@ -284,6 +288,8 @@ set(
     src/internal/context.h
     src/internal/f2c.h
     src/ir/expression.h
+    src/ir/call.c
+    src/ir/call.h
     src/ir/designator.c
     src/ir/format.c
     src/ir/format.h
@@ -356,6 +362,11 @@ set(
     src/semantic/validation/lifetime.c
     src/semantic/validation/private.h
     src/semantic/validation/procedure.c
+    src/semantic/default_initialization.c
+    src/semantic/derived_storage.c
+    src/semantic/default_initialization.h
+    src/semantic/validation/procedure/association.c
+    src/semantic/validation/procedure/binding.c
     src/semantic/validation/procedure/alternate.c
     src/semantic/validation/procedure/select.c
     src/semantic/validation/statement.c
@@ -696,6 +707,19 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_type_binding_tests test/test_type_binding.c)
     f2c_configure_test_target(f2c_type_binding_tests)
     add_test(NAME type_binding_semantics COMMAND f2c_type_binding_tests)
+
+    add_executable(f2c_call_mapping_tests test/test_call_mapping.c)
+    target_include_directories(f2c_call_mapping_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_call_mapping_tests)
+    add_test(NAME call_mapping COMMAND f2c_call_mapping_tests)
+
+    add_executable(f2c_bound_call_tests test/test_bound_calls.c)
+    f2c_configure_test_target(f2c_bound_call_tests)
+    add_test(NAME bound_call_semantics COMMAND f2c_bound_call_tests)
+
+    add_executable(f2c_derived_initialization_tests test/test_derived_initialization.c)
+    f2c_configure_test_target(f2c_derived_initialization_tests)
+    add_test(NAME derived_initialization_semantics COMMAND f2c_derived_initialization_tests)
 
     add_executable(f2c_control_expression_tests test/test_control_expression.c)
     f2c_configure_test_target(f2c_control_expression_tests)
