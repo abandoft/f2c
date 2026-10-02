@@ -270,7 +270,8 @@
   作用域，`LEN/SIZE` 和标量规格实参组合直接替换 typed AST；仍需覆盖类型绑定 `PASS` 参数映射、
   所有数组/组件规格设计子、跨模块宿主捕获及全部结果 kind/shape 的组合。
   非平凡标量实参会在长度计算和调用之前只求值一次；可定义标量实参仍保留原对象地址，
-  带副作用的规格函数实参及 `INTENT(INOUT)` 标量数组元素写回已有原生差分。
+  带副作用的规格函数实参及 `INTENT(INOUT)` 标量数组元素/派生组件写回已有原生差分，标量组件
+  覆盖 INTEGER、REAL、COMPLEX 和 LOGICAL；过程指针组件作为实参保留函数指针值和完整接口检查。
 - [ ] 把字符长度、逐维 shape、实体属性、别名限制和嵌套过程签名纳入
   项目级接口兼容检查。当前过程签名已集中保存参数 type/kind/rank、逐维 shape、常量字符长度、
   `INTENT/OPTIONAL/ALLOCATABLE/POINTER/CONTIGUOUS/TARGET/VALUE/ASYNCHRONOUS/VOLATILE`、描述符、
@@ -502,6 +503,8 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   及 type/kind/rank/shape 语义检查；无效 `DIM`、负 extent/`NCOPIES`、不合形实参和非法 `ORDER`
   会在生成前失败。嵌套变换结果可继续作为其他变换、elemental 表达式、标量归约和假定形状实参，
   数值、LOGICAL、COMPLEX、CHARACTER 和零大小动态结果均由严格 C17 与 gfortran 差分覆盖。
+  归约操作数现为数组组件、数组段和非连续多维描述符规划只读值暂存，避免直接 `ALL` 等归约
+  把派生数组成员误当作连续成员数组；用户过程实参不会因此被替换成不可回写的只读副本。
   含可分配组件的派生类型嵌套 `PACK/CSHIFT/UNPACK` 由独立 ASan/UBSan 所有权测试验证深拷贝和
   逆序销毁；向量下标、用户 ELEMENTAL 派生类型结果及非 elemental 派生类型数组函数结果继续使用
   同一所有权模型。仍需完成全部动态 CHARACTER/派生类型可选参数组合及定义相等组合，故本任务
