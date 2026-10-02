@@ -76,6 +76,7 @@ F2cExpr *f2c_ast_parse_argument(AstParser *parser) {
             argument->type_kind = value->type_kind;
             argument->value_category = value->value_category;
             argument->shape = value->shape;
+            f2c_analyze_expression_access(argument);
             f2c_ast_set_expression_range(parser, argument, begin, parser->token.begin);
             return argument;
         }
@@ -184,6 +185,7 @@ F2cExpr *f2c_ast_parse_name(AstParser *parser, const F2cToken *name_token) {
                 expression, symbol->external_result_rank,
                 symbol->external_result_allocatable ? F2C_SHAPE_DEFERRED : F2C_SHAPE_EXPRESSION);
     }
+    f2c_analyze_expression_access(expression);
     f2c_ast_set_expression_range(parser, expression, name_token->begin, parser->token.begin);
     return expression;
 }
@@ -225,6 +227,7 @@ F2cExpr *f2c_ast_parse_designator(AstParser *parser, F2cExpr *expression) {
                 f2c_ast_next_token(parser);
             f2c_ast_set_expression_range(parser, substring, begin, parser->token.begin);
             expression = substring;
+            f2c_analyze_expression_access(expression);
             continue;
         }
         F2cDerivedType *derived = expression->derived_type;
@@ -374,6 +377,7 @@ F2cExpr *f2c_ast_parse_designator(AstParser *parser, F2cExpr *expression) {
         }
         selection->value_category = F2C_VALUE_VARIABLE;
         selection->definable = expression->definable && !component->parameter;
+        f2c_analyze_expression_access(selection);
         f2c_ast_set_expression_range(parser, selection, begin, parser->token.begin);
         expression = selection;
     }
