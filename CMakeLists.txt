@@ -669,6 +669,24 @@ if(F2C_BUILD_TESTING)
     f2c_configure_internal_test_target(f2c_intrinsic_registry_tests)
     add_test(NAME intrinsic_registry COMMAND f2c_intrinsic_registry_tests)
 
+    # Compile the real registry with hostile platform-style macros, without
+    # linking its ordinary copy from f2c_core into this isolated executable.
+    add_executable(
+        f2c_intrinsic_macro_tests
+        test/test_intrinsic_macro.c
+        src/semantic/intrinsic/identity.c
+    )
+    target_include_directories(
+        f2c_intrinsic_macro_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_compile_definitions(
+        f2c_intrinsic_macro_tests PRIVATE ETIME=137 FUNCTION=211 SUBROUTINE=212
+        ABS=201 MAX=202 MIN=203
+    )
+    f2c_configure_test_compilation(f2c_intrinsic_macro_tests)
+    add_test(NAME intrinsic_platform_macros COMMAND f2c_intrinsic_macro_tests)
+
     add_executable(f2c_numeric_operation_intrinsic_tests test/test_numeric_operation_intrinsic.c)
     f2c_configure_test_target(f2c_numeric_operation_intrinsic_tests)
     add_test(
