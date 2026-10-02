@@ -2,6 +2,7 @@
 
 #include "codegen/descriptor/private.h"
 #include "codegen/lowering/private.h"
+#include "codegen/type/initialization.h"
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -110,67 +111,13 @@ static char *emit_array_constructor(Unit *unit, const F2cExpr *expression, int *
 
 static char *emit_structure_constructor(Unit *unit, const F2cExpr *expression, int *supported) {
     Buffer result = {0};
-    unsigned char *assigned;
-    size_t next_positional = 0U;
-    size_t argument;
-    if (expression->derived_type == NULL || expression->derived_type->c_name == NULL) {
+    char *initializer = f2c_derived_constructor_initializer(unit, expression);
+    if (initializer == NULL) {
         *supported = 0;
         return NULL;
     }
-    assigned = expression->derived_type->component_count != 0U
-                   ? (unsigned char *)calloc(expression->derived_type->component_count, 1U)
-                   : NULL;
-    if (expression->derived_type->component_count != 0U && assigned == NULL) {
-        *supported = 0;
-        return NULL;
-    }
-    f2c_buffer_printf(&result,
-                      "((%s){.f2c_type_tag = F2C_TYPE_ID_%s, .f2c_dynamic_size = sizeof(%s)",
-                      expression->derived_type->c_name, expression->derived_type->c_name,
-                      expression->derived_type->c_name);
-    for (argument = 0U; argument < expression->child_count; ++argument) {
-        const F2cExpr *actual = expression->children[argument];
-        const F2cExpr *value = actual;
-        size_t component = SIZE_MAX;
-        char *code;
-        if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
-            actual->child_count == 1U) {
-            size_t index;
-            value = actual->children[0];
-            for (index = 0U; index < expression->derived_type->component_count; ++index) {
-                if (actual->text != NULL &&
-                    strcmp(actual->text, expression->derived_type->components[index].name) == 0) {
-                    component = index;
-                    break;
-                }
-            }
-        } else {
-            while (next_positional < expression->derived_type->component_count &&
-                   assigned[next_positional])
-                ++next_positional;
-            component = next_positional++;
-        }
-        if (component >= expression->derived_type->component_count || assigned[component]) {
-            *supported = 0;
-            break;
-        }
-        assigned[component] = 1U;
-        code = f2c_expression_emit(unit, value, supported);
-        if (!*supported || code == NULL) {
-            free(code);
-            break;
-        }
-        f2c_buffer_printf(&result, ", .%s = %s",
-                          f2c_symbol_c_name(unit, &expression->derived_type->components[component]),
-                          code);
-        free(code);
-    }
-    f2c_buffer_append(&result, "})");
-    free(assigned);
-    if (!*supported) {
-        free(result.data);
-        return NULL;
-    }
+    f2c_buffer_printf(&result, "((%s)%s)", expression->derived_type->c_name, initializer);
+    free(initializer);
     return f2c_buffer_take(&result);
 }
 
