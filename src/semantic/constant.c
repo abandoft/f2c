@@ -439,6 +439,9 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
     Unit *unit = evaluation->unit;
     if (expression == NULL || value == NULL || !f2c_constant_consume_step(evaluation, depth))
         return 0;
+    if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
+        return f2c_constant_evaluate_integer(evaluation, expression->children[0], value,
+                                             depth + 1U);
     if (expression->kind == F2C_EXPR_INTEGER_LITERAL && expression->text != NULL) {
         char *end = NULL;
         long long parsed;
@@ -643,6 +646,7 @@ int f2c_expression_is_initialization_constant(const F2cExpr *expression) {
         return range->children[2]->kind == F2C_EXPR_INVALID;
     }
     case F2C_EXPR_UNARY:
+    case F2C_EXPR_PARENTHESIZED:
     case F2C_EXPR_BINARY:
     case F2C_EXPR_COMPLEX_LITERAL:
     case F2C_EXPR_ARRAY_CONSTRUCTOR:

@@ -442,6 +442,9 @@ int f2c_constant_evaluate_complex(F2cConstantEvaluation *evaluation, const F2cEx
     if (expression == NULL || value == NULL || !is_complex(expression->type) ||
         !f2c_constant_consume_step(evaluation, depth))
         return 0;
+    if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
+        return f2c_constant_evaluate_complex(evaluation, expression->children[0], value,
+                                             depth + 1U);
     if (expression->kind == F2C_EXPR_COMPLEX_LITERAL && expression->child_count == 2U) {
         double real;
         double imaginary;
