@@ -434,8 +434,12 @@ char *f2c_emit_character_comparison(Unit *unit, const F2cExpr *left, const char 
         free(right_length);
         return NULL;
     }
-    f2c_buffer_printf(&result, "(f2c_character_compare(%s, (size_t)(%s), %s, (size_t)(%s)) %s 0)",
-                      left_pointer, left_length, right_pointer, right_length, comparison);
+    f2c_buffer_printf(
+        &result, "(f2c_character_compare%s(%s, (size_t)(%s), %s, (size_t)(%s)) %s 0)",
+        ((left->storage_qualifiers | right->storage_qualifiers) & F2C_STORAGE_VOLATILE) != 0U
+            ? "_volatile"
+            : "",
+        left_pointer, left_length, right_pointer, right_length, comparison);
     free(left_pointer);
     free(right_pointer);
     free(left_length);
@@ -488,7 +492,14 @@ char *f2c_emit_character_concatenation(Unit *unit, const F2cExpr *expression, co
 
 static void emit_character_copy(Context *context, const char *target_pointer,
                                 const char *target_length, const char *source_pointer,
-                                const char *source_length, int depth) {
+                                const char *source_length, unsigned int qualifiers, int depth) {
+    if ((qualifiers & F2C_STORAGE_VOLATILE) != 0U) {
+        emit_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output,
+                          "f2c_character_copy_volatile(%s, (size_t)(%s), %s, (size_t)(%s));\n",
+                          target_pointer, target_length, source_pointer, source_length);
+        return;
+    }
     emit_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
     emit_indent(&context->output, depth + 1);
@@ -528,7 +539,7 @@ int f2c_emit_character_storage_assignment(Context *context, Unit *unit, const ch
         return 0;
     }
     emit_character_copy(context, target_pointer, target_length, source_pointer, source_length,
-                        depth);
+                        right->storage_qualifiers, depth);
     free(source_length);
     free(source_pointer);
     return 1;
@@ -630,7 +641,7 @@ int f2c_emit_character_assignment(Context *context, Unit *unit, Symbol *left_sym
         return 0;
     }
     emit_character_copy(context, target_pointer, target_length, source_pointer, source_length,
-                        depth);
+                        left->storage_qualifiers | right->storage_qualifiers, depth);
     if (left->kind == F2C_EXPR_NAME && !left_symbol->argument && !left_symbol->pointer &&
         left_symbol->common_block == NULL && !left_symbol->equivalence_associated &&
         !(unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER &&
