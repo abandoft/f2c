@@ -445,7 +445,8 @@ static void test_module_data_initialization(void) {
                strstr(result.code, "= {INT64_C(2), INT64_C(3), INT64_C(5)}") != NULL &&
                strstr(result.code, "f2c_module_configured_state_selected = INT64_C(7)") != NULL &&
                strstr(result.code, "F2C_COMPLEX_FLOAT_INITIALIZER") != NULL &&
-               strstr(result.code, "f2c_module_configured_state_names[(size_t)(3) *") != NULL,
+               strstr(result.code, "f2c_module_configured_state_names[F2C_MAX(1, (size_t)(3) *") !=
+                   NULL,
            "module DATA preserves numeric, complex, and CHARACTER array storage");
     expect(result.code != NULL && strstr(result.code, "f2c_data_initialized_") == NULL,
            "module DATA never depends on a runtime first-use guard");
