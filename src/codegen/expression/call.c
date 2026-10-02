@@ -40,6 +40,8 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
     if (actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
     symbol = actual->symbol;
+    if (actual->kind == F2C_EXPR_COMPONENT && symbol != NULL && symbol->external)
+        return f2c_strdup(code);
     if (symbol != NULL && actual->type == TYPE_DERIVED && actual->rank == 0U &&
         (symbol->pointer || symbol->allocatable) &&
         (actual->kind == F2C_EXPR_NAME || actual->kind == F2C_EXPR_COMPONENT)) {
@@ -99,7 +101,7 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
     }
     if (actual->type == TYPE_CHARACTER)
         return f2c_strdup(code);
-    if (actual->type == TYPE_DERIVED && actual->definable) {
+    if (actual->definable && (actual->type == TYPE_DERIVED || actual->kind == F2C_EXPR_COMPONENT)) {
         f2c_buffer_printf(&result, "&(%s)", code);
         return f2c_buffer_take(&result);
     }

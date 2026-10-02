@@ -265,13 +265,16 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
             } else {
                 f2c_buffer_printf(&lowered, "&%s", f2c_symbol_c_name(unit, ast_symbol));
             }
+        } else if (ast->kind == F2C_EXPR_COMPONENT && ast_symbol != NULL && ast_symbol->external) {
+            result = f2c_strdup(code);
         } else if (ast->kind == F2C_EXPR_SUBSTRING) {
             result = f2c_strdup(code);
         } else if (ast->kind == F2C_EXPR_ARRAY_REFERENCE) {
             f2c_buffer_printf(&lowered, "&%s", code);
         } else if (ast->type == TYPE_CHARACTER) {
             result = f2c_strdup(code);
-        } else if (ast->type == TYPE_DERIVED && ast->definable) {
+        } else if (ast->definable &&
+                   (ast->type == TYPE_DERIVED || ast->kind == F2C_EXPR_COMPONENT)) {
             f2c_buffer_printf(&lowered, "&(%s)", code);
         } else {
             result = f2c_emit_scalar_temporary_address(
