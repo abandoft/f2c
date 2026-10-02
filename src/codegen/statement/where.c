@@ -186,12 +186,9 @@ int f2c_emit_where_begin(Context *context, Unit *unit, const F2cStatement *state
                           dimension + 1U);
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output,
-                          "if (f2c_where_extent_%zu_%zu != 0U && f2c_where_count_%zu > "
-                          "SIZE_MAX / f2c_where_extent_%zu_%zu) abort();\n",
-                          identifier, dimension + 1U, identifier, identifier, dimension + 1U);
-        indent(&context->output, *depth);
-        f2c_buffer_printf(&context->output, "f2c_where_count_%zu *= f2c_where_extent_%zu_%zu;\n",
-                          identifier, identifier, dimension + 1U);
+                          "f2c_where_count_%zu = f2c_size_multiply_checked("
+                          "f2c_where_count_%zu, f2c_where_extent_%zu_%zu);\n",
+                          identifier, identifier, identifier, dimension + 1U);
     }
     if (nested) {
         for (dimension = 0U; dimension < rank; ++dimension) {
@@ -434,15 +431,14 @@ static int emit_character_assignment(Context *context, Unit *unit, const F2cStat
                       identifier, length);
     indent(&context->output, depth);
     f2c_buffer_printf(&context->output,
-                      "if (f2c_where_length_%zu != 0U && f2c_where_count_%zu > "
-                      "SIZE_MAX / f2c_where_length_%zu) abort();\n",
+                      "const size_t f2c_where_bytes_%zu = f2c_size_multiply_checked("
+                      "f2c_where_count_%zu, f2c_where_length_%zu);\n",
                       identifier, identifier, identifier);
     indent(&context->output, depth);
     f2c_buffer_printf(&context->output,
                       "char *f2c_where_values_%zu = (char *)malloc("
-                      "f2c_where_count_%zu * f2c_where_length_%zu == 0U ? 1U : "
-                      "f2c_where_count_%zu * f2c_where_length_%zu);\n",
-                      identifier, identifier, identifier, identifier, identifier);
+                      "f2c_where_bytes_%zu == 0U ? 1U : f2c_where_bytes_%zu);\n",
+                      identifier, identifier, identifier);
     indent(&context->output, depth);
     f2c_buffer_printf(&context->output, "if (f2c_where_values_%zu == NULL) abort();\n", identifier);
     emit_loop_begin(&context->output, identifier, rank, depth);
