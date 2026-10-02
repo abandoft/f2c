@@ -40,7 +40,8 @@ done
 cmp "$work/character-length-width.out" "$work/character_length_parameters-native.out"
 # Independent contracts: GNU Fortran 16.1 repeats certain substring bounds and
 # retains deferred array length on scalar assignment, contrary to F2018
-# 10.2.1.3(3). Differential checks above do not inherit those oracle behaviors.
+# 10.2.1.3(3), and fails zero-length scalar SPREAD at runtime. Differential checks
+# above do not inherit those oracle behaviors.
 for name in character_actual_evaluation character_broadcast_reallocation; do
     "$f2c" "$root/test/fixtures/$name.f90" -o "$work/$name.c"
     "$cc" -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
