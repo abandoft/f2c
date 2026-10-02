@@ -1,3 +1,4 @@
+#include "codegen/array/copy.h"
 #include "codegen/array/private.h"
 
 #include "codegen/lowering/private.h"
@@ -13,7 +14,8 @@ static void free_extents(char **extents, size_t rank) {
 }
 
 static int elemental_assignment_type_matches(const Symbol *target, const F2cExpr *right) {
-    if (target->type != right->type || target->kind != right->type_kind)
+    if (target->type != right->type &&
+        !(f2c_type_is_numeric(target->type) && f2c_type_is_numeric(right->type)))
         return 0;
     return target->type != TYPE_DERIVED ||
            (target->derived_type != NULL && target->derived_type == right->derived_type);
@@ -85,7 +87,9 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
     if (context == NULL || unit == NULL || target == NULL || right == NULL || right->rank == 0U ||
         target->rank == 0U || right->rank != target->rank ||
         (right->kind == F2C_EXPR_NAME &&
-         right->owned_temporary_kind != F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE) ||
+         right->owned_temporary_kind != F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE &&
+         !target->volatile_entity && (right->storage_qualifiers & F2C_STORAGE_VOLATILE) == 0U &&
+         target->type == right->type && target->kind == right->type_kind) ||
         right->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
         return 0;
     if (!elemental_assignment_type_matches(target, right)) {
@@ -122,6 +126,14 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
                 : NULL;
     if (element == NULL || (target->type != TYPE_DERIVED && value == NULL))
         goto unsupported;
+    if (target->type != TYPE_CHARACTER && target->type != TYPE_DERIVED) {
+        char *converted = f2c_emit_numeric_conversion_as(value, element->type, target->type,
+                                                         f2c_symbol_c_type(target));
+        free(value);
+        value = converted;
+        if (value == NULL)
+            goto unsupported;
+    }
     if (target->type == TYPE_CHARACTER) {
         character_length = target->allocatable && target->deferred_character
                                ? f2c_character_length_expression(unit, element)
@@ -271,10 +283,10 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
                               target_name, dimension + 1U, target_name, dimension + 1U, dimension);
         }
     } else if (target->type == TYPE_CHARACTER)
-        f2c_buffer_printf(&context->output,
-                          "if (f2c_element_bytes != 0U) memmove(%s, f2c_element_values, "
-                          "f2c_element_bytes);\n",
-                          f2c_symbol_c_name(unit, target));
+        f2c_array_copy_snapshot(
+            &context->output, unit, f2c_symbol_c_name(unit, target), "f2c_element_values",
+            "f2c_element_bytes",
+            target->volatile_entity ? F2C_STORAGE_VOLATILE : F2C_STORAGE_UNQUALIFIED, 0);
     else if (target->type == TYPE_DERIVED) {
         f2c_buffer_printf(&context->output, "f2c_destroy_array_%s(%s, f2c_element_count, %zuU);\n",
                           target->derived_type->c_name, f2c_symbol_c_name(unit, target),
@@ -285,10 +297,10 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
                           "f2c_element_count * sizeof(*f2c_element_values));\n",
                           f2c_symbol_c_name(unit, target));
     } else
-        f2c_buffer_printf(&context->output,
-                          "if (f2c_element_count != 0U) memmove(%s, f2c_element_values, "
-                          "f2c_element_count * sizeof(*f2c_element_values));\n",
-                          f2c_symbol_c_name(unit, target));
+        f2c_array_copy_snapshot(
+            &context->output, unit, f2c_symbol_c_name(unit, target), "f2c_element_values",
+            "f2c_element_count",
+            target->volatile_entity ? F2C_STORAGE_VOLATILE : F2C_STORAGE_UNQUALIFIED, 0);
     if (!target->allocatable) {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "free(f2c_element_values);\n");
