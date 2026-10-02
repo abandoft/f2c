@@ -612,6 +612,8 @@ static void validate_entity_attributes(Context *context, Unit *unit, const Symbo
 
 static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *symbol) {
     size_t dimension;
+    Unit *length_scope =
+        symbol->character_length_scope != NULL ? symbol->character_length_scope : unit;
     const size_t line = symbol->declaration_line != 0U ? symbol->declaration_line
                                                        : context->lines.items[unit->begin].number;
     const char *source_line = f2c_validation_unit_line(context, unit, line);
@@ -632,7 +634,7 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
     if (symbol->type == TYPE_CHARACTER && symbol->character_length_syntax.count != 0U &&
         !specification_sentinel(symbol->character_length_syntax)) {
         symbol->character_length_expression = parse_specification_syntax(
-            context, unit, line, symbol->character_length_syntax, "character length");
+            context, length_scope, line, symbol->character_length_syntax, "character length");
     } else if (symbol->type == TYPE_CHARACTER &&
                (symbol->character_length == NULL || strcmp(symbol->character_length, "1") == 0)) {
         symbol->character_length_expression = f2c_expr_new_integer_constant(1);
@@ -655,7 +657,7 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
             : NULL;
     f2c_validation_expression_calls(context, unit, line, source_line,
                                     symbol->initializer_expression);
-    f2c_validation_expression_calls(context, unit, line, source_line,
+    f2c_validation_expression_calls(context, length_scope, line, source_line,
                                     symbol->character_length_expression);
     if (symbol->statement_function_expression != NULL) {
         const char *statement_source =

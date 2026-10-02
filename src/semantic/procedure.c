@@ -129,6 +129,7 @@ static int copy_function_character_length(Symbol *target, Unit *definition) {
     target->character_length = copy;
     target->character_length_syntax = result != NULL ? result->character_length_syntax
                                                      : definition->result_character_length_syntax;
+    target->character_length_scope = definition;
     return 1;
 }
 
