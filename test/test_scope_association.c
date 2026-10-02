@@ -102,6 +102,56 @@ static void check_expansion_budget(void) {
     }
 }
 
+static void check_expansion_work_budget(void) {
+    static const char *const declarations[] = {
+        "integer :: values(1000000) = 3",          "real :: values(1000000) = 1.5",
+        "complex :: values(1000000) = (1.0, 2.0)", "logical :: values(1000000) = .true.",
+        "character :: values(1000000) = 'a'",      "character(1000000) :: value = 'a'"};
+    size_t index;
+    for (index = 0U; index < sizeof(declarations) / sizeof(declarations[0]); ++index) {
+        char source[256];
+        F2cConfig config = {.structure_size = sizeof(config)};
+        F2cInput input;
+        F2cResult result;
+        (void)snprintf(source, sizeof(source), "module bounded\n %s\nend module\n",
+                       declarations[index]);
+        input = (F2cInput){source, strlen(source), {"bounded.f90", F2C_SOURCE_FREE, 0}};
+        config.limits.max_constant_steps = 64U;
+        result = f2c_transpile_project_config(&input, 1U, &config);
+        if (result.code != NULL || result.error_count == 0U || result.diagnostics == NULL ||
+            strstr(result.diagnostics, "constant-evaluation step limit") == NULL) {
+            fprintf(stderr, "FAIL: broadcast work must fit the cumulative constant budget\n");
+            ++failures;
+        }
+        f2c_result_free(&result);
+    }
+}
+
+static void check_character_data_work_budget(void) {
+    static const char *const cases[] = {
+        "module bounded\n character(1000000) :: value\n data value /'a'/\nend module\n",
+        "module bounded\n character(1000000) :: value(2)\n"
+        " data value /'a', 'b'/\nend module\n",
+        "block data\n character(1000000) :: value\n"
+        " common /characters/ value\n data value /'a'/\nend\n"};
+    size_t index;
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        F2cConfig config = {.structure_size = sizeof(config)};
+        F2cInput input = {
+            cases[index], strlen(cases[index]), {"bounded-characters.f90", F2C_SOURCE_FREE, 0}};
+        F2cResult result;
+        config.limits.max_constant_steps = 64U;
+        result = f2c_transpile_project_config(&input, 1U, &config);
+        if (result.code != NULL || result.error_count == 0U || result.diagnostics == NULL ||
+            strstr(result.diagnostics, "constant-evaluation step limit") == NULL) {
+            fprintf(stderr, "FAIL: character DATA expansion must fit the work budget\n%s",
+                    result.diagnostics != NULL ? result.diagnostics : "");
+            ++failures;
+        }
+        f2c_result_free(&result);
+    }
+}
+
 static void check_source(const char *source, int accepted, const char *needle) {
     const F2cOptions options = {"scope-association.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
@@ -198,6 +248,8 @@ int main(void) {
     check_reset_identity();
     check_scope_identity();
     check_expansion_budget();
+    check_expansion_work_budget();
+    check_character_data_work_budget();
     check_deep_storage_bindings();
     check_source("program builtins\n implicit none\n intrinsic :: max, conjg\n"
                  "integer :: n\n complex :: z\n n=max(2,5)\n z=conjg((1.0,2.0))\n"
