@@ -110,6 +110,7 @@ struct Symbol {
     char *character_length;
     F2cTokenRange character_length_syntax;
     F2cExpr *character_length_expression;
+    Unit *character_length_scope;
     char *initializer;
     F2cTokenRange initializer_syntax;
     F2cExpr *initializer_expression;
