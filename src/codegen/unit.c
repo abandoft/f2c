@@ -322,9 +322,18 @@ static void emit_declarations(Context *context, Unit *unit) {
         }
         if (symbol->initializer == NULL && !symbol->parameter && symbol->rank != 0U &&
             !unit->save_all && !symbol->saved) {
+            const char *name = f2c_symbol_c_name(unit, symbol);
             f2c_unit_indent(output, 1);
-            f2c_buffer_printf(output, "memset(%s, 0, sizeof(%s));\n",
-                              f2c_symbol_c_name(unit, symbol), f2c_symbol_c_name(unit, symbol));
+            if (symbol->volatile_entity) {
+                /* libc byte stores cannot preserve a volatile object's access semantics. */
+                f2c_buffer_printf(output,
+                                  "for (size_t f2c_zero_index = 0U; "
+                                  "f2c_zero_index < sizeof(%s) / sizeof(%s[0]); "
+                                  "++f2c_zero_index) %s[f2c_zero_index] = (%s){0};\n",
+                                  name, name, name, f2c_symbol_c_type(symbol));
+            } else {
+                f2c_buffer_printf(output, "memset(%s, 0, sizeof(%s));\n", name, name);
+            }
         }
         if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL &&
             symbol->scope_begin_line == 0U && !persistent) {
