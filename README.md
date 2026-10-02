@@ -148,6 +148,8 @@ The currently tested implementation includes:
   results, and the gfortran-compatible trailing-length ABI used by the validation corpus;
 - explicit-parent CHARACTER designators for array-element, section, and component substrings;
   tested overlap-safe writes, pointer aliases, constant padding, and single-evaluation bounds;
+- tested character substring copy-in/copy-out for ordinary subroutine and scalar-result function
+  arguments, with procedure-scoped typed character result-length specifications;
 - nested constructor, elemental, inquiry, and reduction expressions on the tested typed-lowering
   paths, with allocation-free direct reductions retained for simple array/scalar comparisons;
 - structured and legacy control flow, formatted and list-directed I/O, internal files, nonadvancing
@@ -159,8 +161,10 @@ The currently tested implementation includes:
 
 Important remaining work includes complete token-stream coverage for declarations and modules,
 all kind/rank and arbitrary-array-expression combinations, complete module generics and submodules,
-dynamic polymorphic allocation, named/association construct finalization boundaries, every
-formatted-I/O layout rule, complete list-directed null/repeat/slash input combinations,
+dynamic polymorphic allocation, named/association construct finalization boundaries,
+byte-strided views preserving persistent `TARGET` aliases, complete result-specification scope
+and argument mappings, every formatted-I/O layout rule, complete list-directed null/repeat/slash
+input combinations,
 pointer reassociation during NAMELIST input, and multi-compiler ABI
 certification. Unsupported semantics must produce diagnostics rather than plausible but incorrect
 C. The detailed checklist is maintained in [TODO.md](TODO.md).
