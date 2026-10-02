@@ -45,7 +45,8 @@ jobs:
           cmake --build build/host --target f2c --parallel
           for fixture in \
             internal_file_semantics mathematical_conversion_intrinsics \
-            character_designators nested_array_reductions; do
+            character_designators character_array_actuals character_actual_evaluation \
+            nested_array_reductions; do
             build/host/f2c -o "build/wasm/generated-$fixture.c" "test/fixtures/$fixture.f90"
             emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
               -Wstrict-prototypes -Wmissing-prototypes -Werror \
