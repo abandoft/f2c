@@ -276,6 +276,55 @@ static void test_zero_length_result_is_evaluated(void) {
     f2c_result_free(&result);
 }
 
+static void test_result_length_is_captured_before_call(void) {
+    static const char source[] = "program result_length_capture\n"
+                                 "  implicit none\n"
+                                 "  character(:), allocatable :: text\n"
+                                 "  character(2) :: values(2)\n"
+                                 "  integer :: n\n"
+                                 "  n = 2\n"
+                                 "  text = make_text(n)\n"
+                                 "  n = 0\n"
+                                 "  values = make_text(n)\n"
+                                 "contains\n"
+                                 "  function make_text(length) result(value)\n"
+                                 "    integer, intent(inout) :: length\n"
+                                 "    character(length) :: value\n"
+                                 "    value = 'x'\n"
+                                 "    length = length + 3\n"
+                                 "  end function\n"
+                                 "end program\n";
+    F2cOptions options = {"result_length_capture.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    const char *capture =
+        result.code != NULL
+            ? strstr(result.code, "_character_length = (size_t)(f2c_character_parameter_length("
+                                  "(int64_t)(n)));")
+            : NULL;
+    const char *allocation =
+        capture != NULL ? strstr(capture, "f2c_character_temporary_resize(") : NULL;
+    const char *broadcast =
+        result.code != NULL ? strstr(result.code, "char * f2c_call_character_whole_") : NULL;
+    const char *broadcast_capture =
+        broadcast != NULL
+            ? strstr(broadcast, "_character_length = (size_t)(f2c_character_parameter_length("
+                                "(int64_t)(n)));")
+            : NULL;
+    const char *broadcast_count =
+        broadcast != NULL ? strstr(broadcast, "const size_t f2c_whole_count") : NULL;
+    expect(result.code != NULL && result.error_count == 0U,
+           "mutable character result specifications reach code generation");
+    expect(capture != NULL && allocation != NULL && capture < allocation,
+           "result length is captured before result allocation and function execution");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_character_result_0[(size_t)(f2c_call_scalar_") != NULL,
+           "result termination reuses the captured entry length");
+    expect(broadcast_capture != NULL && broadcast_count != NULL &&
+               broadcast_capture < broadcast_count,
+           "character broadcast prepares its call before assignment dimensions and lengths");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_unit_length_substrings();
     test_type_and_length_diagnostics();
@@ -287,5 +336,6 @@ int main(void) {
     test_target_actual_requires_affine_storage();
     test_character_array_allocation_guards();
     test_zero_length_result_is_evaluated();
+    test_result_length_is_captured_before_call();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
