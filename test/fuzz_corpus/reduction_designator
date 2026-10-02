@@ -1,0 +1,12 @@
+program p
+type t
+logical x
+end type
+type(t) a(3)
+logical, target :: b(2,3)
+logical, pointer :: c(:,:)
+a%x=.true.
+b=.true.
+c=>b(2:1:-1,:)
+if(all(a%x).and.count(c)==6) b=.false.
+end
