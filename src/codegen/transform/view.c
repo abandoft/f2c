@@ -283,7 +283,7 @@ int f2c_transform_materialize_array(Context *context, Unit *unit, TransformArray
             f2c_buffer_printf(&context->output, "%s f2c_source = (%s); ",
                               array->derived_type->c_name, element_code);
             if (element_kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR)
-                f2c_buffer_printf(&context->output, "f2c_initialize_%s(&f2c_source); ",
+                f2c_buffer_printf(&context->output, "f2c_refresh_%s(&f2c_source); ",
                                   array->derived_type->c_name);
             f2c_buffer_printf(&context->output,
                               "f2c_clone_%s(&%s[f2c_transform_%s_index], &f2c_source); "
