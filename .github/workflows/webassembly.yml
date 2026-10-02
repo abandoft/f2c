@@ -36,27 +36,23 @@ jobs:
           -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
       - name: Build
         run: cmake --build build/wasm --parallel
-      - name: Validate generated internal I/O without a filesystem
+      - name: Validate standalone generated C17 without a filesystem
         run: |
           cmake -S . -B build/host \
             -DCMAKE_BUILD_TYPE=Release \
             -DF2C_BUILD_TESTING=OFF \
             -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
           cmake --build build/host --target f2c --parallel
-          build/host/f2c \
-            -o build/wasm/generated-internal-file.c \
-            test/fixtures/internal_file_semantics.f90
-          build/host/f2c \
-            -o build/wasm/generated-mathematical-conversion.c \
-            test/fixtures/mathematical_conversion_intrinsics.f90
-          emcc -std=c17 -O2 -sFILESYSTEM=0 -sEXIT_RUNTIME=1 \
-            build/wasm/generated-internal-file.c \
-            -o build/wasm/generated-internal-file.js
-          emcc -std=c17 -O2 -sFILESYSTEM=0 -sEXIT_RUNTIME=1 \
-            build/wasm/generated-mathematical-conversion.c \
-            -o build/wasm/generated-mathematical-conversion.js
-          node build/wasm/generated-internal-file.js
-          node build/wasm/generated-mathematical-conversion.js
+          for fixture in \
+            internal_file_semantics mathematical_conversion_intrinsics \
+            character_designators nested_array_reductions; do
+            build/host/f2c -o "build/wasm/generated-$fixture.c" "test/fixtures/$fixture.f90"
+            emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+              -Wstrict-prototypes -Wmissing-prototypes -Werror \
+              -sFILESYSTEM=0 -sEXIT_RUNTIME=1 \
+              "build/wasm/generated-$fixture.c" -o "build/wasm/generated-$fixture.js"
+            node "build/wasm/generated-$fixture.js"
+          done
       - name: Upload WebAssembly validation artifact
         uses: actions/upload-artifact@v7
         with:
