@@ -221,9 +221,8 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
             if (f2c_array_emit_elemental_call(context, unit, &call, depth))
                 return 1;
         }
-        f2c_emit_call_with_procedure(&context->output, unit, statement->resolved_procedure,
-                                     operands, 2U, depth);
-        return 1;
+        return f2c_emit_call_with_procedure(&context->output, unit, statement->resolved_procedure,
+                                            operands, 2U, depth);
     }
     if (f2c_emit_array_section_assignment(context, unit, statement->left, statement->right,
                                           depth) ||

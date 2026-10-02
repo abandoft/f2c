@@ -30,6 +30,7 @@ int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
     size_t argument;
     size_t temporary = 0U;
     int scoped;
+    int emitted;
     if (context == NULL || unit == NULL || name == NULL)
         return 0;
     prepared = count != 0U ? (F2cExpr **)calloc(count, sizeof(*prepared)) : NULL;
@@ -53,11 +54,11 @@ int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
         f2c_buffer_append(&context->output, prelude.data != NULL ? prelude.data : "");
     }
     if (alternate_call != NULL)
-        f2c_emit_alternate_return_call(&context->output, unit, name, callee, prepared, count,
-                                       alternate_call, depth + (scoped ? 1 : 0));
+        emitted = f2c_emit_alternate_return_call(&context->output, unit, name, callee, prepared,
+                                                 count, alternate_call, depth + (scoped ? 1 : 0));
     else
-        f2c_emit_call_with_signature(&context->output, unit, name, callee, prepared, count,
-                                     depth + (scoped ? 1 : 0));
+        emitted = f2c_emit_call_with_signature(&context->output, unit, name, callee, prepared,
+                                               count, depth + (scoped ? 1 : 0));
     if (scoped) {
         (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
         f2c_array_indent(&context->output, depth);
@@ -66,7 +67,7 @@ int f2c_array_emit_prepared_call(Context *context, Unit *unit, const char *name,
     free_arguments(unit, prepared, count);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
-    return 1;
+    return emitted;
 }
 
 int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStatement *statement,
@@ -190,8 +191,9 @@ int f2c_array_emit_elemental_call(Context *context, Unit *unit, const F2cStateme
                           current, current, current, current);
         ++emitted_depth;
     }
-    f2c_emit_call(&context->output, unit, statement->name, arguments, statement->item_count,
-                  emitted_depth);
+    if (!f2c_emit_call(&context->output, unit, statement->name, arguments, statement->item_count,
+                       emitted_depth))
+        goto unsupported;
     for (dimension = 0U; dimension < rank; ++dimension) {
         --emitted_depth;
         f2c_array_indent(&context->output, emitted_depth);
