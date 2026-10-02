@@ -846,9 +846,13 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                 "\"\"; size_t n = "
                 "strlen(message); if (n > length) n = length; if (n != 0U) memmove(value, "
                 "message, n); if (length > n) memset(value + n, ' ', length - n); }\n");
+            f2c_emit_io_control_model(&context.output);
             f2c_emit_io_stream_support(&context.output);
             f2c_emit_file_unit_support(&context.output);
             f2c_emit_record_io_support(&context.output);
+            f2c_emit_io_control_support(&context.output);
+            f2c_emit_io_number_support(&context.output);
+            f2c_emit_io_number_input_support(&context.output);
             f2c_emit_list_io_support(&context.output, needs_complex);
             f2c_emit_namelist_support(&context);
             if (needs_namelist)

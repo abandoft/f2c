@@ -201,9 +201,10 @@ set(
     src/core/generated/bit.c
     src/core/generated/character.c
     src/core/generated/conversion.c
+    src/core/generated/io/control.c
     src/core/generated/io.c
     src/core/generated/io/number/input.c
-    src/core/generated/list.c
+    src/core/generated/io/list.c
     src/core/generated/io/list/complex.c
     src/core/generated/io/list/read.c
     src/core/generated/io/list/token.c
