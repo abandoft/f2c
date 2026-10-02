@@ -10,6 +10,8 @@
 - Improved dynamic-length, zero-length, embedded-NUL, and qualified character value snapshots with consistent temporary copying and release.
 - Corrected nonpolymorphic derived-value argument copies, preserving independent allocatable component values and pointer component associations, and improved ownership cleanup for function results and `MERGE/TRANSFER`.
 - Rejected parenthesized values in argument positions requiring definable, pointer, or allocatable objects, and added source-located diagnostics for invalid procedure primaries.
+- Added explicit diagnostics for unsupported parenthesized polymorphic values instead of silently losing extension components or dynamic types in generated programs.
+- Preserved complete physical and macro-expansion ranges for nested expressions, fixed empty locations in structured diagnostics, and used binary token lookup to avoid repeated scanning.
 
 ## 1.43.0
 
