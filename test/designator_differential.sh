@@ -13,6 +13,7 @@ fc=${FC:-gfortran}
 cmake -E remove_directory "$work"
 cmake -E make_directory "$work"
 for name in character_designators character_array_actuals character_length_parameters \
+    character_result_effects \
     scalar_component_actuals \
     procedure_pointer_component reduction_designators nested_array_reductions; do
     source=$root/test/fixtures/$name.f90
