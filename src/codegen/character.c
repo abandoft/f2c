@@ -77,7 +77,9 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
     int64_t evaluated_length;
     size_t element;
     size_t output_index = 0U;
-    Buffer result = {0};
+    size_t storage_count;
+    Buffer result = {.limit = unit != NULL && unit->context != NULL ? unit->context->output.limit
+                                                                    : F2C_DEFAULT_MAX_OUTPUT_BYTES};
     if (supported != NULL)
         *supported = 0;
     if (symbol == NULL || symbol->type != TYPE_CHARACTER || symbol->initializer == NULL ||
@@ -102,8 +104,17 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
     }
     if (value_count == 0U || (value_count != 1U && value_count != element_count))
         goto cleanup;
+    if ((element_length != 0U && element_count > SIZE_MAX / element_length) ||
+        (storage_count = element_count * element_length) > SIZE_MAX - element_count ||
+        (result.limit != 0U && storage_count > result.limit)) {
+        if (unit != NULL && unit->context != NULL)
+            unit->context->output.limit_exceeded = 1;
+        goto cleanup;
+    }
+    if (!f2c_reserve_constant_steps(unit, element_count + storage_count))
+        goto cleanup;
     f2c_buffer_append(&result, symbol->rank == 0U ? "\"" : "{");
-    for (element = 0U; element < element_count; ++element) {
+    for (element = 0U; element < element_count && !result.failed; ++element) {
         const size_t value_index = value_count == 1U ? 0U : element;
         size_t literal_length = 0U;
         const F2cExpr *value = values != NULL ? values[value_index] : initializer;
@@ -112,7 +123,7 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
         if (value == NULL ||
             !f2c_evaluate_character_constant(unit, value, &literal, &literal_length))
             goto cleanup;
-        for (offset = 0U; offset < element_length; ++offset) {
+        for (offset = 0U; offset < element_length && !result.failed; ++offset) {
             const unsigned char byte =
                 offset < literal_length ? (unsigned char)literal[offset] : (unsigned char)' ';
             if (symbol->rank == 0U)
@@ -126,7 +137,9 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
     if (symbol->rank != 0U && output_index == 0U)
         f2c_buffer_append(&result, "0");
     f2c_buffer_append(&result, symbol->rank == 0U ? "\"" : "}");
-    if (supported != NULL)
+    if (result.limit_exceeded && unit != NULL && unit->context != NULL)
+        unit->context->output.limit_exceeded = 1;
+    if (supported != NULL && !result.failed)
         *supported = 1;
 
 cleanup:
