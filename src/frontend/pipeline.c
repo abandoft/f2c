@@ -104,6 +104,12 @@ int f2c_build_typed_program(Context *context) {
     if (context->result.error_count == 0U && !f2c_finalize_host_association(context))
         f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
                             "out of memory finalizing host association");
+    if (context->result.error_count == 0U) {
+        for (index = 0U; index < context->modules.count; ++index)
+            f2c_analyze_unit_access(&context->modules.items[index]);
+        for (index = 0U; index < context->units.count; ++index)
+            f2c_analyze_unit_access(&context->units.items[index]);
+    }
     if (context->result.error_count == 0U)
         f2c_validate_project_storage(context);
     if (context->result.error_count == 0U && !plan_expression_lifetimes(context) &&
