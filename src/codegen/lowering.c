@@ -75,12 +75,21 @@ static void append_character_elements(Buffer *output, const char *value, size_t 
     }
 }
 
-char *f2c_emit_numeric_conversion(const char *operand, Type actual, Type target) {
+char *f2c_emit_numeric_conversion_as(const char *operand, Type actual, Type target,
+                                     const char *target_c_type) {
     Buffer converted = {0};
-    if (actual == target || !f2c_type_is_numeric(actual) || !f2c_type_is_numeric(target))
+    if (operand == NULL || target_c_type == NULL)
+        return NULL;
+    if (actual == TYPE_LOGICAL && target == TYPE_LOGICAL) {
+        f2c_buffer_printf(&converted, "((%s)(%s))", target_c_type, operand);
+        return f2c_buffer_take(&converted);
+    }
+    if (!f2c_type_is_numeric(actual) || !f2c_type_is_numeric(target))
         return f2c_strdup(operand);
     if (target == TYPE_COMPLEX || target == TYPE_DOUBLE_COMPLEX) {
         const int double_precision = target == TYPE_DOUBLE_COMPLEX;
+        if (actual == target)
+            return f2c_strdup(operand);
         if (actual == TYPE_COMPLEX || actual == TYPE_DOUBLE_COMPLEX) {
             f2c_buffer_printf(&converted, "%s(%s)", double_precision ? "f2c_c_to_z" : "f2c_z_to_c",
                               operand);
@@ -90,12 +99,18 @@ char *f2c_emit_numeric_conversion(const char *operand, Type actual, Type target)
                 double_precision ? "double" : "float", operand, double_precision ? "0.0" : "0.0f");
         }
     } else if (actual == TYPE_COMPLEX || actual == TYPE_DOUBLE_COMPLEX) {
-        f2c_buffer_printf(&converted, "((%s)%s(%s))", f2c_c_type(target),
+        f2c_buffer_printf(&converted, "((%s)%s(%s))", target_c_type,
                           actual == TYPE_COMPLEX ? "crealf" : "creal", operand);
     } else {
-        f2c_buffer_printf(&converted, "((%s)(%s))", f2c_c_type(target), operand);
+        f2c_buffer_printf(&converted, "((%s)(%s))", target_c_type, operand);
     }
     return f2c_buffer_take(&converted);
+}
+
+char *f2c_emit_numeric_conversion(const char *operand, Type actual, Type target) {
+    return actual == target
+               ? f2c_strdup(operand)
+               : f2c_emit_numeric_conversion_as(operand, actual, target, f2c_c_type(target));
 }
 
 char *f2c_emit_scalar_temporary_address(const char *c_type, Type type, const char *value) {

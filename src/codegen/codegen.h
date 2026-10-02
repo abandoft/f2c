@@ -19,6 +19,8 @@ int f2c_emit_host_capture_lengths(Buffer *output, Unit *caller, const Unit *proc
 char *f2c_emit_intrinsic(const char *name, F2cIntrinsicId intrinsic, char **arguments,
                          const Type *argument_types, size_t count, Type result_type);
 char *f2c_emit_numeric_conversion(const char *operand, Type actual, Type target);
+char *f2c_emit_numeric_conversion_as(const char *operand, Type actual, Type target,
+                                     const char *target_c_type);
 char *f2c_emit_scalar_temporary_address(const char *c_type, Type type, const char *value);
 char *f2c_emit_binary(Unit *unit, const char *left, Type left_type, const char *operator_text,
                       const char *right, Type right_type, Type *result_type);
