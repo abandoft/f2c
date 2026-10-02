@@ -535,6 +535,29 @@ static void refresh_intrinsic_operator_shape(F2cExpr *expression, int operator_h
     }
 }
 
+/* Dynamic type belongs to the produced value, not its definability or storage
+ * attributes. Until the owned-value representation carries that type and its
+ * complete payload, reject rather than slice a CLASS value to its declared type. */
+static int parenthesized_value_is_polymorphic(const F2cExpr *value) {
+    const Symbol *result;
+    Unit *definition;
+    if (value == NULL || value->type != TYPE_DERIVED)
+        return 0;
+    if ((value->kind == F2C_EXPR_NAME || value->kind == F2C_EXPR_ARRAY_REFERENCE ||
+         value->kind == F2C_EXPR_COMPONENT) &&
+        value->symbol != NULL && value->symbol->polymorphic)
+        return 1;
+    if (value->kind == F2C_EXPR_CALL && value->symbol != NULL &&
+        value->symbol->external_result_polymorphic)
+        return 1;
+    definition = value->resolved_procedure;
+    if (definition == NULL || definition->kind != UNIT_FUNCTION)
+        return 0;
+    result = f2c_find_symbol(definition, definition->result_name != NULL ? definition->result_name
+                                                                         : definition->name);
+    return result != NULL && result->polymorphic;
+}
+
 void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                                      const char *statement_text, F2cExpr *expression) {
     size_t i;
@@ -560,6 +583,10 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
             expression->children[0]->value_category == F2C_VALUE_TYPE)
             f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &expression->span, 1,
                                      "a parenthesized primary requires a data expression");
+        else if (parenthesized_value_is_polymorphic(expression->children[0]))
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_UNSUPPORTED, &expression->span, 1,
+                "parenthesized polymorphic values require dynamic-type-aware owned storage");
         else if (f2c_expression_is_initialization_constant(expression))
             expression->value_category = F2C_VALUE_CONSTANT;
     }
