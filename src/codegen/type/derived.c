@@ -81,17 +81,16 @@ static void emit_component(Context *context, Unit *unit, Symbol *component) {
     }
     if (component->type == TYPE_CHARACTER && component->rank == 0U) {
         char *length = component->character_length != NULL
-                           ? f2c_emit_typed_expression(unit, component->character_length_expression)
+                           ? f2c_symbol_character_length(unit, component)
                            : f2c_strdup("1");
         f2c_buffer_printf(output, "[(%s) + 1]", length != NULL ? length : "1");
         free(length);
     } else if (!component->pointer && component->rank != 0U) {
-        f2c_buffer_append(output, "[");
+        f2c_buffer_append(output, component->type == TYPE_CHARACTER ? "[F2C_MAX(1, " : "[");
         if (component->type == TYPE_CHARACTER) {
-            char *length =
-                component->character_length != NULL
-                    ? f2c_emit_typed_expression(unit, component->character_length_expression)
-                    : f2c_strdup("1");
+            char *length = component->character_length != NULL
+                               ? f2c_symbol_character_length(unit, component)
+                               : f2c_strdup("1");
             f2c_buffer_printf(output, "(size_t)(%s) * ", length != NULL ? length : "1");
             free(length);
         }
@@ -105,7 +104,7 @@ static void emit_component(Context *context, Unit *unit, Symbol *component) {
             free(lower);
             free(upper);
         }
-        f2c_buffer_append(output, "]");
+        f2c_buffer_append(output, component->type == TYPE_CHARACTER ? ")]" : "]");
     }
     f2c_buffer_append(output, ";\n");
 }
