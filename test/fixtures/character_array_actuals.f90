@@ -3,6 +3,7 @@ program character_array_actuals
   type :: record_t
     character(8) :: label
     character(8) :: pieces(3)
+    integer :: marker
   end type
   character(8) :: records(-1:2,3:4)
   character(:), allocatable :: dynamic(:)
@@ -74,6 +75,10 @@ program character_array_actuals
   result = edit_mark(records(-1:2:2,4)(2:4), markers(2))
   if (result /= 2 .or. markers(1) /= 10 .or. markers(2) /= 11) stop 35
   if (any(records(-1:2:2,4) /= 'aMUTefgh')) stop 36
+  data%marker = 10
+  call bump_marker(data(2)%marker)
+  result = edit_mark(records(-1:2:2,4)(2:4), data(1)%marker)
+  if (result /= 2 .or. data(1)%marker /= 11 .or. data(2)%marker /= 11) stop 37
   deallocate(result_text)
   deallocate(dynamic)
   print *, 'character array actuals passed'
@@ -124,6 +129,7 @@ contains
     type(record_t) :: item
     item%label = values(1)
     item%pieces = values(1)
+    item%marker = 0
   end function
   function sized_text(values, n) result(text)
     character(*), intent(in) :: values(:)
@@ -147,6 +153,10 @@ contains
     spec_calls = spec_calls + 1
     choose_n = 2
   end function
+  subroutine bump_marker(marker)
+    integer, intent(inout) :: marker
+    marker = marker + 1
+  end subroutine
   integer function count_explicit(values)
     character(*), intent(in) :: values(2)
     if (any(values /= 'OUT')) stop 26
