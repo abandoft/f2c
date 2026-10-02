@@ -1,3 +1,18 @@
+## 1.40.0
+
+- Unified scoped `DECIMAL/ROUND/SIGN/DELIM` controls across explicit-format, list-directed, and NAMELIST transfers, including nested overrides, invalid-value checks, and restoration on exit.
+- Applied connection and statement controls to list-directed real, complex, and integer output, including decimal commas, semicolon separators, and positive signs.
+- Completed apostrophe and quotation-mark escaping for `DELIM` character output and adjacent-character concatenation without separators in `NONE` mode.
+- Replaced fixed short buffers for ordinary numeric, complex, and logical input with bounded dynamic fields, preserving the entire complex destination when conversion fails.
+- Recognized list-directed logical input by its `T/F` prefix and rejected numeric logical extensions and unterminated character quotes.
+- Implemented target-kind input rounding through exact decimal-to-binary comparisons, covering signed midpoints, subnormal values, and extreme finite values while preserving the caller's floating-point environment.
+- Used exact midpoint detection for `COMPATIBLE` output rounding instead of approximate floating-point tests.
+- Propagated decimal-separator and rounding controls through NAMELIST assignment streams, repeated values, and dynamic components.
+- Inherited temporary parent-transfer and edit-descriptor controls in DT child I/O and restored parent modes after child overrides.
+- Synchronized DT child record and column positions, fixing prefix spaces, multirecord internal files, and record termination on nonseekable standard output.
+- Corrected actual-width `B/O/Z` output for narrow integers, dynamically handled wide integer fields and minimum digits, and completed `.0` zero-value blanks and invalid-precision checks.
+- Split generated helpers by control, numeric-conversion, and list-field read/write responsibilities, verified the target binary data model, and retained libc/libm-only dependencies.
+
 ## 1.39.0
 
 - Completed engineering, scientific, and general real formatting for `EN`, `ES`, `E`, `D`, `G`, and kind-aware `G0` edit descriptors.
