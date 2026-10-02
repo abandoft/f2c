@@ -29,9 +29,7 @@ void f2c_emit_namelist_support(Context *context) {
         &context->output,
         "static inline F2C_UNUSED void f2c_namelist_write_character(f2c_io_stream *file, "
         "const char "
-        "*value, size_t length) { size_t i; (void)f2c_stream_putc('\\'', file); for (i = 0U; "
-        "i < length; ++i) { (void)f2c_stream_putc((unsigned char)value[i], file); if "
-        "(value[i] == '\\'') (void)f2c_stream_putc('\\'', file); } "
-        "(void)f2c_stream_putc('\\'', file); }\n");
+        "*value, size_t length) { file->list_character = false; "
+        "f2c_write_character(file, value, length); file->list_character = false; }\n");
     f2c_emit_namelist_parser_support(context);
 }
