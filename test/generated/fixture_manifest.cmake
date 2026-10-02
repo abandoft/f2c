@@ -17,6 +17,8 @@ set(
     character_designators
     character_array_actuals
     character_actual_evaluation
+    scalar_component_actuals
+    reduction_designators
     nested_array_reductions
     pointer_section
     pointer_bounds_once
