@@ -79,7 +79,7 @@ static int emit_clone(Buffer *output, Unit *unit, const F2cExpr *source, const c
                               identifier, merge_depth, source_code);
             if (source->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR) {
                 indent(output, depth + 1);
-                f2c_buffer_printf(output, "f2c_initialize_%s(&f2c_%s_source_%zu_%zu);\n", type_name,
+                f2c_buffer_printf(output, "f2c_refresh_%s(&f2c_%s_source_%zu_%zu);\n", type_name,
                                   scope, identifier, merge_depth);
             }
             indent(output, depth + 1);
