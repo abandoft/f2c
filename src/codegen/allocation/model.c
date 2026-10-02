@@ -62,6 +62,9 @@ static int prepare_array_expression(Context *context, Unit *unit, const F2cState
         f2c_array_indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "const size_t %s = (size_t)(%s);\n", name.data,
                           model->array.extents[dimension]);
+        /* Explicit allocation bounds need not consume every MOLD extent. */
+        f2c_array_indent(&context->output, depth);
+        f2c_buffer_printf(&context->output, "(void)%s;\n", name.data);
         extent = f2c_buffer_take(&name);
         free(model->array.extents[dimension]);
         model->array.extents[dimension] = extent;
