@@ -3,6 +3,7 @@
 #include "frontend/declaration/symbol.h"
 #include "frontend/frontend.h"
 #include "internal/context.h"
+#include "semantic/intrinsic.h"
 #include "semantic/scope.h"
 #include "semantic/symbol.h"
 
@@ -29,8 +30,9 @@ static void check_reset_identity(void) {
     symbol->host_associated = 1;
     symbol->saved = 1;
     symbol->volatile_entity = 1;
+    symbol->intrinsic = f2c_find_intrinsic("max");
     if (!f2c_reset_associated_symbol(&unit, symbol) || symbol->argument || symbol->saved ||
-        symbol->host_associated || symbol->volatile_entity ||
+        symbol->host_associated || symbol->volatile_entity || symbol->intrinsic != NULL ||
         symbol->association != F2C_ASSOCIATION_LOCAL || symbol->declaration_scope_id != 78U)
         ++failures;
     symbol = f2c_ensure_symbol(&unit, "actual");
@@ -197,6 +199,44 @@ int main(void) {
     check_scope_identity();
     check_expansion_budget();
     check_deep_storage_bindings();
+    check_source("program builtins\n implicit none\n intrinsic :: max, conjg\n"
+                 "integer :: n\n complex :: z\n n=max(2,5)\n z=conjg((1.0,2.0))\n"
+                 "end program\n",
+                 1, NULL);
+    check_source("program typed_builtin\n implicit none\n real, intrinsic :: sqrt\n"
+                 "real :: x\n x=sqrt(4.0)\n end program\n",
+                 1, NULL);
+    check_source("program invalid\n real, intrinsic :: cpu_time\n end program\n", 0,
+                 "cannot have a declared result type");
+    check_source("function invalid() result(sin)\n intrinsic :: sin\n end function\n", 0,
+                 "cannot have EXTERNAL");
+    check_source("program invalid\n intrinsic :: nonexistent\n end program\n", 0,
+                 "unknown or unsupported INTRINSIC");
+    check_source("program invalid\n intrinsic :: sin\n external :: sin\n end program\n", 0,
+                 "cannot have EXTERNAL");
+    check_source("program invalid\n external :: sin\n intrinsic :: sin\n end program\n", 0,
+                 "cannot have EXTERNAL");
+    check_source("program invalid\n real, external, intrinsic :: sin\n end program\n", 0,
+                 "cannot have EXTERNAL");
+    check_source("subroutine invalid(sin)\n real :: sin\n intrinsic :: sin\n end subroutine\n", 0,
+                 "cannot have EXTERNAL");
+    check_source("program invalid\n intrinsic :: sin\n real :: sin(2)\n end program\n", 0,
+                 "cannot have EXTERNAL");
+    check_source("program invalid\n intrinsic :: sin\n volatile :: sin\n end program\n", 0,
+                 "cannot have EXTERNAL");
+    check_source("program invalid\n intrinsic :: sin\n save :: sin\n end program\n", 0,
+                 "cannot have EXTERNAL");
+    check_source("program invalid\n intrinsic :: sin,\n end program\n", 0, "malformed INTRINSIC");
+    check_source("program invalid\n intrinsic\n end program\n", 0, "requires a procedure name");
+    check_source("program invalid\n intrinsic :: sin\n intrinsic :: sin\n end program\n", 0,
+                 "duplicate INTRINSIC");
+    check_source("module owner\n integer :: max\n end module\n"
+                 "program invalid\n use owner\n intrinsic :: max\n end program\n",
+                 0, "conflicting entity name");
+    check_source("program names\n integer :: intrinsic(2)\n intrinsic(1)=3\n end program\n", 1,
+                 NULL);
+    check_source("program adapter\n intrinsic :: sin\n call consumer(sin)\n end program\n", 0,
+                 "unsupported ABI adapter");
     check_source("module zero_product\n"
                  " integer :: values(2147483647,2147483647,2147483647,0) = 3\n"
                  "end module\n",
@@ -209,6 +249,9 @@ int main(void) {
     check_bindings("integer(kind=host_kind), dimension(2,3) :: first, second(4)=0", "first,second");
     check_bindings("character*(host_length) first*2, second", "first,second");
     check_bindings("double precision first, second", "first,second");
+    check_bindings("intrinsic :: max, conjg", "max,conjg");
+    check_bindings("real, intrinsic :: sqrt", "sqrt");
+    check_bindings("intrinsic(1) = 3", "");
     check_bindings("type(item), pointer :: object => null()", "object");
     check_bindings("procedure(callback), optional :: first, second", "first,second");
     check_bindings("parameter(first=2, second=first+1)", "first,second");

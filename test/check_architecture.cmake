@@ -415,7 +415,7 @@ if(
     OR NOT SEMANTIC_MODEL MATCHES "size_t[ \t]+declaration_scope_id"
     OR NOT USE_LOWERING MATCHES "association[ \t]*=[ \t]*association"
     OR NOT USE_LOWERING MATCHES "F2C_ASSOCIATION_USE"
-    OR NOT MODULE_CODEGEN MATCHES "symbol->external[ \t]*\\|\\|[ \t]*symbol->association[ \t]*!=[ \t]*F2C_ASSOCIATION_LOCAL"
+    OR NOT MODULE_CODEGEN MATCHES "symbol->external[ \t]*\\|\\|[ \t\r\n]*symbol->intrinsic[ \t]*!=[ \t]*NULL[ \t]*\\|\\|[ \t\r\n]*symbol->association[ \t]*!=[ \t]*F2C_ASSOCIATION_LOCAL"
 )
     message(FATAL_ERROR
             "USE-associated module entities must preserve provider storage ownership")
