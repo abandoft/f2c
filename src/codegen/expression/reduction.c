@@ -1,6 +1,7 @@
 #include "codegen/expression/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/array/view.h"
 #include "codegen/lowering/private.h"
 
 #include <stdint.h>
@@ -58,6 +59,26 @@ static int reduction_code(F2cIntrinsicId intrinsic) {
     return -1;
 }
 
+static const char *kernel_type_suffix(const F2cExpr *expression) {
+    const int kind =
+        expression->type_kind != 0 ? expression->type_kind : f2c_default_kind(expression->type);
+    switch (expression->type) {
+    case TYPE_INTEGER:
+    case TYPE_LOGICAL:
+        return kind == 1 ? "i8" : kind == 2 ? "i16" : kind == 4 ? "i32" : kind == 8 ? "i64" : NULL;
+    case TYPE_REAL:
+        return "f";
+    case TYPE_DOUBLE:
+        return "d";
+    case TYPE_COMPLEX:
+        return "c";
+    case TYPE_DOUBLE_COMPLEX:
+        return "z";
+    default:
+        return NULL;
+    }
+}
+
 static int direct_relation_operand(const F2cExpr *operand) {
     if (operand == NULL)
         return 0;
@@ -91,8 +112,7 @@ int f2c_expression_direct_relation_reduction(const F2cExpr *expression) {
            ((left->type != TYPE_COMPLEX && left->type != TYPE_DOUBLE_COMPLEX) || relation <= 1);
 }
 
-static int scalar_view(Unit *unit, const F2cExpr *expression, char **pointer, char **count,
-                       char **stride, int *supported) {
+static int scalar_view(Unit *unit, const F2cExpr *expression, F2cArrayView *view, int *supported) {
     char *value = f2c_expression_emit(unit, expression, supported);
     Buffer address = {0};
     if (!*supported || value == NULL) {
@@ -101,17 +121,16 @@ static int scalar_view(Unit *unit, const F2cExpr *expression, char **pointer, ch
     }
     f2c_buffer_printf(&address, "(&(%s){(%s)})", f2c_expression_c_type(expression), value);
     free(value);
-    *pointer = f2c_buffer_take(&address);
-    *count = f2c_strdup("SIZE_MAX");
-    *stride = f2c_strdup("0");
-    return *pointer != NULL && *count != NULL && *stride != NULL;
+    view->pointer = f2c_buffer_take(&address);
+    view->count = f2c_strdup("SIZE_MAX");
+    view->stride = f2c_strdup("0");
+    view->storage_qualifiers = F2C_STORAGE_UNQUALIFIED;
+    return view->pointer != NULL && view->count != NULL && view->stride != NULL;
 }
 
-static int operand_view(Unit *unit, const F2cExpr *expression, char **pointer, char **count,
-                        char **stride, int *supported) {
-    return expression->rank == 0U
-               ? scalar_view(unit, expression, pointer, count, stride, supported)
-               : f2c_expression_array_view(unit, expression, pointer, count, stride, supported);
+static int operand_view(Unit *unit, const F2cExpr *expression, F2cArrayView *view, int *supported) {
+    return expression->rank == 0U ? scalar_view(unit, expression, view, supported)
+                                  : f2c_array_view(unit, expression, view, supported);
 }
 
 typedef struct CharacterOperand {
@@ -120,6 +139,7 @@ typedef struct CharacterOperand {
     char *stride;
     char *length;
     int pointer_vector;
+    unsigned int storage_qualifiers;
 } CharacterOperand;
 
 static void free_character_operand(CharacterOperand *operand) {
@@ -137,7 +157,11 @@ static int character_constructor_operand(Unit *unit, const F2cExpr *expression,
     if (expression->child_count == 0U)
         return 0;
     operand->length = f2c_character_length_expression(unit, expression->children[0]);
-    f2c_buffer_printf(&pointers, "(const char *[%zu]){", expression->child_count);
+    for (index = 0U; index < expression->child_count; ++index)
+        operand->storage_qualifiers |= expression->children[index]->storage_qualifiers;
+    f2c_buffer_printf(&pointers, "(const %schar *[%zu]){",
+                      (operand->storage_qualifiers & F2C_STORAGE_VOLATILE) != 0U ? "volatile " : "",
+                      expression->child_count);
     for (index = 0U; index < expression->child_count; ++index) {
         const F2cExpr *element = expression->children[index];
         char *value;
@@ -161,7 +185,7 @@ static int character_constructor_operand(Unit *unit, const F2cExpr *expression,
         operand->count = f2c_buffer_take(&count);
     }
     operand->stride = f2c_strdup("1");
-    operand->pointer_vector = 1;
+    operand->pointer_vector = (operand->storage_qualifiers & F2C_STORAGE_VOLATILE) != 0U ? 2 : 1;
     return operand->pointer != NULL && operand->count != NULL && operand->stride != NULL &&
            operand->length != NULL;
 
@@ -174,6 +198,7 @@ unsupported:
 static int character_operand(Unit *unit, const F2cExpr *expression, CharacterOperand *operand,
                              int *supported) {
     if (expression->rank == 0U) {
+        operand->storage_qualifiers = expression->storage_qualifiers;
         char *value = f2c_expression_emit(unit, expression, supported);
         operand->pointer = *supported && value != NULL
                                ? f2c_character_source_pointer(unit, expression, value)
@@ -189,9 +214,13 @@ static int character_operand(Unit *unit, const F2cExpr *expression, CharacterOpe
         return character_constructor_operand(unit, expression, operand, supported);
     } else {
         operand->length = f2c_character_length_expression(unit, expression);
-        if (!f2c_expression_array_view(unit, expression, &operand->pointer, &operand->count,
-                                       &operand->stride, supported))
+        F2cArrayView view = {0};
+        if (!f2c_array_view(unit, expression, &view, supported))
             return 0;
+        operand->pointer = view.pointer;
+        operand->count = view.count;
+        operand->stride = view.stride;
+        operand->storage_qualifiers = view.storage_qualifiers;
     }
     return *supported && operand->pointer != NULL && operand->count != NULL &&
            operand->stride != NULL && operand->length != NULL;
@@ -209,13 +238,17 @@ static char *character_relation_reduction(Unit *unit, const F2cExpr *left, const
         *supported = 0;
         return NULL;
     }
-    f2c_buffer_printf(&result,
-                      "f2c_character_relation_reduce((const void *)(%s), %s, %s, (size_t)(%s), %d, "
-                      "(const void *)(%s), %s, %s, (size_t)(%s), %d, %d, %d)",
-                      left_operand.pointer, left_operand.stride, left_operand.count,
-                      left_operand.length, left_operand.pointer_vector, right_operand.pointer,
-                      right_operand.stride, right_operand.count, right_operand.length,
-                      right_operand.pointer_vector, relation, reduction);
+    const int qualified = ((left_operand.storage_qualifiers | right_operand.storage_qualifiers) &
+                           F2C_STORAGE_VOLATILE) != 0U;
+    f2c_buffer_printf(
+        &result,
+        "f2c_character_relation_reduce%s((const %svoid *)(%s), %s, %s, (size_t)(%s), %d, "
+        "(const %svoid *)(%s), %s, %s, (size_t)(%s), %d, %d, %d)",
+        qualified ? "_volatile" : "", qualified ? "volatile " : "", left_operand.pointer,
+        left_operand.stride, left_operand.count, left_operand.length, left_operand.pointer_vector,
+        qualified ? "volatile " : "", right_operand.pointer, right_operand.stride,
+        right_operand.count, right_operand.length, right_operand.pointer_vector, relation,
+        reduction);
     free_character_operand(&left_operand);
     free_character_operand(&right_operand);
     return f2c_buffer_take(&result);
@@ -226,12 +259,8 @@ char *f2c_expression_relation_reduction(Unit *unit, const F2cExpr *expression, i
     const F2cExpr *array;
     const F2cExpr *left;
     const F2cExpr *right;
-    char *left_pointer = NULL;
-    char *left_count = NULL;
-    char *left_stride = NULL;
-    char *right_pointer = NULL;
-    char *right_count = NULL;
-    char *right_stride = NULL;
+    F2cArrayView left_view = {0};
+    F2cArrayView right_view = {0};
     Buffer result = {0};
     int relation;
     int reduction;
@@ -258,28 +287,29 @@ char *f2c_expression_relation_reduction(Unit *unit, const F2cExpr *expression, i
         return character_relation_reduction(unit, left, right, relation, reduction, supported);
     if (left->type == TYPE_DERIVED ||
         ((left->type == TYPE_COMPLEX || left->type == TYPE_DOUBLE_COMPLEX) && relation > 1) ||
-        !operand_view(unit, left, &left_pointer, &left_count, &left_stride, supported) ||
-        !operand_view(unit, right, &right_pointer, &right_count, &right_stride, supported)) {
+        !operand_view(unit, left, &left_view, supported) ||
+        !operand_view(unit, right, &right_view, supported)) {
         goto unsupported;
     }
-    f2c_buffer_printf(&result, "F2C_RELATION_REDUCE(%s, %s, %s, %s, %s, %s, %d, %d)", left_pointer,
-                      left_stride, left_count, right_pointer, right_stride, right_count, relation,
-                      reduction);
-    free(left_pointer);
-    free(left_count);
-    free(left_stride);
-    free(right_pointer);
-    free(right_count);
-    free(right_stride);
+    if (((left_view.storage_qualifiers | right_view.storage_qualifiers) & F2C_STORAGE_VOLATILE) !=
+        0U) {
+        const char *suffix = kernel_type_suffix(left);
+        if (suffix == NULL)
+            goto unsupported;
+        f2c_buffer_printf(&result, "f2c_relation_reduce_%s_volatile", suffix);
+    } else {
+        f2c_buffer_append(&result, "F2C_RELATION_REDUCE");
+    }
+    f2c_buffer_printf(&result, "(%s, %s, %s, %s, %s, %s, %d, %d)", left_view.pointer,
+                      left_view.stride, left_view.count, right_view.pointer, right_view.stride,
+                      right_view.count, relation, reduction);
+    f2c_array_view_discard(&left_view);
+    f2c_array_view_discard(&right_view);
     return f2c_buffer_take(&result);
 
 unsupported:
-    free(left_pointer);
-    free(left_count);
-    free(left_stride);
-    free(right_pointer);
-    free(right_count);
-    free(right_stride);
+    f2c_array_view_discard(&left_view);
+    f2c_array_view_discard(&right_view);
     free(result.data);
     *supported = 0;
     return NULL;
@@ -424,29 +454,27 @@ static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) 
         f2c_intrinsic_argument(expression->children, expression->child_count, "vector_a", 0U);
     const F2cExpr *right_array =
         f2c_intrinsic_argument(expression->children, expression->child_count, "vector_b", 1U);
-    char *left_pointer = NULL;
-    char *left_count = NULL;
-    char *left_stride = NULL;
-    char *right_pointer = NULL;
-    char *right_count = NULL;
-    char *right_stride = NULL;
+    F2cArrayView left_view = {0};
+    F2cArrayView right_view = {0};
     char *zero = NULL;
     const char *helper = dot_product_helper(expression);
+    int qualified;
     Buffer result = {0};
-    if (helper == NULL ||
-        !f2c_expression_array_view(unit, left_array, &left_pointer, &left_count, &left_stride,
-                                   supported) ||
-        !f2c_expression_array_view(unit, right_array, &right_pointer, &right_count, &right_stride,
-                                   supported)) {
+    if (helper == NULL || !f2c_array_view(unit, left_array, &left_view, supported) ||
+        !f2c_array_view(unit, right_array, &right_view, supported)) {
         goto unsupported;
     }
+    qualified = ((left_view.storage_qualifiers | right_view.storage_qualifiers) &
+                 F2C_STORAGE_VOLATILE) != 0U;
     if (expression->type == TYPE_LOGICAL) {
         f2c_buffer_printf(&result,
-                          "((%s) == (%s) ? %s((const void *)(%s), sizeof(*(%s)), %s, "
-                          "(const void *)(%s), sizeof(*(%s)), %s, %s) : "
+                          "((%s) == (%s) ? %s%s((const %svoid *)(%s), sizeof(*(%s)), %s, "
+                          "(const %svoid *)(%s), sizeof(*(%s)), %s, %s) : "
                           "(abort(), false))",
-                          left_count, right_count, helper, left_pointer, left_pointer, left_stride,
-                          right_pointer, right_pointer, right_stride, left_count);
+                          left_view.count, right_view.count, helper, qualified ? "_volatile" : "",
+                          qualified ? "volatile " : "", left_view.pointer, left_view.pointer,
+                          left_view.stride, qualified ? "volatile " : "", right_view.pointer,
+                          right_view.pointer, right_view.stride, left_view.count);
     } else {
         const char *left_type = reduction_type_code(left_array);
         const char *right_type = reduction_type_code(right_array);
@@ -456,28 +484,22 @@ static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) 
         if (zero == NULL)
             goto unsupported;
         f2c_buffer_printf(&result,
-                          "((%s) == (%s) ? %s((const void *)(%s), %s, %s, "
-                          "(const void *)(%s), %s, %s, %s) : "
+                          "((%s) == (%s) ? %s%s((const %svoid *)(%s), %s, %s, "
+                          "(const %svoid *)(%s), %s, %s, %s) : "
                           "(abort(), %s))",
-                          left_count, right_count, helper, left_pointer, left_type, left_stride,
-                          right_pointer, right_type, right_stride, left_count, zero);
+                          left_view.count, right_view.count, helper, qualified ? "_volatile" : "",
+                          qualified ? "volatile " : "", left_view.pointer, left_type,
+                          left_view.stride, qualified ? "volatile " : "", right_view.pointer,
+                          right_type, right_view.stride, left_view.count, zero);
     }
-    free(left_pointer);
-    free(left_count);
-    free(left_stride);
-    free(right_pointer);
-    free(right_count);
-    free(right_stride);
+    f2c_array_view_discard(&left_view);
+    f2c_array_view_discard(&right_view);
     free(zero);
     return f2c_buffer_take(&result);
 
 unsupported:
-    free(left_pointer);
-    free(left_count);
-    free(left_stride);
-    free(right_pointer);
-    free(right_count);
-    free(right_stride);
+    f2c_array_view_discard(&left_view);
+    f2c_array_view_discard(&right_view);
     free(zero);
     free(result.data);
     *supported = 0;
@@ -498,19 +520,17 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
         expression != NULL && (expression->intrinsic == F2C_INTRINSIC_COUNT ||
                                expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
                                expression->intrinsic == F2C_INTRINSIC_MINLOC);
-    char *pointer = NULL;
-    char *count = NULL;
-    char *stride = NULL;
+    F2cArrayView array_view = {0};
     char *dimension_code = NULL;
-    char *mask_pointer = NULL;
-    char *mask_count = NULL;
-    char *mask_stride = NULL;
+    F2cArrayView mask_view = {0};
     char *mask_size = NULL;
     char *mask_scalar = NULL;
     char *conformance = NULL;
     char *back_code = NULL;
     char *zero = NULL;
     Buffer result = {0};
+    Buffer qualified_kernel = {0};
+    int qualified;
     if (expression == NULL || !f2c_intrinsic_is_reduction(expression->intrinsic)) {
         *supported = 0;
         return NULL;
@@ -537,36 +557,44 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
     (void)kind;
     macro = logical ? reduction_macro(expression->intrinsic)
                     : masked_reduction_macro(expression->intrinsic);
-    if (macro == NULL ||
-        !f2c_expression_array_view(unit, array, &pointer, &count, &stride, supported))
+    if (macro == NULL || !f2c_array_view(unit, array, &array_view, supported))
         goto unsupported;
     if (mask == NULL || mask->rank == 0U) {
-        mask_pointer = f2c_strdup("NULL");
-        mask_count = f2c_strdup(count);
-        mask_stride = f2c_strdup("0");
+        mask_view.pointer = f2c_strdup("NULL");
+        mask_view.count = f2c_strdup(array_view.count);
+        mask_view.stride = f2c_strdup("0");
         mask_size = f2c_strdup("1U");
         mask_scalar =
             mask != NULL ? f2c_expression_emit(unit, mask, supported) : f2c_strdup("true");
     } else {
-        if (!f2c_expression_array_view(unit, mask, &mask_pointer, &mask_count, &mask_stride,
-                                       supported))
+        if (!f2c_array_view(unit, mask, &mask_view, supported))
             goto unsupported;
         {
             Buffer size = {0};
-            f2c_buffer_printf(&size, "sizeof(*(%s))", mask_pointer);
+            f2c_buffer_printf(&size, "sizeof(*(%s))", mask_view.pointer);
             mask_size = f2c_buffer_take(&size);
         }
         mask_scalar = f2c_strdup("true");
-        conformance = reduction_conformance(unit, array, mask, count, mask_count);
+        conformance = reduction_conformance(unit, array, mask, array_view.count, mask_view.count);
     }
     back_code = back != NULL ? f2c_expression_emit(unit, back, supported) : f2c_strdup("false");
     if (dimension != NULL)
         dimension_code = f2c_expression_emit(unit, dimension, supported);
-    if (!*supported || mask_pointer == NULL || mask_count == NULL || mask_stride == NULL ||
-        mask_size == NULL || mask_scalar == NULL || back_code == NULL ||
+    if (!*supported || mask_view.pointer == NULL || mask_view.count == NULL ||
+        mask_view.stride == NULL || mask_size == NULL || mask_scalar == NULL || back_code == NULL ||
         (mask != NULL && mask->rank != 0U && conformance == NULL) ||
         (dimension != NULL && dimension_code == NULL))
         goto unsupported;
+    qualified = ((array_view.storage_qualifiers | mask_view.storage_qualifiers) &
+                 F2C_STORAGE_VOLATILE) != 0U;
+    if (qualified) {
+        const char *suffix = logical ? "l" : kernel_type_suffix(array);
+        if (suffix == NULL || expression->text == NULL)
+            goto unsupported;
+        f2c_buffer_printf(&qualified_kernel, "f2c_%s%s_%s_volatile", expression->text,
+                          logical ? "" : "_mask", suffix);
+        macro = qualified_kernel.data;
+    }
     if (dimension_code != NULL || conformance != NULL) {
         f2c_buffer_append(&result, "((");
         if (dimension_code != NULL)
@@ -581,12 +609,14 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
         f2c_buffer_printf(&result, "((%s)f2c_reduction_integer_result((int64_t)(",
                           f2c_expression_c_type(expression));
     if (logical) {
-        f2c_buffer_printf(&result, "%s((const void *)(%s), sizeof(*(%s)), %s, %s)", macro, pointer,
-                          pointer, count, stride);
+        f2c_buffer_printf(&result, "%s((const %svoid *)(%s), sizeof(*(%s)), %s, %s)", macro,
+                          qualified ? "volatile " : "", array_view.pointer, array_view.pointer,
+                          array_view.count, array_view.stride);
     } else {
-        f2c_buffer_printf(&result, "%s(%s, %s, %s, (const void *)(%s), %s, %s, (%s)", macro,
-                          pointer, count, stride, mask_pointer, mask_size, mask_stride,
-                          mask_scalar);
+        f2c_buffer_printf(&result, "%s(%s, %s, %s, (const %svoid *)(%s), %s, %s, (%s)", macro,
+                          array_view.pointer, array_view.count, array_view.stride,
+                          qualified ? "volatile " : "", mask_view.pointer, mask_size,
+                          mask_view.stride, mask_scalar);
         if (expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
             expression->intrinsic == F2C_INTRINSIC_MINLOC)
             f2c_buffer_printf(&result, ", (%s)", back_code);
@@ -602,33 +632,27 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
             goto unsupported;
         f2c_buffer_printf(&result, " : (abort(), %s))", zero);
     }
-    free(pointer);
-    free(count);
-    free(stride);
+    f2c_array_view_discard(&array_view);
     free(dimension_code);
-    free(mask_pointer);
-    free(mask_count);
-    free(mask_stride);
+    f2c_array_view_discard(&mask_view);
     free(mask_size);
     free(mask_scalar);
     free(conformance);
     free(back_code);
     free(zero);
+    free(qualified_kernel.data);
     return f2c_buffer_take(&result);
 
 unsupported:
-    free(pointer);
-    free(count);
-    free(stride);
+    f2c_array_view_discard(&array_view);
     free(dimension_code);
-    free(mask_pointer);
-    free(mask_count);
-    free(mask_stride);
+    f2c_array_view_discard(&mask_view);
     free(mask_size);
     free(mask_scalar);
     free(conformance);
     free(back_code);
     free(zero);
+    free(qualified_kernel.data);
     free(result.data);
     *supported = 0;
     return NULL;
