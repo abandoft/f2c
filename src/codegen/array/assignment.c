@@ -170,11 +170,9 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
         f2c_buffer_printf(&context->output, "const size_t f2c_element_length = (size_t)(%s);\n",
                           character_length);
         f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_append(&context->output, "if (f2c_element_length != 0U && f2c_element_count > "
-                                            "SIZE_MAX / f2c_element_length) abort();\n");
-        f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "const size_t f2c_element_bytes = "
-                                            "f2c_element_count * f2c_element_length;\n");
+                                            "f2c_size_multiply_checked("
+                                            "f2c_element_count, f2c_element_length);\n");
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "char *f2c_element_values = (char *)malloc("
                                             "f2c_element_bytes == 0U ? 1U : f2c_element_bytes);\n");
