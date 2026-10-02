@@ -46,8 +46,11 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
     f2c_buffer_printf(&context->output, "const size_t f2c_whole_length = (size_t)(%s);\n",
                       left_length);
     f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_append(&context->output, "const size_t f2c_whole_bytes = f2c_size_multiply_checked("
+    f2c_buffer_append(&context->output, "(void)f2c_size_multiply_checked("
                                         "f2c_whole_count, f2c_whole_length);\n");
+    f2c_array_indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output,
+                      "const size_t f2c_whole_bytes = f2c_whole_count * f2c_whole_length;\n");
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output,
                       "char *f2c_whole_values = f2c_whole_count == 0U ? NULL : "
