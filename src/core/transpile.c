@@ -34,6 +34,7 @@ typedef struct F2cRequiredFeatures {
     int process_cpu_time;
     int bit_intrinsic;
     int character_intrinsic;
+    int character_snapshot;
     int conversion_intrinsic;
     int numeric_model_intrinsic;
     int numeric_operation_intrinsic;
@@ -49,6 +50,9 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
         features->qualified_storage = 1;
     if (expression->type == TYPE_COMPLEX || expression->type == TYPE_DOUBLE_COMPLEX)
         features->complex_values = 1;
+    if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->type == TYPE_CHARACTER &&
+        expression->rank == 0U)
+        features->character_snapshot = 1;
     if (expression->kind != F2C_EXPR_CALL || expression->text == NULL)
         return;
     if (expression->symbol != NULL && expression->symbol->external_declared)
@@ -631,6 +635,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
         f2c_emit_character_length_support(&context.output);
         if (features.qualified_storage)
             f2c_emit_qualified_character_support(&context.output);
+        if (features.character_snapshot)
+            f2c_emit_character_snapshot_support(&context.output, features.qualified_storage);
         f2c_buffer_append(
             &context.output,
             "static inline F2C_UNUSED char *f2c_character_temporary_resize(char *storage, "

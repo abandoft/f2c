@@ -1,5 +1,24 @@
 #include "core/generated/private.h"
 
+void f2c_emit_character_snapshot_support(Buffer *output, int needs_qualified) {
+    f2c_buffer_append(output,
+                      "static inline F2C_UNUSED char *f2c_character_snapshot(char **storage, "
+                      "const char *source, size_t length) { char *copy; if (storage == NULL || "
+                      "length == SIZE_MAX || (source == NULL && length != 0U)) abort(); "
+                      "copy = (char *)malloc(length + 1U); if (copy == NULL) abort(); "
+                      "if (length != 0U) memmove(copy, source, length); copy[length] = '\\0'; "
+                      "free(*storage); *storage = copy; return copy; }\n");
+    if (needs_qualified)
+        f2c_buffer_append(
+            output, "static inline F2C_UNUSED char *f2c_character_snapshot_volatile("
+                    "char **storage, const volatile char *source, size_t length) { "
+                    "char *copy; size_t i; if (storage == NULL || length == SIZE_MAX || "
+                    "(source == NULL && length != 0U)) abort(); "
+                    "copy = (char *)malloc(length + 1U); if (copy == NULL) abort(); "
+                    "for (i = 0U; i < length; ++i) copy[i] = source[i]; copy[length] = '\\0'; "
+                    "free(*storage); *storage = copy; return copy; }\n");
+}
+
 void f2c_emit_qualified_character_support(Buffer *output) {
     f2c_buffer_append(
         output, "static inline F2C_UNUSED void f2c_character_copy_volatile("
