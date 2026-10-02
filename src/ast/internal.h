@@ -27,6 +27,12 @@ void f2c_ast_report_resource_limit(AstParser *parser, const char *message, size_
 
 void f2c_ast_parser_error(AstParser *parser, const char *at);
 void f2c_ast_next_token(AstParser *parser);
+void f2c_ast_set_expression_range(const AstParser *parser, F2cExpr *expression, const char *begin,
+                                  const char *end);
+F2cExpr *f2c_ast_parse_binary(AstParser *parser, int minimum_precedence);
+F2cExpr *f2c_ast_parse_argument(AstParser *parser);
+F2cExpr *f2c_ast_parse_name(AstParser *parser, const F2cToken *name_token);
+F2cExpr *f2c_ast_parse_designator(AstParser *parser, F2cExpr *expression);
 
 void f2c_ast_set_expression_shape(F2cExpr *expression, size_t rank, F2cShapeKind kind);
 void f2c_ast_copy_expression_shape(F2cExpr *expression, const F2cShape *source);

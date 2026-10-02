@@ -88,4 +88,12 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
 void f2c_expr_free(F2cExpr *expression);
 void f2c_visit_expression(F2cExpr *expression, F2cExpressionVisitor visitor, void *state);
 
+/* SUBSTRING owns [parent, range]. Range owns [lower, upper, absent-stride].
+ * Its rank/shape are those of the parent; bounds are scalar integer expressions.
+ * Omitted bounds use INVALID nodes, not a second legacy node representation. */
+const F2cExpr *f2c_substring_parent(const F2cExpr *expression);
+const F2cExpr *f2c_substring_range(const F2cExpr *expression);
+const F2cExpr *f2c_substring_lower(const F2cExpr *expression);
+const F2cExpr *f2c_substring_upper(const F2cExpr *expression);
+
 #endif
