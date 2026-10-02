@@ -133,6 +133,8 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
   尾随长度 ABI；
 - 使用显式母对象的字符数组元素、数组段和组件子串，覆盖重叠安全写入、指针别名、常量补齐及
   边界单次求值；
+- 已测试的普通子程序和标量结果函数字符子串实参复制回写，以及按过程作用域处理的类型化字符
+  结果长度规格表达式；
 - 已测试的构造器、elemental、数组查询及归约嵌套表达式，普通数组/标量比较仍使用无临时分配
   的直接归约路径；
 - 结构化/旧式控制流、格式化和列表导向 I/O、内部文件、非前进 I/O、定义 I/O，以及文档化路径上的
@@ -142,7 +144,8 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
 - 测试覆盖的数值、字符和派生类型组合中的 `RESHAPE`、`PACK`、`UNPACK`、`SPREAD`、
   `CSHIFT`、`EOSHIFT` 和 `FINDLOC` 降级。
 
-重要剩余工作包括：声明/模块的完整 token 流覆盖，所有 kind/rank 与任意数组表达式组合，完整模块
+重要剩余工作包括：保留持久 `TARGET` 别名的字节跨度视图、完整结果规格作用域与实参映射，
+声明/模块的完整 token 流覆盖，所有 kind/rank 与任意数组表达式组合，完整模块
 泛型和子模块，动态多态分配，命名/关联构造的终结边界，全部格式化 I/O 布局规则，列表导向输入的
 完整空值/重复因子/斜杠组合，NAMELIST 输入
 中的指针重关联，以及多编译器 ABI 认证。不支持的语义必须产生诊断，不能生成看似合理但错误的 C。
