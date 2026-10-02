@@ -415,8 +415,10 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
                     *supported = 0;
                     return NULL;
                 }
-                f2c_buffer_printf(&result, "((size_t)(%s) == (size_t)(%s) && %s == %s)",
-                                  pointer_length, target_length, pointer_storage, target_storage);
+                f2c_buffer_printf(&result,
+                                  "f2c_character_associated_target(%s, (size_t)(%s), "
+                                  "%s, (size_t)(%s))",
+                                  pointer_storage, pointer_length, target_storage, target_length);
             } else {
                 f2c_buffer_printf(&result, "((const void *)(%s) == (const void *)(%s))",
                                   pointer_storage, target_storage);
@@ -446,8 +448,9 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
                     *supported = 0;
                     return NULL;
                 }
-                f2c_buffer_printf(&result, "((size_t)(%s) == (size_t)(%s) && %s)", pointer_length,
-                                  target_length, association);
+                f2c_buffer_printf(
+                    &result, "(f2c_character_target_lengths((size_t)(%s), (size_t)(%s)) && %s)",
+                    pointer_length, target_length, association);
             } else {
                 f2c_buffer_append(&result, association);
             }
