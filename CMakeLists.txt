@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 
+set_property(
+    DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/f2c/version.h"
+)
+
 file(
     STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/f2c/version.h"
     F2C_VERSION_DEFINITION
@@ -533,6 +538,16 @@ if(F2C_BUILD_TESTING)
     )
 
     add_test(NAME cli_help COMMAND f2c --help)
+    add_test(
+        NAME incremental_version_metadata
+        COMMAND
+            ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -DWORK_DIR=${CMAKE_CURRENT_SOURCE_DIR}/build/version-metadata-${CMAKE_C_COMPILER_ID}
+            -DC_COMPILER=${CMAKE_C_COMPILER}
+            -DBUILD_GENERATOR=${CMAKE_GENERATOR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test/version_metadata.cmake
+    )
     set_tests_properties(
         cli_help
         PROPERTIES PASS_REGULAR_EXPRESSION "Source form is automatic by default"
