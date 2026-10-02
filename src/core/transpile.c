@@ -25,6 +25,7 @@ typedef struct F2cRequiredFeatures {
     int maxloc;
     int maxval;
     int reduction;
+    int qualified_storage;
     int min;
     int max;
     int io;
@@ -44,6 +45,8 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
     const char *name;
     if (expression == NULL)
         return;
+    if ((expression->storage_qualifiers & F2C_STORAGE_VOLATILE) != 0U)
+        features->qualified_storage = 1;
     if (expression->type == TYPE_COMPLEX || expression->type == TYPE_DOUBLE_COMPLEX)
         features->complex_values = 1;
     if (expression->kind != F2C_EXPR_CALL || expression->text == NULL)
@@ -626,6 +629,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             "size_t length) { while (length != 0U && value[length - 1U] == ' ') --length; "
             "return length; }\n");
         f2c_emit_character_length_support(&context.output);
+        if (features.qualified_storage)
+            f2c_emit_qualified_character_support(&context.output);
         f2c_buffer_append(
             &context.output,
             "static inline F2C_UNUSED char *f2c_character_temporary_resize(char *storage, "
@@ -812,7 +817,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                 "f2c_dmaxval)((v), (n))\n");
         }
         if (needs_reduction)
-            f2c_emit_reduction_support(&context.output, needs_complex);
+            f2c_emit_reduction_support(&context.output, needs_complex, features.qualified_storage);
         if (needs_random) {
             f2c_buffer_append(
                 &context.output,
