@@ -188,8 +188,11 @@ static F2cExpr *parse_parenthesized_expression(AstParser *parser) {
         return result;
     }
     if (value_count == 1U) {
-        result = values[0];
+        result = f2c_expr_new(F2C_EXPR_PARENTHESIZED, values[0]->type, NULL, 0U);
+        if (result == NULL || !push_expression(parser, result, values[0]))
+            goto failed;
         values[0] = NULL;
+        f2c_expr_refresh_parenthesized(result);
     } else if (value_count == 2U) {
         const Type common = f2c_common_numeric_type(values[0]->type, values[1]->type);
         result = f2c_expr_new(F2C_EXPR_COMPLEX_LITERAL,

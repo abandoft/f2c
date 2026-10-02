@@ -271,7 +271,8 @@ static void test_function_macro_expansion(void) {
     F2cResult result = translate(source, &config);
     expect(result.error_count == 0U,
            "function-like, nested, zero-argument and variadic macros translate");
-    expect_contains(result.code, "(*value) = (2 + 4)",
+    expect_contains(result.code, "(2)", "nested macro arguments retain their literal value");
+    expect_contains(result.code, " + (4)",
                     "function-like arguments are recursively expanded exactly once");
     expect_contains(result.code, "joined = (*value)",
                     "token pasting forms a canonical Fortran identifier");
@@ -577,8 +578,8 @@ static void test_explicit_preprocessor_contract(void) {
         "#define BAD_PASTE(value) ## value\ninteger :: value = BAD_PASTE(1)\n",
         F2C_DIAGNOSTIC_SYNTAX, 2U, 20U, "invalid leading token-paste operator",
         "invalid token-paste placement is rejected");
-    expect_preprocessor_error("#define CHANGED 1\n#define CHANGED 2\n", F2C_DIAGNOSTIC_SYNTAX,
-                              2U, 9U, "incompatible redefinition",
+    expect_preprocessor_error("#define CHANGED 1\n#define CHANGED 2\n", F2C_DIAGNOSTIC_SYNTAX, 2U,
+                              9U, "incompatible redefinition",
                               "incompatible macro redefinitions preserve the original table");
 }
 
