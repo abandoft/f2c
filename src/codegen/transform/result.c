@@ -34,15 +34,13 @@ void f2c_transform_emit_result_allocation(Context *context, Unit *unit, const Sy
                           "const size_t f2c_transform_result_element_length = (size_t)(%s);\n",
                           length != NULL ? length : "0U");
         f2c_transform_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "if (f2c_transform_result_element_length != 0U && "
-                                            "f2c_transform_result_count > SIZE_MAX / "
-                                            "f2c_transform_result_element_length) abort();\n");
+        f2c_buffer_append(&context->output,
+                          "const size_t f2c_transform_result_bytes = f2c_size_multiply_checked("
+                          "f2c_transform_result_count, f2c_transform_result_element_length);\n");
         f2c_transform_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "char *f2c_transform_result = (char *)malloc("
-                                            "f2c_transform_result_count == 0U || "
-                                            "f2c_transform_result_element_length == 0U ? 1U : "
-                                            "f2c_transform_result_count * "
-                                            "f2c_transform_result_element_length);\n");
+                                            "f2c_transform_result_bytes == 0U ? 1U : "
+                                            "f2c_transform_result_bytes);\n");
         f2c_transform_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "if (f2c_transform_result == NULL) abort();\n");
         free(length);
@@ -157,7 +155,8 @@ void f2c_transform_append_array_store(Buffer *output, const Symbol *target, cons
                           "{ char *f2c_dst = f2c_transform_result + (%s) * "
                           "f2c_transform_result_element_length; const char *f2c_src = %s + "
                           "(%s) * (size_t)(%s); size_t f2c_copy = "
-                          "F2C_MIN(f2c_transform_result_element_length, (size_t)(%s)); "
+                          "f2c_character_copy_length(f2c_transform_result_element_length, "
+                          "(size_t)(%s)); "
                           "if (f2c_copy != 0U) memmove(f2c_dst, f2c_src, f2c_copy); "
                           "if (f2c_transform_result_element_length > f2c_copy) "
                           "memset(f2c_dst + f2c_copy, ' ', "
@@ -182,7 +181,8 @@ void f2c_transform_append_scalar_store(Buffer *output, const Symbol *target,
                           "{ char *f2c_dst = f2c_transform_result + (%s) * "
                           "f2c_transform_result_element_length; const char *f2c_src = (%s); "
                           "size_t f2c_src_len = (size_t)(%s); size_t f2c_copy = "
-                          "F2C_MIN(f2c_transform_result_element_length, f2c_src_len); "
+                          "f2c_character_copy_length(f2c_transform_result_element_length, "
+                          "f2c_src_len); "
                           "if (f2c_copy != 0U) memmove(f2c_dst, f2c_src, f2c_copy); "
                           "if (f2c_transform_result_element_length > f2c_copy) "
                           "memset(f2c_dst + f2c_copy, ' ', "
