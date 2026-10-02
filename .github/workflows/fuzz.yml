@@ -43,7 +43,8 @@ jobs:
           restore-keys: |
             f2c-libfuzzer-${{ runner.os }}-
       - name: Add versioned seed corpus
-        run: cp -n test/fuzz_corpus/* build/fuzz-corpus/
+        # Keep evolved hash-named inputs, but always refresh repository-owned seeds.
+        run: cp test/fuzz_corpus/* build/fuzz-corpus/
       - name: Run coverage-guided campaign
         run: |
           build/fuzz/f2c_libfuzzer build/fuzz-corpus \
