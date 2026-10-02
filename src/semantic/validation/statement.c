@@ -21,22 +21,8 @@ static int null_pointer_value(const F2cExpr *expression) {
 static int pointer_target_designator(const F2cExpr *expression) {
     return expression != NULL &&
            (expression->kind == F2C_EXPR_NAME || expression->kind == F2C_EXPR_ARRAY_REFERENCE ||
-            expression->kind == F2C_EXPR_COMPONENT) &&
+            expression->kind == F2C_EXPR_COMPONENT || expression->kind == F2C_EXPR_SUBSTRING) &&
            expression->symbol != NULL;
-}
-
-static int pointer_target_has_vector_subscript(const F2cExpr *expression) {
-    size_t selector;
-    if (expression == NULL ||
-        (expression->kind != F2C_EXPR_ARRAY_REFERENCE && expression->kind != F2C_EXPR_COMPONENT))
-        return 0;
-    for (selector = expression->kind == F2C_EXPR_COMPONENT ? 1U : 0U;
-         selector < expression->child_count; ++selector) {
-        const F2cExpr *subscript = expression->children[selector];
-        if (subscript != NULL && subscript->kind != F2C_EXPR_ARRAY_SECTION && subscript->rank != 0U)
-            return 1;
-    }
-    return 0;
 }
 
 static int pointer_derived_type_compatible(const Symbol *pointer, const F2cExpr *target) {
@@ -320,12 +306,12 @@ static void validate_pointer_statement(Context *context, Unit *unit, F2cStatemen
                               "pointer bounds cannot be used when assigning NULL()");
             return;
         }
-        if (!null_target && (target == NULL || (!target->target && !target->pointer))) {
+        if (!null_target && (target == NULL || !f2c_expression_has_target_attribute(right))) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, right), 1,
                               "pointer-assignment value must designate a TARGET or POINTER "
                               "object, or NULL()");
-        } else if (!null_target && pointer_target_has_vector_subscript(right)) {
+        } else if (!null_target && f2c_expression_has_vector_subscript(right)) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, right), 1,
                               "pointer-assignment target cannot have a vector subscript");

@@ -730,17 +730,6 @@ void f2c_resolve_derived_semantics(Context *context) {
         resolve_derived_unit(context, &context->units.items[unit]);
 }
 
-static int has_vector_subscript(const F2cExpr *expression) {
-    size_t selector;
-    if (expression == NULL || expression->kind != F2C_EXPR_ARRAY_REFERENCE)
-        return 0;
-    for (selector = 0U; selector < expression->child_count; ++selector)
-        if (expression->children[selector]->kind != F2C_EXPR_ARRAY_SECTION &&
-            expression->children[selector]->rank != 0U)
-            return 1;
-    return 0;
-}
-
 static void validate_procedure_actual(Context *context, Unit *caller, const Unit *definition,
                                       const Symbol *dummy, const F2cExpr *actual, size_t index,
                                       size_t line, const char *statement_text) {
@@ -856,7 +845,7 @@ static void validate_procedure_actual(Context *context, Unit *caller, const Unit
         }
     }
     if ((dummy->intent == F2C_INTENT_OUT || dummy->intent == F2C_INTENT_INOUT) &&
-        has_vector_subscript(value)) {
+        f2c_expression_has_vector_subscript(value)) {
         f2c_diagnostic_at(context, line, column, 1,
                           "argument %zu of procedure '%s' uses a vector subscript but dummy '%s' "
                           "has INTENT(%s)",

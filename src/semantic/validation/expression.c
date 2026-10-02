@@ -46,20 +46,6 @@ static void validate_allocated_intrinsic(Context *context, size_t line, const ch
     }
 }
 
-static int associated_target_has_vector_subscript(const F2cExpr *target) {
-    size_t selector;
-    if (target == NULL ||
-        (target->kind != F2C_EXPR_ARRAY_REFERENCE && target->kind != F2C_EXPR_COMPONENT))
-        return 0;
-    for (selector = target->kind == F2C_EXPR_COMPONENT ? 1U : 0U; selector < target->child_count;
-         ++selector) {
-        const F2cExpr *subscript = target->children[selector];
-        if (subscript != NULL && subscript->kind != F2C_EXPR_ARRAY_SECTION && subscript->rank != 0U)
-            return 1;
-    }
-    return 0;
-}
-
 static int associated_derived_type_compatible(const Symbol *pointer, const F2cExpr *target) {
     const F2cDerivedType *candidate;
     if (pointer == NULL || target == NULL || pointer->type != TYPE_DERIVED)
@@ -115,14 +101,14 @@ static void validate_associated_intrinsic(Context *context, size_t line, const c
         return;
     }
     if (target != NULL &&
-        (target_symbol == NULL || (!target_symbol->target && !target_symbol->pointer) ||
+        (target_symbol == NULL || !f2c_expression_has_target_attribute(target) ||
          target->type != pointer_symbol->type || target->type_kind != pointer_symbol->kind ||
          target->rank != pointer_symbol->rank ||
          !associated_derived_type_compatible(pointer_symbol, target))) {
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, target), 1,
                           "ASSOCIATED target must be a compatible TARGET or POINTER object");
-    } else if (associated_target_has_vector_subscript(target)) {
+    } else if (f2c_expression_has_vector_subscript(target)) {
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, target), 1,
                           "ASSOCIATED target cannot have a vector subscript");
@@ -245,30 +231,30 @@ static void validate_substring_semantics(Context *context, Unit *unit, size_t li
     int length_known = 0;
     if (expression == NULL || expression->kind != F2C_EXPR_SUBSTRING)
         return;
-    if (expression->symbol == NULL || expression->child_count != 1U) {
+    const F2cExpr *parent = f2c_substring_parent(expression);
+    selector = f2c_substring_range(expression);
+    if (parent == NULL || parent->type != TYPE_CHARACTER || selector == NULL) {
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, expression), 1,
                           "malformed CHARACTER substring designator");
         return;
     }
-    selector = expression->children[0];
-    if (selector->kind == F2C_EXPR_ARRAY_SECTION) {
-        if (selector->child_count != 3U) {
-            f2c_diagnostic_at(context, line,
-                              f2c_validation_expression_start_column(statement_text, selector), 1,
-                              "malformed CHARACTER substring range");
-            return;
-        }
-        if (selector->children[0]->kind != F2C_EXPR_INVALID)
-            lower = selector->children[0];
-        if (selector->children[1]->kind != F2C_EXPR_INVALID)
-            upper = selector->children[1];
-        if (selector->children[2]->kind != F2C_EXPR_INVALID)
-            stride = selector->children[2];
-    } else {
-        lower = selector;
-        upper = selector;
+    if (parent->kind != F2C_EXPR_NAME && parent->kind != F2C_EXPR_ARRAY_REFERENCE &&
+        parent->kind != F2C_EXPR_COMPONENT && parent->kind != F2C_EXPR_STRING_LITERAL) {
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, parent), 1,
+                          "CHARACTER substring requires a variable designator or scalar constant");
     }
+    if (selector->kind != F2C_EXPR_ARRAY_SECTION || selector->child_count != 3U) {
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, selector), 1,
+                          "CHARACTER substring requires a lower:upper range");
+        return;
+    }
+    lower = f2c_substring_lower(expression);
+    upper = f2c_substring_upper(expression);
+    if (selector->children[2]->kind != F2C_EXPR_INVALID)
+        stride = selector->children[2];
     if (stride != NULL) {
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, stride), 1,
@@ -284,16 +270,7 @@ static void validate_substring_semantics(Context *context, Unit *unit, size_t li
                           f2c_validation_expression_start_column(statement_text, upper), 1,
                           "CHARACTER substring upper bound must be a scalar INTEGER");
     }
-    length_known = expression->symbol->character_length_expression != NULL
-                       ? f2c_evaluate_integer_constant(
-                             unit, expression->symbol->character_length_expression, &length_value)
-                   : expression->symbol->character_length_syntax.count != 0U
-                       ? f2c_evaluate_integer_syntax(
-                             unit, expression->symbol->character_length_syntax, &length_value)
-                   : expression->symbol->character_length == NULL ||
-                           strcmp(expression->symbol->character_length, "1") == 0
-                       ? (length_value = 1, 1)
-                       : 0;
+    length_known = f2c_character_constant_length(unit, parent, &length_value);
     if (lower != NULL)
         lower_known = f2c_evaluate_integer_constant(unit, lower, &lower_value);
     if (upper != NULL) {
@@ -302,11 +279,15 @@ static void validate_substring_semantics(Context *context, Unit *unit, size_t li
         upper_value = length_value;
         upper_known = 1;
     }
+    /* Reversed endpoints denote an empty substring, including out-of-bounds endpoints.
+     * Only nonempty substrings require both endpoints to lie within the parent. */
+    if (!lower_known || !upper_known || lower_value > upper_value)
+        return;
     if (lower_known && lower_value < 1) {
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text,
                                                                  lower != NULL ? lower : selector),
-                          1, "CHARACTER substring lower bound must be at least one");
+                          1, "nonempty CHARACTER substring lower bound must be at least one");
     }
     if (upper_known && length_known && upper_value > length_value) {
         f2c_diagnostic_at(context, line,
@@ -314,13 +295,6 @@ static void validate_substring_semantics(Context *context, Unit *unit, size_t li
                                                                  upper != NULL ? upper : selector),
                           1, "CHARACTER substring upper bound exceeds declared length %lld",
                           (long long)length_value);
-    }
-    if (lower_known && upper_known &&
-        (upper_value == INT64_MAX ? lower_value > upper_value : lower_value > upper_value + 1)) {
-        f2c_diagnostic_at(context, line,
-                          f2c_validation_expression_start_column(statement_text, selector), 1,
-                          "CHARACTER substring lower bound may exceed the upper bound by at most "
-                          "one");
     }
 }
 
