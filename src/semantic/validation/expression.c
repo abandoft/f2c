@@ -1,3 +1,4 @@
+#include "semantic/default_initialization.h"
 #include "semantic/validation/private.h"
 
 #include "ast/declaration/designator.h"
@@ -397,7 +398,7 @@ static void validate_structure_constructor(Context *context, size_t line,
     }
     for (argument = 0U; argument < expression->derived_type->component_count; ++argument) {
         if (!assigned[argument] &&
-            expression->derived_type->components[argument].initializer == NULL) {
+            !f2c_component_may_be_omitted(&expression->derived_type->components[argument])) {
             f2c_diagnostic_at(context, line,
                               f2c_validation_expression_start_column(statement_text, expression), 1,
                               "constructor for type '%s' does not initialize component '%s'",
@@ -679,18 +680,7 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
             validate_associated_intrinsic(context, line, statement_text, expression);
     } else if (expression->kind == F2C_EXPR_CALL && expression->symbol != NULL &&
                expression->symbol->type_bound) {
-        const Symbol *binding = expression->symbol;
-        const size_t explicit_count =
-            expression->child_count != 0U ? expression->child_count - 1U : 0U;
-        const size_t expected_count =
-            binding->external_parameter_count -
-            ((!binding->type_bound_nopass && binding->external_parameter_count != 0U) ? 1U : 0U);
-        if (explicit_count != expected_count)
-            f2c_diagnostic_at(context, line,
-                              f2c_validation_expression_column(statement_text, expression), 1,
-                              "type-bound function '%s' expects %zu explicit arguments but has "
-                              "%zu",
-                              expression->text, expected_count, explicit_count);
+        f2c_validation_bound_function(context, unit, line, statement_text, expression);
     } else if (expression->kind == F2C_EXPR_CALL && f2c_is_intrinsic_subroutine(expression->text) &&
                (expression->symbol == NULL || !expression->symbol->external_declared)) {
         f2c_diagnostic_at(

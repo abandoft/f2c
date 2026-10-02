@@ -39,6 +39,20 @@ Unit *f2c_validation_procedure_call(Context *context, Unit *caller, size_t line,
                                     const F2cSourceSpan *call_span, F2cExpr ***arguments,
                                     char ***argument_texts, size_t *argument_count, int subroutine);
 Unit *f2c_validation_call_statement(Context *context, Unit *caller, F2cStatement *statement);
+int f2c_validation_bind_procedure_arguments(Context *context, Unit *definition, size_t line,
+                                            const char *statement_text, const char *name,
+                                            const F2cSourceSpan *span, F2cExpr ***arguments,
+                                            char ***items, size_t *count, F2cStatement *statement,
+                                            size_t implicit_parameter, F2cExpr *passed_object);
+void f2c_validation_procedure_actual(Context *context, Unit *caller, const Unit *definition,
+                                     const Symbol *dummy, const F2cExpr *actual, size_t index,
+                                     size_t line, const char *statement_text);
+int f2c_validation_bound_arguments(Context *context, Unit *caller, size_t line,
+                                   const char *statement_text, F2cExpr *binding,
+                                   F2cExpr ***arguments, char ***items, size_t *count,
+                                   int subroutine);
+void f2c_validation_bound_function(Context *context, Unit *caller, size_t line,
+                                   const char *statement_text, F2cExpr *call);
 int f2c_validation_bind_unresolved_alternate_call(Context *context, Unit *caller, const char *name,
                                                   const F2cSourceSpan *call_span,
                                                   F2cStatement *statement);
