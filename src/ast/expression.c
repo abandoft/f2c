@@ -132,6 +132,7 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
     clone->rank = expression->rank;
     clone->definable = expression->definable;
     clone->value_category = expression->value_category;
+    clone->storage_qualifiers = expression->storage_qualifiers;
     clone->shape = expression->shape;
     clone->span = expression->span;
     clone->parse_error_span = expression->parse_error_span;
