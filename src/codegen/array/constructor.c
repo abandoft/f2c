@@ -1,3 +1,4 @@
+#include "codegen/array/copy.h"
 #include "codegen/array/private.h"
 
 #include "codegen/lowering/private.h"
@@ -579,11 +580,10 @@ int f2c_array_emit_numeric_constructor(Context *context, Unit *unit, Symbol *lef
                           left_symbol->rank);
         f2c_array_indent(&context->output, depth + 1);
     }
-    f2c_buffer_printf(&context->output,
-                      "if (f2c_constructor_count != 0U) memmove(%s, "
-                      "f2c_constructor_values, f2c_constructor_count * "
-                      "sizeof(*f2c_constructor_values));\n",
-                      f2c_symbol_c_name(unit, left_symbol));
+    f2c_array_copy_snapshot(
+        &context->output, unit, f2c_symbol_c_name(unit, left_symbol), "f2c_constructor_values",
+        "f2c_constructor_count",
+        left_symbol->volatile_entity ? F2C_STORAGE_VOLATILE : F2C_STORAGE_UNQUALIFIED, 0);
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "free(f2c_constructor_values);\n");
     f2c_array_indent(&context->output, depth);
