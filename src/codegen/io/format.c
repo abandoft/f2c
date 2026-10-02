@@ -169,7 +169,7 @@ void f2c_emit_format_support(Context *context) {
         &context->output,
         "static inline F2C_UNUSED int f2c_format_read_real(f2c_format_state *state, double "
         "*value, int kind) { f2c_format_descriptor descriptor; char *field; char *replacement; "
-        "char *end; char suffix[32]; size_t length; int status; int adjustment = 0; int saved; "
+        "char suffix[32]; size_t length; int status; int adjustment = 0; "
         "bool has_exponent; "
         "bool has_decimal; bool special; double parsed; if (!f2c_format_next(state, &descriptor)) "
         "return 0; "
@@ -187,11 +187,8 @@ void f2c_emit_format_support(Context *context) {
         "(size_t)appended - 1U) { free(field); return state->status = 0; } replacement = (char "
         "*)realloc(field, length + (size_t)appended + 1U); if (replacement == NULL) { "
         "free(field); return state->status = 0; } field = replacement; memcpy(field + length, "
-        "suffix, (size_t)appended + 1U); } } errno = 0; if "
-        "(!f2c_format_begin_rounding(state, 0.0, 0, &saved)) { free(field); return 0; } if (kind "
-        "== 4) { float narrow = strtof(field, &end); parsed = (double)narrow; } else parsed = "
-        "strtod(field, &end); f2c_format_end_rounding(saved); if (end == field || *end != '\\0' "
-        "|| (errno == ERANGE && isinf(parsed))) { free(field); return state->status = 0; } free("
+        "suffix, (size_t)appended + 1U); } } if (!f2c_io_parse_real(field, false, kind, "
+        "state->rounding, &parsed)) { free(field); return state->status = 0; } free("
         "field); *value = parsed; return 1; }\n");
     f2c_buffer_append(
         &context->output,
