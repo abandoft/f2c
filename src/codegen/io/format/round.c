@@ -14,7 +14,7 @@ void f2c_io_emit_format_round_support(Context *context) {
         "int needed; int saved; struct lconv *locale; const char *point; char *decimal; size_t "
         "point_length; if (precision < 0 || precision > 1000000 || (conversion != 'f' && "
         "conversion != 'E')) { state->status = 0; return NULL; } (void)snprintf(format, "
-        "sizeof(format), state->sign_plus ? \"%%+.*%c\" : \"%%.*%c\", conversion); if "
+        "sizeof(format), state->sign == F2C_SIGN_PLUS ? \"%%+.*%c\" : \"%%.*%c\", conversion); if "
         "(!f2c_format_begin_rounding(state, value, precision, conversion, &saved)) return NULL; "
         "needed = "
         "snprintf(NULL, 0U, format, precision, value); f2c_format_end_rounding(saved); if "

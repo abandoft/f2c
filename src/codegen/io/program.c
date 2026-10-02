@@ -81,7 +81,9 @@ static int runtime_control(const F2cFormatNode *node) {
         return 0;
     }
     if (node->kind == F2C_FORMAT_SIGN)
-        return node->control == F2C_FORMAT_SIGN_PLUS;
+        return node->control == F2C_FORMAT_SIGN_PLUS       ? 2
+               : node->control == F2C_FORMAT_SIGN_SUPPRESS ? 1
+                                                           : 0;
     if (node->kind == F2C_FORMAT_BLANK)
         return node->control == F2C_FORMAT_BLANK_ZERO;
     if (node->kind == F2C_FORMAT_DECIMAL)

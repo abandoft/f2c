@@ -211,8 +211,7 @@ static void emit_formatted_derived(Context *context, Unit *unit, const char *val
         "f2c_io_format.file->controls.decimal_comma = "
         "f2c_io_format.decimal_comma != 0;\n"
         "f2c_io_format.file->controls.rounding = f2c_io_format.rounding;\n"
-        "f2c_io_format.file->controls.sign = f2c_io_format.sign_plus ? "
-        "F2C_SIGN_PLUS : F2C_SIGN_SUPPRESS;\n"
+        "f2c_io_format.file->controls.sign = f2c_io_format.sign;\n"
         "f2c_io_format.file->controls_active = true;\n");
     if (!f2c_io_emit_defined_io_call(context, value, derived, kind, unit_number,
                                      "f2c_dtio_descriptor.iotype", "f2c_dtio_descriptor.v_list",

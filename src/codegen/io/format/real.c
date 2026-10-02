@@ -6,7 +6,7 @@ static void emit_real_utilities(Buffer *output) {
         "static inline F2C_UNUSED char *f2c_format_real_special(f2c_format_state *state, double "
         "value, size_t *length) { const char *word; size_t prefix = 0U; char *field; if "
         "(isnan(value)) word = \"NaN\"; else if (isinf(value)) { word = \"Infinity\"; prefix = "
-        "signbit(value) || state->sign_plus ? 1U : 0U; } else return NULL; *length = "
+        "signbit(value) || state->sign == F2C_SIGN_PLUS ? 1U : 0U; } else return NULL; *length = "
         "strlen(word) + prefix; field = (char *)malloc(*length + 1U); if (field == NULL) { "
         "state->status = 0; return NULL; } if (prefix != 0U) field[0] = signbit(value) ? '-' : "
         "'+'; memcpy(field + prefix, word, strlen(word) + 1U); return field; }\n"
