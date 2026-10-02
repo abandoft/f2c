@@ -357,6 +357,31 @@ static void test_statement_call_lowering_is_immutable(void) {
     free(context.diagnostics.data);
 }
 
+static void test_call_lowering_failure_is_atomic(void) {
+    Context context = {0};
+    Unit unit = {0};
+    F2cExpr invalid = {0};
+    F2cExpr *arguments[1] = {&invalid};
+    Buffer output = {0};
+    invalid.kind = F2C_EXPR_INVALID;
+    invalid.type = TYPE_UNKNOWN;
+    invalid.span.begin.line = 27U;
+    invalid.span.begin.column = 8U;
+    invalid.span.end = invalid.span.begin;
+    unit.context = &context;
+    f2c_buffer_append(&output, "/* retained output */\n");
+    expect(!f2c_emit_call(&output, &unit, "consume_invalid", arguments, 1U, 0),
+           "unsupported actual lowering returns an explicit failure");
+    expect(output.data != NULL && strcmp(output.data, "/* retained output */\n") == 0,
+           "failed call lowering atomically restores the previous output");
+    expect(context.result.error_count == 1U && context.diagnostics.data != NULL &&
+               strstr(context.diagnostics.data, "consume_invalid") != NULL,
+           "failed call lowering emits a hard diagnostic rather than silently omitting CALL");
+    free(output.data);
+    free(context.diagnostics.data);
+    f2c_lowering_clear(&context);
+}
+
 int main(void) {
     test_character_temporary_plan();
     test_ordered_call_plan();
@@ -365,6 +390,7 @@ int main(void) {
     test_owned_array_temporary_flow();
     test_expression_call_lowering_is_immutable();
     test_statement_call_lowering_is_immutable();
+    test_call_lowering_failure_is_atomic();
     if (failures != 0)
         fprintf(stderr, "%d temporary-lifetime test(s) failed\n", failures);
     return failures == 0 ? 0 : 1;
