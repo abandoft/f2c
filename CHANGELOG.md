@@ -1,3 +1,13 @@
+## 1.42.0
+
+- Fixed character result lengths for type-bound functions with first/nonfirst `PASS`, `NOPASS`, and inherited overrides, retaining the length at function entry.
+- Unified keyword and optional argument association for type-bound functions and subroutines, including type, kind, rank, and definability checks.
+- Added noncontiguous character substring argument copy-back in type-bound functions and single evaluation of object index functions on covered paths.
+- Improved default initialization for numeric, logical, complex, and character derived components, including fixed-shape arrays and nested and inherited components.
+- Generated portable static initializers for module and `SAVE` derived objects, preserving changes across procedure calls.
+- Improved omitted default and allocatable components in supported structure constructors, preserving explicit component values and copied or moved data.
+- Unified supported defaults for automatic objects, block scopes, `INTENT(OUT)`, and `SOURCE/MOLD` allocation, and fixed strict compilation of two-dimensional derived component indices.
+
 ## 1.41.0
 
 - Unified character substring designators for array elements, sections, and derived-type components.
