@@ -18,6 +18,7 @@ on:
           - dgetf2
           - extended
           - diagnostics
+          - loop-policies
   schedule:
     - cron: "17 2 * * 3"
 
@@ -55,22 +56,37 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && inputs.scope == 'diagnostics'
         run: sh test/performance/codegen_report.sh build/performance/f2c
       - name: Run the generated C versus Fortran matrix
-        if: github.event_name != 'workflow_dispatch' || inputs.scope != 'diagnostics'
+        if: >-
+          github.event_name != 'workflow_dispatch' ||
+          (inputs.scope != 'diagnostics' && inputs.scope != 'loop-policies')
         env:
           F2C_PERFORMANCE_SCOPE: ${{ inputs.scope || 'full' }}
         run: >-
           sh test/reference_performance_matrix.sh
           build/performance/f2c
           "$F2C_PERFORMANCE_SCOPE"
+      - name: Diagnose compiler loop policies
+        if: github.event_name == 'workflow_dispatch' && inputs.scope == 'loop-policies'
+        run: sh test/performance/loop_policy.sh build/performance/f2c
       - name: Upload performance reports
         if: >-
           always() &&
-          (github.event_name != 'workflow_dispatch' || inputs.scope != 'diagnostics')
+          (github.event_name != 'workflow_dispatch' ||
+           (inputs.scope != 'diagnostics' && inputs.scope != 'loop-policies'))
         uses: actions/upload-artifact@v7
         with:
           name: f2c-performance-matrix
           path: build/benchmarks/performance-matrix/
           if-no-files-found: warn
+          retention-days: 30
+      - name: Upload loop-policy diagnostics
+        if: >-
+          always() && github.event_name == 'workflow_dispatch' && inputs.scope == 'loop-policies'
+        uses: actions/upload-artifact@v7
+        with:
+          name: f2c-performance-loop-policies
+          path: build/diagnostics/performance-loop-policies/
+          if-no-files-found: error
           retention-days: 30
       - name: Upload performance code-generation diagnostics
         if: github.event_name == 'workflow_dispatch' && inputs.scope == 'diagnostics'
