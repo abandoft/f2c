@@ -1,6 +1,7 @@
 #include "semantic/data_flow.h"
 
 #include "internal/f2c.h"
+#include "ir/call.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -105,30 +106,13 @@ static void mark_actual(VariableFlowBuilder *builder, const F2cExpr *actual, F2c
     }
 }
 
-static size_t type_bound_parameter(const Symbol *procedure, size_t child) {
-    size_t parameter = 0U;
-    size_t explicit_child;
-    if (procedure == NULL || !procedure->type_bound)
-        return child;
-    if (child == 0U)
-        return procedure->type_bound_nopass ? SIZE_MAX : procedure->type_bound_pass_index;
-    for (explicit_child = 1U; explicit_child < child; ++explicit_child) {
-        ++parameter;
-        if (!procedure->type_bound_nopass && parameter == procedure->type_bound_pass_index)
-            ++parameter;
-    }
-    if (!procedure->type_bound_nopass && parameter == procedure->type_bound_pass_index)
-        ++parameter;
-    return parameter;
-}
-
 static void mark_call(VariableFlowBuilder *builder, const F2cExpr *expression) {
     const Symbol *procedure = expression->symbol;
     size_t child;
     if (procedure != NULL && procedure->procedure_pointer)
         mark_symbol(builder, builder->flow->uses, procedure);
     for (child = 0U; child < expression->child_count; ++child) {
-        const size_t parameter = type_bound_parameter(procedure, child);
+        const size_t parameter = f2c_call_child_parameter(expression, child);
         F2cIntent intent;
         if (parameter == SIZE_MAX) {
             mark_value(builder, expression->children[child]);
