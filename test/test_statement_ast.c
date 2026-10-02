@@ -224,6 +224,22 @@ int main(void) {
            "a numeric token after an identifier colon cannot recursively become a label");
     f2c_statement_free(&statement);
 
+    {
+        static const char *const invalid_prefixes[] = {
+            "prefix: else branch",         "prefix: end if branch",    "prefix: end do branch",
+            "prefix: case default branch", "prefix: elsewhere branch", "prefix: cycle branch",
+            "prefix: exit branch"};
+        size_t index;
+        for (index = 0U; index < sizeof(invalid_prefixes) / sizeof(invalid_prefixes[0]); ++index) {
+            expect(f2c_parse_statement(&unit, invalid_prefixes[index], 15U, &statement),
+                   "invalid named branch/terminator still builds diagnostic syntax IR");
+            expect(!statement.construct_syntax_valid && statement.construct_name != NULL &&
+                       strcmp(statement.construct_name, "prefix") == 0,
+                   "invalid construct prefix retains one owned name without suffix replacement");
+            f2c_statement_free(&statement);
+        }
+    }
+
     expect(f2c_parse_statement(&unit, "do n = ((n - 1) / 4) * 4 + 1, 1, -4", 15U, &statement),
            "counted DO with a parenthesized initial expression parses");
     expect(statement.kind == F2C_STMT_DO && statement.left != NULL && statement.right != NULL &&

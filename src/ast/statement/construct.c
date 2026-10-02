@@ -115,8 +115,12 @@ int f2c_statement_parse_construct_syntax(const Line *line, size_t body_start,
         statement->construct_name = copy_identifier(&line->tokens[0]);
         if (statement->construct_name == NULL)
             return 0;
-        if (!is_construct_opener(statement))
+        if (!is_construct_opener(statement)) {
             statement->construct_syntax_valid = 0;
+            /* A prefix cannot also own a branch/terminator suffix name. Preserve
+             * the invalid prefix for validation without overwriting its storage. */
+            return 1;
+        }
     }
     if (is_construct_opener(statement) && !opener_syntax_valid(line, body_start, statement))
         statement->construct_syntax_valid = 0;
