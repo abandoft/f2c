@@ -2,14 +2,9 @@
 
 #include "codegen/array/private.h"
 #include "codegen/lowering/private.h"
+#include "ir/call.h"
 
 #include <stdlib.h>
-
-static F2cExpr *actual_value(F2cExpr *actual) {
-    return actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT && actual->child_count == 1U
-               ? actual->children[0]
-               : actual;
-}
 
 int f2c_call_expression_requires_materialization(Unit *unit, const F2cExpr *expression) {
     const Symbol *callee;
@@ -17,12 +12,12 @@ int f2c_call_expression_requires_materialization(Unit *unit, const F2cExpr *expr
     if (expression == NULL || expression->kind != F2C_EXPR_CALL || expression->rank != 0U ||
         expression->intrinsic != F2C_INTRINSIC_NONE ||
         f2c_lowering_code(unit, expression) != NULL || (callee = expression->symbol) == NULL ||
-        callee->type_bound || callee->external_elemental ||
+        callee->external_elemental ||
         (expression->resolved_procedure != NULL && expression->resolved_procedure->elemental))
         return 0;
-    for (argument = 0U; argument < expression->child_count; ++argument)
-        if (f2c_call_actual_requires_materialization(unit, callee, expression->children[argument],
-                                                     argument))
+    for (argument = 0U; argument < f2c_call_parameter_count(expression); ++argument)
+        if (f2c_call_actual_requires_materialization(
+                unit, callee, f2c_call_parameter_actual(expression, argument), argument))
             return 1;
     /* A definable actual or host variable can change during the function body.
      * Capture the result specification before the call and retain that value
@@ -54,15 +49,15 @@ int f2c_call_materialize_expression(Unit *unit, F2cExpr *expression, size_t iden
     f2c_buffer_printf(&name, "f2c_call_%s_%zu_%zu", role, identifier, (*temporary)++);
     if (name.data == NULL)
         goto done;
-    for (argument = 0U; argument < expression->child_count; ++argument) {
-        F2cExpr *actual = actual_value(expression->children[argument]);
+    for (argument = 0U; argument < f2c_call_parameter_count(expression); ++argument) {
+        F2cExpr *actual = (F2cExpr *)f2c_call_parameter_actual(expression, argument);
         if (actual != NULL &&
             !f2c_array_hoist_scalar_subexpressions(unit, actual, identifier, role, temporary,
                                                    &setup, depth + 1, actual->definable))
             goto done;
     }
-    for (argument = 0U; argument < expression->child_count; ++argument) {
-        F2cExpr *actual = actual_value(expression->children[argument]);
+    for (argument = 0U; argument < f2c_call_parameter_count(expression); ++argument) {
+        F2cExpr *actual = (F2cExpr *)f2c_call_parameter_actual(expression, argument);
         F2cDescriptorView view = {0};
         const F2cIntent intent = argument < callee->external_parameter_count
                                      ? callee->external_parameter_intents[argument]

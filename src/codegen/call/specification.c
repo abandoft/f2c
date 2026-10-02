@@ -2,14 +2,9 @@
 
 #include "codegen/array/private.h"
 #include "codegen/lowering/private.h"
+#include "ir/call.h"
 
 #include <stdlib.h>
-
-static const F2cExpr *actual_value(const F2cExpr *actual) {
-    return actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT && actual->child_count == 1U
-               ? actual->children[0]
-               : actual;
-}
 
 static int substitute_actuals(Unit *caller, const Unit *scope, const F2cExpr *call,
                               F2cExpr **expression) {
@@ -21,8 +16,7 @@ static int substitute_actuals(Unit *caller, const Unit *scope, const F2cExpr *ca
     if (node->kind == F2C_EXPR_NAME && node->symbol != NULL && node->symbol->argument) {
         for (argument = 0U; argument < scope->argument_count; ++argument) {
             if (node->symbol == f2c_find_symbol((Unit *)scope, scope->arguments[argument])) {
-                const F2cExpr *actual =
-                    argument < call->child_count ? actual_value(call->children[argument]) : NULL;
+                const F2cExpr *actual = f2c_call_parameter_actual(call, argument);
                 F2cExpr *replacement =
                     actual != NULL ? f2c_array_clone_expression(caller, actual) : NULL;
                 if (replacement == NULL)
