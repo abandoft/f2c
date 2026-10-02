@@ -137,11 +137,21 @@ int main(void) {
         expect(
             result.error_count == 0U && result.code != NULL &&
                 strstr(result.code, "volatile float values[") != NULL &&
-                strstr(result.code, "values[f2c_zero_index] = (float){0}") != NULL &&
+                strstr(result.code, "values[f2c_zero_index_0] = (float){0}") != NULL &&
                 strstr(result.code, "memset(values,") == NULL,
             "volatile output arrays retain qualified initialization instead of libc byte stores");
         expect(result.code != NULL && strstr(result.code, "f2c_etime(volatile float *user") != NULL,
                "ETIME output parameters preserve volatile array stores");
+        f2c_result_free(&result);
+        result = transpile("program timing\n implicit none\n real, volatile :: "
+                           "f2c_zero_index(2), f2c_zero_index_0(2)\n"
+                           "real :: elapsed\n intrinsic :: etime\n "
+                           "elapsed=etime(f2c_zero_index)\nend program\n",
+                           "volatile-index-collision.f90");
+        expect(result.error_count == 0U && result.code != NULL &&
+                   strstr(result.code, "for (size_t f2c_zero_index_1 = 0U;") != NULL &&
+                   strstr(result.code, "f2c_zero_index[f2c_zero_index_1] = (float){0}") != NULL,
+               "volatile initialization counters do not shadow source-level array names");
         f2c_result_free(&result);
         for (index = 0U; index < sizeof(declarations) / sizeof(declarations[0]); ++index) {
             char source[256];
