@@ -68,7 +68,9 @@
   计数/无控制/`WHILE`/标号 `DO`、单行/块/算术 `IF`、直接/计算/赋值 `GOTO`、`ASSIGN` 和带标签
   嵌套动作也已迁移。`CALL/MOVE_ALLOC`、`ALLOCATE/DEALLOCATE/NULLIFY`、`STOP/ERROR STOP`、
   `RETURN`、普通赋值和指针赋值现同样直接从 canonical token range 构建 AST；关键字实参、分配
-  类型说明、停止码及赋值两端均保留精确物理 span。`f2c_identifier`、全部 `f2c_split_*`、
+  类型说明、停止码及赋值两端均保留精确物理 span。`WHERE/ELSEWHERE` 的掩码和单行赋值也直接
+  消费原 token 范围，保留续行物理位置；非法空掩码、不完整赋值及非赋值动作会生成语法诊断，
+  不再泄漏半构造的嵌套语句。`f2c_identifier`、全部 `f2c_split_*`、
   `f2c_starts_word`、整数文本求值器和表达式文本查询包装器已经从生产代码删除；架构测试禁止在
   parser 之外重新调用原始文本表达式入口，也禁止恢复这些旧解析器。`PROGRAM`、`SUBROUTINE`、
   `FUNCTION`、`MODULE` 和 `BLOCK DATA` 头、前缀、哑实参、`RESULT`、
@@ -593,7 +595,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   尾随空白已经匹配 gfortran。实数输出已覆盖 `RU/RD/RZ/RN/RC/RP`、正负舍入进位、signed zero、
   `NaN/Infinity`、字段星号溢出和紧凑前导零；实数输入按目标 kind 单次转换，覆盖定向舍入、隐含
   小数点、比例因子、特殊值及动态分配的超宽字段。连接默认值、语句级动态覆盖、非法值错误传播和
-  浮点环境恢复也已进入同一状态机。仍需完成其余描述符交叉组合、`RC` 十进制到二进制精确中点输入
+  浮点环境恢复也已进入显式 FORMAT 状态机。列表导向及 NAMELIST 尚需消费同一组
+  `DECIMAL/ROUND/SIGN` 控制，不能仅接受控制项却忽略它们。仍需完成其余描述符交叉组合、
+  `RC` 十进制到二进制精确中点输入
   及第二种原生 Fortran 编译器的逐字段差分。
   标准规定的最右嵌套组 FORMAT 回转点及其与非前进 I/O、冒号和无限组的全部组合也尚需逐项差分。
 - [x] 用统一、可定位的内存记录引擎实现内部文件，不再通过 `tmpfile()` 模拟或结束时回读复制。
