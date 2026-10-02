@@ -151,7 +151,9 @@ The currently tested implementation includes:
 - tested character substring copy-in/copy-out for ordinary subroutine and scalar-result function
   arguments, with procedure-scoped typed character result-length specifications, normalized negative
   declared lengths, checked target-width conversions, scalar-broadcast length reallocation, and
-  preserved procedure execution for zero-length character assignment results;
+  preserved procedure execution for zero-length character assignment results; ordinary scalar
+  character functions retain their entry result length when their body modifies length arguments
+  or host variables, including scalar-broadcast assignment;
 - nested constructor, elemental, inquiry, and reduction expressions on the tested typed-lowering
   paths, including statement-owned snapshots of component arrays and noncontiguous reduction
   operands; allocation-free direct reductions remain for simple array/scalar comparisons;
