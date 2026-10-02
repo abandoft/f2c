@@ -15,7 +15,7 @@ contains
     character(*), intent(in) :: iotype
     integer, intent(out) :: iostat
     character(*), intent(inout) :: iomsg
-    character(24) :: decimal_mode, round_mode, sign_mode, delim_mode
+    character(24) :: decimal_mode, round_mode, sign_mode, delim_mode, expected_sign
     inquire(unit, decimal=decimal_mode, round=round_mode, sign=sign_mode, delim=delim_mode, &
             iostat=iostat, iomsg=iomsg)
     if (unit < 0) then
@@ -23,8 +23,25 @@ contains
       iostat = 0
     else
       if (iostat /= 0) return
-      if (decimal_mode /= 'COMMA' .or. round_mode /= 'UP' .or. sign_mode /= 'PLUS') stop 1
+      if (decimal_mode /= 'COMMA' .or. round_mode /= 'UP') stop 1
       if (iotype == 'NAMELIST' .and. delim_mode /= 'QUOTE') stop 2
+    end if
+    if (size(v_list) > 0) then
+      if (v_list(1) >= 3) then
+        if (v_list(1) == 3) then
+          expected_sign = 'PROCESSOR_DEFINED'
+        else if (v_list(1) == 4) then
+          expected_sign = 'SUPPRESS'
+        else
+          expected_sign = 'PLUS'
+        end if
+        if (unit < 0 .or. sign_mode /= expected_sign) stop 22
+        write(unit, '(F6.1)', iostat=iostat, iomsg=iomsg) dtv%value
+        return
+      end if
+    end if
+    if (unit >= 0) then
+      if (sign_mode /= 'PLUS') stop 23
     end if
     write(unit, '(F6.1)', iostat=iostat, iomsg=iomsg) dtv%value
     if (iostat /= 0) return

@@ -10,6 +10,7 @@ program dtio_controls
   character(160) :: record
   character(32) :: records(2)
   character(24) :: decimal_mode, round_mode, sign_mode, dynamic_mode
+  character(64) :: dynamic_format
   integer :: status
   namelist /group/ object
   object%value = 1.25d0
@@ -66,6 +67,21 @@ program dtio_controls
   read(26, nml=group)
   if (abs(object%value - 1.3d0) > epsilon(object%value)) stop 17
   close(26)
+  object%value = 1.25d0
+  open(27, status='scratch', decimal='comma', round='up', sign='plus')
+  write(27, '(SP,SS,DT(4),S,DT(3),SP,DT(5))') object, object, object
+  inquire(27, sign=sign_mode)
+  if (sign_mode /= 'PLUS') stop 24
+  rewind(27)
+  read(27, '(A)') record
+  if (record(1:18) /= '   1,3   1,3  +1,3') stop 25
+  rewind(27)
+  dynamic_format = '(SP,SS,DT(4),S,DT(3),SP,DT(5))'
+  write(27, dynamic_format) object, object, object
+  rewind(27)
+  read(27, '(A)') record
+  if (record(1:18) /= '   1,3   1,3  +1,3') stop 26
+  close(27)
   object%value = 1.25d0
   write(*, '(DT(1))', decimal='comma', round='up', sign='plus') object
   write(*, '(DC,RU,SP,DT(1))') object
