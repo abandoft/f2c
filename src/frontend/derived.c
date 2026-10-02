@@ -24,6 +24,20 @@ static const F2cToken *derived_type_name_token(const Line *line) {
                : NULL;
 }
 
+static F2cNameAssociation derived_name_association(const Unit *unit, const char *name,
+                                                   const F2cDerivedType *type) {
+    size_t index;
+    for (index = 0U; index < unit->derived_type_count; ++index)
+        if (strcmp(unit->derived_types[index].name, name) == 0)
+            return F2C_ASSOCIATION_LOCAL;
+    for (index = 0U; index < unit->imported_derived_type_count; ++index) {
+        const F2cImportedDerivedType *imported = &unit->imported_derived_types[index];
+        if (strcmp(imported->local_name, name) == 0 && imported->type == type)
+            return imported->association;
+    }
+    return F2C_ASSOCIATION_LOCAL;
+}
+
 int f2c_line_in_derived_type(const Unit *unit, size_t line_index) {
     size_t i;
     for (i = 0U; i < unit->derived_type_count; ++i) {
@@ -542,12 +556,20 @@ void f2c_parse_derived_type_definitions(Context *context, Unit *unit) {
             free(name);
             continue;
         }
-        if (f2c_find_derived_type(unit, name) != NULL) {
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, name_token, 1,
-                                      "duplicate derived-type definition '%s'", name);
-            free(name);
-            line_index = end;
-            continue;
+        {
+            F2cDerivedType *existing = f2c_find_derived_type(unit, name);
+            const F2cNameAssociation association = derived_name_association(unit, name, existing);
+            if (existing != NULL && association != F2C_ASSOCIATION_HOST) {
+                f2c_diagnostic_token_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, line, name_token, 1,
+                    association == F2C_ASSOCIATION_USE
+                        ? "USE local name '%s' denotes conflicting derived types"
+                        : "duplicate derived-type definition '%s'",
+                    name);
+                free(name);
+                line_index = end;
+                continue;
+            }
         }
         if (append_derived_type(context, unit, line, name, line_index, end) == NULL) {
             f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line->number, 1,
@@ -621,7 +643,9 @@ void f2c_parse_derived_type_definitions(Context *context, Unit *unit) {
         derived->components = component_scope.symbols;
         derived->component_count = component_scope.symbol_count;
         derived->component_capacity = component_scope.symbol_capacity;
-        for (line_index = 0U; line_index < derived->component_count; ++line_index)
+        for (line_index = 0U; line_index < derived->component_count; ++line_index) {
             derived->components[line_index].derived_owner = derived;
+            derived->components[line_index].declaration_scope_id = unit->begin + 1U;
+        }
     }
 }
