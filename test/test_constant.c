@@ -350,7 +350,47 @@ static void test_complex_constants(Unit *unit) {
            "complex constant division by zero is rejected");
 }
 
+static void test_normalized_character_lengths(void) {
+    Symbol negative = {0};
+    Symbol zero = {0};
+    F2cExpr designator = {0};
+    F2cExpr inquiry = {0};
+    F2cExpr *argument = &designator;
+    int64_t length = -1;
+    char *code;
+    negative.type = TYPE_CHARACTER;
+    negative.character_length_expression = f2c_expr_new_integer_constant(INT64_MIN);
+    zero.type = TYPE_CHARACTER;
+    zero.character_length_expression = f2c_expr_new_integer_constant(0);
+    expect(negative.character_length_expression != NULL && zero.character_length_expression != NULL,
+           "character length constants are allocated");
+    expect(f2c_character_declaration_length(NULL, &negative, &length) && length == 0,
+           "the most negative length normalizes without negation or overflow");
+    expect(f2c_character_length_signatures_match(&negative, &zero),
+           "negative and zero length parameters have the same character signature");
+    designator.kind = F2C_EXPR_NAME;
+    designator.type = TYPE_CHARACTER;
+    designator.symbol = &negative;
+    expect(f2c_character_constant_length(NULL, &designator, &length) && length == 0,
+           "typed designator inquiry sees the normalized declaration length");
+    inquiry.kind = F2C_EXPR_CALL;
+    inquiry.intrinsic = F2C_INTRINSIC_LEN;
+    inquiry.text = "len";
+    inquiry.type = TYPE_INTEGER;
+    inquiry.children = &argument;
+    inquiry.child_count = 1U;
+    expect(f2c_evaluate_integer_constant(NULL, &inquiry, &length) && length == 0,
+           "constant LEN folds a negative declared parameter to zero");
+    code = f2c_character_parameter_length(NULL, negative.character_length_expression);
+    expect(code != NULL && strcmp(code, "0U") == 0,
+           "zero-length storage keeps a constant expression for C17 declarations");
+    free(code);
+    f2c_expr_free(negative.character_length_expression);
+    f2c_expr_free(zero.character_length_expression);
+}
+
 int main(void) {
+    test_normalized_character_lengths();
     Symbol symbols[3];
     Unit unit;
     int64_t value = 0;
