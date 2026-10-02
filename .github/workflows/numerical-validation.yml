@@ -98,6 +98,8 @@ jobs:
         run: sh test/real_representation_intrinsic_differential.sh build/numerical/f2c
       - name: Differential-test character intrinsics
         run: sh test/character_intrinsic_differential.sh build/numerical/f2c
+      - name: Differential-test character designators and nested array reductions
+        run: sh test/designator_differential.sh build/numerical/f2c
       - name: Differential-test unformatted I/O length inquiries
         run: sh test/iolength_differential.sh build/numerical/f2c
       - name: Differential-test transformational intrinsics

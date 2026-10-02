@@ -14,6 +14,8 @@ set(
     formatted_record_input
     namelist_internal
     pointer_semantics
+    character_designators
+    nested_array_reductions
     pointer_section
     pointer_bounds_once
     pointer_allocation

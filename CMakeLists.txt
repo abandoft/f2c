@@ -50,6 +50,7 @@ set(
     src/ast/declaration/procedure.h
     src/ast/declaration/use.c
     src/ast/declaration/use.h
+    src/ast/designator.c
     src/ast/expression.c
     src/ast/format.c
     src/ast/format.h
@@ -104,6 +105,7 @@ set(
     src/codegen/descriptor/private.h
     src/codegen/descriptor/view.c
     src/codegen/expression.c
+    src/codegen/expression/designator.c
     src/codegen/host/capture.c
     src/codegen/host/descriptor.c
     src/codegen/host/private.h
@@ -276,12 +278,14 @@ set(
     src/internal/context.h
     src/internal/f2c.h
     src/ir/expression.h
+    src/ir/designator.c
     src/ir/format.c
     src/ir/format.h
     src/ir/intrinsic.h
     src/ir/statement.h
     src/ir/type.h
-    src/semantic/character.c
+    src/semantic/character/length.c
+    src/semantic/character/literal.c
     src/semantic/control_flow.c
     src/semantic/control_flow.h
     src/semantic/control_flow/connectivity.c
@@ -300,6 +304,7 @@ set(
     src/semantic/data_flow/bitset.c
     src/semantic/data_flow/temporaries.c
     src/semantic/data_flow/variables.c
+    src/semantic/designator.c
     src/semantic/host.c
     src/semantic/implicit.c
     src/semantic/implicit/declaration.c
@@ -981,6 +986,16 @@ if(F2C_BUILD_TESTING)
                         FC=${F2C_GFORTRAN_EXECUTABLE}
                         ${F2C_SH_EXECUTABLE}
                         ${CMAKE_CURRENT_SOURCE_DIR}/test/reduction_intrinsic_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
+                add_test(
+                    NAME designator_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/designator_differential.sh
                         $<TARGET_FILE:f2c>
                 )
                 add_test(
