@@ -431,8 +431,13 @@ static int emit_character_assignment(Context *context, Unit *unit, const F2cStat
                       identifier, length);
     indent(&context->output, depth);
     f2c_buffer_printf(&context->output,
-                      "const size_t f2c_where_bytes_%zu = f2c_size_multiply_checked("
+                      "(void)f2c_size_multiply_checked("
                       "f2c_where_count_%zu, f2c_where_length_%zu);\n",
+                      identifier, identifier);
+    indent(&context->output, depth);
+    f2c_buffer_printf(&context->output,
+                      "const size_t f2c_where_bytes_%zu = "
+                      "f2c_where_count_%zu * f2c_where_length_%zu;\n",
                       identifier, identifier, identifier);
     indent(&context->output, depth);
     f2c_buffer_printf(&context->output,
