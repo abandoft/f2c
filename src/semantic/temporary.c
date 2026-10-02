@@ -208,6 +208,35 @@ static F2cExpr *transfer_source_requiring_temporary(F2cExpr *expression) {
     return source;
 }
 
+static void assign_reduction_designator_values(ExpressionTemporaryAssigner *assigner,
+                                               F2cExpr *expression) {
+    size_t child;
+    if (expression == NULL || expression->kind != F2C_EXPR_CALL ||
+        !f2c_intrinsic_is_reduction(expression->intrinsic))
+        return;
+    for (child = 0U; child < expression->child_count; ++child) {
+        F2cExpr *value = (F2cExpr *)actual_value(expression->children[child]);
+        const Symbol *symbol;
+        int needs_snapshot;
+        if (value == NULL || value->rank == 0U ||
+            value->owned_temporary_kind != F2C_OWNED_TEMPORARY_NONE)
+            continue;
+        symbol = value->symbol;
+        needs_snapshot =
+            value->kind == F2C_EXPR_COMPONENT || value->kind == F2C_EXPR_ARRAY_REFERENCE ||
+            value->kind == F2C_EXPR_SUBSTRING ||
+            (value->kind == F2C_EXPR_NAME && value->rank > 1U && symbol != NULL &&
+             (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol))) &&
+             !symbol->contiguous);
+        if (needs_snapshot && !append_statement_owned_temporary(
+                                  assigner, value, F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE)) {
+            f2c_diagnostic_span_code(assigner->context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, &value->span,
+                                     1, "out of memory while planning reduction operand storage");
+            assigner->failed = 1;
+        }
+    }
+}
+
 static void assign_contiguous_actual(ExpressionTemporaryAssigner *assigner, F2cExpr *actual,
                                      int descriptor, int contiguous, int pointer) {
     size_t temporary;
@@ -466,6 +495,7 @@ static void assign_expression_temporary(F2cExpr *expression, void *state) {
             expression->statement_temporary_index = temporary;
     }
     assign_ordered_call_arguments(assigner, expression);
+    assign_reduction_designator_values(assigner, expression);
     expression->has_order_sensitive_call = user_procedure_call(expression);
     if (call_uses_argument_values(expression))
         for (child = 0U; child < expression->child_count; ++child)

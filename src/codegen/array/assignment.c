@@ -83,7 +83,9 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
     F2cArrayCleanupList cleanup = {0};
     int emitted_depth;
     if (context == NULL || unit == NULL || target == NULL || right == NULL || right->rank == 0U ||
-        target->rank == 0U || right->rank != target->rank || right->kind == F2C_EXPR_NAME ||
+        target->rank == 0U || right->rank != target->rank ||
+        (right->kind == F2C_EXPR_NAME &&
+         right->owned_temporary_kind != F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE) ||
         right->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
         return 0;
     if (!elemental_assignment_type_matches(target, right)) {

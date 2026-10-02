@@ -357,6 +357,57 @@ static void test_statement_call_lowering_is_immutable(void) {
     free(context.diagnostics.data);
 }
 
+static void test_reduction_designator_ownership(void) {
+    Context context = {0};
+    Unit unit = {0};
+    F2cExpr operand = {0};
+    F2cExpr actual = {0};
+    F2cExpr reduction = {0};
+    F2cExpr call = {0};
+    F2cExpr *operands[1] = {&operand};
+    F2cExpr *actuals[1] = {&actual};
+    F2cStatement statements[2] = {0};
+    operand.kind = F2C_EXPR_COMPONENT;
+    operand.type = TYPE_LOGICAL;
+    operand.type_kind = f2c_default_kind(TYPE_LOGICAL);
+    operand.rank = 1U;
+    operand.definable = 1;
+    actual = operand;
+    reduction.kind = F2C_EXPR_CALL;
+    reduction.type = TYPE_LOGICAL;
+    reduction.text = (char *)"all";
+    reduction.intrinsic = F2C_INTRINSIC_ALL;
+    reduction.children = operands;
+    reduction.child_count = 1U;
+    call.kind = F2C_EXPR_CALL;
+    call.text = (char *)"consume";
+    call.children = actuals;
+    call.child_count = 1U;
+    statements[0].kind = F2C_STMT_ASSIGNMENT;
+    statements[0].right = &reduction;
+    statements[1].kind = F2C_STMT_CALL;
+    statements[1].expression = &call;
+    unit.context = &context;
+    unit.phase = F2C_UNIT_TYPED_IR;
+    unit.statements = statements;
+    unit.statement_count = 2U;
+    expect(f2c_plan_expression_lifetimes(&context, &unit),
+           "read-only reduction designators receive semantic lifetime plans");
+    expect(unit.owned_temporary_count == 1U &&
+               operand.owned_temporary_kind == F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE &&
+               operand.owned_temporary_index == 0U && operand.lifetime_statement_index == 0U &&
+               operand.temporary_ownership_analyzed,
+           "the reduction snapshot is a statement-owned typed array value");
+    expect(actual.owned_temporary_kind == F2C_OWNED_TEMPORARY_NONE,
+           "user procedure designator arguments retain original object identity");
+    expect(f2c_plan_expression_lifetimes(&context, &unit) && unit.owned_temporary_count == 1U,
+           "replanning reduction lifetimes does not duplicate owned storage");
+    free(unit.owned_temporaries);
+    free(statements[0].temporary_plan.owned_temporaries);
+    free(statements[1].temporary_plan.owned_temporaries);
+    free(context.diagnostics.data);
+}
+
 static void test_call_lowering_failure_is_atomic(void) {
     Context context = {0};
     Unit unit = {0};
@@ -390,6 +441,7 @@ int main(void) {
     test_owned_array_temporary_flow();
     test_expression_call_lowering_is_immutable();
     test_statement_call_lowering_is_immutable();
+    test_reduction_designator_ownership();
     test_call_lowering_failure_is_atomic();
     if (failures != 0)
         fprintf(stderr, "%d temporary-lifetime test(s) failed\n", failures);

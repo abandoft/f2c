@@ -60,6 +60,8 @@ int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_
         return 0;
     if (expression == NULL)
         return 1;
+    if (f2c_lowering_code(unit, expression) != NULL)
+        return 1;
     if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
         return 1;
     if (!root && expression->rank == 0U && !trivial_scalar(expression) &&
@@ -257,7 +259,6 @@ static int materialize_elemental_value(Context *context, Unit *unit, F2cExpr *ex
     Symbol target;
     int output_state;
     int emitted;
-    (void)temporary;
     if (!requires_elemental_temporary(unit, expression, array_value_required))
         return 1;
     if (!f2c_array_owned_temporary_valid(unit, expression,
@@ -279,6 +280,11 @@ static int materialize_elemental_value(Context *context, Unit *unit, F2cExpr *ex
     target.deferred_character = expression->type == TYPE_CHARACTER;
     target.derived_type = expression->derived_type;
     target.c_type = expression->type == TYPE_DERIVED ? expression->derived_type->c_name : NULL;
+    if (!f2c_array_hoist_scalar_subexpressions(unit, expression, identifier, role, temporary,
+                                               prelude, depth, 1)) {
+        free(name.data);
+        return 0;
+    }
     output_state = begin_temporary_output(context, prelude, &saved_output);
     if (output_state == 0) {
         free(name.data);
