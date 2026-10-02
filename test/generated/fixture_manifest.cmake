@@ -15,6 +15,8 @@ set(
     namelist_internal
     pointer_semantics
     character_designators
+    character_array_actuals
+    character_actual_evaluation
     nested_array_reductions
     pointer_section
     pointer_bounds_once
