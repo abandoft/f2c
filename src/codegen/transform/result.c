@@ -1,3 +1,4 @@
+#include "codegen/array/copy.h"
 #include "codegen/transform/private.h"
 
 #include <stdlib.h>
@@ -134,17 +135,13 @@ void f2c_transform_emit_result_commit(Context *context, Unit *unit, Symbol *targ
                               "f2c_transform_result_count, %zuU);\n",
                               target->derived_type->c_name, rank);
         } else if (target->type == TYPE_CHARACTER) {
-            f2c_buffer_printf(&context->output,
-                              "if (f2c_transform_result_count != 0U && "
-                              "f2c_transform_result_element_length != 0U) memmove(%s, "
-                              "f2c_transform_result, f2c_transform_result_count * "
-                              "f2c_transform_result_element_length);\n",
-                              name);
+            f2c_array_copy_snapshot(
+                &context->output, unit, name, "f2c_transform_result", "f2c_transform_result_bytes",
+                target->volatile_entity ? F2C_STORAGE_VOLATILE : F2C_STORAGE_UNQUALIFIED, 0);
         } else {
-            f2c_buffer_printf(&context->output,
-                              "if (f2c_transform_result_count != 0U) memmove(%s, "
-                              "f2c_transform_result, f2c_transform_result_count * sizeof(*%s));\n",
-                              name, name);
+            f2c_array_copy_snapshot(
+                &context->output, unit, name, "f2c_transform_result", "f2c_transform_result_count",
+                target->volatile_entity ? F2C_STORAGE_VOLATILE : F2C_STORAGE_UNQUALIFIED, 0);
         }
         f2c_transform_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "free(f2c_transform_result);\n");
