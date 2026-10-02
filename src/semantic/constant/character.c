@@ -139,6 +139,50 @@ static int evaluate_merge(F2cCharacterConstantEvaluation *evaluation, const F2cE
     return evaluate(evaluation, selected, value, length, depth + 1U);
 }
 
+static int evaluate_substring(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *expression,
+                              char **value, size_t *length, size_t depth) {
+    const F2cExpr *parent = f2c_substring_parent(expression);
+    const F2cExpr *range = f2c_substring_range(expression);
+    const F2cExpr *lower = f2c_substring_lower(expression);
+    const F2cExpr *upper = f2c_substring_upper(expression);
+    char *source = NULL;
+    size_t source_length = 0U;
+    size_t offset = 0U;
+    size_t result_length = 0U;
+    int64_t first = 1;
+    int64_t last;
+    if (parent == NULL || range == NULL || range->kind != F2C_EXPR_ARRAY_SECTION ||
+        range->child_count != 3U || range->children[2]->kind != F2C_EXPR_INVALID ||
+        !evaluate(evaluation, parent, &source, &source_length, depth + 1U) ||
+        source_length > (uint64_t)INT64_MAX ||
+        (lower != NULL && !f2c_evaluate_integer_constant(evaluation->unit, lower, &first))) {
+        free(source);
+        return 0;
+    }
+    last = (int64_t)source_length;
+    if (upper != NULL && !f2c_evaluate_integer_constant(evaluation->unit, upper, &last)) {
+        free(source);
+        return 0;
+    }
+    if (first <= last) {
+        if (first < 1 || last < 1 || (uint64_t)last > (uint64_t)source_length) {
+            free(source);
+            return 0;
+        }
+        offset = (size_t)(first - 1);
+        result_length = (size_t)((uint64_t)last - (uint64_t)first + UINT64_C(1));
+    }
+    if (!allocate_result(result_length, value)) {
+        free(source);
+        return 0;
+    }
+    if (result_length != 0U)
+        memcpy(*value, source + offset, result_length);
+    free(source);
+    *length = result_length;
+    return 1;
+}
+
 static int evaluate(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *expression,
                     char **value, size_t *length, size_t depth) {
     if (expression == NULL || value == NULL || length == NULL || !consume_step(evaluation, depth))
@@ -149,10 +193,38 @@ static int evaluate(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *e
         *value = f2c_character_literal_bytes(expression->text, length);
         return *value != NULL;
     }
+    if (expression->kind == F2C_EXPR_SUBSTRING)
+        return evaluate_substring(evaluation, expression, value, length, depth);
     if (expression->kind == F2C_EXPR_NAME && expression->symbol != NULL &&
-        expression->symbol->parameter && expression->symbol->initializer_expression != NULL)
-        return evaluate(evaluation, expression->symbol->initializer_expression, value, length,
-                        depth + 1U);
+        expression->symbol->parameter && expression->symbol->initializer_expression != NULL) {
+        char *source = NULL;
+        size_t source_length = 0U;
+        int64_t declared;
+        size_t result_length;
+        size_t copied;
+        if (!evaluate(evaluation, expression->symbol->initializer_expression, &source,
+                      &source_length, depth + 1U))
+            return 0;
+        if (!f2c_character_constant_length(evaluation->unit, expression, &declared)) {
+            *value = source;
+            *length = source_length;
+            return 1;
+        }
+        if (declared < 0 || (uint64_t)declared >= (uint64_t)SIZE_MAX ||
+            !allocate_result((size_t)declared, value)) {
+            free(source);
+            return 0;
+        }
+        result_length = (size_t)declared;
+        copied = source_length < result_length ? source_length : result_length;
+        if (copied != 0U)
+            memcpy(*value, source, copied);
+        if (copied < result_length)
+            memset(*value + copied, ' ', result_length - copied);
+        free(source);
+        *length = result_length;
+        return 1;
+    }
     if (expression->kind == F2C_EXPR_BINARY && expression->type == TYPE_CHARACTER &&
         expression->text != NULL && strcmp(expression->text, "//") == 0 &&
         expression->child_count == 2U) {

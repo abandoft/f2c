@@ -116,6 +116,30 @@ char *f2c_expression_boz_literal(const char *text) {
 
 char *f2c_expression_name(Unit *unit, const F2cExpr *expression, int *supported) {
     Symbol *symbol = expression->symbol;
+    if (symbol != NULL && symbol->parameter && symbol->type == TYPE_CHARACTER &&
+        expression->rank == 0U) {
+        Buffer literal = {0};
+        char *bytes = NULL;
+        size_t length = 0U;
+        size_t offset;
+        if (!f2c_evaluate_character_constant(unit, expression, &bytes, &length)) {
+            *supported = 0;
+            return NULL;
+        }
+        f2c_buffer_append(&literal, "\"");
+        for (offset = 0U; offset < length; ++offset) {
+            const unsigned char value = (unsigned char)bytes[offset];
+            if (value == '\\' || value == '"')
+                f2c_buffer_printf(&literal, "\\%c", (int)value);
+            else if (value >= 32U && value <= 126U)
+                f2c_buffer_append_n(&literal, bytes + offset, 1U);
+            else
+                f2c_buffer_printf(&literal, "\\%03o", (unsigned int)value);
+        }
+        f2c_buffer_append(&literal, "\"");
+        free(bytes);
+        return f2c_buffer_take(&literal);
+    }
     if (symbol != NULL && symbol->parameter && symbol->initializer != NULL) {
         char *value = f2c_emit_typed_expression(unit, symbol->initializer_expression);
         Buffer constant = {0};

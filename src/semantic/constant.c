@@ -622,11 +622,22 @@ int f2c_expression_is_initialization_constant(const F2cExpr *expression) {
         }
         break;
     case F2C_EXPR_ARRAY_REFERENCE:
-    case F2C_EXPR_SUBSTRING:
     case F2C_EXPR_COMPONENT:
         if (expression->symbol == NULL || !expression->symbol->parameter)
             return 0;
         break;
+    case F2C_EXPR_SUBSTRING: {
+        const F2cExpr *parent = f2c_substring_parent(expression);
+        const F2cExpr *range = f2c_substring_range(expression);
+        if (parent == NULL || range == NULL || range->kind != F2C_EXPR_ARRAY_SECTION ||
+            range->child_count != 3U || !f2c_expression_is_initialization_constant(parent))
+            return 0;
+        for (index = 0U; index < 2U; ++index)
+            if (range->children[index]->kind != F2C_EXPR_INVALID &&
+                !f2c_expression_is_initialization_constant(range->children[index]))
+                return 0;
+        return range->children[2]->kind == F2C_EXPR_INVALID;
+    }
     case F2C_EXPR_UNARY:
     case F2C_EXPR_BINARY:
     case F2C_EXPR_COMPLEX_LITERAL:
