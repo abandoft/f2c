@@ -126,11 +126,101 @@ static void test_lexical_comparison_lowering(void) {
     f2c_result_free(&result);
 }
 
+static void test_array_dynamic_component_constraints(void) {
+    static const char *const selections[] = {"records%allocated", "records%pointed",
+                                             "records%allocated(:2)", "records%child%allocated",
+                                             "records%child%pointed"};
+    size_t selection;
+    for (selection = 0U; selection < sizeof(selections) / sizeof(selections[0]); ++selection) {
+        char source[2048];
+        F2cOptions options = {"array_dynamic_component.f90", F2C_SOURCE_FREE, 0};
+        F2cResult result;
+        const int length = snprintf(source, sizeof(source),
+                                    "subroutine invalid_component()\n"
+                                    "implicit none\n"
+                                    "type :: leaf_t\n"
+                                    " character(:), allocatable :: allocated\n"
+                                    " character(:), pointer :: pointed\n"
+                                    "end type\n"
+                                    "type :: record_t\n"
+                                    " character(:), allocatable :: allocated\n"
+                                    " character(:), pointer :: pointed\n"
+                                    " type(leaf_t) :: child\n"
+                                    "end type\n"
+                                    "type(record_t) :: records(2)\n"
+                                    "%s = 'ab'\n"
+                                    "end subroutine\n",
+                                    selections[selection]);
+        expect(length > 0 && (size_t)length < sizeof(source), "component fixture is bounded");
+        result = f2c_transpile(source, (size_t)length, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "dynamic component after an array part-reference suppresses generated code");
+        expect(result.diagnostics != NULL &&
+                   strstr(result.diagnostics, "ALLOCATABLE or POINTER component") != NULL,
+               "dynamic component constraint is diagnosed by typed designator validation");
+        f2c_result_free(&result);
+    }
+}
+
+static void test_vector_substring_out_constraints(void) {
+    static const char *const intents[] = {"out", "inout"};
+    size_t intent;
+    for (intent = 0U; intent < sizeof(intents) / sizeof(intents[0]); ++intent) {
+        char source[768];
+        F2cOptions options = {"vector_substring_out.f90", F2C_SOURCE_FREE, 0};
+        F2cResult result;
+        const int length = snprintf(source, sizeof(source),
+                                    "program invalid_actual\n"
+                                    "implicit none\n"
+                                    "character(8) :: records(3)\n"
+                                    "call edit(records([3,1,3])(2:4))\n"
+                                    "contains\n"
+                                    "subroutine edit(values)\n"
+                                    "character(*), intent(%s) :: values(:)\n"
+                                    "values = 'abc'\n"
+                                    "end subroutine\n"
+                                    "end program\n",
+                                    intents[intent]);
+        expect(length > 0 && (size_t)length < sizeof(source), "vector actual fixture is bounded");
+        result = f2c_transpile(source, (size_t)length, &options);
+        expect(result.code == NULL && result.error_count != 0U,
+               "vector-subscripted substring cannot be associated with mutable dummy");
+        expect(result.diagnostics != NULL && strstr(result.diagnostics, "vector") != NULL,
+               "mutable vector-subscript actual produces a semantic diagnostic");
+        f2c_result_free(&result);
+    }
+}
+
+static void test_target_actual_requires_affine_storage(void) {
+    static const char source[] = "program target_actual\n"
+                                 "implicit none\n"
+                                 "character(8), target :: records(2)\n"
+                                 "call retain(records(:)(2:4))\n"
+                                 "contains\n"
+                                 "subroutine retain(values)\n"
+                                 "character(*), target, intent(inout) :: values(:)\n"
+                                 "character(:), pointer :: view\n"
+                                 "view => values(1)\n"
+                                 "view = 'abc'\n"
+                                 "end subroutine\n"
+                                 "end program\n";
+    F2cOptions options = {"target_actual.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code == NULL && result.error_count != 0U,
+           "unsupported persistent TARGET view cannot silently become a dangling copy");
+    expect(result.diagnostics != NULL && strstr(result.diagnostics, "byte-strided") != NULL,
+           "persistent TARGET view reports the remaining descriptor model limitation");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_unit_length_substrings();
     test_type_and_length_diagnostics();
     test_kind_and_value_diagnostics();
     test_keyword_diagnostics();
     test_lexical_comparison_lowering();
+    test_array_dynamic_component_constraints();
+    test_vector_substring_out_constraints();
+    test_target_actual_requires_affine_storage();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
