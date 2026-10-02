@@ -1,5 +1,6 @@
 #include "codegen/type/initialization.h"
 
+#include "codegen/array/static_shape.h"
 #include "internal/f2c.h"
 
 #include <stdlib.h>
@@ -39,33 +40,42 @@ static int binding_has_definition(Unit *unit, const F2cTypeBinding *binding) {
     return 0;
 }
 
-static int fixed_count(Unit *unit, const Symbol *component, size_t *count) {
-    size_t result = 1U;
-    for (size_t dimension = 0U; dimension < component->rank; ++dimension) {
-        int64_t lower;
-        int64_t upper;
-        uint64_t extent;
-        if (!f2c_evaluate_integer_constant(unit, component->dimensions[dimension].lower_expression,
-                                           &lower) ||
-            !f2c_evaluate_integer_constant(unit, component->dimensions[dimension].upper_expression,
-                                           &upper))
-            return 0;
-        extent = upper < lower ? 0U : (uint64_t)upper - (uint64_t)lower;
-        if (upper >= lower) {
-            if (extent == UINT64_MAX)
-                return 0;
-            ++extent;
-        }
-        if (extent > SIZE_MAX || (extent != 0U && result > SIZE_MAX / (size_t)extent))
-            return 0;
-        result *= (size_t)extent;
-    }
-    *count = result;
-    return 1;
-}
-
 static char *aggregate(Unit *caller, const F2cDerivedType *derived, const F2cDerivedType *dynamic,
                        const F2cExpr *constructor);
+static char *component_initializer(Unit *caller, Unit *scope, const Symbol *component,
+                                   const F2cExpr *actual);
+
+static char *broadcast_initializer(Unit *caller, Unit *scope, const Symbol *scalar,
+                                   const F2cExpr *actual, size_t count) {
+    Buffer output = {.limit = caller->context->output.limit};
+    char *item;
+    size_t length;
+    size_t index;
+    if (count == 0U)
+        return f2c_strdup("{0}");
+    item = component_initializer(caller, scope, scalar, actual);
+    if (item == NULL)
+        return NULL;
+    length = strlen(item);
+    /* Braces and separators make the exact expansion size count * (length + 2). */
+    if (length > SIZE_MAX - 2U || count > SIZE_MAX / (length + 2U) ||
+        (output.limit != 0U && count > output.limit / (length + 2U))) {
+        caller->context->output.limit_exceeded = 1;
+        free(item);
+        return NULL;
+    }
+    f2c_buffer_append(&output, "{");
+    for (index = 0U; index < count && !output.failed; ++index) {
+        if (index != 0U)
+            f2c_buffer_append(&output, ", ");
+        f2c_buffer_append_n(&output, item, length);
+    }
+    f2c_buffer_append(&output, "}");
+    free(item);
+    if (output.limit_exceeded)
+        caller->context->output.limit_exceeded = 1;
+    return f2c_buffer_take(&output);
+}
 
 static char *component_initializer(Unit *caller, Unit *scope, const Symbol *component,
                                    const F2cExpr *actual) {
@@ -86,7 +96,7 @@ static char *component_initializer(Unit *caller, Unit *scope, const Symbol *comp
     if (component->rank != 0U) {
         Buffer output = {.limit = caller->context->output.limit};
         size_t count;
-        if (!fixed_count(scope, component, &count))
+        if (!f2c_static_array_element_count(scope, component, &count))
             return NULL;
         if (component->type == TYPE_CHARACTER) {
             int64_t length;
@@ -114,6 +124,8 @@ static char *component_initializer(Unit *caller, Unit *scope, const Symbol *comp
             expression->child_count != count)
             return NULL;
         value.rank = 0U;
+        if (expression == NULL || expression->rank == 0U)
+            return broadcast_initializer(caller, scope, &value, actual, count);
         f2c_buffer_append(&output, "{");
         for (size_t element = 0U; element < count; ++element) {
             const F2cExpr *item =

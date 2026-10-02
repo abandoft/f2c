@@ -37,6 +37,14 @@ static void check_expansion_budget(void) {
         ++failures;
     }
     f2c_result_free(&result);
+    result = f2c_transpile_project(&input, 1U);
+    if (result.code != NULL || result.error_count == 0U || result.diagnostics == NULL ||
+        strstr(result.diagnostics, "generated output limit") == NULL) {
+        fprintf(stderr,
+                "FAIL: default budget must bound actual initializer bytes before expansion\n");
+        ++failures;
+    }
+    f2c_result_free(&result);
 }
 
 int main(void) {
