@@ -180,7 +180,7 @@ typedef struct F2cLimits {
     size_t max_include_files;
     /** Maximum number of explicitly permitted external module providers. */
     size_t max_external_modules;
-    /** Total integer constant-evaluation steps across the request. */
+    /** Total constant-evaluation and initializer-expansion steps across the request. */
     size_t max_constant_steps;
 } F2cLimits;
 
