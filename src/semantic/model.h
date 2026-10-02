@@ -7,6 +7,17 @@
 typedef struct F2cDerivedType F2cDerivedType;
 typedef struct F2cStatement F2cStatement;
 
+typedef enum F2cNameAssociation {
+    F2C_ASSOCIATION_LOCAL,
+    F2C_ASSOCIATION_USE,
+    F2C_ASSOCIATION_HOST
+} F2cNameAssociation;
+
+typedef enum F2cScopedAttribute {
+    F2C_SCOPED_ASYNCHRONOUS = 1U,
+    F2C_SCOPED_VOLATILE = 2U
+} F2cScopedAttribute;
+
 typedef enum F2cAccessibility {
     F2C_ACCESS_UNSPECIFIED,
     F2C_ACCESSIBILITY_PUBLIC,
@@ -77,7 +88,11 @@ struct Symbol {
     int asynchronous;
     int volatile_entity;
     int module_entity;
-    int use_associated;
+    F2cNameAssociation association;
+    size_t declaration_scope_id; /* Canonical line-index identity, zero for synthesized entities. */
+    F2cSourceSpan association_span;
+    unsigned int scoped_attributes;
+    unsigned int inconsistent_association_attributes;
     int host_associated;
     int host_capture;
     size_t host_symbol_index;
@@ -268,6 +283,7 @@ typedef struct F2cImportedDerivedType {
     char *local_name;
     F2cDerivedType *type;
     F2cSourceSpan association_span;
+    F2cNameAssociation association;
     F2cAccessibility access;
     F2cSourceSpan access_span;
 } F2cImportedDerivedType;

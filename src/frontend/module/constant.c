@@ -1,4 +1,5 @@
 #include "frontend/module/constant.h"
+#include "frontend/declaration/symbol.h"
 
 #include "internal/f2c.h"
 
@@ -99,8 +100,18 @@ static void import_constant(Context *context, Unit *unit, const char *local_name
         return;
     }
     symbol = f2c_find_symbol(unit, local_name);
+    if (symbol != NULL && symbol->association == F2C_ASSOCIATION_HOST && !symbol->argument) {
+        if (!f2c_reset_associated_symbol(unit, symbol)) {
+            free(resolved_c_name);
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, span, 1,
+                                     "out of memory importing '%s'", local_name);
+            return;
+        }
+        symbol = NULL;
+    }
     if (symbol != NULL) {
-        const int same_entity = symbol->use_associated && symbol->c_name != NULL &&
+        const int same_entity = symbol->association == F2C_ASSOCIATION_USE &&
+                                symbol->c_name != NULL &&
                                 strcmp(symbol->c_name, resolved_c_name) == 0;
         free(resolved_c_name);
         if (!same_entity)
@@ -121,7 +132,7 @@ static void import_constant(Context *context, Unit *unit, const char *local_name
     symbol->value_category = F2C_VALUE_CONSTANT;
     symbol->parameter = 1;
     symbol->module_entity = 1;
-    symbol->use_associated = 1;
+    symbol->association = F2C_ASSOCIATION_USE;
     symbol->access = F2C_ACCESS_UNSPECIFIED;
     memset(&symbol->access_span, 0, sizeof(symbol->access_span));
     free(symbol->c_name);

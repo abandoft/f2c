@@ -29,7 +29,8 @@ int f2c_discover_units(Context *context);
 int f2c_discover_modules(Context *context);
 Symbol *f2c_find_symbol(Unit *unit, const char *name);
 Symbol *f2c_ensure_symbol(Unit *unit, const char *name);
-int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *local_name);
+int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *local_name,
+                                F2cNameAssociation association);
 F2cNamelistGroup *f2c_find_namelist(Unit *unit, const char *name);
 F2cDerivedType *f2c_find_derived_type(Unit *unit, const char *name);
 int f2c_line_in_derived_type(const Unit *unit, size_t line_index);

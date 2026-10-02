@@ -1,3 +1,4 @@
+#include "codegen/array/static_shape.h"
 #include "frontend/module_constants.h"
 #include "internal/f2c.h"
 
@@ -102,7 +103,7 @@ void f2c_emit_project_modules(Context *context) {
         f2c_buffer_printf(&context->output, "/* Fortran module %s. */\n", module->name);
         for (symbol_index = 0U; symbol_index < module->symbol_count; ++symbol_index) {
             Symbol *symbol = &module->symbols[symbol_index];
-            if (symbol->external || symbol->use_associated)
+            if (symbol->external || symbol->association != F2C_ASSOCIATION_LOCAL)
                 continue;
             const char *name = f2c_symbol_c_name(module, symbol);
             const size_t line = symbol->declaration_line != 0U
@@ -167,42 +168,30 @@ void f2c_emit_project_modules(Context *context) {
                 f2c_buffer_printf(&context->output, "[(%s) + 1]", length);
                 free(length);
             } else if (symbol->rank != 0U) {
-                f2c_buffer_append(&context->output,
-                                  symbol->type == TYPE_CHARACTER ? "[F2C_MAX(1, " : "[");
+                size_t storage_count;
+                if (!f2c_static_array_element_count(module, symbol, &storage_count)) {
+                    free(initializer);
+                    f2c_diagnostic(context, line, 1,
+                                   "module array '%s' has a nonconstant or overflowing shape",
+                                   symbol->name);
+                    return;
+                }
                 if (symbol->type == TYPE_CHARACTER) {
-                    char *length = f2c_symbol_character_length(module, symbol);
-                    if (length == NULL) {
+                    int64_t length;
+                    if (!f2c_character_declaration_length(module, symbol, &length) ||
+                        (uint64_t)length > SIZE_MAX ||
+                        (length > 0 && storage_count > SIZE_MAX / (size_t)length)) {
                         free(initializer);
-                        f2c_diagnostic(context, line, 1,
-                                       "typed character length for module entity '%s' cannot be "
-                                       "emitted",
-                                       symbol->name);
+                        f2c_diagnostic(
+                            context, line, 1,
+                            "module character array '%s' has an overflowing storage size",
+                            symbol->name);
                         return;
                     }
-                    f2c_buffer_printf(&context->output, "(size_t)(%s) * ", length);
-                    free(length);
+                    storage_count *= (size_t)length;
                 }
-                for (dimension = 0U; dimension < symbol->rank; ++dimension) {
-                    char *lower = f2c_emit_typed_expression(
-                        module, symbol->dimensions[dimension].lower_expression);
-                    char *upper = f2c_emit_typed_expression(
-                        module, symbol->dimensions[dimension].upper_expression);
-                    if (lower == NULL || upper == NULL) {
-                        free(lower);
-                        free(upper);
-                        free(initializer);
-                        f2c_diagnostic(context, line, 1,
-                                       "typed bounds for module entity '%s' cannot be emitted",
-                                       symbol->name);
-                        return;
-                    }
-                    f2c_buffer_printf(&context->output, "%s((%s) - (%s) + 1)",
-                                      dimension == 0U ? "" : " * ", upper != NULL ? upper : "0",
-                                      lower != NULL ? lower : "1");
-                    free(lower);
-                    free(upper);
-                }
-                f2c_buffer_append(&context->output, symbol->type == TYPE_CHARACTER ? ")]" : "]");
+                f2c_buffer_printf(&context->output, "[%zuU]",
+                                  storage_count != 0U ? storage_count : 1U);
             }
             if (initializer != NULL)
                 f2c_buffer_printf(&context->output, " = %s", initializer);

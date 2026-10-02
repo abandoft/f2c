@@ -438,7 +438,7 @@ static int validate_target(DataValidation *validation, F2cIoItem *item) {
                                      "variable");
             return 0;
         }
-        if (symbol->use_associated) {
+        if (symbol->association != F2C_ASSOCIATION_LOCAL) {
             f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
                                      "DATA target cannot be a use-associated entity");
             return 0;

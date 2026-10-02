@@ -47,6 +47,10 @@ set(
     src/ast/declaration/designator.c
     src/ast/declaration/designator.h
     src/ast/declaration/procedure.c
+    src/ast/declaration/bindings.c
+    src/ast/declaration/bindings.h
+    src/ast/declaration/bindings_private.h
+    src/ast/declaration/storage_bindings.c
     src/ast/declaration/procedure.h
     src/ast/declaration/use.c
     src/ast/declaration/use.h
@@ -84,6 +88,8 @@ set(
     src/codegen/allocation/private.h
     src/codegen/array.c
     src/codegen/array/assignment.c
+    src/codegen/array/static_shape.c
+    src/codegen/array/static_shape.h
     src/codegen/array/call.c
     src/codegen/array/character.c
     src/codegen/array/component.c
@@ -246,6 +252,9 @@ set(
     src/frontend/declaration/namelist.c
     src/frontend/declaration/private.h
     src/frontend/declaration/syntax.c
+    src/frontend/declaration/symbol.c
+    src/frontend/declaration/symbol.h
+    src/frontend/declaration/bindings.c
     src/frontend/declaration/type.c
     src/frontend/derived.c
     src/frontend/host.c
@@ -327,6 +336,9 @@ set(
     src/semantic/intrinsic/resolution.c
     src/semantic/intrinsic.h
     src/semantic/model.h
+    src/semantic/scope.c
+    src/semantic/scope.h
+    src/semantic/symbol.h
     src/semantic/numeric_model.c
     src/semantic/numeric_model.h
     src/semantic/procedure.c

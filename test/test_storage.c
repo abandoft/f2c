@@ -440,14 +440,14 @@ static void test_module_data_initialization(void) {
     F2cResult result = transpile_with_diagnostics(source, &capture);
     expect(result.error_count == 0U && result.code != NULL,
            "module DATA statements reach typed static-storage emission");
-    expect(result.code != NULL &&
-               strstr(result.code, "f2c_module_configured_state_values[") != NULL &&
-               strstr(result.code, "= {INT64_C(2), INT64_C(3), INT64_C(5)}") != NULL &&
-               strstr(result.code, "f2c_module_configured_state_selected = INT64_C(7)") != NULL &&
-               strstr(result.code, "F2C_COMPLEX_FLOAT_INITIALIZER") != NULL &&
-               strstr(result.code, "f2c_module_configured_state_names[F2C_MAX(1, (size_t)(3) *") !=
-                   NULL,
-           "module DATA preserves numeric, complex, and CHARACTER array storage");
+    expect(
+        result.code != NULL && strstr(result.code, "f2c_module_configured_state_values[") != NULL &&
+            strstr(result.code, "= {INT64_C(2), INT64_C(3), INT64_C(5)}") != NULL &&
+            strstr(result.code, "f2c_module_configured_state_selected = INT64_C(7)") != NULL &&
+            strstr(result.code, "F2C_COMPLEX_FLOAT_INITIALIZER") != NULL &&
+            strstr(result.code, "f2c_module_configured_state_names[6U] = {[0] = 'a', "
+                                "[1] = ' ', [2] = ' ', [3] = 'x', [4] = 'y', [5] = 'z'}") != NULL,
+        "module DATA preserves numeric, complex, and CHARACTER array storage");
     expect(result.code != NULL && strstr(result.code, "f2c_data_initialized_") == NULL,
            "module DATA never depends on a runtime first-use guard");
     f2c_result_free(&result);

@@ -1,4 +1,5 @@
 #include "ast/declaration/use.h"
+#include "frontend/declaration/symbol.h"
 #include "frontend/module/access.h"
 #include "frontend/module/constant.h"
 #include "frontend/module/intrinsic.h"
@@ -85,18 +86,35 @@ static Unit *find_project_module(Context *context, const char *name) {
 }
 
 static int import_derived_type(Unit *unit, F2cDerivedType *derived, const char *local_name,
-                               const F2cSourceSpan *association_span) {
+                               const F2cSourceSpan *association_span,
+                               F2cNameAssociation association) {
     F2cImportedDerivedType *replacement;
     char *owned_name;
     size_t i;
     for (i = 0U; i < unit->derived_type_count; ++i) {
         if (strcmp(unit->derived_types[i].name, local_name) == 0)
-            return &unit->derived_types[i] == derived ? 1 : -1;
+            return association == F2C_ASSOCIATION_HOST || &unit->derived_types[i] == derived ? 1
+                                                                                             : -1;
     }
     for (i = 0U; i < unit->imported_derived_type_count; ++i) {
         F2cImportedDerivedType *existing = &unit->imported_derived_types[i];
-        if (strcmp(existing->local_name, local_name) == 0)
-            return existing->type == derived ? 1 : -1;
+        if (strcmp(existing->local_name, local_name) == 0) {
+            if (existing->association == F2C_ASSOCIATION_HOST &&
+                association == F2C_ASSOCIATION_USE) {
+                existing->type = derived;
+                existing->association = association;
+                if (association_span != NULL)
+                    existing->association_span = *association_span;
+                return 1;
+            }
+            if (association == F2C_ASSOCIATION_HOST)
+                return 1;
+            if (existing->type == derived) {
+                existing->association = association;
+                return 1;
+            }
+            return -1;
+        }
     }
     owned_name = f2c_strdup(local_name);
     if (owned_name == NULL)
@@ -123,6 +141,7 @@ static int import_derived_type(Unit *unit, F2cDerivedType *derived, const char *
            sizeof(unit->imported_derived_types[unit->imported_derived_type_count]));
     unit->imported_derived_types[unit->imported_derived_type_count].local_name = owned_name;
     unit->imported_derived_types[unit->imported_derived_type_count].type = derived;
+    unit->imported_derived_types[unit->imported_derived_type_count].association = association;
     if (association_span != NULL)
         unit->imported_derived_types[unit->imported_derived_type_count].association_span =
             *association_span;
@@ -133,7 +152,8 @@ static int import_derived_type(Unit *unit, F2cDerivedType *derived, const char *
     return 1;
 }
 
-int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *local_name) {
+int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *local_name,
+                                F2cNameAssociation association) {
     Symbol *target = f2c_find_symbol(unit, local_name);
     char *procedure_interface_name = source->procedure_interface_name != NULL
                                          ? f2c_strdup(source->procedure_interface_name)
@@ -148,11 +168,42 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
             target->generic_origin_name != NULL && source->generic_origin_name != NULL &&
             strcmp(target->generic_origin_name, source->generic_origin_name) == 0;
         const int same_entity =
-            target->use_associated &&
+            target->association != F2C_ASSOCIATION_LOCAL &&
             (same_generic || (!generic_source && target->c_name != NULL && source->c_name != NULL &&
                               strcmp(target->c_name, source->c_name) == 0));
-        free(procedure_interface_name);
-        return same_entity ? 1 : -1;
+        if (same_entity) {
+            if (association == F2C_ASSOCIATION_USE) {
+                if (target->association == F2C_ASSOCIATION_USE) {
+                    if (target->asynchronous != source->asynchronous)
+                        target->inconsistent_association_attributes |= F2C_SCOPED_ASYNCHRONOUS;
+                    if (target->volatile_entity != source->volatile_entity)
+                        target->inconsistent_association_attributes |= F2C_SCOPED_VOLATILE;
+                    target->asynchronous |= source->asynchronous;
+                    target->volatile_entity |= source->volatile_entity;
+                } else {
+                    /* An explicit USE hides the HOST path, even for the same ultimate entity. */
+                    target->asynchronous = source->asynchronous;
+                    target->volatile_entity = source->volatile_entity;
+                    target->scoped_attributes = 0U;
+                    target->inconsistent_association_attributes = 0U;
+                }
+                target->association = association;
+            }
+            free(procedure_interface_name);
+            return 1;
+        }
+        if (association == F2C_ASSOCIATION_HOST && target->association == F2C_ASSOCIATION_LOCAL) {
+            free(procedure_interface_name);
+            return 1;
+        }
+        if (target->association != F2C_ASSOCIATION_HOST || target->argument) {
+            free(procedure_interface_name);
+            return -1;
+        }
+        if (!f2c_reset_associated_symbol(unit, target)) {
+            free(procedure_interface_name);
+            return 0;
+        }
     }
     target = f2c_ensure_symbol(unit, local_name);
     if (target == NULL ||
@@ -200,7 +251,9 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
     target->asynchronous = source->asynchronous;
     target->volatile_entity = source->volatile_entity;
     target->module_entity = !source->external;
-    target->use_associated = 1;
+    target->association = association;
+    target->declaration_scope_id = source->declaration_scope_id;
+    target->association_span = unit->header_span;
     target->access = F2C_ACCESS_UNSPECIFIED;
     memset(&target->access_span, 0, sizeof(target->access_span));
     target->deferred_character = source->deferred_character;
@@ -329,17 +382,27 @@ static Unit *find_module_procedure(Context *context, const Unit *module, const c
     return NULL;
 }
 
-static int import_module_procedure(Unit *unit, Unit *procedure, const char *local_name) {
+static int import_module_procedure(Unit *unit, Unit *procedure, const char *local_name,
+                                   F2cNameAssociation association) {
     Symbol *symbol = f2c_find_symbol(unit, local_name);
     Symbol *result = procedure->kind == UNIT_FUNCTION && procedure->result_name != NULL
                          ? f2c_find_symbol(procedure, procedure->result_name)
                          : NULL;
     size_t i;
-    if (symbol != NULL)
-        return symbol->use_associated && symbol->c_name != NULL && procedure->name != NULL &&
-                       strcmp(symbol->c_name, procedure->name) == 0
-                   ? 1
-                   : -1;
+    if (symbol != NULL) {
+        if (symbol->association != F2C_ASSOCIATION_LOCAL && symbol->c_name != NULL &&
+            procedure->name != NULL && strcmp(symbol->c_name, procedure->name) == 0) {
+            if (association == F2C_ASSOCIATION_USE)
+                symbol->association = association;
+            return 1;
+        }
+        if (association == F2C_ASSOCIATION_HOST && symbol->association == F2C_ASSOCIATION_LOCAL)
+            return 1;
+        if (symbol->association != F2C_ASSOCIATION_HOST || symbol->argument)
+            return -1;
+        if (!f2c_reset_associated_symbol(unit, symbol))
+            return 0;
+    }
     symbol = f2c_ensure_symbol(unit, local_name);
     if (symbol == NULL)
         return 0;
@@ -347,7 +410,7 @@ static int import_module_procedure(Unit *unit, Unit *procedure, const char *loca
     symbol->external_declared = 1;
     symbol->external_signature_observed = 1;
     symbol->external_signature_explicit = 1;
-    symbol->use_associated = 1;
+    symbol->association = association;
     symbol->access = F2C_ACCESS_UNSPECIFIED;
     memset(&symbol->access_span, 0, sizeof(symbol->access_span));
     symbol->external_subroutine = procedure->kind == UNIT_SUBROUTINE;
@@ -393,7 +456,7 @@ static int import_project_member(Context *context, Unit *unit, Unit *module, con
                                      module->name);
             return 0;
         }
-        imported = f2c_clone_associated_symbol(unit, symbol, local_name);
+        imported = f2c_clone_associated_symbol(unit, symbol, local_name, F2C_ASSOCIATION_USE);
         if (imported < 0) {
             f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &association->local.span, 1,
                                      "USE local name '%s' denotes conflicting entities",
@@ -406,6 +469,9 @@ static int import_project_member(Context *context, Unit *unit, Unit *module, con
                                      "out of memory importing module entity '%s'", local_name);
             return 0;
         } else {
+            Symbol *target = f2c_find_symbol(unit, local_name);
+            if (target != NULL)
+                target->association_span = association->local.span;
             return 1;
         }
     }
@@ -416,8 +482,8 @@ static int import_project_member(Context *context, Unit *unit, Unit *module, con
                                      module->name);
             return 0;
         }
-        const int imported =
-            import_derived_type(unit, derived, local_name, &association->local.span);
+        const int imported = import_derived_type(unit, derived, local_name,
+                                                 &association->local.span, F2C_ASSOCIATION_USE);
         if (imported < 0) {
             f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &association->local.span, 1,
                                      "USE local name '%s' denotes conflicting derived types",
@@ -438,7 +504,7 @@ static int import_project_member(Context *context, Unit *unit, Unit *module, con
                                      module->name);
             return 0;
         }
-        imported = import_module_procedure(unit, procedure, local_name);
+        imported = import_module_procedure(unit, procedure, local_name, F2C_ASSOCIATION_USE);
         if (imported < 0) {
             f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &association->local.span, 1,
                                      "USE local name '%s' denotes conflicting entities",
@@ -468,8 +534,9 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
         if (syntax != NULL && !f2c_module_derived_type_is_public(
                                   module, module->derived_types[i].name, &module->derived_types[i]))
             continue;
-        imported = import_derived_type(unit, &module->derived_types[i],
-                                       module->derived_types[i].name, NULL);
+        imported =
+            import_derived_type(unit, &module->derived_types[i], module->derived_types[i].name,
+                                NULL, syntax != NULL ? F2C_ASSOCIATION_USE : F2C_ASSOCIATION_HOST);
         if (imported == 0) {
             f2c_diagnostic(context, line, 1, "out of memory importing module type");
         } else if (imported < 0) {
@@ -493,7 +560,8 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
             !f2c_module_derived_type_is_public(module, source->local_name, source->type))
             continue;
         imported =
-            import_derived_type(unit, source->type, source->local_name, &source->association_span);
+            import_derived_type(unit, source->type, source->local_name, &source->association_span,
+                                syntax != NULL ? F2C_ASSOCIATION_USE : F2C_ASSOCIATION_HOST);
         if (imported == 0) {
             f2c_diagnostic(context, line, 1, "out of memory importing module type");
         } else if (imported < 0) {
@@ -511,7 +579,14 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
             continue;
         if (syntax != NULL && !f2c_module_symbol_is_public(module, &module->symbols[i]))
             continue;
-        imported = f2c_clone_associated_symbol(unit, &module->symbols[i], module->symbols[i].name);
+        imported = f2c_clone_associated_symbol(unit, &module->symbols[i], module->symbols[i].name,
+                                               syntax != NULL ? F2C_ASSOCIATION_USE
+                                                              : F2C_ASSOCIATION_HOST);
+        if (imported > 0 && syntax != NULL) {
+            Symbol *target = f2c_find_symbol(unit, module->symbols[i].name);
+            if (target != NULL)
+                target->association_span = syntax->module_name->span;
+        }
         if (imported == 0) {
             f2c_diagnostic(context, line, 1, "out of memory importing module entity");
         } else if (imported < 0) {
@@ -533,7 +608,9 @@ static void import_entire_project_module(Context *context, Unit *unit, Unit *mod
         if (procedure != unit && procedure->begin > module->end &&
             procedure->begin < module->container_end && !f2c_use_name_is_renamed(syntax, visible) &&
             (syntax == NULL || f2c_module_procedure_is_public(module, procedure))) {
-            const int imported = import_module_procedure(unit, procedure, visible);
+            const int imported = import_module_procedure(unit, procedure, visible,
+                                                         syntax != NULL ? F2C_ASSOCIATION_USE
+                                                                        : F2C_ASSOCIATION_HOST);
             if (imported == 0) {
                 f2c_diagnostic(context, line, 1, "out of memory importing module procedure");
             } else if (imported < 0) {
@@ -678,18 +755,18 @@ void f2c_import_host_module(Context *context, Unit *unit) {
         Unit *host = unit->signature_host;
         for (i = 0U; i < host->derived_type_count; ++i)
             (void)import_derived_type(unit, &host->derived_types[i], host->derived_types[i].name,
-                                      NULL);
+                                      NULL, F2C_ASSOCIATION_HOST);
         for (i = 0U; i < host->imported_derived_type_count; ++i) {
             F2cImportedDerivedType *imported = &host->imported_derived_types[i];
             (void)import_derived_type(unit, imported->type, imported->local_name,
-                                      &imported->association_span);
+                                      &imported->association_span, F2C_ASSOCIATION_HOST);
         }
     }
     if (unit->internal && unit->host_index < context->units.count) {
         Unit *host = &context->units.items[unit->host_index];
         for (i = 0U; i < host->derived_type_count; ++i)
             (void)import_derived_type(unit, &host->derived_types[i], host->derived_types[i].name,
-                                      NULL);
+                                      NULL, F2C_ASSOCIATION_HOST);
     }
     for (i = 0U; i < context->modules.count; ++i) {
         Unit *module = &context->modules.items[i];

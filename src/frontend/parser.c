@@ -286,6 +286,8 @@ Symbol *f2c_ensure_symbol_impl(Unit *unit, const char *name) {
     symbol->type = TYPE_UNKNOWN;
     symbol->value_category = F2C_VALUE_VARIABLE;
     symbol->shape.kind = F2C_SHAPE_SCALAR;
+    symbol->declaration_scope_id =
+        unit->context != NULL && unit->begin != SIZE_MAX ? unit->begin + 1U : 0U;
     return symbol->name == NULL || symbol->c_name == NULL ? NULL : symbol;
 }
 

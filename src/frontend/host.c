@@ -20,7 +20,8 @@ static int is_host_internal_procedure(const Context *context, const Unit *unit,
 
 static int requires_host_capture(const Symbol *symbol) {
     return symbol != NULL && !symbol->parameter && !symbol->module_entity &&
-           !symbol->use_associated && (!symbol->external || symbol->procedure_pointer);
+           symbol->association != F2C_ASSOCIATION_USE &&
+           (!symbol->external || symbol->procedure_pointer);
 }
 
 static char *make_capture_alias(Unit *unit, size_t host_symbol_index) {
@@ -62,7 +63,8 @@ int f2c_import_host_symbols(Context *context, Unit *unit) {
         if (source->name == NULL || (source->external && !source->procedure_pointer &&
                                      is_host_internal_procedure(context, unit, source)))
             continue;
-        shadowed = f2c_find_symbol(unit, source->name) != NULL ||
+        target = f2c_find_symbol(unit, source->name);
+        shadowed = (target != NULL && target->association != F2C_ASSOCIATION_HOST) ||
                    (unit->kind == UNIT_FUNCTION && unit->result_name != NULL &&
                     strcmp(unit->result_name, source->name) == 0);
         if (shadowed && !requires_host_capture(source))
@@ -73,7 +75,7 @@ int f2c_import_host_symbols(Context *context, Unit *unit) {
                 return 0;
         }
         local_name = alias != NULL ? alias : source->name;
-        imported = f2c_clone_associated_symbol(unit, source, local_name);
+        imported = f2c_clone_associated_symbol(unit, source, local_name, F2C_ASSOCIATION_HOST);
         if (imported <= 0) {
             free(alias);
             return 0;
@@ -93,12 +95,12 @@ int f2c_import_host_symbols(Context *context, Unit *unit) {
             target->c_name = c_name;
         }
         free(alias);
-        if (source->parameter || source->module_entity || source->use_associated)
+        if (source->parameter || source->module_entity ||
+            source->association == F2C_ASSOCIATION_USE)
             continue;
         if (source->external && !source->procedure_pointer)
             continue;
         target->module_entity = 0;
-        target->use_associated = 0;
         target->argument = 1;
         target->host_associated = 1;
         target->host_capture = 0;
