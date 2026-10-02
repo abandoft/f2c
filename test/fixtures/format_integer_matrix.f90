@@ -25,6 +25,8 @@ program format_integer_matrix
   if (record(599:600) /= '42') stop 4
   write(*, '(A)') record
   write(*, '("|",I3.2,"|")') 4242
+  write(*, '("star |",3X,I2.1,"|",T18,I2.1,"|")') 4242, 4242
+  write(*, '("real |",3X,F4.1,"|",T20,F4.1,"|")') 4242.0, 4242.0
   dynamic_format = '(I5.1000)'
   write(record, dynamic_format, iostat=status) 42
   if (status == 0) stop 5
