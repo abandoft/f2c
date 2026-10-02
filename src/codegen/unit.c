@@ -289,7 +289,7 @@ static void emit_declarations(Context *context, Unit *unit) {
                 f2c_diagnostic(context, symbol->declaration_line, 1,
                                "typed DATA initializer for array '%s' cannot be emitted",
                                symbol->name);
-        } else if (symbol->initializer != NULL) {
+        } else if (symbol->initializer != NULL || (persistent && symbol->type == TYPE_DERIVED)) {
             if (symbol->type == TYPE_CHARACTER) {
                 int supported = 0;
                 initializer = f2c_character_declaration_initializer(unit, symbol, &supported);
@@ -300,7 +300,8 @@ static void emit_declarations(Context *context, Unit *unit) {
                                    symbol->name);
                 }
             } else {
-                initializer = symbol->rank != 0U || symbol->type == TYPE_COMPLEX ||
+                initializer = symbol->rank != 0U || symbol->type == TYPE_DERIVED ||
+                                      symbol->type == TYPE_COMPLEX ||
                                       symbol->type == TYPE_DOUBLE_COMPLEX
                                   ? f2c_unit_static_storage_initializer(unit, symbol)
                                   : f2c_emit_typed_expression(unit, symbol->initializer_expression);
@@ -326,7 +327,7 @@ static void emit_declarations(Context *context, Unit *unit) {
                               f2c_symbol_c_name(unit, symbol), f2c_symbol_c_name(unit, symbol));
         }
         if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL &&
-            symbol->scope_begin_line == 0U) {
+            symbol->scope_begin_line == 0U && !persistent) {
             const char *name = f2c_symbol_c_name(unit, symbol);
             if (symbol->rank == 0U) {
                 f2c_unit_indent(output, 1);
