@@ -330,7 +330,7 @@ static int emit_constructor_whole_array(ConstructorEmitter *emitter, const F2cEx
         f2c_array_indent(&emitter->context->output, depth + 1);
         f2c_buffer_printf(&emitter->context->output,
                           "const size_t f2c_constructor_copy_%zu = "
-                          "F2C_MIN((size_t)(%s), (size_t)(%s));\n",
+                          "f2c_character_copy_length((size_t)(%s), (size_t)(%s));\n",
                           temporary, emitter->character_length, source_length);
         f2c_array_indent(&emitter->context->output, depth + 1);
         f2c_buffer_printf(&emitter->context->output,
