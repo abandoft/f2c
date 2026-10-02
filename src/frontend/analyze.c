@@ -1,6 +1,7 @@
 #include "frontend/private.h"
 
 #include "ast/declaration/use.h"
+#include "frontend/declaration/symbol.h"
 #include "frontend/module/access.h"
 
 #include <ctype.h>
@@ -60,7 +61,7 @@ void f2c_analyze_module(Context *context, Unit *unit) {
         Buffer c_name = {0};
         if (symbol->external)
             continue;
-        if (symbol->use_associated)
+        if (symbol->association != F2C_ASSOCIATION_LOCAL)
             continue;
         symbol->module_entity = 1;
         symbol->saved = 1;
@@ -113,7 +114,17 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
     if (!unit->interface_body)
         f2c_parse_explicit_interfaces(context, unit);
     f2c_prepare_implicit_map(context, unit);
+    if (!f2c_predeclare_local_bindings(context, unit))
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, header_line, 1,
+                            "out of memory recording local scope bindings");
     f2c_import_host_module(context, unit);
+    for (i = unit->begin + 1U; i < unit->end; ++i) {
+        if (f2c_unit_line_is_active(unit, &context->lines.items[i]))
+            f2c_import_module(context, unit, &context->lines.items[i]);
+    }
+    if (!f2c_import_host_symbols(context, unit))
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, header_line, 1,
+                            "out of memory importing host-associated entities");
     f2c_parse_derived_type_definitions(context, unit);
     for (i = 0U; i < unit->argument_count; ++i) {
         Symbol *symbol = f2c_ensure_symbol_impl(unit, unit->arguments[i]);
@@ -127,7 +138,6 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
             continue;
         if (f2c_line_in_derived_type(unit, i))
             continue;
-        f2c_import_module(context, unit, &context->lines.items[i]);
         f2c_parse_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_entity_attribute_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_dimension_declaration(context, unit, &context->lines.items[i]);
@@ -141,9 +151,6 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
         f2c_mark_call_targets(unit, &context->lines.items[i]);
     }
     f2c_parse_access_statements(context, unit);
-    if (!f2c_import_host_symbols(context, unit))
-        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, header_line, 1,
-                            "out of memory importing host-associated entities");
     f2c_discover_implicit_symbols(context, unit);
     {
         int in_specification_part = 1;
