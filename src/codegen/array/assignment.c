@@ -219,6 +219,9 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
         ++emitted_depth;
     }
     if (target->type == TYPE_CHARACTER) {
+        f2c_array_indent(&context->output, emitted_depth);
+        f2c_buffer_append(&context->output,
+                          "if (f2c_element_linear >= f2c_element_count) abort();\n");
         if (!f2c_emit_character_storage_assignment(
                 context, unit, "f2c_element_values + f2c_element_linear * f2c_element_length",
                 "f2c_element_length", element, value, emitted_depth))
