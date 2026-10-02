@@ -213,6 +213,32 @@ static void test_target_actual_requires_affine_storage(void) {
     f2c_result_free(&result);
 }
 
+static void test_character_array_allocation_guards(void) {
+    static const char source[] = "program character_array_allocation_guards\n"
+                                 "  implicit none\n"
+                                 "  character(4) :: values(2), adjusted(2)\n"
+                                 "  character(-1) :: empty(2)\n"
+                                 "  values = [' A  ', '  B ']\n"
+                                 "  adjusted = adjustl(values)\n"
+                                 "  empty = adjustl(empty)\n"
+                                 "end program\n";
+    F2cOptions options = {"character_array_allocation_guards.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "positive and zero-length character array operations reach code generation");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_size_multiply_checked(f2c_element_count, "
+                                   "f2c_element_length)") != NULL,
+           "character elemental storage products are checked for overflow");
+    expect(result.code != NULL &&
+               strstr(result.code, "malloc(f2c_element_count == 0U || "
+                                   "f2c_element_length == 0U ? 1U : "
+                                   "f2c_element_bytes)") != NULL &&
+               strstr(result.code, "malloc(f2c_element_bytes == 0U") == NULL,
+           "placeholder allocation remains visibly tied to empty shape or character length");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_unit_length_substrings();
     test_type_and_length_diagnostics();
@@ -222,5 +248,6 @@ int main(void) {
     test_array_dynamic_component_constraints();
     test_vector_substring_out_constraints();
     test_target_actual_requires_affine_storage();
+    test_character_array_allocation_guards();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
