@@ -7,7 +7,6 @@
 #define F95 F2C_INTRINSIC_STANDARD_FORTRAN_95
 #define F2008 F2C_INTRINSIC_STANDARD_FORTRAN_2008
 #define EXTENSION F2C_INTRINSIC_STANDARD_EXTENSION
-#define F2C_INTRINSIC_NULL_ID F2C_INTRINSIC_NULL
 
 #define BIT F2C_INTRINSIC_FAMILY_BIT
 #define CHARACTER F2C_INTRINSIC_FAMILY_CHARACTER
@@ -22,40 +21,40 @@
 #define ASSUMED_SIZE F2C_INTRINSIC_FAMILY_ASSUMED_SIZE_INQUIRY
 #define NONE F2C_INTRINSIC_FAMILY_NONE
 
+/* Qualify IDs in the first macro, before forwarding: ETIME and NULL may be system macros. */
 #define SPEC(procedure, id, name, standard, families, minimum, maximum, type, rank, kind,          \
              required, variadic, count, ...)                                                       \
-    [F2C_INTRINSIC_##id] = {                                                                       \
-        {F2C_INTRINSIC_##id, name, standard, F2C_INTRINSIC_PROCEDURE_##procedure, families},       \
-        {{__VA_ARGS__}, count, required, variadic},                                                \
-        {name, minimum, maximum, type, rank, F2C_INTRINSIC_##id, kind}}
+    [id] = {{id, name, standard, procedure, families},                                             \
+            {{__VA_ARGS__}, count, required, variadic},                                            \
+            {name, minimum, maximum, type, rank, id, kind}}
 #define SPEC_ARGS1(procedure, id, name, standard, families, minimum, maximum, type, rank, kind,    \
                    required, a0)                                                                   \
-    SPEC(procedure, id, name, standard, families, minimum, maximum, type, rank, kind, required,    \
-         0U, 1U, a0)
+    SPEC(F2C_INTRINSIC_PROCEDURE_##procedure, F2C_INTRINSIC_##id, name, standard, families,        \
+         minimum, maximum, type, rank, kind, required, 0U, 1U, a0)
 #define SPEC_ARGS2(procedure, id, name, standard, families, minimum, maximum, type, rank, kind,    \
                    required, a0, a1)                                                               \
-    SPEC(procedure, id, name, standard, families, minimum, maximum, type, rank, kind, required,    \
-         0U, 2U, a0, a1)
+    SPEC(F2C_INTRINSIC_PROCEDURE_##procedure, F2C_INTRINSIC_##id, name, standard, families,        \
+         minimum, maximum, type, rank, kind, required, 0U, 2U, a0, a1)
 #define SPEC_ARGS3(procedure, id, name, standard, families, minimum, maximum, type, rank, kind,    \
                    required, a0, a1, a2)                                                           \
-    SPEC(procedure, id, name, standard, families, minimum, maximum, type, rank, kind, required,    \
-         0U, 3U, a0, a1, a2)
+    SPEC(F2C_INTRINSIC_PROCEDURE_##procedure, F2C_INTRINSIC_##id, name, standard, families,        \
+         minimum, maximum, type, rank, kind, required, 0U, 3U, a0, a1, a2)
 #define SPEC_ARGS4(procedure, id, name, standard, families, minimum, maximum, type, rank, kind,    \
                    required, a0, a1, a2, a3)                                                       \
-    SPEC(procedure, id, name, standard, families, minimum, maximum, type, rank, kind, required,    \
-         0U, 4U, a0, a1, a2, a3)
+    SPEC(F2C_INTRINSIC_PROCEDURE_##procedure, F2C_INTRINSIC_##id, name, standard, families,        \
+         minimum, maximum, type, rank, kind, required, 0U, 4U, a0, a1, a2, a3)
 #define SPEC_ARGS5(procedure, id, name, standard, families, minimum, maximum, type, rank, kind,    \
                    required, a0, a1, a2, a3, a4)                                                   \
-    SPEC(procedure, id, name, standard, families, minimum, maximum, type, rank, kind, required,    \
-         0U, 5U, a0, a1, a2, a3, a4)
+    SPEC(F2C_INTRINSIC_PROCEDURE_##procedure, F2C_INTRINSIC_##id, name, standard, families,        \
+         minimum, maximum, type, rank, kind, required, 0U, 5U, a0, a1, a2, a3, a4)
 #define SPEC_ARGS6(procedure, id, name, standard, families, minimum, maximum, type, rank, kind,    \
                    required, a0, a1, a2, a3, a4, a5)                                               \
-    SPEC(procedure, id, name, standard, families, minimum, maximum, type, rank, kind, required,    \
-         0U, 6U, a0, a1, a2, a3, a4, a5)
+    SPEC(F2C_INTRINSIC_PROCEDURE_##procedure, F2C_INTRINSIC_##id, name, standard, families,        \
+         minimum, maximum, type, rank, kind, required, 0U, 6U, a0, a1, a2, a3, a4, a5)
 #define SPEC_VARARGS2(procedure, id, name, standard, families, minimum, maximum, type, rank, kind, \
                       a0, a1)                                                                      \
-    SPEC(procedure, id, name, standard, families, minimum, maximum, type, rank, kind, 3U, 1U, 2U,  \
-         a0, a1)
+    SPEC(F2C_INTRINSIC_PROCEDURE_##procedure, F2C_INTRINSIC_##id, name, standard, families,        \
+         minimum, maximum, type, rank, kind, 3U, 1U, 2U, a0, a1)
 
 static const F2cIntrinsicSpecification specifications[F2C_INTRINSIC_ID_COUNT] = {
     SPEC_ARGS1(FUNCTION, ETIME, "etime", EXTENSION, NONE, 1U, 1U, F2C_INTRINSIC_TYPE_REAL,
@@ -242,7 +241,7 @@ static const F2cIntrinsicSpecification specifications[F2C_INTRINSIC_ID_COUNT] = 
                F2C_INTRINSIC_RANK_ELEMENTAL, F2C_INTRINSIC_KIND_OPTIONAL, 1U, "a", "kind"),
     SPEC_ARGS1(FUNCTION, NOT, "not", F90, BIT, 1U, 1U, F2C_INTRINSIC_TYPE_INTEGER,
                F2C_INTRINSIC_RANK_ELEMENTAL, F2C_INTRINSIC_KIND_FIRST, 1U, "i"),
-    SPEC_ARGS1(FUNCTION, NULL_ID, "null", F95, NONE, 0U, 1U, F2C_INTRINSIC_TYPE_FIRST,
+    SPEC_ARGS1(FUNCTION, NULL, "null", F95, NONE, 0U, 1U, F2C_INTRINSIC_TYPE_FIRST,
                F2C_INTRINSIC_RANK_SCALAR, F2C_INTRINSIC_KIND_FIRST, 0U, "mold"),
     SPEC_ARGS5(SUBROUTINE, MVBITS, "mvbits", F90, BIT, 5U, 5U, F2C_INTRINSIC_TYPE_FIRST,
                F2C_INTRINSIC_RANK_SCALAR, F2C_INTRINSIC_KIND_DEFAULT, 31U, "from", "frompos", "len",
@@ -410,7 +409,6 @@ int f2c_intrinsic_has_family(F2cIntrinsicId intrinsic, F2cIntrinsicFamily family
 #undef CHARACTER
 #undef BIT
 #undef EXTENSION
-#undef F2C_INTRINSIC_NULL_ID
 #undef F2008
 #undef F95
 #undef F90
