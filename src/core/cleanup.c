@@ -1,10 +1,11 @@
 #include "internal/f2c.h"
 
 #include "semantic/data_flow.h"
+#include "semantic/symbol.h"
 
 #include <stdlib.h>
 
-static void free_symbol(Symbol *symbol) {
+void f2c_discard_symbol(Symbol *symbol) {
     size_t index;
     (void)f2c_symbol_resize_external_parameters(symbol, 0U);
     free(symbol->name);
@@ -43,7 +44,7 @@ static void free_derived_type(F2cDerivedType *derived) {
     free(derived->c_name);
     free(derived->parent_name);
     for (index = 0U; index < derived->component_count; ++index)
-        free_symbol(&derived->components[index]);
+        f2c_discard_symbol(&derived->components[index]);
     free(derived->components);
     for (index = 0U; index < derived->finalizer_count; ++index)
         free(derived->finalizers[index]);
@@ -56,7 +57,7 @@ static void free_derived_type(F2cDerivedType *derived) {
         free(binding->target_name);
         free(binding->interface_name);
         free(binding->pass_name);
-        free_symbol(&binding->procedure);
+        f2c_discard_symbol(&binding->procedure);
     }
     free(derived->bindings);
     for (index = 0U; index < F2C_DEFINED_IO_COUNT; ++index)
@@ -104,7 +105,7 @@ void f2c_free_unit(Unit *unit) {
     }
     free(unit->equivalence_groups);
     for (index = 0U; index < unit->symbol_count; ++index)
-        free_symbol(&unit->symbols[index]);
+        f2c_discard_symbol(&unit->symbols[index]);
     free(unit->symbols);
     for (index = 0U; index < unit->derived_type_count; ++index)
         free_derived_type(&unit->derived_types[index]);
