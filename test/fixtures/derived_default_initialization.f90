@@ -110,7 +110,7 @@ program derived_default_initialization
   deallocate(heap, clone)
   allocate(heap(2))
   heap(1)%seed = 99
-  allocate(clone, mold=heap)
+  allocate(clone(size(heap)), mold=heap)
   call verify(clone(1))
   deallocate(heap, clone)
   deallocate(value%payload)
