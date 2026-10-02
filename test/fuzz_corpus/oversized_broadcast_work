@@ -1,0 +1,6 @@
+0prog :: valu
+end
+module larg
+ integer :: values(0073401155) = 1
+ end type
+end module
