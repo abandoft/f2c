@@ -13,7 +13,7 @@
 - Unified copy-in/copy-out for noncontiguous character substring arguments in subroutine and function calls, covering explicit/assumed shapes, dynamic lengths, derived components, and character and derived-type function results.
 - Resolved character function result lengths in their procedure scope, substituted actual arguments into typed specification expressions, and evaluated specification arguments once.
 - Completed strict code generation for empty arrays and zero-length arguments and rejected illegal allocatable/pointer components following array references.
-- Preserved addresses of definable scalar component arguments and validated procedure pointer component arguments; lowering failures report hard, source-located errors and roll back incomplete output.
+- Improved portable numeric component assignment, scalar argument addresses, and procedure pointer argument interface checks; lowering failures report hard, source-located errors and roll back incomplete output.
 - Fixed a memory leak in invalid construct-prefix and branch-name combinations.
 
 ## 1.40.0
