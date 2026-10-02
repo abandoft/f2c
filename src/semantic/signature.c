@@ -1,30 +1,12 @@
 #include "semantic/semantic.h"
 
-#include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 int f2c_symbol_character_length_constant(const Symbol *symbol, int64_t *length) {
-    char *end = NULL;
-    long long value;
-    if (symbol == NULL || length == NULL || symbol->type != TYPE_CHARACTER)
-        return 0;
-    if (symbol->character_length_expression != NULL &&
-        f2c_evaluate_integer_constant(NULL, symbol->character_length_expression, length))
-        return 1;
-    if (symbol->character_length_syntax.count != 0U &&
-        f2c_evaluate_integer_syntax(NULL, symbol->character_length_syntax, length))
-        return 1;
-    if (symbol->character_length == NULL)
-        return 0;
-    errno = 0;
-    value = strtoll(symbol->character_length, &end, 10);
-    if (errno != 0 || end == symbol->character_length || *end != '\0')
-        return 0;
-    *length = (int64_t)value;
-    return 1;
+    return f2c_character_declaration_length(NULL, symbol, length);
 }
 
 int f2c_character_length_signatures_match(const Symbol *left, const Symbol *right) {
