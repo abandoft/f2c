@@ -790,7 +790,82 @@ static void test_component_section_rank(void) {
     f2c_expr_free(expression);
 }
 
+static void test_character_designator_tree(void) {
+    Symbol symbols[3];
+    Unit unit = {0};
+    F2cExpr *expression;
+    const F2cExpr *parent;
+    const char *error_at = NULL;
+    char *constant = NULL;
+    size_t length = 0U;
+    int64_t known_length;
+    add_symbol(symbols, 0U, "records", TYPE_CHARACTER, 1U, 0);
+    add_symbol(symbols, 1U, "text", TYPE_CHARACTER, 0U, 0);
+    add_symbol(symbols, 2U, "padded", TYPE_CHARACTER, 0U, 0);
+    symbols[0].dimensions[0].kind = F2C_DIMENSION_EXPLICIT;
+    symbols[0].dimensions[0].lower_expression = f2c_expr_new_integer_constant(1);
+    symbols[0].dimensions[0].upper_expression = f2c_expr_new_integer_constant(3);
+    for (size_t index = 0U; index < 3U; ++index) {
+        symbols[index].character_length = "8";
+        symbols[index].character_length_expression = f2c_expr_new_integer_constant(8);
+    }
+    symbols[1].intent = F2C_INTENT_IN;
+    symbols[2].parameter = 1;
+    unit.symbols = symbols;
+    unit.symbol_count = 3U;
+    f2c_shape_from_symbol(&unit, &symbols[0].shape, &symbols[0]);
+    symbols[2].initializer_expression = f2c_parse_expression_ast(&unit, "'abc'", &error_at);
+
+    expression = f2c_parse_expression_ast(&unit, "records(2)(:4)", &error_at);
+    parent = f2c_substring_parent(expression);
+    expect(expression != NULL && error_at == NULL && expression->child_count == 2U &&
+               expression->type == TYPE_CHARACTER && expression->type_kind == 1 &&
+               expression->rank == 0U && expression->shape.rank == 0U && expression->definable,
+           "array-element substring has one explicit typed parent and a scalar shape");
+    expect(parent != NULL && parent->kind == F2C_EXPR_ARRAY_REFERENCE &&
+               parent->child_count == 1U && parent->symbol == &symbols[0] &&
+               f2c_substring_lower(expression) == NULL && f2c_substring_upper(expression) != NULL,
+           "substring retains array selectors separately from omitted character bounds");
+    expect(expression != NULL && expression->source_offset == 0U &&
+               expression->source_length == strlen("records(2)(:4)") && parent != NULL &&
+               parent->source_length == strlen("records(2)"),
+           "nested designators retain distinct original source ranges");
+    f2c_expr_free(expression);
+
+    expression = f2c_parse_expression_ast(&unit, "records(:)(2:4)", &error_at);
+    expect(expression != NULL && error_at == NULL && expression->rank == 1U &&
+               expression->shape.rank == 1U && expression->shape.dimensions[0].extent_known &&
+               expression->shape.dimensions[0].extent == 3U,
+           "substring arrays preserve parent rank and extents without adding a range dimension");
+    f2c_expr_free(expression);
+    expression = f2c_parse_expression_ast(&unit, "text(2:4)", &error_at);
+    expect(expression != NULL && !expression->definable &&
+               f2c_substring_parent(expression) != NULL &&
+               !f2c_substring_parent(expression)->definable,
+           "substring preserves INTENT(IN) nondefinability");
+    f2c_expr_free(expression);
+
+    expression = f2c_parse_expression_ast(&unit, "padded(:5)", &error_at);
+    expect(expression != NULL && f2c_expression_is_initialization_constant(expression) &&
+               f2c_evaluate_character_constant(&unit, expression, &constant, &length) &&
+               length == 5U && memcmp(constant, "abc  ", 5U) == 0,
+           "constant substring uses the declared padded parameter value");
+    free(constant);
+    f2c_expr_free(expression);
+    expression = f2c_parse_expression_ast(&unit, "'abcdef'(100:-100)", &error_at);
+    expect(expression != NULL && error_at == NULL &&
+               f2c_character_constant_length(&unit, expression, &known_length) && known_length == 0,
+           "arbitrarily reversed constant bounds designate an empty substring");
+    f2c_expr_free(expression);
+    f2c_expr_free(symbols[0].dimensions[0].lower_expression);
+    f2c_expr_free(symbols[0].dimensions[0].upper_expression);
+    for (size_t index = 0U; index < 3U; ++index)
+        f2c_expr_free(symbols[index].character_length_expression);
+    f2c_expr_free(symbols[2].initializer_expression);
+}
+
 int main(void) {
+    test_character_designator_tree();
     test_kind_shape_and_value_category();
     test_array_function_result_shape_in_transform();
     test_typed_numeric_tree();

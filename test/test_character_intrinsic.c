@@ -51,6 +51,14 @@ static void test_unit_length_substrings(void) {
 }
 
 static void test_type_and_length_diagnostics(void) {
+    expect_diagnostic("  result = strings(1)(1:3)", "exceeds declared length 2",
+                      "array-element substring uses the parent element length");
+    expect_diagnostic("  result = result(1:2:1)", "cannot have a stride",
+                      "substring ranges do not accept array-section strides");
+    expect_diagnostic("  result = result(1)", "requires a lower:upper range",
+                      "character indexing without a colon is not a substring");
+    expect_diagnostic("  result = strings(1)(0:1)", "lower bound must be at least one",
+                      "nonempty out-of-bounds array-element substrings are rejected");
     expect_diagnostic("  result = adjustl(1)", "ADJUSTL argument STRING must be CHARACTER",
                       "noncharacter adjustment arguments suppress generated code");
     expect_diagnostic("  code = ichar('AB')", "ICHAR argument C must have CHARACTER length one",
