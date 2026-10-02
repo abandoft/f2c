@@ -48,6 +48,7 @@ jobs:
             character_designators character_array_actuals character_actual_evaluation \
             character_length_parameters character_result_effects character_broadcast_reallocation \
             type_bound_character_results derived_default_initialization \
+            scope_association scope_storage_bindings \
             scalar_component_actuals procedure_pointer_component \
             reduction_designators nested_array_reductions; do
             build/host/f2c -o "build/wasm/generated-$fixture.c" "test/fixtures/$fixture.f90"
