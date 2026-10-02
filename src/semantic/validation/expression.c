@@ -546,6 +546,7 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
                                         expression->children[i]);
     operator_handled = resolve_operator(context, unit, line, statement_text, expression);
     refresh_intrinsic_operator_shape(expression, operator_handled);
+    f2c_validate_designator_components(context, expression);
     validate_substring_semantics(context, unit, line, statement_text, expression);
     if (expression->kind == F2C_EXPR_ARRAY_REFERENCE && expression->symbol != NULL) {
         for (i = 0U; i < expression->child_count; ++i) {

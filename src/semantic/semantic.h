@@ -19,6 +19,7 @@ int f2c_symbol_uses_descriptor(const Symbol *symbol);
 int f2c_symbol_is_assumed_size(const Symbol *symbol);
 int f2c_expression_is_whole_assumed_size(const F2cExpr *expression);
 int f2c_expression_has_target_attribute(const F2cExpr *expression);
+void f2c_validate_designator_components(Context *context, const F2cExpr *expression);
 int f2c_expression_has_vector_subscript(const F2cExpr *expression);
 int f2c_unit_has_descriptor_result(const Unit *unit);
 int f2c_procedure_has_descriptor_result(const Symbol *procedure);
