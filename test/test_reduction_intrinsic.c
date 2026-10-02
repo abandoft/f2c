@@ -261,11 +261,45 @@ static void test_direct_relation_reduction(void) {
            "simple relations keep the allocation-free fused reduction path");
     expect(result.code != NULL && strstr(result.code, "f2c_array_scalar_elemental") == NULL,
            "simple relations do not materialize a logical mask array");
+    expect(result.code != NULL && strstr(result.code, "F2C_REDUCTION_ACCESS volatile") == NULL &&
+               strstr(result.code, "f2c_character_compare_volatile") == NULL,
+           "ordinary storage does not emit or select qualified kernels");
+    f2c_result_free(&result);
+}
+
+static void test_qualified_storage_lowering(void) {
+    static const char source[] =
+        "subroutine qualified(values, selected, ordinary, total, dot, matched)\n"
+        "  implicit none\n"
+        "  real, volatile, intent(inout) :: values(4)\n"
+        "  logical, volatile, intent(inout) :: selected(4)\n"
+        "  real, intent(in) :: ordinary(4)\n"
+        "  real, intent(out) :: total, dot\n"
+        "  logical, intent(out) :: matched\n"
+        "  total = sum(values, mask=selected)\n"
+        "  dot = dot_product(values, ordinary)\n"
+        "  matched = any(values > 0.0) .and. any(selected)\n"
+        "end subroutine qualified\n";
+    F2cOptions options = {"qualified.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "qualified arrays lower without dropping their access attributes");
+    expect(result.code != NULL && strstr(result.code, "f2c_sum_mask_f_volatile(values") != NULL &&
+               strstr(result.code, "f2c_dot_f_volatile((const volatile void *)(values)") != NULL,
+           "numeric reductions and mixed-qualification dots select qualified kernels");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_relation_reduce_f_volatile(values") != NULL &&
+               strstr(result.code, "f2c_any_l_volatile((const volatile void *)(selected)") != NULL,
+           "numeric relations and logical reductions retain qualified storage");
+    expect(result.code != NULL && strstr(result.code, "(const void *)(values)") == NULL &&
+               strstr(result.code, "(const void *)(selected)") == NULL,
+           "type-erased kernel arguments never silently strip volatile qualifiers");
     f2c_result_free(&result);
 }
 
 int main(void) {
     test_direct_relation_reduction();
+    test_qualified_storage_lowering();
     test_argument_contracts();
     test_dot_product_contracts();
     test_typed_scalar_lowering();
