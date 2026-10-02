@@ -1,9 +1,33 @@
 #include "codegen/unit/private.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static int zero_index_name_conflicts(Unit *unit, const char *name) {
+    size_t index;
+    for (index = 0U; index < unit->symbol_count; ++index) {
+        if (strcmp(f2c_symbol_c_name(unit, &unit->symbols[index]), name) == 0)
+            return 1;
+    }
+    if (unit->context != NULL) {
+        for (index = 0U; index < unit->context->units.count; ++index) {
+            const Unit *procedure = &unit->context->units.items[index];
+            if (procedure->name != NULL && strcmp(procedure->name, name) == 0)
+                return 1;
+        }
+    }
+    return 0;
+}
+
+static void volatile_zero_index_name(Unit *unit, char *name, size_t capacity) {
+    size_t suffix = 0U;
+    do {
+        (void)snprintf(name, capacity, "f2c_zero_index_%zu", suffix++);
+    } while (zero_index_name_conflicts(unit, name));
+}
 
 static void emit_declarations(Context *context, Unit *unit) {
     Buffer *output = &context->output;
@@ -325,12 +349,16 @@ static void emit_declarations(Context *context, Unit *unit) {
             const char *name = f2c_symbol_c_name(unit, symbol);
             f2c_unit_indent(output, 1);
             if (symbol->volatile_entity) {
+                /* A size_t has no more decimal digits than bits. */
+                char index_name[sizeof("f2c_zero_index_") + sizeof(size_t) * CHAR_BIT];
+                volatile_zero_index_name(unit, index_name, sizeof(index_name));
                 /* libc byte stores cannot preserve a volatile object's access semantics. */
                 f2c_buffer_printf(output,
-                                  "for (size_t f2c_zero_index = 0U; "
-                                  "f2c_zero_index < sizeof(%s) / sizeof(%s[0]); "
-                                  "++f2c_zero_index) %s[f2c_zero_index] = (%s){0};\n",
-                                  name, name, name, f2c_symbol_c_type(symbol));
+                                  "for (size_t %s = 0U; "
+                                  "%s < sizeof(%s) / sizeof(%s[0]); "
+                                  "++%s) %s[%s] = (%s){0};\n",
+                                  index_name, index_name, name, name, index_name, name, index_name,
+                                  f2c_symbol_c_type(symbol));
             } else {
                 f2c_buffer_printf(output, "memset(%s, 0, sizeof(%s));\n", name, name);
             }
