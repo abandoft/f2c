@@ -212,6 +212,7 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
     else
         memset(&target->initializer_syntax, 0, sizeof(target->initializer_syntax));
     target->character_length_syntax = source->character_length_syntax;
+    target->character_length_scope = source->character_length_scope;
     target->declaration_span = source->declaration_span;
     free(target->c_name);
     target->c_name = f2c_strdup(source->c_name);
@@ -361,6 +362,7 @@ static int import_module_procedure(Unit *unit, Unit *procedure, const char *loca
         free(symbol->character_length);
         symbol->character_length = length;
         symbol->character_length_syntax = result->character_length_syntax;
+        symbol->character_length_scope = procedure;
     }
     if (!f2c_symbol_resize_external_parameters(symbol, procedure->argument_count))
         return 0;

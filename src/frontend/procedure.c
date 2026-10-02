@@ -73,6 +73,7 @@ int f2c_copy_procedure_signature(Symbol *symbol, Unit *signature) {
         free(symbol->character_length);
         symbol->character_length = f2c_strdup(result->character_length);
         symbol->character_length_syntax = result->character_length_syntax;
+        symbol->character_length_scope = signature;
         if (symbol->character_length == NULL)
             return 0;
     }
