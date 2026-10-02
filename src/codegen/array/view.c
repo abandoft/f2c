@@ -1,6 +1,7 @@
 #include "codegen/expression/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/array/view.h"
 #include "codegen/descriptor/private.h"
 #include "codegen/lowering/private.h"
 
@@ -114,8 +115,8 @@ cleanup:
     return *pointer != NULL && *count != NULL && *stride != NULL;
 }
 
-int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, char **count,
-                              char **stride, int *supported) {
+static int build_array_view(Unit *unit, const F2cExpr *array, char **pointer, char **count,
+                            char **stride, unsigned int *qualifiers, int *supported) {
     Buffer extent = {0};
     Buffer storage_stride = {0};
     const F2cExpr *selector;
@@ -127,9 +128,11 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
     size_t dimension;
     if (array == NULL || array->rank == 0U)
         return 0;
+    *qualifiers = array->storage_qualifiers;
     lowered_code = f2c_lowering_code(unit, array);
     if (f2c_lowering_is_array_temporary(unit, array) && lowered_code != NULL) {
         Buffer count_code = {0};
+        *qualifiers = F2C_STORAGE_UNQUALIFIED;
         *pointer = f2c_strdup(lowered_code);
         f2c_buffer_printf(&count_code, "f2c_inquiry_size(%zuU, (const size_t[]){", array->rank);
         for (dimension = 0U; dimension < array->rank; ++dimension)
@@ -169,6 +172,7 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
         return *pointer != NULL && *count != NULL && *stride != NULL;
     }
     if (array->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
+        *qualifiers = F2C_STORAGE_UNQUALIFIED;
         char *constructor = f2c_expression_emit(unit, array, supported);
         Buffer grouped = {0};
         if (constructor != NULL)
@@ -184,20 +188,17 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
         const F2cExpr *source = call_argument(array, "source", 0U);
         const F2cExpr *pad = call_argument(array, "pad", 2U);
         const F2cExpr *order = call_argument(array, "order", 3U);
-        char *source_count = NULL;
+        F2cArrayView source_view = {0};
         Buffer result_count = {0};
         size_t index;
         if (source == NULL || pad != NULL || order != NULL || array->rank == 0U ||
-            !f2c_expression_array_view(unit, source, pointer, &source_count, stride, supported))
+            !f2c_array_view(unit, source, &source_view, supported))
             return 0;
         for (index = 0U; index < array->rank; ++index) {
             char *dimension_extent = f2c_array_expression_extent(unit, array, index);
             if (dimension_extent == NULL) {
-                free(*pointer);
-                free(source_count);
-                free(*stride);
-                *pointer = NULL;
-                *stride = NULL;
+                f2c_array_view_discard(&source_view);
+                free(result_count.data);
                 return 0;
             }
             f2c_buffer_printf(&result_count, "%s(size_t)(%s)", index == 0U ? "" : " * ",
@@ -205,9 +206,12 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
             free(dimension_extent);
         }
         f2c_buffer_printf(&extent, "((%s) <= (size_t)(%s) ? (%s) : (abort(), 0U))",
-                          result_count.data, source_count, result_count.data);
+                          result_count.data, source_view.count, result_count.data);
         free(result_count.data);
-        free(source_count);
+        *pointer = source_view.pointer;
+        *stride = source_view.stride;
+        *qualifiers = source_view.storage_qualifiers;
+        free(source_view.count);
         *count = f2c_buffer_take(&extent);
         return *pointer != NULL && *count != NULL && *stride != NULL;
     }
@@ -216,6 +220,14 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
         return 0;
     if (contiguous_section_view(unit, array, pointer, count, stride, supported))
         return 1;
+    free(*pointer);
+    free(*count);
+    free(*stride);
+    *pointer = NULL;
+    *count = NULL;
+    *stride = NULL;
+    if (!*supported)
+        return 0;
     if (array->rank != 1U)
         return 0;
     selector = NULL;
@@ -300,4 +312,24 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
     free(upper);
     free(step);
     return *pointer != NULL && *count != NULL && *stride != NULL;
+}
+
+void f2c_array_view_discard(F2cArrayView *view) {
+    if (view == NULL)
+        return;
+    free(view->pointer);
+    free(view->count);
+    free(view->stride);
+    memset(view, 0, sizeof(*view));
+}
+
+int f2c_array_view(Unit *unit, const F2cExpr *array, F2cArrayView *view, int *supported) {
+    F2cArrayView result = {0};
+    if (!build_array_view(unit, array, &result.pointer, &result.count, &result.stride,
+                          &result.storage_qualifiers, supported)) {
+        f2c_array_view_discard(&result);
+        return 0;
+    }
+    *view = result;
+    return 1;
 }

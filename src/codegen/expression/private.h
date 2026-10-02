@@ -39,8 +39,6 @@ void f2c_expression_append_derived_actual_releases(Buffer *output, const F2cExpr
 char *f2c_expression_real_representation_intrinsic(Unit *unit, const F2cExpr *expression,
                                                    int *supported);
 char *f2c_expression_array_inquiry(Unit *unit, const F2cExpr *expression, int *supported);
-int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, char **count,
-                              char **stride, int *supported);
 char *f2c_expression_relation_reduction(Unit *unit, const F2cExpr *expression, int *supported,
                                         int *matched);
 int f2c_expression_direct_relation_reduction(const F2cExpr *expression);
