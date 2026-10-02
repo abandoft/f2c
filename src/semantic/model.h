@@ -6,6 +6,7 @@
 
 typedef struct F2cDerivedType F2cDerivedType;
 typedef struct F2cStatement F2cStatement;
+struct F2cIntrinsicSignature;
 
 typedef enum F2cNameAssociation {
     F2C_ASSOCIATION_LOCAL,
@@ -46,6 +47,8 @@ struct Symbol {
     F2cIntent intent;
     int parameter;
     int external;
+    const struct F2cIntrinsicSignature *intrinsic;
+    F2cSourceSpan intrinsic_span;
     int external_declared;
     int external_subroutine;
     int external_pure;

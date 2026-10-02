@@ -225,6 +225,8 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
     target->intent = source->intent;
     target->parameter = source->parameter;
     target->external = source->external;
+    target->intrinsic = source->intrinsic;
+    target->intrinsic_span = source->intrinsic_span;
     target->external_declared = source->external_declared;
     target->external_subroutine = source->external_subroutine;
     target->external_pure = source->external_pure;
@@ -240,7 +242,7 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
     target->procedure_interface = source->procedure_interface;
     free(target->procedure_interface_name);
     target->procedure_interface_name = procedure_interface_name;
-    target->saved = !source->external;
+    target->saved = !source->external && source->intrinsic == NULL;
     target->allocatable = source->allocatable;
     target->pointer = source->pointer;
     target->contiguous = source->contiguous;
@@ -250,7 +252,7 @@ int f2c_clone_associated_symbol(Unit *unit, const Symbol *source, const char *lo
     target->value = source->value;
     target->asynchronous = source->asynchronous;
     target->volatile_entity = source->volatile_entity;
-    target->module_entity = !source->external;
+    target->module_entity = !source->external && source->intrinsic == NULL;
     target->association = association;
     target->declaration_scope_id = source->declaration_scope_id;
     target->association_span = unit->header_span;

@@ -19,8 +19,8 @@ static int is_host_internal_procedure(const Context *context, const Unit *unit,
 }
 
 static int requires_host_capture(const Symbol *symbol) {
-    return symbol != NULL && !symbol->parameter && !symbol->module_entity &&
-           symbol->association != F2C_ASSOCIATION_USE &&
+    return symbol != NULL && symbol->intrinsic == NULL && !symbol->parameter &&
+           !symbol->module_entity && symbol->association != F2C_ASSOCIATION_USE &&
            (!symbol->external || symbol->procedure_pointer);
 }
 
@@ -98,7 +98,7 @@ int f2c_import_host_symbols(Context *context, Unit *unit) {
         if (source->parameter || source->module_entity ||
             source->association == F2C_ASSOCIATION_USE)
             continue;
-        if (source->external && !source->procedure_pointer)
+        if (source->intrinsic != NULL || (source->external && !source->procedure_pointer))
             continue;
         target->module_entity = 0;
         target->argument = 1;
