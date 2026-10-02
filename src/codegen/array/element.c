@@ -337,6 +337,11 @@ F2cExpr *f2c_array_element_expression(Unit *unit, const F2cExpr *expression, siz
         return NULL;
     if (f2c_lowering_is_array_temporary(unit, expression))
         return lowered_array_temporary_element(unit, expression, rank, ordinals);
+    /* The enclosing array value is copied by its owned materialization plan.
+     * Read each source element with its original access attributes; allocating
+     * a second scalar character/derived snapshot here would duplicate ownership. */
+    if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
+        return f2c_array_element_expression(unit, expression->children[0], rank, ordinals);
     if (expression->kind == F2C_EXPR_NAME)
         return whole_array_element(unit, expression, rank, ordinals);
     if (expression->kind == F2C_EXPR_SUBSTRING) {
