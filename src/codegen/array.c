@@ -384,7 +384,7 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output,
                           "char *f2c_section_values = f2c_section_count == 0U ? NULL : "
-                          "(char *)malloc(f2c_section_bytes == 0U ? 1U : f2c_section_bytes);\n");
+                          "(char *)malloc(f2c_character_length == 0U ? 1U : f2c_section_bytes);\n");
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output,
                           "if (f2c_section_count != 0U && f2c_section_values == NULL) abort();\n");
