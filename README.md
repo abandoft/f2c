@@ -154,6 +154,12 @@ The currently tested implementation includes:
   preserved procedure execution for zero-length character assignment results; ordinary scalar
   character functions retain their entry result length when their body modifies length arguments
   or host variables, including scalar-broadcast assignment;
+- tested type-bound scalar character results with first/nonfirst `PASS`, `NOPASS`, inherited
+  overrides, reordered keywords, optional arguments, noncontiguous substring copy-back, and a
+  shared entry-length snapshot;
+- tested derived-component default initialization for fixed-shape numeric, logical, complex,
+  character, nested, and inherited components; automatic, block, module, `SAVE`, `INTENT(OUT)`,
+  and allocation paths share defaults, while constructors and deep copies preserve explicit data;
 - nested constructor, elemental, inquiry, and reduction expressions on the tested typed-lowering
   paths, including statement-owned snapshots of component arrays and noncontiguous reduction
   operands; allocation-free direct reductions remain for simple array/scalar comparisons;
