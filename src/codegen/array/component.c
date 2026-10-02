@@ -93,7 +93,8 @@ static int emit_temporary_declaration(Context *context, Unit *unit, const F2cExp
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output,
                           "char *f2c_component_values = (char *)malloc("
-                          "f2c_component_bytes == 0U ? 1U : f2c_component_bytes);\n");
+                          "f2c_component_count == 0U || f2c_component_length == 0U "
+                          "? 1U : f2c_component_bytes);\n");
     } else {
         f2c_buffer_printf(&context->output,
                           "if (f2c_component_count > SIZE_MAX / sizeof(%s)) abort();\n",
