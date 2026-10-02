@@ -437,8 +437,9 @@ static int emit_character_assignment(Context *context, Unit *unit, const F2cStat
     indent(&context->output, depth);
     f2c_buffer_printf(&context->output,
                       "char *f2c_where_values_%zu = (char *)malloc("
-                      "f2c_where_bytes_%zu == 0U ? 1U : f2c_where_bytes_%zu);\n",
-                      identifier, identifier, identifier);
+                      "f2c_where_count_%zu == 0U || f2c_where_length_%zu == 0U "
+                      "? 1U : f2c_where_bytes_%zu);\n",
+                      identifier, identifier, identifier, identifier);
     indent(&context->output, depth);
     f2c_buffer_printf(&context->output, "if (f2c_where_values_%zu == NULL) abort();\n", identifier);
     emit_loop_begin(&context->output, identifier, rank, depth);
