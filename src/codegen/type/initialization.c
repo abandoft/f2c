@@ -80,7 +80,8 @@ static char *broadcast_initializer(Unit *caller, Unit *scope, const Symbol *scal
 static char *component_initializer(Unit *caller, Unit *scope, const Symbol *component,
                                    const F2cExpr *actual) {
     Symbol value = *component;
-    const F2cExpr *expression = actual != NULL ? actual : component->initializer_expression;
+    const F2cExpr *expression =
+        f2c_expr_value_source(actual != NULL ? actual : component->initializer_expression);
     char *initializer;
     if (component->allocatable || component->pointer || component->procedure_pointer) {
         if (expression == NULL ||
@@ -256,6 +257,7 @@ char *f2c_derived_entity_initializer(Unit *unit, const Symbol *symbol) {
 }
 
 char *f2c_derived_constructor_initializer(Unit *unit, const F2cExpr *constructor) {
+    constructor = f2c_expr_value_source(constructor);
     if (constructor == NULL || constructor->kind != F2C_EXPR_STRUCTURE_CONSTRUCTOR)
         return NULL;
     return aggregate(unit, constructor->derived_type, constructor->derived_type, constructor);

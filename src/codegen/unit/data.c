@@ -203,7 +203,7 @@ static char *numeric_data_array_initializer(Unit *unit, const Symbol *symbol) {
 }
 
 static char *numeric_array_constructor_initializer(Unit *unit, const Symbol *symbol) {
-    const F2cExpr *constructor = symbol->initializer_expression;
+    const F2cExpr *constructor = f2c_expr_value_source(symbol->initializer_expression);
     Buffer initializer = {0};
     size_t element;
     if (constructor == NULL || constructor->kind != F2C_EXPR_ARRAY_CONSTRUCTOR ||
