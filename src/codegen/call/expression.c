@@ -24,15 +24,11 @@ int f2c_call_expression_requires_materialization(Unit *unit, const F2cExpr *expr
         if (f2c_call_actual_requires_materialization(unit, callee, expression->children[argument],
                                                      argument))
             return 1;
-    if (expression->type == TYPE_CHARACTER && callee->character_length_scope != NULL) {
-        for (argument = 0U; argument < expression->child_count; ++argument) {
-            const F2cExpr *actual = actual_value(expression->children[argument]);
-            if (actual != NULL && actual->rank == 0U && !actual->definable &&
-                (actual->kind == F2C_EXPR_CALL || actual->kind == F2C_EXPR_UNARY ||
-                 actual->kind == F2C_EXPR_BINARY))
-                return 1;
-        }
-    }
+    /* A definable actual or host variable can change during the function body.
+     * Capture the result specification before the call and retain that value
+     * in the shared lowering view for allocation, ABI length, and consumers. */
+    if (expression->type == TYPE_CHARACTER)
+        return 1;
     return 0;
 }
 
