@@ -33,6 +33,8 @@ void f2c_emit_character_length_support(Buffer *output) {
         "static inline F2C_UNUSED size_t f2c_character_parameter_length(int64_t value) { "
         "size_t length = 0U; if (!f2c_character_parameter_size(value, &length)) abort(); "
         "return length; }\n"
+        "static inline F2C_UNUSED size_t f2c_character_copy_length(size_t destination, "
+        "size_t source) { return destination < source ? destination : source; }\n"
         "static inline F2C_UNUSED bool f2c_character_target_lengths(size_t pointer_length, "
         "size_t target_length) { return target_length != 0U && pointer_length == "
         "target_length; }\n"
