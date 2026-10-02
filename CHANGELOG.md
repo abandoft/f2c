@@ -1,3 +1,15 @@
+## 1.43.0
+
+- Corrected local declarations, dummy arguments, and function results shadowing same-named module and procedure host entities.
+- Improved local name binding for `DATA`, `COMMON`, `EQUIVALENCE`, and procedure declarations without inheriting host storage attributes.
+- Corrected nearest-host lookup, explicit `USE` rebinding, and sibling-call capture forwarding to prevent access to the wrong same-named object.
+- Preserved genuine `USE` name conflicts and module storage ownership while allowing legal host-derived-type shadowing.
+- Evaluated imported constants, character lengths, and module array bounds in their defining scope, including private constant dependencies and module re-exports.
+- Improved scope-local `ASYNCHRONOUS/VOLATILE` attributes and consistency checks across import paths, rejecting illegal attribute changes to associated entities.
+- Added scalar constant broadcast initialization for fixed-shape numeric, logical, and complex module arrays while preserving floating-point negative zero.
+- Corrected static storage generation for zero-element arrays, zero-length characters, and overflowing array sizes, sharing shape calculation between modules and derived components.
+- Optimized derived-component broadcast initializers to avoid repeated per-element evaluation and check actual output bytes before expansion.
+
 ## 1.42.0
 
 - Fixed character result lengths for type-bound functions with first/nonfirst `PASS`, `NOPASS`, and inherited overrides, retaining the length at function entry.
