@@ -1,6 +1,7 @@
 #include "internal/f2c.h"
 
 #include "codegen/array/private.h"
+#include "codegen/call/private.h"
 #include "codegen/descriptor/private.h"
 #include "codegen/lowering/private.h"
 #include "codegen/value/private.h"
@@ -62,18 +63,6 @@ static int actual_designates_const_dummy(const F2cExpr *actual) {
     return 0;
 }
 
-static int actual_guaranteed_contiguous(const F2cExpr *actual) {
-    const Symbol *symbol;
-    if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT && actual->child_count == 1U)
-        actual = actual->children[0];
-    if (actual == NULL || actual->kind != F2C_EXPR_NAME || actual->symbol == NULL)
-        return 0;
-    symbol = actual->symbol;
-    if (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol)))
-        return symbol->contiguous;
-    return 1;
-}
-
 char *f2c_bridge_implicit_mutable_actual(const Symbol *callee, size_t parameter,
                                          const F2cExpr *actual, const char *code) {
     Buffer result = {0};
@@ -103,6 +92,21 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
         return f2c_strdup("NULL");
     if (ast->rank != 0U && f2c_lowering_code(unit, ast) != NULL)
         return f2c_strdup(f2c_lowering_code(unit, ast));
+    if (ast->rank != 0U && !f2c_call_actual_guaranteed_contiguous(ast)) {
+        F2cDescriptorView view = {0};
+        if (!f2c_descriptor_materialize_view(&call->prelude, &call->postlude, unit, ast,
+                                             parameter_intent(callee, index), 0U, index, depth,
+                                             &view) ||
+            (ast->type == TYPE_CHARACTER &&
+             !f2c_lowering_copy_character_length(unit, ast, view.character_length))) {
+            f2c_descriptor_view_free(&view);
+            return NULL;
+        }
+        result = f2c_strdup(view.data);
+        f2c_descriptor_view_free(&view);
+        call->has_temporaries = 1;
+        return result;
+    }
     if (ast->symbol != NULL && ast->symbol->equivalence_unaligned && ast->rank != 0U &&
         ast->kind == F2C_EXPR_NAME) {
         const F2cIntent intent = parameter_intent(callee, index);
@@ -418,15 +422,20 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
         has_view = actual != NULL && actual->equivalence_unaligned
                        ? 0
                        : f2c_descriptor_view(unit, expression, &view);
+        if (has_view && view.rank != expression->rank) {
+            f2c_descriptor_view_free(&view);
+            has_view = 0;
+        }
         force_contiguous_temporary = callee->external_parameter_contiguous[i] &&
                                      !callee->external_parameter_pointer[i] &&
-                                     !actual_guaranteed_contiguous(expression);
+                                     !f2c_call_actual_guaranteed_contiguous(expression);
         if (has_view && force_contiguous_temporary) {
             f2c_descriptor_view_free(&view);
             has_view = 0;
         }
         if (!has_view &&
             (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i] ||
+             !f2c_call_actual_permits_copy(unit, callee, expression, i) ||
              !f2c_descriptor_materialize_view(&call->prelude, &call->postlude, unit, expression,
                                               parameter_intent(callee, i), 0U, i, depth, &view)))
             return 0;
@@ -538,25 +547,32 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
     return 1;
 }
 
-static void emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
-                                     const Symbol *explicit_callee,
-                                     F2cExpr *const *argument_expressions, size_t count,
-                                     const F2cStatement *alternate_call, int depth) {
+static int emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
+                                    const Symbol *explicit_callee,
+                                    F2cExpr *const *argument_expressions, size_t count,
+                                    const F2cStatement *alternate_call, int depth) {
     size_t i;
     LoweredCall call;
     F2cExpr **lowering_arguments = NULL;
     const Symbol *callee;
     const Unit *capture_procedure;
     int has_scope;
-    if (name == NULL)
-        return;
+    int emitted = 0;
+    size_t output_start;
+    F2cSourceSpan failure_span;
+    if (output == NULL || unit == NULL || name == NULL)
+        return 0;
+    output_start = output->length;
+    failure_span = count != 0U && argument_expressions != NULL && argument_expressions[0] != NULL
+                       ? argument_expressions[0]->span
+                       : unit->header_span;
     memset(&call, 0, sizeof(call));
     if (count != 0U) {
         if (argument_expressions == NULL || count > SIZE_MAX / sizeof(*lowering_arguments))
-            return;
+            goto done;
         lowering_arguments = (F2cExpr **)calloc(count, sizeof(*lowering_arguments));
         if (lowering_arguments == NULL)
-            return;
+            goto done;
         for (i = 0U; i < count; ++i) {
             lowering_arguments[i] = f2c_array_clone_expression(unit, argument_expressions[i]);
             if (lowering_arguments[i] == NULL)
@@ -688,52 +704,65 @@ static void emit_call_with_signature(Buffer *output, Unit *unit, const char *nam
         emit_indent(output, depth);
         f2c_buffer_append(output, "}\n");
     }
+    emitted = 1;
 done:
     lowered_call_free(&call);
-    for (i = 0U; i < count; ++i)
-        f2c_codegen_expression_free(unit,
-                                    lowering_arguments != NULL ? lowering_arguments[i] : NULL);
+    if (lowering_arguments != NULL) {
+        for (i = 0U; i < count; ++i)
+            f2c_codegen_expression_free(unit, lowering_arguments[i]);
+    }
     free(lowering_arguments);
+    if (!emitted) {
+        output->length = output_start;
+        if (output->data != NULL)
+            output->data[output_start] = '\0';
+        f2c_diagnostic_span_code(unit->context, F2C_DIAGNOSTIC_INTERNAL, &failure_span, 1,
+                                 "code generation could not lower actual arguments for %s", name);
+    }
+    return emitted;
 }
 
-void f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
-                                  const Symbol *explicit_callee,
-                                  F2cExpr *const *argument_expressions, size_t count, int depth) {
-    emit_call_with_signature(output, unit, name, explicit_callee, argument_expressions, count, NULL,
-                             depth);
+int f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
+                                 const Symbol *explicit_callee,
+                                 F2cExpr *const *argument_expressions, size_t count, int depth) {
+    return emit_call_with_signature(output, unit, name, explicit_callee, argument_expressions,
+                                    count, NULL, depth);
 }
 
-void f2c_emit_alternate_return_call(Buffer *output, Unit *unit, const char *name,
-                                    const Symbol *explicit_callee,
-                                    F2cExpr *const *argument_expressions, size_t count,
-                                    const F2cStatement *statement, int depth) {
-    emit_call_with_signature(output, unit, name, explicit_callee, argument_expressions, count,
-                             statement, depth);
+int f2c_emit_alternate_return_call(Buffer *output, Unit *unit, const char *name,
+                                   const Symbol *explicit_callee,
+                                   F2cExpr *const *argument_expressions, size_t count,
+                                   const F2cStatement *statement, int depth) {
+    return emit_call_with_signature(output, unit, name, explicit_callee, argument_expressions,
+                                    count, statement, depth);
 }
 
-void f2c_emit_call(Buffer *output, Unit *unit, const char *name,
-                   F2cExpr *const *argument_expressions, size_t count, int depth) {
-    f2c_emit_call_with_signature(output, unit, name, NULL, argument_expressions, count, depth);
+int f2c_emit_call(Buffer *output, Unit *unit, const char *name,
+                  F2cExpr *const *argument_expressions, size_t count, int depth) {
+    return f2c_emit_call_with_signature(output, unit, name, NULL, argument_expressions, count,
+                                        depth);
 }
 
-void f2c_emit_call_with_procedure(Buffer *output, Unit *unit, const Unit *procedure,
-                                  F2cExpr *const *argument_expressions, size_t count, int depth) {
+int f2c_emit_call_with_procedure(Buffer *output, Unit *unit, const Unit *procedure,
+                                 F2cExpr *const *argument_expressions, size_t count, int depth) {
     Symbol signature = {0};
+    int emitted;
     if (procedure == NULL || procedure->name == NULL)
-        return;
+        return 0;
     if (!f2c_copy_procedure_signature(&signature, (Unit *)procedure)) {
         (void)f2c_symbol_resize_external_parameters(&signature, 0U);
         free(signature.procedure_interface_name);
         free(signature.character_length);
         free(signature.derived_type_name);
         free(signature.c_type);
-        return;
+        return 0;
     }
-    f2c_emit_call_with_signature(output, unit, procedure->name, &signature, argument_expressions,
-                                 count, depth);
+    emitted = f2c_emit_call_with_signature(output, unit, procedure->name, &signature,
+                                           argument_expressions, count, depth);
     (void)f2c_symbol_resize_external_parameters(&signature, 0U);
     free(signature.procedure_interface_name);
     free(signature.character_length);
     free(signature.derived_type_name);
     free(signature.c_type);
+    return emitted;
 }
