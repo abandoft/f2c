@@ -247,3 +247,32 @@ int f2c_benchmark_level3(void) {
     free(native);
     return passed;
 }
+
+/* Focused compiler-policy diagnostics retain the exact official matrix inputs,
+ * repetition counts and 24 ABBA/BAAB samples. They are not a parity gate and do
+ * not replace the complete 71-case run. */
+int f2c_benchmark_dtrsm_policy(void) {
+    static const Level3Case cases[] = {
+        {32, 'R', 'N', 65536}, {96, 'R', 'N', 4096}, {192, 'R', 'N', 512}};
+    const size_t maximum = 192U * 192U;
+    double *a = (double *)malloc(maximum * sizeof(*a));
+    double *input = (double *)malloc(maximum * sizeof(*input));
+    double *generated = (double *)malloc(maximum * F2C_DTRSM_BATCH_SIZE * sizeof(*generated));
+    double *native = (double *)malloc(maximum * F2C_DTRSM_BATCH_SIZE * sizeof(*native));
+    size_t i;
+    int passed = 1;
+    if (a == NULL || input == NULL || generated == NULL || native == NULL) {
+        free(a);
+        free(input);
+        free(generated);
+        free(native);
+        return 0;
+    }
+    for (i = 0U; i < sizeof(cases) / sizeof(cases[0]); ++i)
+        passed = run_dtrsm(&cases[i], a, input, generated, native) && passed;
+    free(a);
+    free(input);
+    free(generated);
+    free(native);
+    return passed;
+}
