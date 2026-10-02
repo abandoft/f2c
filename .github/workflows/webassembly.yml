@@ -46,6 +46,7 @@ jobs:
           for fixture in \
             internal_file_semantics mathematical_conversion_intrinsics \
             character_designators character_array_actuals character_actual_evaluation \
+            character_length_parameters character_broadcast_reallocation \
             scalar_component_actuals procedure_pointer_component \
             reduction_designators nested_array_reductions; do
             build/host/f2c -o "build/wasm/generated-$fixture.c" "test/fixtures/$fixture.f90"
@@ -55,6 +56,13 @@ jobs:
               "build/wasm/generated-$fixture.c" -o "build/wasm/generated-$fixture.js"
             node "build/wasm/generated-$fixture.js"
           done
+          emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+            -Wstrict-prototypes -Wmissing-prototypes -Werror -Ibuild/wasm \
+            -DF2C_CHARACTER_LENGTH_SOURCE='"generated-character_length_parameters.c"' \
+            -sFILESYSTEM=0 -sEXIT_RUNTIME=1 \
+            test/fixtures/character_length_width_harness.c \
+            -o build/wasm/character-length-width.js
+          node build/wasm/character-length-width.js
       - name: Upload WebAssembly validation artifact
         uses: actions/upload-artifact@v7
         with:
