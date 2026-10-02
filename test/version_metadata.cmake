@@ -3,6 +3,13 @@ if(NOT DEFINED SOURCE_DIR OR NOT DEFINED WORK_DIR OR NOT DEFINED C_COMPILER
     message(FATAL_ERROR "version metadata test requires source, work, compiler, and generator")
 endif()
 
+get_filename_component(BUILD_ROOT "${SOURCE_DIR}/build" REALPATH)
+get_filename_component(WORK_ROOT "${WORK_DIR}" REALPATH)
+string(FIND "${WORK_ROOT}" "${BUILD_ROOT}/" WORK_PREFIX)
+if(NOT WORK_PREFIX EQUAL 0)
+    message(FATAL_ERROR "version metadata artifacts must remain below the root build directory")
+endif()
+
 # Exercise the actual root version prelude in an isolated project. Never rewrite the repository's
 # version header while other compiler or CTest configurations may be using it.
 file(READ "${SOURCE_DIR}/CMakeLists.txt" ROOT_CMAKE)
