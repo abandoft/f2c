@@ -4,6 +4,7 @@
 int f2c_benchmark_level1(void);
 int f2c_benchmark_level2(void);
 int f2c_benchmark_level3(void);
+int f2c_benchmark_dtrsm_policy(void);
 int f2c_benchmark_lapack(void);
 
 #endif
