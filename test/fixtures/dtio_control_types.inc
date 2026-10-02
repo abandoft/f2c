@@ -67,13 +67,14 @@ contains
     character(*), intent(in) :: iotype
     integer, intent(out) :: iostat
     character(*), intent(inout) :: iomsg
-    character(24) :: decimal_mode, round_mode
-    inquire(unit, decimal=decimal_mode, round=round_mode, iostat=iostat)
+    character(24) :: decimal_mode, round_mode, sign_mode
+    inquire(unit, decimal=decimal_mode, round=round_mode, sign=sign_mode, iostat=iostat)
     if (unit < 0) then
       if (iostat == 0) stop 16
       iostat = 0
     else
       if (decimal_mode /= 'COMMA' .or. round_mode /= 'UP') stop 4
+      if (sign_mode /= 'PLUS') stop 24
     end if
     if (size(v_list) /= 0 .or. len(iotype) == 0) stop 5
     if (iotype == 'NAMELIST' .or. iotype == 'LISTDIRECTED') then

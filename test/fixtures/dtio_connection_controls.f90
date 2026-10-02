@@ -6,6 +6,7 @@ program dtio_connection_controls
   type(payload) :: object
   character(160) :: record
   character(24) :: decimal_mode, round_mode, sign_mode
+  character(32) :: dynamic_format
   namelist /group/ object
   open(25, status='scratch', decimal='comma', round='up', sign='plus', delim='quote')
   object%value = 1.25d0
@@ -19,8 +20,12 @@ program dtio_connection_controls
   rewind(25)
   write(25, '(A)') '   0,1'
   rewind(25)
-  read(25, '(DT)') object
+  read(25, '(SS,S,SP,DT)') object
   write(*, '(Z16.16)') transfer(object%value, 0_8)
+  rewind(25)
+  dynamic_format = '(SS,S,SP,DT)'
+  read(25, dynamic_format) object
+  if (transfer(object%value, 0_8) /= 4591870180066957722_8) stop 4
   rewind(25)
   object%value = 1.25d0
   write(25, nml=group)
