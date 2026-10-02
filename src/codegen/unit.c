@@ -217,9 +217,9 @@ static void emit_declarations(Context *context, Unit *unit) {
                               length != NULL ? length : "0");
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output,
-                              "size_t f2c_char_len_%s = f2c_char_len_value_%s > 0 ? "
-                              "(size_t)f2c_char_len_value_%s : 0U;\n",
-                              name, name, name);
+                              "size_t f2c_char_len_%s = f2c_character_parameter_length("
+                              "f2c_char_len_value_%s);\n",
+                              name, name);
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output, "size_t f2c_char_count_%s = (size_t)(%s);\n", name,
                               count != NULL ? count : "0U");
@@ -259,17 +259,16 @@ static void emit_declarations(Context *context, Unit *unit) {
                           f2c_symbol_c_type(symbol), f2c_symbol_c_name(unit, symbol));
         if (symbol->type == TYPE_CHARACTER && symbol->rank == 0U &&
             symbol->character_length != NULL) {
-            char *length = f2c_emit_typed_expression(unit, symbol->character_length_expression);
+            char *length = f2c_symbol_character_length(unit, symbol);
             f2c_buffer_printf(output, "[(%s) + 1]", length);
             free(length);
         } else if (symbol->rank != 0U) {
             size_t d;
             f2c_buffer_append(output, "[F2C_MAX(1, ");
             if (symbol->type == TYPE_CHARACTER) {
-                char *length =
-                    symbol->character_length != NULL
-                        ? f2c_emit_typed_expression(unit, symbol->character_length_expression)
-                        : f2c_strdup("1U");
+                char *length = symbol->character_length != NULL
+                                   ? f2c_symbol_character_length(unit, symbol)
+                                   : f2c_strdup("1U");
                 f2c_buffer_printf(output, "(size_t)(%s) * ", length);
                 free(length);
             }

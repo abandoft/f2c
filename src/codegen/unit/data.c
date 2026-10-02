@@ -87,8 +87,7 @@ static char *static_numeric_initializer(Unit *unit, Type target_type, const F2cE
                       target_type == TYPE_DOUBLE_COMPLEX ? "F2C_COMPLEX_DOUBLE_INITIALIZER"
                                                          : "F2C_COMPLEX_FLOAT_INITIALIZER",
                       target_type == TYPE_DOUBLE_COMPLEX ? "double" : "float", real_literal,
-                      target_type == TYPE_DOUBLE_COMPLEX ? "double" : "float",
-                      imaginary_literal);
+                      target_type == TYPE_DOUBLE_COMPLEX ? "double" : "float", imaginary_literal);
     free(real_literal);
     free(imaginary_literal);
     return f2c_buffer_take(&initializer);
@@ -110,10 +109,8 @@ static char *fixed_character_initializer(Unit *unit, const Symbol *symbol,
     char *value = NULL;
     size_t value_length = 0U;
     size_t offset;
-    if (symbol->character_length_expression == NULL ||
-        !f2c_evaluate_integer_constant(unit, symbol->character_length_expression,
-                                       &declared_length) ||
-        declared_length <= 0 || (uint64_t)declared_length > SIZE_MAX)
+    if (!f2c_character_declaration_length(unit, symbol, &declared_length) ||
+        (uint64_t)declared_length > SIZE_MAX)
         return NULL;
     if (!f2c_evaluate_character_constant(unit, expression, &value, &value_length)) {
         free(value);
@@ -126,6 +123,8 @@ static char *fixed_character_initializer(Unit *unit, const Symbol *symbol,
         append_character_constant(&initializer, offset < value_length ? (unsigned char)value[offset]
                                                                       : (unsigned char)' ');
     }
+    if (declared_length == 0)
+        f2c_buffer_append(&initializer, "0");
     f2c_buffer_append(&initializer, "}");
     free(value);
     return f2c_buffer_take(&initializer);
@@ -136,10 +135,8 @@ static char *character_data_array_initializer(Unit *unit, const Symbol *symbol) 
     int64_t declared_length;
     size_t element;
     int emitted = 0;
-    if (symbol->character_length_expression == NULL ||
-        !f2c_evaluate_integer_constant(unit, symbol->character_length_expression,
-                                       &declared_length) ||
-        declared_length < 0 || (uint64_t)declared_length > SIZE_MAX)
+    if (!f2c_character_declaration_length(unit, symbol, &declared_length) ||
+        (uint64_t)declared_length > SIZE_MAX)
         return NULL;
     f2c_buffer_append(&initializer, "{");
     for (element = 0U; element < symbol->data_element_initializer_count; ++element) {
