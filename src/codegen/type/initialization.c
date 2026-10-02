@@ -64,6 +64,10 @@ static char *broadcast_initializer(Unit *caller, Unit *scope, const Symbol *scal
         free(item);
         return NULL;
     }
+    if (!f2c_reserve_constant_steps(caller, count)) {
+        free(item);
+        return NULL;
+    }
     f2c_buffer_append(&output, "{");
     for (index = 0U; index < count && !output.failed; ++index) {
         if (index != 0U)
