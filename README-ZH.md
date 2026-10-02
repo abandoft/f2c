@@ -122,6 +122,9 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
 
 - 统一化的自由/固定源码形式、续行、标签、有界对象宏与条件预处理、回调式 include、行重映射、
   程序单元、内部过程、模块、宿主关联与 `USE` 关联；
+- 已测试的本地声明及哑实参/函数结果对模块和过程宿主的遮蔽、最近宿主查询、显式 `USE` 重绑定
+  与兄弟调用捕获转发；导入常量和模块 shape 保留定义作用域，覆盖私有依赖与模块转导出，
+  作用域内的 `ASYNCHRONOUS/VOLATILE` 属性保持关联存储；
 - 内建数值、逻辑、字符和复数类型，显式/隐式类型，类型化表达式、数组构造器、数组段、向量下标、
   归约及选定的 transformational intrinsic；
 - 显式、抽象、泛型和过程指针接口，以及受支持 ABI 路径上的位置、关键字、可选和过程实参；
