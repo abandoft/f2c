@@ -26,7 +26,8 @@ static F2cOwnedTemporaryKind owned_temporary_kind(const F2cExpr *expression) {
     if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_NONE &&
         f2c_expression_has_descriptor_result(expression))
         return F2C_OWNED_TEMPORARY_ARRAY_FUNCTION_RESULT;
-    if (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY)
+    if (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY ||
+        expression->kind == F2C_EXPR_PARENTHESIZED)
         return F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE;
     if (expression->kind == F2C_EXPR_CALL) {
         const F2cIntrinsicSignature *intrinsic =
@@ -117,7 +118,9 @@ int f2c_expression_is_character_temporary(const F2cExpr *expression) {
     const int concatenation = expression != NULL && expression->kind == F2C_EXPR_BINARY &&
                               expression->type == TYPE_CHARACTER && expression->text != NULL &&
                               strcmp(expression->text, "//") == 0;
-    return function_call || intrinsic_call || concatenation;
+    const int parenthesized = expression != NULL && expression->kind == F2C_EXPR_PARENTHESIZED &&
+                              expression->type == TYPE_CHARACTER && expression->rank == 0U;
+    return function_call || intrinsic_call || concatenation || parenthesized;
 }
 
 int f2c_statement_is_function_definition(const Unit *unit, size_t statement) {
