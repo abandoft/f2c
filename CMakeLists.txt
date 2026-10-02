@@ -73,6 +73,7 @@ set(
     src/ast/statement/label.c
     src/ast/statement/parenthesis.c
     src/ast/statement/private.h
+    src/ast/statement/where.c
     src/ast/token_stream.c
     src/ast/unit.c
     src/ast/unit.h

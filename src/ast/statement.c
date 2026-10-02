@@ -153,15 +153,10 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
     }
     statement->kind = classified_kind;
     if (statement->kind == F2C_STMT_ELSE_IF || statement->kind == F2C_STMT_DO_WHILE ||
-        statement->kind == F2C_STMT_SELECT_CASE || statement->kind == F2C_STMT_SELECT_TYPE ||
-        statement->kind == F2C_STMT_WHERE ||
-        (statement->kind == F2C_STMT_ELSEWHERE && body_start + 1U < token_line->token_count &&
-         token_line->tokens[body_start + 1U].kind == F2C_TOKEN_LEFT_PAREN)) {
+        statement->kind == F2C_STMT_SELECT_CASE || statement->kind == F2C_STMT_SELECT_TYPE) {
         statement->expression = f2c_statement_parse_parenthesized_tokens(
             unit, token_line, body_start,
-            statement->kind == F2C_STMT_ELSE_IF || statement->kind == F2C_STMT_WHERE
-                ? &statement->tail
-                : NULL);
+            statement->kind == F2C_STMT_ELSE_IF ? &statement->tail : NULL);
     }
     if (statement->kind == F2C_STMT_TYPE_GUARD) {
         if (token_words(token_line, body_start, "class", "default")) {
@@ -179,17 +174,9 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
     if (statement->kind == F2C_STMT_ELSE_IF) {
         statement->block = 1;
     }
-    if (statement->kind == F2C_STMT_WHERE && statement->tail != NULL) {
-        statement->block = statement->tail[0] == '\0';
-        if (!statement->block) {
-            statement->nested = (F2cStatement *)calloc(1U, sizeof(*statement->nested));
-            if (statement->nested != NULL &&
-                !f2c_parse_statement(unit, statement->tail, line, statement->nested)) {
-                free(statement->nested);
-                statement->nested = NULL;
-            }
-        }
-    }
+    if ((statement->kind == F2C_STMT_WHERE || statement->kind == F2C_STMT_ELSEWHERE) &&
+        !f2c_statement_parse_where(unit, token_line, body_start, statement))
+        return 0;
     if ((statement->kind == F2C_STMT_IF || statement->kind == F2C_STMT_DO ||
          statement->kind == F2C_STMT_ASSIGN_LABEL || statement->kind == F2C_STMT_GOTO) &&
         !f2c_statement_parse_control(unit, token_line, body_start, statement))
@@ -250,9 +237,10 @@ int f2c_statement_parse_nested_tokens(Unit *unit, const Line *line, size_t begin
     view = *line;
     view.tokens += begin;
     view.token_count -= begin;
+    view.number = view.tokens[0].span.begin.line;
     body_start = statement_body_start(&view);
-    if (!parse_statement(unit, text, line->number, nested, classify_tokens(&view, body_start),
-                         &view, body_start)) {
+    if (!parse_statement(unit, text, view.number, nested, classify_tokens(&view, body_start), &view,
+                         body_start)) {
         f2c_statement_free(nested);
         free(nested);
         free(text);

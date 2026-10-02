@@ -16,6 +16,8 @@ int f2c_statement_parse_action(Unit *unit, const Line *line, size_t body_start,
                                F2cStatement *statement);
 int f2c_statement_parse_assignment(Unit *unit, const Line *line, size_t body_start,
                                    F2cStatement *statement);
+int f2c_statement_parse_where(Unit *unit, const Line *line, size_t body_start,
+                              F2cStatement *statement);
 void f2c_statement_free_io_item(F2cIoItem *item);
 int f2c_statement_parse_io_item_tokens(Unit *unit, F2cTokenRange range, F2cIoItem *item);
 int f2c_statement_parse_io(Unit *unit, const Line *line, size_t body_start,
