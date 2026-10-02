@@ -15,5 +15,8 @@ int f2c_call_materialize_expression(Unit *unit, F2cExpr *expression, size_t iden
                                     const char *role, size_t *temporary, Buffer *prelude,
                                     int depth);
 char *f2c_call_result_character_length(Unit *unit, const F2cExpr *expression);
+char *f2c_call_emit_actual_address(Unit *unit, const F2cExpr *actual, const char *code,
+                                   int *supported);
+char *f2c_call_bound_expression(Unit *unit, const F2cExpr *expression, int *supported);
 
 #endif
