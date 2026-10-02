@@ -1,6 +1,7 @@
 #include "codegen/unit/private.h"
 
 #include "codegen/literal/real.h"
+#include "codegen/type/initialization.h"
 
 #include <inttypes.h>
 #include <stdint.h>
@@ -225,6 +226,8 @@ static char *numeric_array_constructor_initializer(Unit *unit, const Symbol *sym
 char *f2c_unit_static_storage_initializer(Unit *unit, const Symbol *symbol) {
     if (unit == NULL || symbol == NULL)
         return NULL;
+    if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL)
+        return f2c_derived_entity_initializer(unit, symbol);
     if (symbol->type == TYPE_CHARACTER) {
         if (symbol->rank != 0U && symbol->data_element_initializers != NULL)
             return character_data_array_initializer(unit, symbol);
