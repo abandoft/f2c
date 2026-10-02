@@ -218,9 +218,10 @@ int f2c_transform_materialize_array(Context *context, Unit *unit, TransformArray
                           role, count_name.data, role);
         f2c_transform_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
-                          "char *%s = (char *)malloc(f2c_transform_%s_bytes == 0U "
+                          "char *%s = (char *)malloc(%s == 0U || "
+                          "f2c_transform_%s_element_length == 0U "
                           "? 1U : f2c_transform_%s_bytes);\n",
-                          pointer_name.data, role, role);
+                          pointer_name.data, count_name.data, role, role);
     } else if (array->type == TYPE_DERIVED) {
         const char *element_type = array->derived_type->c_name;
         f2c_buffer_printf(&context->output, "if (%s > SIZE_MAX / sizeof(%s)) abort();\n",
