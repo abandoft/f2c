@@ -90,66 +90,6 @@ char *f2c_emit_unaligned_designator_address(Unit *unit, const F2cExpr *expressio
     return result;
 }
 
-static char *emit_substring(Unit *unit, const F2cExpr *expression, int *supported) {
-    const F2cExpr *selector;
-    const F2cExpr *lower_expression;
-    const F2cExpr *upper_expression;
-    char *lower;
-    char *upper = NULL;
-    char *declared_length = NULL;
-    Buffer result = {0};
-    if (expression->symbol == NULL || expression->child_count != 1U) {
-        *supported = 0;
-        return NULL;
-    }
-    selector = expression->children[0];
-    if (selector->kind == F2C_EXPR_ARRAY_SECTION) {
-        if (selector->child_count < 2U) {
-            *supported = 0;
-            return NULL;
-        }
-        lower_expression =
-            selector->children[0]->kind == F2C_EXPR_INVALID ? NULL : selector->children[0];
-        upper_expression = selector->children[1];
-    } else {
-        lower_expression = selector;
-        upper_expression = NULL;
-    }
-    lower = lower_expression != NULL ? f2c_expression_emit(unit, lower_expression, supported)
-                                     : f2c_strdup("1");
-    if (!*supported || lower == NULL)
-        return NULL;
-    if (upper_expression != NULL && upper_expression->kind != F2C_EXPR_INVALID)
-        upper = f2c_expression_emit(unit, upper_expression, supported);
-    if (upper == NULL && selector->kind == F2C_EXPR_ARRAY_SECTION)
-        upper = f2c_symbol_character_length(unit, expression->symbol);
-    else if (upper == NULL)
-        upper = f2c_strdup(lower);
-    declared_length = f2c_symbol_character_length(unit, expression->symbol);
-    if (!*supported || upper == NULL || declared_length == NULL) {
-        free(lower);
-        free(upper);
-        free(declared_length);
-        return NULL;
-    }
-    if (selector->kind == F2C_EXPR_ARRAY_SECTION)
-        f2c_buffer_printf(&result,
-                          "(&%s[f2c_substring_offset((size_t)(%s), (int64_t)(%s), "
-                          "(int64_t)(%s))])",
-                          f2c_symbol_c_name(unit, expression->symbol), declared_length, lower,
-                          upper);
-    else
-        f2c_buffer_printf(&result,
-                          "%s[f2c_substring_offset((size_t)(%s), (int64_t)(%s), "
-                          "(int64_t)(%s))]",
-                          f2c_symbol_c_name(unit, expression->symbol), declared_length, lower,
-                          upper);
-    free(lower);
-    free(upper);
-    free(declared_length);
-    return f2c_buffer_take(&result);
-}
-
 static char *emit_array_constructor(Unit *unit, const F2cExpr *expression, int *supported) {
     char **elements = NULL;
     Type *types = NULL;
@@ -410,7 +350,7 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
     case F2C_EXPR_ARRAY_REFERENCE:
         return f2c_expression_emit_array_reference(unit, expression, supported);
     case F2C_EXPR_SUBSTRING:
-        return emit_substring(unit, expression, supported);
+        return f2c_expression_emit_substring(unit, expression, supported);
     case F2C_EXPR_COMPLEX_LITERAL:
         left = f2c_expression_emit(unit, expression->children[0], supported);
         right = *supported ? f2c_expression_emit(unit, expression->children[1], supported) : NULL;

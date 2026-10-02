@@ -624,8 +624,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
         f2c_buffer_append(
             &context.output,
             "static inline F2C_UNUSED size_t f2c_substring_offset(size_t length, int64_t lower, "
-            "int64_t upper) { if (lower < 1 || (upper > 0 && (uint64_t)upper > "
-            "(uint64_t)length) || (lower > upper && lower - 1 != upper)) abort(); return "
+            "int64_t upper) { if (lower > upper) return 0U; if (lower < 1 || upper < 1 || "
+            "(uint64_t)upper > (uint64_t)length) abort(); return "
             "(size_t)(lower - 1); }\n"
             "static inline F2C_UNUSED size_t f2c_substring_length(size_t length, int64_t lower, "
             "int64_t upper) { (void)f2c_substring_offset(length, lower, upper); return upper >= "

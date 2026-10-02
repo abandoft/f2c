@@ -2,6 +2,7 @@
 #define F2C_CODEGEN_EXPRESSION_PRIVATE_H
 
 #include "internal/f2c.h"
+char *f2c_expression_emit_substring(Unit *unit, const F2cExpr *expression, int *supported);
 
 char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_emit_array_reference(Unit *unit, const F2cExpr *expression, int *supported);
@@ -41,6 +42,7 @@ int f2c_expression_array_view(Unit *unit, const F2cExpr *array, char **pointer, 
                               char **stride, int *supported);
 char *f2c_expression_relation_reduction(Unit *unit, const F2cExpr *expression, int *supported,
                                         int *matched);
+int f2c_expression_direct_relation_reduction(const F2cExpr *expression);
 char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_statement_function(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_transfer_intrinsic(Unit *unit, const F2cExpr *expression, int *supported);
