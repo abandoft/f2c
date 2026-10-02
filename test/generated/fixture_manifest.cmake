@@ -90,6 +90,8 @@ set(
     statement_function
     statement_function_single_eval
     host_association
+    scope_association
+    scope_storage_bindings
     host_dynamic_association
     do_semantics
     data_statement

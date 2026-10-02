@@ -696,6 +696,11 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_host_association_tests)
     add_test(NAME host_association_semantics COMMAND f2c_host_association_tests)
 
+    add_executable(f2c_scope_association_tests test/test_scope_association.c)
+    target_include_directories(f2c_scope_association_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_scope_association_tests)
+    add_test(NAME scope_association_semantics COMMAND f2c_scope_association_tests)
+
     add_executable(f2c_pointer_association_tests test/test_pointer_association.c)
     f2c_configure_test_target(f2c_pointer_association_tests)
     add_test(NAME pointer_association_semantics COMMAND f2c_pointer_association_tests)
@@ -1008,6 +1013,16 @@ if(F2C_BUILD_TESTING)
                         FC=${F2C_GFORTRAN_EXECUTABLE}
                         ${F2C_SH_EXECUTABLE}
                         ${CMAKE_CURRENT_SOURCE_DIR}/test/host_dynamic_association_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
+                add_test(
+                    NAME scope_association_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/scope_association_differential.sh
                         $<TARGET_FILE:f2c>
                 )
                 add_test(

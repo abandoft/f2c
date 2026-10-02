@@ -92,6 +92,12 @@ foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
     if(CONTENT MATCHES "netlib-f2c")
         message(FATAL_ERROR "${RELATIVE_FILE} references the archived netlib-f2c tree")
     endif()
+    if(
+        RELATIVE_FILE MATCHES "^src/ast/declaration/(bindings|storage_bindings)\\.c$"
+        AND CONTENT MATCHES "f2c_(ensure_symbol|find_symbol|diagnostic|parse_expression)"
+    )
+        message(FATAL_ERROR "${RELATIVE_FILE} mixes pure declaration binding syntax with semantics")
+    endif()
     if(CONTENT MATCHES "f2c_validation_bind_intrinsic_arguments[ \t\r\n]*\\(")
         message(
             FATAL_ERROR
@@ -405,9 +411,11 @@ if(
             "defined assignment must lower through typed generic resolution")
 endif()
 if(
-    NOT SEMANTIC_MODEL MATCHES "int[ \t]+use_associated"
-    OR NOT USE_LOWERING MATCHES "use_associated[ \t]*=[ \t]*1"
-    OR NOT MODULE_CODEGEN MATCHES "symbol->external[ \t]*\\|\\|[ \t]*symbol->use_associated"
+    NOT SEMANTIC_MODEL MATCHES "F2cNameAssociation[ \t]+association"
+    OR NOT SEMANTIC_MODEL MATCHES "size_t[ \t]+declaration_scope_id"
+    OR NOT USE_LOWERING MATCHES "association[ \t]*=[ \t]*association"
+    OR NOT USE_LOWERING MATCHES "F2C_ASSOCIATION_USE"
+    OR NOT MODULE_CODEGEN MATCHES "symbol->external[ \t]*\\|\\|[ \t]*symbol->association[ \t]*!=[ \t]*F2C_ASSOCIATION_LOCAL"
 )
     message(FATAL_ERROR
             "USE-associated module entities must preserve provider storage ownership")
