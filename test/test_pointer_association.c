@@ -139,6 +139,27 @@ static void test_array_pointer_component_lowering(void) {
 }
 
 static void test_invalid_targets(void) {
+    expect_failure("program vector_component\n"
+                   "  type :: record_t\n"
+                   "    character(4) :: label\n"
+                   "  end type\n"
+                   "  type(record_t), target :: records(2)\n"
+                   "  integer :: indices(2)\n"
+                   "  character(4), pointer :: values(:)\n"
+                   "  values => records(indices)%label\n"
+                   "end program\n",
+                   "pointer-assignment target cannot have a vector subscript",
+                   "component targets retain vector-subscript restrictions from their parent");
+    expect_failure("program component_without_target\n"
+                   "  type :: record_t\n"
+                   "    character(4) :: label\n"
+                   "  end type\n"
+                   "  type(record_t) :: record\n"
+                   "  character(:), pointer :: value\n"
+                   "  value => record%label(1:2)\n"
+                   "end program\n",
+                   "must designate a TARGET or POINTER object",
+                   "ordinary components do not acquire a spurious TARGET attribute");
     static const char vector_subscript[] = "program vector_target\n"
                                            "  integer, target :: target_value(4)\n"
                                            "  integer, pointer :: pointer_value(:)\n"

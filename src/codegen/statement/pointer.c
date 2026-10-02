@@ -362,6 +362,7 @@ static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
     }
     if (!null_target && target_expression != NULL && target_expression->rank == 0U &&
         (target_expression->kind == F2C_EXPR_ARRAY_REFERENCE ||
+         target_expression->kind == F2C_EXPR_SUBSTRING ||
          (target_expression->kind == F2C_EXPR_COMPONENT && target_expression->child_count > 1U)))
         target_code = f2c_emit_statement_expression(context, unit, target_expression, line);
     if (!null_target && !emit_character_length_check(context, unit, statement->left->symbol,
@@ -376,7 +377,9 @@ static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
         f2c_buffer_printf(&context->output, "%s = NULL;\n", pointer_name);
     } else if (target_code != NULL) {
         Buffer target_address = {0};
-        f2c_buffer_printf(&target_address, "&(%s)", target_code);
+        f2c_buffer_printf(&target_address, "%s%s%s",
+                          target_expression->kind == F2C_EXPR_SUBSTRING ? "" : "&(", target_code,
+                          target_expression->kind == F2C_EXPR_SUBSTRING ? "" : ")");
         emit_scalar_pointer_store(context, statement, pointer_name, target_address.data, depth);
         free(target_address.data);
     } else if (target_expression != NULL && target_expression->kind == F2C_EXPR_COMPONENT) {
@@ -506,11 +509,50 @@ int f2c_emit_nullify_statement(Context *context, Unit *unit, const F2cStatement 
     return 1;
 }
 
+static int emit_prepared_pointer_assignment(Context *context, Unit *unit,
+                                            const F2cStatement *statement, size_t line, int depth) {
+    const size_t output_start = context->output.length;
+    F2cPreparedStatementExpression left = {0};
+    F2cPreparedStatementExpression right = {0};
+    F2cStatement prepared = *statement;
+    int emitted = 0;
+    if (!f2c_prepare_statement_expression(context, unit, statement, statement->left, "pointer_left",
+                                          line, depth + 1, &left) ||
+        !f2c_prepare_statement_expression(context, unit, statement, statement->right,
+                                          "pointer_right", line, depth + 1, &right))
+        goto cleanup;
+    prepared.left = (F2cExpr *)left.expression;
+    prepared.right = (F2cExpr *)right.expression;
+    indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "{\n");
+    f2c_buffer_append(&context->output, left.prelude.data != NULL ? left.prelude.data : "");
+    f2c_buffer_append(&context->output, right.prelude.data != NULL ? right.prelude.data : "");
+    if (!f2c_emit_pointer_assignment_statement(context, unit, &prepared, line, depth + 1)) {
+        context->output.length = output_start;
+        if (context->output.data != NULL)
+            context->output.data[output_start] = '\0';
+        goto cleanup;
+    }
+    (void)f2c_array_cleanup_emit(&context->output, unit, &right.cleanup);
+    (void)f2c_array_cleanup_emit(&context->output, unit, &left.cleanup);
+    indent(&context->output, depth);
+    f2c_buffer_append(&context->output, "}\n");
+    emitted = 1;
+cleanup:
+    f2c_release_statement_expression(&right);
+    f2c_release_statement_expression(&left);
+    return emitted;
+}
+
 int f2c_emit_pointer_assignment_statement(Context *context, Unit *unit,
                                           const F2cStatement *statement, size_t line, int depth) {
     Symbol *pointer = statement->left != NULL ? statement->left->symbol : NULL;
     Symbol *target = statement->right != NULL ? statement->right->symbol : NULL;
     const int null_target = null_pointer_value(statement->right);
+    if (pointer != NULL && pointer->pointer && pointer->rank == 0U &&
+        (f2c_array_contains_unmaterialized_value(unit, statement->left) ||
+         f2c_array_contains_unmaterialized_value(unit, statement->right)))
+        return emit_prepared_pointer_assignment(context, unit, statement, line, depth);
     if (pointer != NULL && pointer->procedure_pointer) {
         char *pointer_name = f2c_emit_statement_expression(context, unit, statement->left, line);
         if (pointer_name == NULL)
