@@ -272,6 +272,8 @@
   非平凡标量实参会在长度计算和调用之前只求值一次；可定义标量实参仍保留原对象地址，
   带副作用的规格函数实参及 `INTENT(INOUT)` 标量数组元素/派生组件写回已有原生差分，标量组件
   覆盖 INTEGER、REAL、COMPLEX 和 LOGICAL；过程指针组件作为实参保留函数指针值和完整接口检查。
+  组件数值赋值使用带目标 C 类型的共享转换入口，复数结构体表示不再使用非法 cast，跨复数 kind
+  及复数到宽 INTEGER 目标不会先截断到默认整数 kind。
 - [ ] 把字符长度、逐维 shape、实体属性、别名限制和嵌套过程签名纳入
   项目级接口兼容检查。当前过程签名已集中保存参数 type/kind/rank、逐维 shape、常量字符长度、
   `INTENT/OPTIONAL/ALLOCATABLE/POINTER/CONTIGUOUS/TARGET/VALUE/ASYNCHRONOUS/VOLATILE`、描述符、
