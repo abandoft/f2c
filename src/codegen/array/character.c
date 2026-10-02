@@ -51,7 +51,7 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output,
                       "char *f2c_whole_values = f2c_whole_count == 0U ? NULL : "
-                      "(char *)malloc(f2c_whole_bytes == 0U ? 1U : f2c_whole_bytes);\n");
+                      "(char *)malloc(f2c_whole_length == 0U ? 1U : f2c_whole_bytes);\n");
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output,
                       "if (f2c_whole_count != 0U && f2c_whole_values == NULL) abort();\n");
