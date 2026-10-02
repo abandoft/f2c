@@ -62,6 +62,28 @@ static int check_malformed_where(void) {
     return 1;
 }
 
+static int check_oversized_broadcast(void) {
+    static const char *const cases[] = {
+        "prog :: valu\nend\nmodule larg\n"
+        " integer :: values(0073401155) = 1\n end type\nend module\n",
+        "module large_default\n type :: data\n"
+        " integer :: values(0073401155) = 1\n end type\nend module\n"};
+    const F2cOptions options = {"oversized-broadcast.f90", F2C_SOURCE_FREE, 0};
+    size_t index;
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        F2cResult result = f2c_transpile(cases[index], strlen(cases[index]), &options);
+        const int valid = result.code == NULL && result.error_count != 0U &&
+                          result.diagnostics != NULL &&
+                          strstr(result.diagnostics, "step limit") != NULL;
+        f2c_result_free(&result);
+        if (!valid) {
+            fputs("oversized static broadcast must fail before expansion\n", stderr);
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int main(void) {
     static const char *const seeds[] = {
         "program p\ninteger :: i\ndo i=1,3\nprint *, i\nend do\nend program p\n",
@@ -72,7 +94,7 @@ int main(void) {
     F2cOptions options = {"fuzz.f90", F2C_SOURCE_FREE, 0};
     uint32_t state = UINT32_C(0x9e3779b9);
     size_t seed_index;
-    if (!check_malformed_where())
+    if (!check_malformed_where() || !check_oversized_broadcast())
         return EXIT_FAILURE;
     for (seed_index = 0U; seed_index < sizeof(seeds) / sizeof(seeds[0]); ++seed_index) {
         int iteration;
