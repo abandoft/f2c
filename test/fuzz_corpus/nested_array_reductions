@@ -1,0 +1,10 @@
+program nested_array_reductions
+  implicit none
+  real(8) :: values(3), reference
+  integer :: matrix(2,3)
+  values = [3.5d0,3.5d0,-4.25d0]
+  reference = 1.0d0
+  if (any(abs(values-[3.5d0,3.5d0,-4.25d0]) > epsilon(reference))) stop 1
+  matrix = reshape([1,2,3,4,5,6],[2,3])
+  if (any(shape(matrix) /= [2,3])) stop 2
+end program

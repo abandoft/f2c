@@ -1,0 +1,12 @@
+program character_designators
+  implicit none
+  character(8), target :: records(-1:1)
+  character(:), pointer :: view
+  character(5), parameter :: prefix = 'abcdef'(2:6)
+  records = 'abcdefgh'
+  records(-1:0)(2:5) = records(0:1)(4:7)
+  view => records(0)(2:5)
+  view = prefix(:4)
+  if (len(records(1)(100:-100)) /= 0) stop 1
+  nullify(view)
+end program
