@@ -380,6 +380,12 @@ static void test_program_and_control_flow(void) {
                     "generated source defaults to reproducible floating-point evaluation");
     expect_contains(result.code, "#define F2C_LOOP_UNROLL",
                     "generated source defines a portable loop optimization hint");
+    expect_contains(result.code, "clang loop unroll_count(4)",
+                    "LLVM retains the established loop backend policy");
+    expect_not_contains(result.code, "GCC unroll",
+                        "GCC chooses loop expansion through its target cost model");
+    expect_contains(result.code, "#if !defined(F2C_LOOP_UNROLL)",
+                    "explicit loop backend overrides remain independently selectable");
     expect_contains(result.code, "__STDC_VERSION__ < 201710L",
                     "generated source rejects pre-C17 compilation modes");
     expect_contains(result.code, "int main(void)", "PROGRAM maps to C main");
