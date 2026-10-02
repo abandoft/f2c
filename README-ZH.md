@@ -131,6 +131,10 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
   以及已支持控制流路径上的构造作用域终结；
 - 长度感知的字符赋值与比较、子串、数组、延迟长度、函数结果及验证语料使用的 gfortran 兼容
   尾随长度 ABI；
+- 使用显式母对象的字符数组元素、数组段和组件子串，覆盖重叠安全写入、指针别名、常量补齐及
+  边界单次求值；
+- 已测试的构造器、elemental、数组查询及归约嵌套表达式，普通数组/标量比较仍使用无临时分配
+  的直接归约路径；
 - 结构化/旧式控制流、格式化和列表导向 I/O、内部文件、非前进 I/O、定义 I/O，以及文档化路径上的
   递归 NAMELIST；
 - 统一的 `DECIMAL/ROUND/SIGN/DELIM` 作用域、感知 binary32/64 的精确输入舍入、列表导向字符

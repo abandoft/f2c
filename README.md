@@ -146,6 +146,10 @@ The currently tested implementation includes:
   `FINAL` procedures, and construct-scope finalization on supported control-flow paths;
 - length-aware CHARACTER assignment and comparison, substrings, arrays, deferred lengths, function
   results, and the gfortran-compatible trailing-length ABI used by the validation corpus;
+- explicit-parent CHARACTER designators for array-element, section, and component substrings;
+  tested overlap-safe writes, pointer aliases, constant padding, and single-evaluation bounds;
+- nested constructor, elemental, inquiry, and reduction expressions on the tested typed-lowering
+  paths, with allocation-free direct reductions retained for simple array/scalar comparisons;
 - structured and legacy control flow, formatted and list-directed I/O, internal files, nonadvancing
   I/O, defined I/O, and recursive NAMELIST handling on the documented paths;
 - shared `DECIMAL/ROUND/SIGN/DELIM` scopes, binary32/64-aware exact input rounding, escaped
