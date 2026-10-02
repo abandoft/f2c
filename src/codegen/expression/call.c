@@ -71,8 +71,11 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
         f2c_buffer_printf(&result, "&(%s)", code);
         return f2c_buffer_take(&result);
     }
-    if (f2c_lowering_code(unit, actual) != NULL)
-        return f2c_strdup(code);
+    if (f2c_lowering_code(unit, actual) != NULL) {
+        if (actual->rank != 0U || actual->type == TYPE_CHARACTER || actual->type == TYPE_DERIVED)
+            return f2c_strdup(code);
+        return f2c_emit_scalar_temporary_address(f2c_expression_c_type(actual), actual->type, code);
+    }
     if (actual->kind == F2C_EXPR_NAME && symbol != NULL) {
         if (symbol->parameter) {
             if (symbol->type == TYPE_CHARACTER)
