@@ -149,7 +149,8 @@ The currently tested implementation includes:
 - explicit-parent CHARACTER designators for array-element, section, and component substrings;
   tested overlap-safe writes, pointer aliases, constant padding, and single-evaluation bounds;
 - tested character substring copy-in/copy-out for ordinary subroutine and scalar-result function
-  arguments, with procedure-scoped typed character result-length specifications;
+  arguments, with procedure-scoped typed character result-length specifications, normalized negative
+  declared lengths, checked target-width conversions, and scalar-broadcast length reallocation;
 - nested constructor, elemental, inquiry, and reduction expressions on the tested typed-lowering
   paths, including statement-owned snapshots of component arrays and noncontiguous reduction
   operands; allocation-free direct reductions remain for simple array/scalar comparisons;
