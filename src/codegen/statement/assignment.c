@@ -30,7 +30,7 @@ static int emit_derived_assignment(Context *context, const F2cStatement *stateme
         f2c_buffer_printf(&context->output, "{ %s f2c_assignment_temporary = %s;\n",
                           statement->right->derived_type->c_name, right);
         indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "f2c_initialize_%s(&f2c_assignment_temporary);\n",
+        f2c_buffer_printf(&context->output, "f2c_refresh_%s(&f2c_assignment_temporary);\n",
                           statement->right->derived_type->c_name);
         indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output, "f2c_copy_%s(&(%s), &f2c_assignment_temporary);\n",
