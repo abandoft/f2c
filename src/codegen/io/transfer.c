@@ -291,6 +291,9 @@ int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStateme
                           "f2c_io_stream *f2c_io_file = f2c_io_status == F2C_IO_STATUS_OK ? "
                           "f2c_io_transfer_state.stream : NULL;\n");
     }
+    if (formatted && !f2c_io_emit_transfer_controls(context, unit, statement, "f2c_io_file",
+                                                    "f2c_io_unit", "f2c_io_status", depth))
+        goto cleanup;
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "if (f2c_io_status == F2C_IO_STATUS_OK) {\n");
     ++depth;
@@ -317,6 +320,10 @@ int f2c_emit_read_write_statement(Context *context, Unit *unit, const F2cStateme
     --depth;
     f2c_io_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
+    if (formatted) {
+        f2c_io_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "f2c_io_leave_controls(&f2c_io_control_state);\n");
+    }
     if (internal_file) {
         f2c_io_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "f2c_unregister_internal_unit(f2c_internal_unit);\n");

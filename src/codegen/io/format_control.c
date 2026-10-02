@@ -3,38 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct F2cEmittedFormatControls {
-    F2cEmittedCharacterControl decimal;
-    F2cEmittedCharacterControl round;
-    F2cEmittedCharacterControl sign;
-    int has_decimal;
-    int has_round;
-    int has_sign;
-} F2cEmittedFormatControls;
-
-static void free_format_controls(F2cEmittedFormatControls *controls) {
-    f2c_io_free_character_control(&controls->decimal);
-    f2c_io_free_character_control(&controls->round);
-    f2c_io_free_character_control(&controls->sign);
-}
-
-static int emit_optional_format_control(Unit *unit, const F2cStatement *statement,
-                                        F2cIoControlKind kind, F2cEmittedCharacterControl *control,
-                                        int *present) {
-    *present = f2c_io_control(statement, kind, (size_t)-1) != NULL;
-    return !*present || f2c_io_emit_character_control(unit, statement, kind, NULL, NULL, control);
-}
-
-static int emit_format_controls(Unit *unit, const F2cStatement *statement,
-                                F2cEmittedFormatControls *controls) {
-    return emit_optional_format_control(unit, statement, F2C_IO_CONTROL_DECIMAL, &controls->decimal,
-                                        &controls->has_decimal) &&
-           emit_optional_format_control(unit, statement, F2C_IO_CONTROL_ROUND, &controls->round,
-                                        &controls->has_round) &&
-           emit_optional_format_control(unit, statement, F2C_IO_CONTROL_SIGN, &controls->sign,
-                                        &controls->has_sign);
-}
-
 static const F2cStatement *find_format_statement(const Unit *unit, const char *label) {
     size_t index;
     if (unit == NULL || label == NULL)
@@ -174,7 +142,6 @@ int f2c_io_emit_formatted_transfer(Context *context, Unit *unit, const F2cStatem
     char *format_pointer = NULL;
     char *format_length_expression = NULL;
     char *program_name = NULL;
-    F2cEmittedFormatControls controls = {0};
     size_t index;
     int assigned_format;
     int constant_format;
@@ -200,11 +167,6 @@ int f2c_io_emit_formatted_transfer(Context *context, Unit *unit, const F2cStatem
         (format_pointer == NULL || format_length_expression == NULL)) {
         f2c_diagnostic(context, statement->line, 1,
                        "FORMAT label or CHARACTER expression could not be resolved");
-        goto cleanup;
-    }
-    if (!emit_format_controls(unit, statement, &controls)) {
-        f2c_diagnostic(context, statement->line, 1,
-                       "formatted I/O control expressions could not be resolved");
         goto cleanup;
     }
     f2c_io_indent(&context->output, depth);
@@ -247,17 +209,6 @@ int f2c_io_emit_formatted_transfer(Context *context, Unit *unit, const F2cStatem
     f2c_buffer_printf(&context->output,
                       "f2c_format_apply_unit_controls(&f2c_io_format, (int32_t)(%s));\n",
                       unit_number);
-    f2c_io_indent(&context->output, depth);
-    f2c_buffer_printf(
-        &context->output,
-        "(void)f2c_format_apply_statement_controls(&f2c_io_format, %s, (size_t)(%s), %s, "
-        "(size_t)(%s), %s, (size_t)(%s));\n",
-        controls.has_decimal ? controls.decimal.pointer : "NULL",
-        controls.has_decimal ? controls.decimal.length : "0U",
-        controls.has_round ? controls.round.pointer : "NULL",
-        controls.has_round ? controls.round.length : "0U",
-        controls.has_sign ? controls.sign.pointer : "NULL",
-        controls.has_sign ? controls.sign.length : "0U");
     for (index = 0U; index < statement->io_item_count; ++index)
         f2c_io_emit_formatted_item(context, unit, &statement->io_items[index], input, unit_number,
                                    depth);
@@ -286,6 +237,5 @@ cleanup:
     free(format_pointer);
     free(format_length_expression);
     free(program_name);
-    free_format_controls(&controls);
     return result;
 }

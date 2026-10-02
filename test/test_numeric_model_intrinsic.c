@@ -92,10 +92,10 @@ static void test_valid_contracts(void) {
     expect(result.code != NULL && result.error_count == 0U,
            "valid numeric model intrinsic contracts produce typed C17 IR");
     expect(result.code != NULL &&
-               strstr(result.code, "F2C_WRITE(f2c_unit_stream(6, false), (INT8_MAX))") != NULL,
+               strstr(result.code, "F2C_WRITE(f2c_print_file, (INT8_MAX))") != NULL,
            "INTEGER(1) HUGE lowers to its exact-width C17 model constant");
     expect(result.code != NULL &&
-               strstr(result.code, "F2C_WRITE(f2c_unit_stream(6, false), (FLT_EPSILON))") != NULL,
+               strstr(result.code, "F2C_WRITE(f2c_print_file, (FLT_EPSILON))") != NULL,
            "REAL(4) EPSILON lowers to the binary32 C17 model constant");
     expect(result.code != NULL && strstr(result.code, "_Generic((i1)") == NULL &&
                strstr(result.code, "_Generic((r4)") == NULL,
@@ -121,7 +121,7 @@ static void test_inquiry_arguments_are_not_evaluated(void) {
     expect(result.code != NULL && strstr(result.code, "f2c_ordered_argument_") == NULL,
            "numeric inquiry arguments do not allocate unused ordering temporaries");
     expect(result.code != NULL &&
-               strstr(result.code, "F2C_WRITE(f2c_unit_stream(6, false), (INT32_MAX))") != NULL,
+               strstr(result.code, "F2C_WRITE(f2c_print_file, (INT32_MAX))") != NULL,
            "INTEGER(4) HUGE remains an integer model constant");
     f2c_result_free(&result);
 }

@@ -106,8 +106,8 @@ static void test_file_control_codegen(void) {
                     "OPEN lowers every connection property through the file-unit model");
     expect_contains(result.code, "\"comma\", (size_t)(5U), \"up\", (size_t)(2U), \"plus\"",
                     "OPEN lowers DECIMAL, ROUND, and SIGN connection defaults");
-    expect_contains(result.code, "f2c_format_apply_statement_controls",
-                    "formatted transfers apply statement-level DECIMAL, ROUND, and SIGN values");
+    expect_contains(result.code, "f2c_io_enter_controls",
+                    "formatted transfers scope statement-level DECIMAL, ROUND, and SIGN values");
     expect_contains(result.code, "size_t expected_length = strlen(expected)",
                     "dynamic file-control options compare against bounded literal lengths");
     expect_contains(result.code, "f2c_backspace_unit",
@@ -192,12 +192,12 @@ static void test_print_codegen(void) {
                     "PRINT character literals lower to immutable FORMAT programs");
     expect_contains(result.code,
                     "f2c_format_initialize_program(&f2c_io_format, "
-                    "f2c_unit_stream(6, false), "
+                    "f2c_print_file, "
                     "f2c_io_format_program_6",
                     "PRINT character literals bypass runtime FORMAT text parsing");
     expect_contains(result.code,
                     "f2c_format_initialize_program(&f2c_io_format, "
-                    "f2c_unit_stream(6, false), "
+                    "f2c_print_file, "
                     "f2c_io_format_program_7",
                     "PRINT statement labels use their bound structured FORMAT program");
     expect_contains(result.code, "runtime_format, (size_t)(16)",

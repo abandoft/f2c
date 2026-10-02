@@ -4,6 +4,9 @@
 #include "internal/f2c.h"
 
 void f2c_io_indent(Buffer *output, int depth);
+int f2c_io_emit_transfer_controls(Context *context, Unit *unit, const F2cStatement *statement,
+                                  const char *stream, const char *unit_number, const char *status,
+                                  int depth);
 char *f2c_io_emit_item_expression(Unit *unit, const F2cIoItem *item);
 char *f2c_io_emit_required_expression(Unit *unit, const F2cExpr *expression);
 int f2c_io_begin_unaligned_input(Context *context, Unit *unit, const F2cIoItem *item, int depth,
@@ -16,6 +19,7 @@ void f2c_io_emit_format_program_support(Context *context);
 void f2c_io_emit_format_text_parser_support(Context *context);
 void f2c_io_emit_format_round_support(Context *context);
 void f2c_io_emit_format_real_support(Context *context);
+void f2c_io_emit_format_integer_support(Context *context);
 int f2c_io_emit_format_program(Context *context, const F2cFormat *format, const char *name,
                                int depth);
 F2cTypeBinding *f2c_io_defined_binding(F2cDerivedType *derived, F2cDefinedIoKind kind);
