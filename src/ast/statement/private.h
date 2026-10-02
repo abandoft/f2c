@@ -2,6 +2,7 @@
 #define F2C_AST_STATEMENT_PRIVATE_H
 
 #include "internal/f2c.h"
+F2cStatementKind f2c_statement_classify_assignment(Unit *unit, const Line *line, size_t begin);
 
 int f2c_statement_parse_data(Unit *unit, const Line *line, size_t body_start,
                              F2cStatement *statement);

@@ -41,12 +41,16 @@ static void set_statement_span(const Line *line, F2cStatement *statement) {
     statement->span.end.column = 1U;
 }
 
-static F2cStatementKind classify_tokens(const Line *line, size_t begin) {
+static F2cStatementKind classify_tokens(Unit *unit, const Line *line, size_t begin) {
     size_t index;
+    F2cStatementKind assignment;
     if (begin >= line->token_count)
         return F2C_STMT_EMPTY;
     if (line->tokens[begin].kind == F2C_TOKEN_NUMBER)
         return begin == 0U ? F2C_STMT_LABEL : F2C_STMT_INVALID;
+    assignment = f2c_statement_classify_assignment(unit, line, begin);
+    if (assignment != F2C_STMT_INVALID)
+        return assignment;
     if (token_words(line, begin, "type", "is") || token_words(line, begin, "class", "is") ||
         token_words(line, begin, "class", "default"))
         return F2C_STMT_TYPE_GUARD;
@@ -210,7 +214,8 @@ static int parse_statement(Unit *unit, const char *text, size_t line, F2cStateme
     if (!f2c_statement_parse_construct_syntax(token_line, body_start, statement)) {
         return 0;
     }
-    if (statement->kind == F2C_STMT_INVALID &&
+    if ((statement->kind == F2C_STMT_INVALID || statement->kind == F2C_STMT_ASSIGNMENT ||
+         statement->kind == F2C_STMT_POINTER_ASSIGNMENT) &&
         !f2c_statement_parse_assignment(unit, token_line, body_start, statement))
         return 0;
     return 1;
@@ -239,8 +244,8 @@ int f2c_statement_parse_nested_tokens(Unit *unit, const Line *line, size_t begin
     view.token_count -= begin;
     view.number = view.tokens[0].span.begin.line;
     body_start = statement_body_start(&view);
-    if (!parse_statement(unit, text, view.number, nested, classify_tokens(&view, body_start), &view,
-                         body_start)) {
+    if (!parse_statement(unit, text, view.number, nested, classify_tokens(unit, &view, body_start),
+                         &view, body_start)) {
         f2c_statement_free(nested);
         free(nested);
         free(text);
@@ -259,8 +264,9 @@ int f2c_parse_statement(Unit *unit, const char *text, size_t line, F2cStatement 
     if (!f2c_statement_tokenize_transient(text != NULL ? text : "", line, &token_line))
         return 0;
     body_start = statement_body_start(&token_line);
-    result = parse_statement(unit, text, line, statement, classify_tokens(&token_line, body_start),
-                             &token_line, body_start);
+    result =
+        parse_statement(unit, text, line, statement, classify_tokens(unit, &token_line, body_start),
+                        &token_line, body_start);
     if (result)
         set_statement_span(&token_line, statement);
     f2c_statement_release_transient(&token_line);
@@ -278,7 +284,7 @@ int f2c_parse_statement_tokens(Unit *unit, const Line *line, F2cStatement *state
     }
     body_start = statement_body_start(line);
     if (!parse_statement(unit, line->text, line->number, statement,
-                         classify_tokens(line, body_start), line, body_start))
+                         classify_tokens(unit, line, body_start), line, body_start))
         return 0;
     set_statement_span(line, statement);
     return 1;

@@ -2,6 +2,40 @@
 
 #include <stdlib.h>
 
+F2cStatementKind f2c_statement_classify_assignment(Unit *unit, const Line *line, size_t begin) {
+    size_t cursor = begin;
+    if (line == NULL || cursor >= line->token_count ||
+        line->tokens[cursor].kind != F2C_TOKEN_IDENTIFIER)
+        return F2C_STMT_INVALID;
+    ++cursor;
+    while (cursor < line->token_count) {
+        const F2cToken *token = &line->tokens[cursor];
+        if (token->kind == F2C_TOKEN_LEFT_PAREN) {
+            size_t close;
+            if (cursor == begin + 1U && unit != NULL) {
+                char *name = f2c_token_text(&line->tokens[begin]);
+                Symbol *symbol = name != NULL ? f2c_find_symbol(unit, name) : NULL;
+                free(name);
+                if (symbol == NULL)
+                    return F2C_STMT_INVALID;
+            }
+            if (!f2c_token_matching_delimiter(line->tokens, line->token_count, cursor, &close))
+                return F2C_STMT_INVALID;
+            cursor = close + 1U;
+        } else if (token->kind == F2C_TOKEN_PERCENT && cursor + 1U < line->token_count &&
+                   line->tokens[cursor + 1U].kind == F2C_TOKEN_IDENTIFIER) {
+            cursor += 2U;
+        } else if (token->kind == F2C_TOKEN_OPERATOR && f2c_token_equals(token, "=")) {
+            return cursor + 1U < line->token_count ? F2C_STMT_ASSIGNMENT : F2C_STMT_INVALID;
+        } else if (token->kind == F2C_TOKEN_OPERATOR && f2c_token_equals(token, "=>")) {
+            return cursor + 1U < line->token_count ? F2C_STMT_POINTER_ASSIGNMENT : F2C_STMT_INVALID;
+        } else {
+            return F2C_STMT_INVALID;
+        }
+    }
+    return F2C_STMT_INVALID;
+}
+
 static int store_assignment(Unit *unit, const Line *line, F2cTokenRange range, size_t equals,
                             F2cStatement *statement) {
     F2cTokenRange left;
