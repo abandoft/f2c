@@ -38,6 +38,9 @@ set(
     vector_subscript
     reduction_intrinsics
     volatile_reductions
+    parenthesized_intrinsic_values
+    parenthesized_values
+    parenthesized_character_values
     transform_intrinsics
     transform_character_derived
     nested_transform_intrinsics
