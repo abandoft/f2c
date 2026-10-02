@@ -204,6 +204,10 @@ set(
     src/core/generated/io.c
     src/core/generated/io/number/input.c
     src/core/generated/list.c
+    src/core/generated/io/list/complex.c
+    src/core/generated/io/list/read.c
+    src/core/generated/io/list/token.c
+    src/core/generated/io/list/write.c
     src/core/generated/mathematical.c
     src/core/generated/model.c
     src/core/generated/numeric.c

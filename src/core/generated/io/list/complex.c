@@ -1,0 +1,36 @@
+#include "core/generated/private.h"
+
+void f2c_emit_list_complex_support(Buffer *output) {
+    f2c_buffer_append(
+        output,
+        "static inline F2C_UNUSED void f2c_write_c(f2c_io_stream *f, f2c_complex_float v) { "
+        "f->list_character = false; (void)f2c_stream_putc(' ', f); (void)f2c_stream_putc('(', f); "
+        "f2c_io_write_real(f, (double)crealf(v), FLT_DECIMAL_DIG); "
+        "(void)f2c_stream_putc(f2c_io_value_separator(f), f); "
+        "f2c_io_write_real(f, (double)cimagf(v), FLT_DECIMAL_DIG); "
+        "(void)f2c_stream_putc(')', f); }\n"
+        "static inline F2C_UNUSED void f2c_write_z(f2c_io_stream *f, f2c_complex_double v) { "
+        "f->list_character = false; (void)f2c_stream_putc(' ', f); (void)f2c_stream_putc('(', f); "
+        "f2c_io_write_real(f, creal(v), DBL_DECIMAL_DIG); "
+        "(void)f2c_stream_putc(f2c_io_value_separator(f), f); "
+        "f2c_io_write_real(f, cimag(v), DBL_DECIMAL_DIG); "
+        "(void)f2c_stream_putc(')', f); }\n"
+        "static inline F2C_UNUSED int f2c_read_complex_parts(f2c_io_stream *f, int kind, "
+        "double *real, double *imaginary) { char *first = NULL, *second = NULL; int c, "
+        "status; do { c = f2c_stream_getc(f); } while (c != EOF && "
+        "(isspace((unsigned char)c) || c == f2c_io_value_separator(f))); if (c != '(') "
+        "return c == EOF ? EOF : 0; status = f2c_io_read_token(f, f2c_io_value_separator(f), "
+        "false, false, &first); if (status == 1 && f2c_stream_getc(f) == "
+        "f2c_io_value_separator(f)) { status = f2c_io_read_token(f, ')', false, false, "
+        "&second); if (status == 1 && f2c_stream_getc(f) == ')') status = "
+        "f2c_io_parse_real(first, f->controls.decimal_comma, kind, f->controls.rounding, "
+        "real) && f2c_io_parse_real(second, f->controls.decimal_comma, kind, "
+        "f->controls.rounding, imaginary); else if (status == 1) status = 0; } else if "
+        "(status == 1) status = 0; free(first); free(second); return status; }\n"
+        "static inline F2C_UNUSED int f2c_read_c(f2c_io_stream *f, f2c_complex_float *v) { "
+        "double real, imaginary; int status = f2c_read_complex_parts(f, 4, &real, &imaginary); "
+        "if (status == 1) *v = f2c_make_c((float)real, (float)imaginary); return status; }\n"
+        "static inline F2C_UNUSED int f2c_read_z(f2c_io_stream *f, f2c_complex_double *v) { "
+        "double real, imaginary; int status = f2c_read_complex_parts(f, 8, &real, &imaginary); "
+        "if (status == 1) *v = f2c_make_z(real, imaginary); return status; }\n");
+}
