@@ -58,6 +58,41 @@ F2cExpr *f2c_expr_new(F2cExprKind kind, Type type, const char *text, size_t leng
     return expression;
 }
 
+const F2cExpr *f2c_expr_value_source(const F2cExpr *expression) {
+    while (expression != NULL && expression->kind == F2C_EXPR_PARENTHESIZED &&
+           expression->child_count == 1U)
+        expression = expression->children[0];
+    return expression;
+}
+
+void f2c_expr_refresh_parenthesized(F2cExpr *expression) {
+    const F2cExpr *value;
+    size_t dimension;
+    if (expression == NULL || expression->kind != F2C_EXPR_PARENTHESIZED ||
+        expression->child_count != 1U || expression->children[0] == NULL)
+        return;
+    value = expression->children[0];
+    expression->type = value->type;
+    expression->type_kind = value->type_kind;
+    expression->rank = value->rank;
+    expression->derived_type = value->derived_type;
+    expression->definable = 0;
+    expression->symbol = NULL;
+    expression->resolved_procedure = NULL;
+    expression->intrinsic = F2C_INTRINSIC_NONE;
+    expression->storage_qualifiers = F2C_STORAGE_UNQUALIFIED;
+    expression->value_category =
+        value->value_category == F2C_VALUE_CONSTANT ? F2C_VALUE_CONSTANT : F2C_VALUE_TEMPORARY;
+    expression->shape = value->shape;
+    expression->shape.rank = value->rank;
+    expression->shape.kind = value->rank == 0U ? F2C_SHAPE_SCALAR : F2C_SHAPE_EXPRESSION;
+    for (dimension = 0U; dimension < value->rank && dimension < F2C_MAX_RANK; ++dimension) {
+        expression->shape.dimensions[dimension].kind = F2C_DIMENSION_EXPLICIT;
+        expression->shape.dimensions[dimension].lower_known = 1;
+        expression->shape.dimensions[dimension].lower = 1;
+    }
+}
+
 F2cExpr *f2c_expr_new_absent(Type type, size_t rank) {
     F2cExpr *expression = f2c_expr_new(F2C_EXPR_ABSENT_ARGUMENT, type, NULL, 0U);
     if (expression != NULL) {

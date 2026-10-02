@@ -12,6 +12,7 @@ typedef enum F2cExprKind {
     F2C_EXPR_STRING_LITERAL,
     F2C_EXPR_LOGICAL_LITERAL,
     F2C_EXPR_NAME,
+    F2C_EXPR_PARENTHESIZED,
     F2C_EXPR_UNARY,
     F2C_EXPR_BINARY,
     F2C_EXPR_CALL,
@@ -95,6 +96,14 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
                                             size_t substitution_count);
 void f2c_expr_free(F2cExpr *expression);
 void f2c_visit_expression(F2cExpr *expression, F2cExpressionVisitor visitor, void *state);
+
+/* PARENTHESIZED owns one data expression. It preserves type and extents, not
+ * object identity, definability or storage attributes. Array value bounds are 1.
+ * Refresh after resolving its child, whose procedure result may change shape. */
+void f2c_expr_refresh_parenthesized(F2cExpr *expression);
+/* Inspect the producing value for constant emission and ownership lowering.
+ * Never use this to recover a variable's attributes, identity or definability. */
+const F2cExpr *f2c_expr_value_source(const F2cExpr *expression);
 
 /* SUBSTRING owns [parent, range]. Range owns [lower, upper, absent-stride].
  * Its rank/shape are those of the parent; bounds are scalar integer expressions.
