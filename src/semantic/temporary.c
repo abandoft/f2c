@@ -1,6 +1,7 @@
 #include "semantic/semantic.h"
 
 #include "internal/f2c.h"
+#include "ir/call.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -259,21 +260,8 @@ static void assign_call_contiguous_actuals(ExpressionTemporaryAssigner *assigner
     const Symbol *procedure = expression->symbol;
     size_t parameter;
     if (procedure != NULL && procedure->type_bound) {
-        const F2cExpr *callee = expression->child_count != 0U ? expression->children[0] : NULL;
-        F2cExpr *passed_object =
-            callee != NULL && callee->kind == F2C_EXPR_COMPONENT && callee->child_count != 0U
-                ? callee->children[0]
-                : NULL;
-        size_t explicit_argument = 1U;
         for (parameter = 0U; parameter < procedure->external_parameter_count; ++parameter) {
-            F2cExpr *actual;
-            if (!procedure->type_bound_nopass && parameter == procedure->type_bound_pass_index) {
-                actual = passed_object;
-            } else {
-                actual = explicit_argument < expression->child_count
-                             ? expression->children[explicit_argument++]
-                             : NULL;
-            }
+            F2cExpr *actual = (F2cExpr *)f2c_call_parameter_actual(expression, parameter);
             assign_contiguous_actual(assigner, actual,
                                      procedure->external_parameter_descriptor[parameter],
                                      procedure->external_parameter_contiguous[parameter],
