@@ -150,6 +150,7 @@ jobs:
         with:
           name: f2c-numerical-validation
           path: |
+            build/*-differential/*.c
             build/reference-lapack-core/native-results/
             build/reference-lapack-core/differential-reports/
             build/reference-lapack-core/xlintst*.out
