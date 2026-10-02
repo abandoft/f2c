@@ -30,6 +30,7 @@ typedef struct F2cRequiredFeatures {
     int io;
     int random;
     int time_intrinsic;
+    int process_cpu_time;
     int bit_intrinsic;
     int character_intrinsic;
     int conversion_intrinsic;
@@ -49,6 +50,10 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
         return;
     if (expression->symbol != NULL && expression->symbol->external_declared)
         return;
+    if (expression->intrinsic == F2C_INTRINSIC_ETIME) {
+        features->time_intrinsic = 1;
+        features->process_cpu_time = 1;
+    }
     if (f2c_intrinsic_is_bit(expression->intrinsic))
         features->bit_intrinsic = 1;
     if (f2c_intrinsic_is_character(expression->intrinsic))
@@ -290,6 +295,13 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                           "<stdlib.h>\n#include <string.h>\n#include <float.h>\n#include <fenv.h>\n"
                           "#include <locale.h>\n#include <time.h>\n"
                           "#include <math.h>\n");
+        if (features.process_cpu_time)
+            f2c_buffer_append(&context.output, "#if (defined(__unix__) || defined(__APPLE__)) && "
+                                               "!defined(__EMSCRIPTEN__) && !defined(__wasi__) && "
+                                               "!defined(F2C_DISABLE_PROCESS_CPU_TIME)\n"
+                                               "#include <sys/resource.h>\n"
+                                               "#define F2C_PROCESS_CPU_TIME 1\n"
+                                               "#else\n#define F2C_PROCESS_CPU_TIME 0\n#endif\n");
         if (needs_complex) {
             f2c_buffer_append(&context.output, "#include <complex.h>\n");
         }
@@ -328,6 +340,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             f2c_emit_real_representation_support(&context.output);
         if (needs_time_intrinsic)
             f2c_emit_time_intrinsic_support(&context.output);
+        if (features.process_cpu_time)
+            f2c_emit_process_cpu_time_support(&context.output);
         f2c_buffer_append(&context.output,
                           "#if !defined(F2C_LOOP_UNROLL)\n"
                           "#if defined(__clang__) && defined(__OPTIMIZE__)\n"

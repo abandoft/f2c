@@ -17,6 +17,7 @@ void f2c_expression_free_arguments(char **arguments, Type *types, size_t count);
 int f2c_expression_children(Unit *unit, const F2cExpr *expression, char ***arguments_out,
                             Type **types_out);
 char *f2c_expression_call(Unit *unit, const F2cExpr *expression, int *supported);
+char *f2c_expression_etime(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_associated_scalar_target(Unit *unit, const F2cExpr *target, int *supported);
 char *f2c_expression_associated_array_target(Unit *unit, const F2cExpr *pointer,
                                              const F2cExpr *target, const char *pointer_storage,

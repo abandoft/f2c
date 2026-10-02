@@ -129,6 +129,7 @@ set(
     src/codegen/expression/associated.c
     src/codegen/expression/bit.c
     src/codegen/expression/call.c
+    src/codegen/expression/time.c
     src/codegen/expression/character.c
     src/codegen/expression/conversion.c
     src/codegen/expression/descriptor.c
@@ -245,6 +246,7 @@ set(
     src/core/generated/relation.c
     src/core/generated/stream.c
     src/core/generated/time.c
+    src/core/generated/process_time.c
     src/core/generated/transfer.c
     src/core/support.c
     src/core/transpile.c
