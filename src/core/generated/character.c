@@ -1,5 +1,24 @@
 #include "core/generated/private.h"
 
+void f2c_emit_qualified_character_support(Buffer *output) {
+    f2c_buffer_append(
+        output, "static inline F2C_UNUSED void f2c_character_copy_volatile("
+                "volatile char *target, size_t target_length, const volatile char *source, "
+                "size_t source_length) { size_t i, copied = target_length < source_length "
+                "? target_length : source_length; char *snapshot = copied == 0U ? NULL : "
+                "(char *)malloc(copied); if (copied != 0U && snapshot == NULL) abort(); "
+                "for (i = 0U; i < copied; ++i) snapshot[i] = source[i]; "
+                "for (i = 0U; i < target_length; ++i) target[i] = i < copied ? snapshot[i] : ' '; "
+                "free(snapshot); }\n");
+    f2c_buffer_append(output,
+                      "static inline F2C_UNUSED int f2c_character_compare_volatile("
+                      "const volatile char *a, size_t an, const volatile char *b, size_t bn) { "
+                      "size_t i, n = an > bn ? an : bn; for (i = 0U; i < n; ++i) { "
+                      "unsigned char av = i < an ? (unsigned char)a[i] : (unsigned char)' '; "
+                      "unsigned char bv = i < bn ? (unsigned char)b[i] : (unsigned char)' '; "
+                      "if (av != bv) return av < bv ? -1 : 1; } return 0; }\n");
+}
+
 void f2c_emit_character_intrinsic_support(Buffer *output) {
     f2c_buffer_append(
         output,
