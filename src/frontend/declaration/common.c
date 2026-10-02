@@ -1,4 +1,5 @@
 #include "frontend/declaration/private.h"
+#include "frontend/declaration/symbol.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -60,7 +61,6 @@ static char *parse_common_block(Context *context, const Line *line, size_t *inde
 static int assign_common_member(Context *context, Unit *unit, Line *line, size_t *index,
                                 const char *block, size_t *member_index) {
     const F2cToken *name_token;
-    char *name;
     Symbol *symbol;
     Buffer c_name = {0};
     if (*index >= line->token_count || line->tokens[*index].kind != F2C_TOKEN_IDENTIFIER ||
@@ -72,13 +72,9 @@ static int assign_common_member(Context *context, Unit *unit, Line *line, size_t
         return 0;
     }
     name_token = &line->tokens[*index];
-    name = f2c_token_text(name_token);
     ++*index;
-    symbol = name != NULL ? f2c_ensure_symbol_impl(unit, name) : NULL;
-    free(name);
+    symbol = f2c_declaration_symbol(context, unit, line, name_token);
     if (symbol == NULL) {
-        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, name_token, 1,
-                                  "out of memory parsing COMMON member");
         return 0;
     }
     if (symbol->common_block != NULL) {

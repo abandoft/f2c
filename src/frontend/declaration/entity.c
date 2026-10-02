@@ -1,4 +1,5 @@
 #include "frontend/declaration/private.h"
+#include "frontend/declaration/symbol.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -374,14 +375,9 @@ static int configure_derived_type(Context *context, Unit *unit, const Line *line
 static int apply_entity(Context *context, Unit *unit, const Line *line,
                         const F2cDeclarationTypeSpec *type_spec,
                         const F2cDeclarationAttributes *attributes, const F2cEntitySpec *entity) {
-    char *name = f2c_token_text(&line->tokens[entity->begin]);
-    Symbol *symbol = name != NULL ? f2c_ensure_symbol_impl(unit, name) : NULL;
+    Symbol *symbol = f2c_declaration_symbol(context, unit, line, &line->tokens[entity->begin]);
     const unsigned int flags = attributes->flags;
-    free(name);
     if (symbol == NULL) {
-        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line,
-                                  &line->tokens[entity->begin], 1,
-                                  "out of memory recording declaration entity");
         return 0;
     }
     if (symbol->type != TYPE_UNKNOWN && symbol->declaration_line != 0U) {

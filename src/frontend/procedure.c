@@ -1,6 +1,7 @@
 #include "internal/f2c.h"
 
 #include "ast/declaration/procedure.h"
+#include "frontend/declaration/symbol.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -203,10 +204,10 @@ static void lower_declaration(Context *context, Unit *unit, const Line *line,
     for (index = 0U; index < syntax->entity_count; ++index) {
         const F2cToken *entity = syntax->entities[index];
         char *name = f2c_token_text(entity);
-        Symbol *symbol = name != NULL ? f2c_ensure_symbol(unit, name) : NULL;
+        Symbol *symbol = f2c_declaration_symbol(context, unit, line, entity);
         if (symbol == NULL) {
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, entity, 1,
-                                      "out of memory binding PROCEDURE entity");
+            free(name);
+            continue;
         } else if (!f2c_copy_procedure_signature(symbol, signature)) {
             f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, entity, 1,
                                       "out of memory binding PROCEDURE entity '%s'", name);
