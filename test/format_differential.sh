@@ -46,5 +46,6 @@ cmake -E make_directory "$work"
 
 run_case basic "$root/test/fixtures/format_matrix.f90"
 run_case real "$root/test/fixtures/format_real_matrix.f90"
+run_case integer "$root/test/fixtures/format_integer_matrix.f90"
 
 echo "FORMAT descriptor differential passed"
