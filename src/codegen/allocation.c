@@ -294,9 +294,11 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
             f2c_buffer_printf(&context->output,
                               "const int64_t f2c_alloc_char_len_value = (int64_t)(%s);\n", length);
             indent(&context->output, depth + 1);
+            f2c_buffer_append(&context->output, "size_t f2c_alloc_char_len = 0U;\n");
+            indent(&context->output, depth + 1);
             f2c_buffer_append(&context->output,
-                              "const size_t f2c_alloc_char_len = f2c_alloc_char_len_value > 0 ? "
-                              "(size_t)f2c_alloc_char_len_value : 0U;\n");
+                              "if (!f2c_character_parameter_size(f2c_alloc_char_len_value, "
+                              "&f2c_alloc_char_len)) f2c_alloc_ok = false;\n");
             indent(&context->output, depth + 1);
             f2c_buffer_append(&context->output,
                               "if (f2c_alloc_char_len != 0U && f2c_alloc_count > "
