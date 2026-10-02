@@ -89,8 +89,8 @@ static void append_ordinal_decode(Buffer *output, const F2cDescriptorView *view,
     for (dimension = 0U; dimension < view->rank; ++dimension)
         f2c_buffer_printf(output,
                           "size_t f2c_call_actual_%zu_ordinal_%zu = "
-                          "f2c_call_actual_%zu_ordinal %% %s; "
-                          "f2c_call_actual_%zu_ordinal /= %s; ",
+                          "f2c_call_actual_%zu_ordinal %% F2C_MAX((size_t)1U, %s); "
+                          "f2c_call_actual_%zu_ordinal /= F2C_MAX((size_t)1U, %s); ",
                           identifier, dimension + 1U, identifier, view->extent[dimension],
                           identifier, view->extent[dimension]);
 }
@@ -107,12 +107,16 @@ static int append_copy_in(Buffer *prelude, Unit *unit, const F2cExpr *expression
     append_ordinal_decode(prelude, view, identifier, "index");
     f2c_buffer_append(prelude, "\n");
     if (expression->type == TYPE_CHARACTER) {
+        char *pointer = f2c_character_source_pointer(unit, element, element_code);
+        if (pointer == NULL)
+            return 0;
         indent(prelude, depth + 1);
         f2c_buffer_printf(prelude,
-                          "if (%s != 0U) memmove(%s + f2c_call_actual_%zu_index * %s, %s(%s), "
+                          "if (%s != 0U) memmove(%s + f2c_call_actual_%zu_index * %s, %s, "
                           "%s);\n",
-                          character_length, storage, identifier, character_length,
-                          element->definable ? "&" : "", element_code, character_length);
+                          character_length, storage, identifier, character_length, pointer,
+                          character_length);
+        free(pointer);
     } else if (expression->type == TYPE_DERIVED) {
         Buffer destination = {0};
         f2c_buffer_printf(&destination, "%s[f2c_call_actual_%zu_index]", storage, identifier);
@@ -145,11 +149,15 @@ static int append_copy_out(Buffer *cleanup, Unit *unit, const F2cExpr *expressio
                       identifier, identifier, count, identifier);
     append_ordinal_decode(cleanup, view, identifier, "index");
     if (expression->type == TYPE_CHARACTER) {
+        char *pointer = f2c_character_source_pointer(unit, element, element_code);
+        if (pointer == NULL)
+            return 0;
         f2c_buffer_printf(cleanup,
-                          "if (%s != 0U) memmove(&(%s), %s + "
+                          "if (%s != 0U) memmove(%s, %s + "
                           "f2c_call_actual_%zu_index * %s, %s); }\n",
-                          character_length, element_code, storage, identifier, character_length,
+                          character_length, pointer, storage, identifier, character_length,
                           character_length);
+        free(pointer);
     } else if (expression->type == TYPE_DERIVED) {
         f2c_buffer_printf(cleanup,
                           "f2c_destroy_%s(&(%s)); f2c_clone_%s(&(%s), "
