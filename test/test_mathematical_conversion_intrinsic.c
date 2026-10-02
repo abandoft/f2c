@@ -265,6 +265,32 @@ static void test_complex_static_initialization(void) {
     f2c_result_free(&result);
 }
 
+static void test_component_numeric_conversion(void) {
+    static const char source[] = "program component_numeric_conversion\n"
+                                 "  type :: item_t\n"
+                                 "    complex(kind=8) :: phase\n"
+                                 "    integer(kind=8) :: count\n"
+                                 "  end type\n"
+                                 "  type(item_t) :: data(2)\n"
+                                 "  data%phase = cmplx(1.0_8, 2.0_8, kind=8)\n"
+                                 "  data%phase = data(2:1:-1)%phase\n"
+                                 "  data%phase = [cmplx(2.0,3.0),cmplx(4.0,5.0)]\n"
+                                 "  data%count = cmplx(3000000000.0_8,0.0_8,kind=8)\n"
+                                 "end program\n";
+    F2cOptions options = {"component-numeric-conversion.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.code != NULL && result.error_count == 0U,
+           "component numeric assignment uses typed portable conversions");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_component_scalar = (f2c_complex_double)") == NULL &&
+               strstr(result.code, "f2c_component_linear++] = (f2c_complex_double)") == NULL,
+           "component complex assignment never casts a struct-valued complex representation");
+    expect(result.code != NULL && strstr(result.code, "f2c_c_to_z(") != NULL &&
+               strstr(result.code, "const int64_t f2c_component_scalar = ((int64_t)creal(") != NULL,
+           "component conversion retains complex kind promotion and wide integer destinations");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_mathematical_contracts();
     test_conversion_contracts();
@@ -273,5 +299,6 @@ int main(void) {
     test_external_name_precedence();
     test_iso_environment_kind_alias();
     test_complex_static_initialization();
+    test_component_numeric_conversion();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

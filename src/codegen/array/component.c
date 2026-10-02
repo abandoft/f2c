@@ -173,6 +173,12 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
         goto unsupported;
     if (symbol->type != TYPE_DERIVED)
         right_code = f2c_array_emit_expression(unit, right_element);
+    if (right_code != NULL && (numeric_type(symbol->type) || symbol->type == TYPE_LOGICAL)) {
+        char *converted = f2c_emit_numeric_conversion_as(right_code, right_element->type,
+                                                         symbol->type, f2c_symbol_c_type(symbol));
+        free(right_code);
+        right_code = converted;
+    }
     left_code = f2c_array_emit_expression(unit, left_element);
     if (left_code != NULL && symbol->type == TYPE_CHARACTER)
         left_pointer = f2c_character_source_pointer(unit, left_element, left_code);
@@ -218,8 +224,8 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
                 goto emission_failed;
         } else {
             f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_printf(&context->output, "const %s f2c_component_scalar = (%s)(%s);\n",
-                              f2c_symbol_c_type(symbol), f2c_symbol_c_type(symbol), right_code);
+            f2c_buffer_printf(&context->output, "const %s f2c_component_scalar = %s;\n",
+                              f2c_symbol_c_type(symbol), right_code);
         }
     }
     f2c_array_indent(&context->output, emitted_depth);
@@ -261,8 +267,7 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
                                                 "f2c_component_scalar;\n");
         else
             f2c_buffer_printf(&context->output,
-                              "f2c_component_values[f2c_component_linear++] = (%s)(%s);\n",
-                              f2c_symbol_c_type(symbol), right_code);
+                              "f2c_component_values[f2c_component_linear++] = %s;\n", right_code);
     }
     close_loops(&context->output, target->rank, &emitted_depth);
     if (prepared_right->rank == 0U) {
