@@ -202,10 +202,12 @@ set(
     src/core/generated/character.c
     src/core/generated/conversion.c
     src/core/generated/io.c
+    src/core/generated/io/number/input.c
     src/core/generated/list.c
     src/core/generated/mathematical.c
     src/core/generated/model.c
     src/core/generated/numeric.c
+    src/core/generated/io/number/model.c
     src/core/generated/private.h
     src/core/generated/representation.c
     src/core/generated/record.c

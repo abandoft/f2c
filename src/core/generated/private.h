@@ -16,7 +16,15 @@ void f2c_emit_transfer_support(Buffer *output, int needs_complex);
 void f2c_emit_reduction_support(Buffer *output, int needs_complex);
 void f2c_emit_relation_reduction_support(Buffer *output, int needs_complex);
 void f2c_emit_io_stream_support(Buffer *output);
+void f2c_emit_io_control_model(Buffer *output);
+void f2c_emit_io_control_support(Buffer *output);
+void f2c_emit_io_number_support(Buffer *output);
+void f2c_emit_io_number_input_support(Buffer *output);
 void f2c_emit_list_io_support(Buffer *output, int needs_complex);
+void f2c_emit_list_read_support(Buffer *output);
+void f2c_emit_list_token_support(Buffer *output);
+void f2c_emit_list_write_support(Buffer *output);
+void f2c_emit_list_complex_support(Buffer *output);
 void f2c_emit_file_unit_support(Buffer *output);
 void f2c_emit_record_io_support(Buffer *output);
 
