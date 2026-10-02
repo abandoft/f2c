@@ -1,5 +1,7 @@
 #include "codegen/array/private.h"
 
+#include "codegen/lowering/private.h"
+
 #include <stdlib.h>
 
 int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symbol *left_symbol,
@@ -15,9 +17,22 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
     char *right_length = NULL;
     char *right_count = NULL;
     char *scalar_code = NULL;
+    F2cExpr *prepared_right = NULL;
+    Buffer prelude = {0};
+    F2cArrayCleanupList temporaries = {0};
+    size_t temporary = 0U;
     int result = 0;
     if (left_symbol == NULL || left_symbol->type != TYPE_CHARACTER || element_count == NULL)
         return 0;
+    if (right != NULL && right->rank == 0U) {
+        prepared_right = f2c_array_clone_expression(unit, right);
+        if (prepared_right == NULL ||
+            !f2c_array_materialize_constructors(context, unit, prepared_right,
+                                                right->span.begin.line, "character_whole",
+                                                &temporary, &prelude, &temporaries, depth + 1))
+            goto cleanup;
+        right = prepared_right;
+    }
     if (!has_constructor && right_symbol != NULL && right_symbol->rank != 0U &&
         right_symbol->type == TYPE_CHARACTER) {
         right_length = f2c_symbol_character_length(unit, right_symbol);
@@ -39,6 +54,7 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
 
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
+    f2c_buffer_append(&context->output, prelude.data != NULL ? prelude.data : "");
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output, "const size_t f2c_whole_count = (size_t)(%s);\n",
                       element_count);
@@ -141,6 +157,8 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
                       f2c_symbol_c_name(unit, left_symbol));
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "free(f2c_whole_values);\n");
+    if (!f2c_array_cleanup_emit(&context->output, unit, &temporaries))
+        goto cleanup;
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     result = 1;
@@ -154,5 +172,8 @@ cleanup:
     free(right_length);
     free(right_count);
     free(scalar_code);
+    free(prelude.data);
+    f2c_array_cleanup_clear(&temporaries);
+    f2c_codegen_expression_free(unit, prepared_right);
     return result;
 }
