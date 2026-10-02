@@ -273,7 +273,79 @@ int main(void) {
                statement.expression->type == TYPE_LOGICAL && statement.expression->rank == 2U &&
                statement.nested != NULL && statement.nested->kind == F2C_STMT_ASSIGNMENT,
            "single-line WHERE owns its array mask and nested assignment AST");
+    expect(statement.nested != NULL && statement.nested->span.begin.line == 16U &&
+               statement.nested->span.begin.column == 20U && statement.nested->left != NULL &&
+               statement.nested->left->span.begin.column == 20U,
+           "single-line WHERE keeps the original nested assignment columns");
     f2c_statement_free(&statement);
+
+    {
+        static char source[] = "where (work > 0.0) work = work + 1.0";
+        F2cToken tokens[16];
+        F2cTokenStream stream;
+        Line line = {0};
+        size_t count = 0U;
+        size_t index;
+        size_t close = 0U;
+        f2c_token_stream_init(&stream, source, 40U, 3U);
+        for (;;) {
+            f2c_token_stream_next(&stream);
+            if (stream.token.kind == F2C_TOKEN_END)
+                break;
+            if (count < sizeof(tokens) / sizeof(tokens[0]))
+                tokens[count++] = stream.token;
+        }
+        expect(f2c_token_matching_delimiter(tokens, count, 1U, &close),
+               "continued WHERE mask tokens have a matching delimiter");
+        for (index = 0U; index < count; ++index) {
+            tokens[index].span.begin.source_name = "continued-where.f90";
+            tokens[index].span.end.source_name = "continued-where.f90";
+            if (index > close) {
+                tokens[index].line = 41U;
+                tokens[index].span.begin.line = 41U;
+                tokens[index].span.end.line = 41U;
+                tokens[index].column -= 17U;
+                tokens[index].span.begin.column -= 17U;
+                tokens[index].span.end.column -= 17U;
+            }
+        }
+        line.text = source;
+        line.source_name = "continued-where.f90";
+        line.number = 40U;
+        line.tokens = tokens;
+        line.token_count = count;
+        expect(f2c_parse_statement_tokens(&unit, &line, &statement),
+               "continued WHERE consumes the existing token range");
+        expect(statement.nested != NULL && statement.nested->line == 41U &&
+                   statement.nested->span.begin.line == 41U &&
+                   statement.nested->span.begin.column == 5U &&
+                   strcmp(statement.nested->span.begin.source_name, line.source_name) == 0 &&
+                   statement.nested->left != NULL &&
+                   statement.nested->left->span.begin.line == 41U &&
+                   statement.nested->left->span.begin.column == 5U &&
+                   statement.nested->right != NULL &&
+                   statement.nested->right->span.begin.line == 41U &&
+                   statement.nested->right->span.begin.column == 12U,
+               "continued WHERE preserves physical source spans without retokenizing its action");
+        f2c_statement_free(&statement);
+    }
+    {
+        static const char *const malformed[] = {"where()=",
+                                                "where (work > 0.0) work =",
+                                                "where (work > 0.0) = work",
+                                                "where (work > 0.0) call consume(work)",
+                                                "where work > (0.0) work = 1.0",
+                                                "where (work > 0.0 work = 1.0",
+                                                "elsewhere()"};
+        size_t index;
+        for (index = 0U; index < sizeof(malformed) / sizeof(malformed[0]); ++index) {
+            expect(f2c_parse_statement(&unit, malformed[index], 42U, &statement),
+                   "malformed WHERE syntax remains representable");
+            expect(!statement.control_syntax_valid && statement.nested == NULL,
+                   "malformed WHERE syntax has no partially owned nested action");
+            f2c_statement_free(&statement);
+        }
+    }
 
     expect(f2c_parse_statement(&unit, "masking: where (work > 0.0)", 16U, &statement),
            "named WHERE construct parses");
