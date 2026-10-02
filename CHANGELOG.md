@@ -1,3 +1,16 @@
+## 1.44.0
+
+- Preserved `VOLATILE/ASYNCHRONOUS` object attributes in typed IR, expression clones, and array views, distinguishing original objects from computed values.
+- Improved qualified reads in supported numeric, logical, and complex reductions, including `DIM/MASK`, relational reductions, and `DOT_PRODUCT`, while retaining ordinary-array fast paths.
+- Corrected qualified character storage copies and comparisons, including overlapping reads and writes, without discarding access qualifiers.
+- Corrected qualified stores in cross-type/kind array assignments, constructors, character arrays, and transformational results, and prevented generated temporary names from colliding with user objects.
+- Retained independent AST nodes and source ranges for parenthesized expressions, propagated type and shape, normalized array-value lower bounds to 1, and stopped inheriting object definability and storage attributes.
+- Improved integer, real, complex, and character constant evaluation through parentheses and grouped array and structure initializers while preserving constant-evaluation budgets.
+- Corrected snapshots for parenthesized intrinsic scalar and array arguments, including reverse sections, zero-sized arrays, and single evaluation of functions.
+- Improved dynamic-length, zero-length, embedded-NUL, and qualified character value snapshots with consistent temporary copying and release.
+- Corrected nonpolymorphic derived-value argument copies, preserving independent allocatable component values and pointer component associations, and improved ownership cleanup for function results and `MERGE/TRANSFER`.
+- Rejected parenthesized values in argument positions requiring definable, pointer, or allocatable objects, and added source-located diagnostics for invalid procedure primaries.
+
 ## 1.43.0
 
 - Corrected local declarations, dummy arguments, and function results shadowing same-named module and procedure host entities.
