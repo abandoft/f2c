@@ -11,7 +11,7 @@
 - Split core implementation by designator parsing, character-length semantics, and substring emission while retaining libc/libm-only generated-code dependencies.
 - Fixed 32-bit character-length checks and extended strict filesystem-free WebAssembly compilation and execution coverage.
 - Unified copy-in/copy-out for noncontiguous character substring arguments in subroutine and function calls, covering explicit/assumed shapes, dynamic lengths, derived components, and character and derived-type function results.
-- Resolved character function result lengths in their procedure scope, substituted actual arguments into typed specification expressions, and evaluated specification arguments once.
+- Resolved ordinary scalar character function result lengths in their procedure scope, evaluated specification arguments once, and retained the entry length when the function modifies length arguments or host variables, including scalar-broadcast assignment.
 - Completed strict code generation for empty arrays and zero-length arguments, preserved function evaluation for zero-length character assignment results, updated allocatable character array lengths on scalar assignment, and rejected illegal allocatable/pointer components following array references.
 - Improved portable numeric component assignment, scalar argument addresses, and procedure pointer argument interface checks; lowering failures report hard, source-located errors and roll back incomplete output.
 - Fixed a memory leak in invalid construct-prefix and branch-name combinations.
