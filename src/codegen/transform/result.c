@@ -39,7 +39,8 @@ void f2c_transform_emit_result_allocation(Context *context, Unit *unit, const Sy
                           "f2c_transform_result_count, f2c_transform_result_element_length);\n");
         f2c_transform_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "char *f2c_transform_result = (char *)malloc("
-                                            "f2c_transform_result_bytes == 0U ? 1U : "
+                                            "f2c_transform_result_count == 0U || "
+                                            "f2c_transform_result_element_length == 0U ? 1U : "
                                             "f2c_transform_result_bytes);\n");
         f2c_transform_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "if (f2c_transform_result == NULL) abort();\n");
