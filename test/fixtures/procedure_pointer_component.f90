@@ -21,6 +21,10 @@ program procedure_pointer_component
   if (.not. associated(callback%action, increment)) stop 2
   call callback%action(value)
   if (value /= 10) stop 3
+  call apply(callback%action, value)
+  if (value /= 11) stop 4
+  if (invoke(callback%action, value) /= 12) stop 5
+  if (value /= 12) stop 6
 
 contains
 
@@ -28,5 +32,18 @@ contains
     integer, intent(inout) :: value
     value = value + 1
   end subroutine increment
+
+  subroutine apply(action, value)
+    procedure(integer_action) :: action
+    integer, intent(inout) :: value
+    call action(value)
+  end subroutine apply
+
+  integer function invoke(action, value)
+    procedure(integer_action) :: action
+    integer, intent(inout) :: value
+    call action(value)
+    invoke = value
+  end function invoke
 
 end program procedure_pointer_component
