@@ -99,6 +99,8 @@ set(
     src/codegen/array/character.c
     src/codegen/array/component.c
     src/codegen/array/constructor.c
+    src/codegen/array/copy.c
+    src/codegen/array/copy.h
     src/codegen/array/element.c
     src/codegen/array/function.c
     src/codegen/array/inquiry.c
@@ -107,6 +109,8 @@ set(
     src/codegen/array/temporary.c
     src/codegen/array/value.c
     src/codegen/array/value.h
+    src/codegen/array/view.c
+    src/codegen/array/view.h
     src/codegen/call.c
     src/codegen/call/actual.c
     src/codegen/call/expression.c
@@ -144,7 +148,6 @@ set(
     src/codegen/expression/reduction.c
     src/codegen/expression/statement_function.c
     src/codegen/expression/transfer.c
-    src/codegen/expression/view.c
     src/codegen/io.c
     src/codegen/io/control/common.c
     src/codegen/io/control/inquire.c
@@ -182,6 +185,8 @@ set(
     src/codegen/literal/real.h
     src/codegen/lowering.c
     src/codegen/module.c
+    src/codegen/names.c
+    src/codegen/names.h
     src/codegen/ownership.c
     src/codegen/statement.c
     src/codegen/statement/assignment.c
@@ -333,6 +338,7 @@ set(
     src/semantic/data_flow/bitset.c
     src/semantic/data_flow/temporaries.c
     src/semantic/data_flow/variables.c
+    src/semantic/access.c
     src/semantic/designator.c
     src/semantic/host.c
     src/semantic/implicit.c
@@ -594,6 +600,11 @@ if(F2C_BUILD_TESTING)
     target_include_directories(f2c_ast_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_ast_tests)
     add_test(NAME ast COMMAND f2c_ast_tests)
+
+    add_executable(f2c_access_tests test/test_access.c)
+    target_include_directories(f2c_access_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_access_tests)
+    add_test(NAME access_qualifiers COMMAND f2c_access_tests)
 
     add_executable(f2c_unit_header_tests test/test_unit_header.c)
     target_include_directories(f2c_unit_header_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
