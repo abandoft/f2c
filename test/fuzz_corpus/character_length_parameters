@@ -1,0 +1,17 @@
+module lengths
+contains
+function text(n) result(r)
+integer, intent(in) :: n
+character(len=n) :: r
+r='X'
+end function
+end module
+program p
+use lengths
+character(len=-4), parameter :: empty='discard'
+character(:), allocatable :: v
+integer :: n
+n=-7
+v=text(n)
+if(len(v)/=0.or.len(empty)/=0) stop 1
+end
