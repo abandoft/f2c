@@ -5,6 +5,8 @@
 #include "semantic/intrinsic.h"
 
 void f2c_validate_unit_expressions(Context *context, Unit *unit);
+void f2c_analyze_expression_access(F2cExpr *expression);
+void f2c_analyze_unit_access(Unit *unit);
 void f2c_validate_project_storage(Context *context);
 int f2c_finalize_host_association(Context *context);
 void f2c_resolve_equivalence_storage(Context *context, Unit *unit);

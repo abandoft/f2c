@@ -28,6 +28,12 @@ typedef enum F2cExprKind {
     F2C_EXPR_STRUCTURE_CONSTRUCTOR
 } F2cExprKind;
 
+typedef enum F2cStorageQualifier {
+    F2C_STORAGE_UNQUALIFIED = 0U,
+    F2C_STORAGE_VOLATILE = 1U,
+    F2C_STORAGE_ASYNCHRONOUS = 2U
+} F2cStorageQualifier;
+
 struct F2cExpr {
     F2cExprKind kind;
     F2cIntrinsicId intrinsic;
@@ -36,6 +42,8 @@ struct F2cExpr {
     size_t rank;
     int definable;
     F2cValueCategory value_category;
+    /* Attributes of the designated object, not of a computed value. */
+    unsigned int storage_qualifiers;
     F2cShape shape;
     F2cSourceSpan span;
     F2cSourceSpan parse_error_span;
