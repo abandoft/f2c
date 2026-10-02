@@ -219,25 +219,11 @@ static int common_element_count(Unit *unit, const Symbol *symbol, uint64_t *coun
 }
 
 static int common_character_length(Unit *unit, const Symbol *symbol, int64_t *length) {
-    char *end = NULL;
-    long long parsed;
     if (symbol->type != TYPE_CHARACTER) {
         *length = 0;
         return 1;
     }
-    if (symbol->character_length_expression != NULL)
-        return f2c_evaluate_integer_constant(unit, symbol->character_length_expression, length) &&
-               *length >= 0;
-    if (symbol->character_length_syntax.count != 0U)
-        return f2c_evaluate_integer_syntax(unit, symbol->character_length_syntax, length) &&
-               *length >= 0;
-    if (symbol->character_length == NULL)
-        return 0;
-    parsed = strtoll(symbol->character_length, &end, 10);
-    if (end == symbol->character_length || *end != '\0' || parsed < 0)
-        return 0;
-    *length = (int64_t)parsed;
-    return 1;
+    return f2c_character_declaration_length(unit, symbol, length);
 }
 
 static int resolved_kind(const Symbol *symbol) {
