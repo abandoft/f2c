@@ -1,4 +1,5 @@
 #include "codegen/array/private.h"
+#include "codegen/call/private.h"
 
 #include "codegen/expression/private.h"
 #include "codegen/lowering/private.h"
@@ -125,6 +126,8 @@ int f2c_array_contains_unmaterialized_value(const Unit *unit, const F2cExpr *exp
     if (f2c_expression_direct_relation_reduction(expression))
         return 0;
     if (array_transform_call(unit, expression) || f2c_array_function_result_call(unit, expression))
+        return 1;
+    if (f2c_call_expression_requires_materialization((Unit *)unit, expression))
         return 1;
     if (expression == NULL)
         return 0;
@@ -416,6 +419,9 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
             }
         }
     }
+    if (!f2c_call_materialize_expression(unit, expression, identifier, role, temporary, prelude,
+                                         depth))
+        return 0;
     if (!f2c_array_materialize_function_result(unit, expression, identifier, role, temporary,
                                                prelude, cleanup, depth))
         return 0;
