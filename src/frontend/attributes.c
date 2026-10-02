@@ -1,4 +1,5 @@
 #include "frontend/declaration/private.h"
+#include "frontend/declaration/symbol.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -59,10 +60,9 @@ void f2c_parse_external_declaration(Context *context, Unit *unit, Line *source_l
             return;
         }
         name = f2c_token_text(&source_line->tokens[index++]);
-        symbol = name != NULL ? f2c_ensure_symbol_impl(unit, name) : NULL;
+        symbol =
+            f2c_declaration_symbol(context, unit, source_line, &source_line->tokens[index - 1U]);
         if (symbol == NULL) {
-            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
-                                "out of memory in EXTERNAL declaration");
             free(name);
             return;
         }
@@ -95,10 +95,10 @@ void f2c_parse_dimension_declaration(Context *context, Unit *unit, Line *source_
             return;
         }
         name = f2c_token_text(&source_line->tokens[index]);
-        symbol = name != NULL ? f2c_ensure_symbol_impl(unit, name) : NULL;
+        symbol = f2c_declaration_symbol(context, unit, source_line, &source_line->tokens[index]);
         if (symbol == NULL) {
-            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
-                                "out of memory in DIMENSION declaration");
+            free(name);
+            return;
         } else if (symbol->rank != 0U) {
             f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, source_line,
                                       &source_line->tokens[index], 1,
@@ -169,10 +169,11 @@ void f2c_parse_parameter_declaration(Context *context, Unit *unit, Line *source_
         name = f2c_token_text(name_token);
         initializer = f2c_token_range_text(
             f2c_line_token_range(source_line, expression_begin, expression_end));
-        symbol = name != NULL ? f2c_ensure_symbol_impl(unit, name) : NULL;
+        symbol = f2c_declaration_symbol(context, unit, source_line, name_token);
         if (symbol == NULL || initializer == NULL) {
-            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
-                                "out of memory in PARAMETER declaration");
+            if (symbol != NULL)
+                f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
+                                    "out of memory in PARAMETER declaration");
             free(name);
             free(initializer);
             return;
@@ -212,10 +213,9 @@ void f2c_parse_save_declaration(Context *context, Unit *unit, Line *source_line)
             return;
         }
         name = f2c_token_text(&source_line->tokens[index++]);
-        symbol = name != NULL ? f2c_ensure_symbol_impl(unit, name) : NULL;
+        symbol =
+            f2c_declaration_symbol(context, unit, source_line, &source_line->tokens[index - 1U]);
         if (symbol == NULL) {
-            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line->number, 1,
-                                "out of memory in SAVE declaration");
             free(name);
             return;
         }
@@ -308,11 +308,9 @@ static int equivalence_designator(Context *context, Unit *unit, const Line *line
     }
     name_token = &line->tokens[range.begin];
     name = f2c_token_text(name_token);
-    symbol = name != NULL ? f2c_ensure_symbol_impl(unit, name) : NULL;
+    symbol = f2c_declaration_symbol(context, unit, line, name_token);
     free(name);
     if (symbol == NULL) {
-        f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, name_token, 1,
-                                  "out of memory parsing EQUIVALENCE designator");
         return 0;
     }
     open = range.begin + 1U;
