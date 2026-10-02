@@ -116,8 +116,52 @@ static void test_explicit_external_override(void) {
 }
 
 int main(void) {
+    {
+        static const char *const declarations[] = {"real :: values(1)", "real(kind=8) :: values(2)",
+                                                   "integer :: values(2)"};
+        size_t index;
+        F2cResult result =
+            transpile("program timing\n implicit none\n real :: values(2), elapsed\n"
+                      "real :: etime\n intrinsic :: etime\n elapsed=etime(values)\nend program\n",
+                      "etime.f90");
+        expect(
+            result.error_count == 0U && result.code != NULL &&
+                strstr(result.code, "f2c_etime(&(") != NULL &&
+                strstr(result.code, "getrusage(RUSAGE_SELF") != NULL,
+            "ETIME has a typed libc-only function implementation instead of an unresolved symbol");
+        f2c_result_free(&result);
+        for (index = 0U; index < sizeof(declarations) / sizeof(declarations[0]); ++index) {
+            char source[256];
+            (void)snprintf(source, sizeof(source),
+                           "program invalid\n implicit none\n %s\n real :: elapsed\n"
+                           "intrinsic :: etime\n elapsed=etime(values)\nend program\n",
+                           declarations[index]);
+            result = transpile(source, "invalid-etime.f90");
+            expect(result.code == NULL && result.error_count != 0U && result.diagnostics != NULL &&
+                       strstr(result.diagnostics, "ETIME VALUES") != NULL,
+                   "ETIME rejects invalid output array contracts");
+            f2c_result_free(&result);
+        }
+        result = transpile("program unsupported\n real :: values(2), total\n"
+                           "call etime(values,total)\nend program\n",
+                           "etime-subroutine.f90");
+        expect(result.code == NULL && result.diagnostics != NULL &&
+                   strstr(result.diagnostics, "ETIME subroutine form is not implemented") != NULL,
+               "unimplemented ETIME subroutine form fails before code generation");
+        f2c_result_free(&result);
+    }
     test_time_intrinsic_lowering();
     test_time_intrinsic_diagnostics();
     test_explicit_external_override();
+    {
+        F2cResult result =
+            transpile("pure real function invalid(values)\n real, intent(out) :: values(2)\n"
+                      "invalid=etime(values)\nend function\n",
+                      "pure-etime.f90");
+        expect(result.code == NULL && result.diagnostics != NULL &&
+                   strstr(result.diagnostics, "impure ETIME invocation") != NULL,
+               "ETIME is forbidden in a PURE procedure");
+        f2c_result_free(&result);
+    }
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -51,3 +51,23 @@ if ! cmp -s "$WORK/generated.out" "$WORK/generated-sanitized.out"; then
 fi
 
 echo "time intrinsic differential and sanitizer validation passed"
+
+"$F2C" "$ROOT/test/fixtures/etime.f90" -o "$WORK/etime.c"
+for profile in optimized sanitized unavailable; do
+    case $profile in
+        optimized) flags='-O2' ;;
+        sanitized) flags='-O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all' ;;
+        unavailable) flags='-O2 -DF2C_DISABLE_PROCESS_CPU_TIME=1' ;;
+    esac
+    # Intentional splitting of controlled, literal compiler flags.
+    # shellcheck disable=SC2086
+    "$CC" -std=c17 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wstrict-prototypes \
+        -Wmissing-prototypes -Werror $flags "$WORK/etime.c" -lm -o "$WORK/etime-$profile"
+    "$WORK/etime-$profile" > "$WORK/etime-$profile.out"
+done
+"$FC" -std=gnu -O2 -Wall -Wextra -Werror "$ROOT/test/fixtures/etime.f90" -o "$WORK/etime-native"
+"$WORK/etime-native" > "$WORK/etime-native.out"
+for profile in optimized sanitized unavailable; do
+    cmp "$WORK/etime-native.out" "$WORK/etime-$profile.out"
+done
+echo "ETIME native properties, sanitizer checks, and unavailable-platform contract passed"
