@@ -297,31 +297,25 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
         free(right);
         return f2c_buffer_take(&result);
     }
-    if (expression->kind == F2C_EXPR_SUBSTRING && expression->symbol != NULL &&
-        expression->child_count == 1U) {
-        const F2cExpr *selector = expression->children[0];
-        const F2cExpr *lower_expression = NULL;
-        const F2cExpr *upper_expression = NULL;
+    if (expression->kind == F2C_EXPR_SUBSTRING) {
+        const F2cExpr *parent = f2c_substring_parent(expression);
+        const F2cExpr *selector = f2c_substring_range(expression);
+        const F2cExpr *lower_expression = f2c_substring_lower(expression);
+        const F2cExpr *upper_expression = f2c_substring_upper(expression);
         char *lower;
         char *upper;
         char *declared_length;
         int supported = 1;
-        if (selector->kind == F2C_EXPR_ARRAY_SECTION && selector->child_count >= 2U) {
-            if (selector->children[0]->kind != F2C_EXPR_INVALID)
-                lower_expression = selector->children[0];
-            if (selector->children[1]->kind != F2C_EXPR_INVALID)
-                upper_expression = selector->children[1];
-        } else {
-            lower_expression = selector;
-            upper_expression = selector;
-        }
+        if (parent == NULL || selector == NULL || selector->kind != F2C_EXPR_ARRAY_SECTION ||
+            selector->child_count != 3U)
+            return NULL;
+        declared_length = f2c_character_length_expression(unit, parent);
         lower = lower_expression != NULL
                     ? f2c_emit_expression_ast(unit, lower_expression, &supported)
                     : f2c_strdup("1");
         upper = upper_expression != NULL
                     ? f2c_emit_expression_ast(unit, upper_expression, &supported)
-                    : f2c_symbol_character_length(unit, expression->symbol);
-        declared_length = f2c_symbol_character_length(unit, expression->symbol);
+                    : (declared_length != NULL ? f2c_strdup(declared_length) : NULL);
         if (!supported || lower == NULL || upper == NULL || declared_length == NULL) {
             free(lower);
             free(upper);
@@ -329,8 +323,7 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
             return NULL;
         }
         f2c_buffer_printf(&result,
-                          "f2c_substring_length((size_t)(%s), (int64_t)(%s), "
-                          "(int64_t)(%s))",
+                          "f2c_substring_length((size_t)(%s), (int64_t)(%s), (int64_t)(%s))",
                           declared_length, lower, upper);
         free(lower);
         free(upper);
@@ -391,9 +384,9 @@ char *f2c_character_source_pointer(Unit *unit, const F2cExpr *right, const char 
             f2c_buffer_append(&result, right_code);
         return f2c_buffer_take(&result);
     }
-    if (right->kind == F2C_EXPR_SUBSTRING && strncmp(right_code, "(&", 2U) == 0)
+    if (right->kind == F2C_EXPR_SUBSTRING)
         return f2c_strdup(right_code);
-    if (right->kind == F2C_EXPR_ARRAY_REFERENCE || right->kind == F2C_EXPR_SUBSTRING) {
+    if (right->kind == F2C_EXPR_ARRAY_REFERENCE) {
         f2c_buffer_printf(&result, "&%s", right_code);
         return f2c_buffer_take(&result);
     }
@@ -631,11 +624,10 @@ int f2c_emit_character_assignment(Context *context, Unit *unit, Symbol *left_sym
             f2c_buffer_printf(&target, "&%s", left_code);
         else
             target_pointer = f2c_strdup(left_code);
-    } else if (left->kind == F2C_EXPR_SUBSTRING || left->kind == F2C_EXPR_ARRAY_REFERENCE) {
-        if (strncmp(left_code, "(&", 2U) == 0)
-            target_pointer = f2c_strdup(left_code);
-        else
-            f2c_buffer_printf(&target, "&%s", left_code);
+    } else if (left->kind == F2C_EXPR_SUBSTRING) {
+        target_pointer = f2c_strdup(left_code);
+    } else if (left->kind == F2C_EXPR_ARRAY_REFERENCE) {
+        f2c_buffer_printf(&target, "&%s", left_code);
     } else if (unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER &&
                unit->result_name != NULL && strcmp(left_symbol->name, unit->result_name) == 0) {
         target_pointer = f2c_strdup("f2c_result");
@@ -655,7 +647,7 @@ int f2c_emit_character_assignment(Context *context, Unit *unit, Symbol *left_sym
     }
     emit_character_copy(context, target_pointer, target_length, source_pointer, source_length,
                         depth);
-    if (left->kind == F2C_EXPR_NAME && !left_symbol->argument &&
+    if (left->kind == F2C_EXPR_NAME && !left_symbol->argument && !left_symbol->pointer &&
         left_symbol->common_block == NULL && !left_symbol->equivalence_associated &&
         !(unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER &&
           unit->result_name != NULL && strcmp(left_symbol->name, unit->result_name) == 0) &&

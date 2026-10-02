@@ -92,10 +92,7 @@ static char *emit_external_actual(Unit *unit, const F2cExpr *actual, const char 
         return f2c_buffer_take(&result);
     }
     if (actual->kind == F2C_EXPR_SUBSTRING) {
-        if (code[0] == '(' && code[1] == '&')
-            return f2c_strdup(code);
-        f2c_buffer_printf(&result, "&%s", code);
-        return f2c_buffer_take(&result);
+        return f2c_strdup(code);
     }
     if (actual->type == TYPE_CHARACTER)
         return f2c_strdup(code);

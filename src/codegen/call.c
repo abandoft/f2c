@@ -261,11 +261,10 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
             } else {
                 f2c_buffer_printf(&lowered, "&%s", f2c_symbol_c_name(unit, ast_symbol));
             }
-        } else if (ast->kind == F2C_EXPR_ARRAY_REFERENCE || ast->kind == F2C_EXPR_SUBSTRING) {
-            if (ast->kind == F2C_EXPR_SUBSTRING && code[0] == '(' && code[1] == '&')
-                result = f2c_strdup(code);
-            else
-                f2c_buffer_printf(&lowered, "&%s", code);
+        } else if (ast->kind == F2C_EXPR_SUBSTRING) {
+            result = f2c_strdup(code);
+        } else if (ast->kind == F2C_EXPR_ARRAY_REFERENCE) {
+            f2c_buffer_printf(&lowered, "&%s", code);
         } else if (ast->type == TYPE_CHARACTER) {
             result = f2c_strdup(code);
         } else if (ast->type == TYPE_DERIVED && ast->definable) {

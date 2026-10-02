@@ -28,11 +28,7 @@ char *f2c_expression_associated_scalar_target(Unit *unit, const F2cExpr *target,
             free(code);
             return NULL;
         }
-        if (target->child_count == 1U && target->children[0] != NULL &&
-            target->children[0]->kind == F2C_EXPR_ARRAY_SECTION)
-            f2c_buffer_append(&result, code);
-        else
-            f2c_buffer_printf(&result, "&(%s)", code);
+        f2c_buffer_append(&result, code);
         free(code);
         return f2c_buffer_take(&result);
     }
