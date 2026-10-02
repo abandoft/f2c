@@ -1,3 +1,4 @@
+#include "codegen/array/copy.h"
 #include "codegen/array/private.h"
 
 #include "codegen/lowering/private.h"
@@ -150,11 +151,13 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
         f2c_buffer_append(&context->output, "}\n");
     }
     f2c_array_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output,
-                      "if (f2c_whole_values != NULL && f2c_whole_bytes != 0U) "
-                      "memmove(%s, f2c_whole_values, "
-                      "f2c_whole_bytes);\n",
-                      f2c_symbol_c_name(unit, left_symbol));
+    f2c_buffer_append(&context->output, "if (f2c_whole_values != NULL) {\n");
+    f2c_array_copy_snapshot(
+        &context->output, unit, f2c_symbol_c_name(unit, left_symbol), "f2c_whole_values",
+        "f2c_whole_bytes",
+        left_symbol->volatile_entity ? F2C_STORAGE_VOLATILE : F2C_STORAGE_UNQUALIFIED, depth + 2);
+    f2c_array_indent(&context->output, depth + 1);
+    f2c_buffer_append(&context->output, "}\n");
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "free(f2c_whole_values);\n");
     if (!f2c_array_cleanup_emit(&context->output, unit, &temporaries))
