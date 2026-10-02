@@ -37,6 +37,7 @@ set(
     procedure_pointer_component
     vector_subscript
     reduction_intrinsics
+    volatile_reductions
     transform_intrinsics
     transform_character_derived
     nested_transform_intrinsics
