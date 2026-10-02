@@ -506,9 +506,11 @@ static int emit_spread(Context *context, Unit *unit, Symbol *target, const F2cEx
     f2c_transform_emit_result_allocation(context, unit, target, source_expression, depth + 1);
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
-                      "for (size_t output = 0U; output < f2c_transform_result_count; ++output) { "
-                      "size_t source_index = 0U, source_stride = 1U, result_stride = 1U; ");
-    for (dimension = 0U; dimension < result_rank; ++dimension) {
+                      "for (size_t output = 0U; output < f2c_transform_result_count; ++output) { ");
+    if (source_rank != 0U)
+        f2c_buffer_append(&context->output,
+                          "size_t source_index = 0U, source_stride = 1U, result_stride = 1U; ");
+    for (dimension = 0U; source_rank != 0U && dimension < result_rank; ++dimension) {
         f2c_buffer_printf(&context->output,
                           "{ size_t coordinate = (output / result_stride) %% "
                           "(f2c_transform_result_extent_%zu == 0U ? 1U : "
