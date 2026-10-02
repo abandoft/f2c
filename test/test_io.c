@@ -500,6 +500,21 @@ static void test_iolength_codegen(void) {
     f2c_result_free(&result);
 }
 
+static void test_io_numeric_representation_contract(void) {
+    static const char source[] = "program numeric_input\n"
+                                 "real :: value\n"
+                                 "read(*, *) value\n"
+                                 "end program numeric_input\n";
+    F2cOptions options = {"numeric_input.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    expect(result.error_count == 0U, "ordinary real input translates without model intrinsics");
+    expect_contains(result.code, "_Static_assert(sizeof(float) == sizeof(uint32_t)",
+                    "binary32 IO conversion proves the generated target representation");
+    expect_contains(result.code, "_Static_assert(sizeof(double) == sizeof(uint64_t)",
+                    "binary64 IO conversion proves the generated target representation");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_file_control_semantics();
     test_file_control_codegen();
@@ -512,6 +527,7 @@ int main(void) {
     test_unformatted_owned_result_cleanup();
     test_iolength_semantics();
     test_iolength_codegen();
+    test_io_numeric_representation_contract();
     if (failures != 0) {
         fprintf(stderr, "%d I/O semantic test(s) failed\n", failures);
         return 1;

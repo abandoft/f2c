@@ -318,7 +318,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             f2c_emit_character_intrinsic_support(&context.output);
         if (needs_conversion_intrinsic)
             f2c_emit_numeric_conversion_support(&context.output);
-        if (needs_numeric_model_intrinsic || needs_real_representation_intrinsic)
+        if (needs_numeric_model_intrinsic || needs_real_representation_intrinsic || needs_io)
             f2c_emit_numeric_model_contract(&context.output);
         if (needs_numeric_model_intrinsic)
             f2c_emit_numeric_model_support(&context.output);

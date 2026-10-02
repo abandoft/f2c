@@ -9,10 +9,12 @@ void f2c_emit_numeric_model_contract(Buffer *output) {
         "_Static_assert(INT32_MAX == INT32_C(2147483647), \"f2c INTEGER(4) model mismatch\");\n"
         "_Static_assert(INT64_MAX == INT64_C(9223372036854775807), "
         "\"f2c INTEGER(8) model mismatch\");\n"
-        "_Static_assert(FLT_RADIX == 2 && FLT_MANT_DIG == 24 && FLT_DIG == 6 && "
+        "_Static_assert(sizeof(float) == sizeof(uint32_t) && FLT_RADIX == 2 && "
+        "FLT_MANT_DIG == 24 && FLT_DIG == 6 && "
         "FLT_MIN_EXP == -125 && FLT_MAX_EXP == 128 && FLT_MIN_10_EXP == -37, "
         "\"f2c REAL(4) model requires IEEE binary32\");\n"
-        "_Static_assert(FLT_RADIX == 2 && DBL_MANT_DIG == 53 && DBL_DIG == 15 && "
+        "_Static_assert(sizeof(double) == sizeof(uint64_t) && FLT_RADIX == 2 && "
+        "DBL_MANT_DIG == 53 && DBL_DIG == 15 && "
         "DBL_MIN_EXP == -1021 && DBL_MAX_EXP == 1024 && DBL_MIN_10_EXP == -307, "
         "\"f2c REAL(8) model requires IEEE binary64\");\n");
 }
