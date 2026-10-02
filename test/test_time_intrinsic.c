@@ -130,6 +130,19 @@ int main(void) {
                 strstr(result.code, "getrusage(RUSAGE_SELF") != NULL,
             "ETIME has a typed libc-only function implementation instead of an unresolved symbol");
         f2c_result_free(&result);
+        result = transpile("program timing\n implicit none\n real, volatile :: values(-3:0)\n"
+                           "real :: elapsed\n intrinsic :: etime\n elapsed=etime(values)\n"
+                           "end program\n",
+                           "volatile-etime.f90");
+        expect(
+            result.error_count == 0U && result.code != NULL &&
+                strstr(result.code, "volatile float values[") != NULL &&
+                strstr(result.code, "values[f2c_zero_index] = (float){0}") != NULL &&
+                strstr(result.code, "memset(values,") == NULL,
+            "volatile output arrays retain qualified initialization instead of libc byte stores");
+        expect(result.code != NULL && strstr(result.code, "f2c_etime(volatile float *user") != NULL,
+               "ETIME output parameters preserve volatile array stores");
+        f2c_result_free(&result);
         for (index = 0U; index < sizeof(declarations) / sizeof(declarations[0]); ++index) {
             char source[256];
             (void)snprintf(source, sizeof(source),
