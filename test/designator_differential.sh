@@ -12,7 +12,8 @@ cc=${CC:-cc}
 fc=${FC:-gfortran}
 cmake -E remove_directory "$work"
 cmake -E make_directory "$work"
-for name in character_designators character_array_actuals nested_array_reductions; do
+for name in character_designators character_array_actuals scalar_component_actuals \
+    procedure_pointer_component reduction_designators nested_array_reductions; do
     source=$root/test/fixtures/$name.f90
     "$f2c" "$source" -o "$work/$name.c"
     "$cc" -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
