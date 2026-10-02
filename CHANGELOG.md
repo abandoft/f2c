@@ -8,7 +8,7 @@
 - Implemented target-kind input rounding through exact decimal-to-binary comparisons, covering signed midpoints, subnormal values, and extreme finite values while preserving the caller's floating-point environment.
 - Used exact midpoint detection for `COMPATIBLE` output rounding instead of approximate floating-point tests.
 - Propagated decimal-separator and rounding controls through NAMELIST assignment streams, repeated values, and dynamic components.
-- Inherited temporary parent-transfer and edit-descriptor controls in DT child I/O and restored parent modes after child overrides.
+- Inherited temporary parent-transfer and edit-descriptor controls in DT child I/O, preserved distinct `S/SS/SP` modes, and restored parent modes after child overrides.
 - Synchronized DT child record and column positions, fixing prefix spaces, multirecord internal files, and record termination on nonseekable standard output.
 - Corrected actual-width `B/O/Z` output for narrow integers, dynamically handled wide integer fields and minimum digits, and completed `.0` zero-value blanks and invalid-precision checks.
 - Split generated helpers by control, numeric-conversion, and list-field read/write responsibilities, verified the target binary data model, and retained libc/libm-only dependencies.
