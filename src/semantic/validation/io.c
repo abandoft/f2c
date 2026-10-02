@@ -123,7 +123,7 @@ static int io_control_supported(F2cStatementKind statement_kind, F2cIoControlKin
                control_kind == F2C_IO_CONTROL_IOSTAT || control_kind == F2C_IO_CONTROL_IOMSG ||
                control_kind == F2C_IO_CONTROL_ADVANCE || control_kind == F2C_IO_CONTROL_REC ||
                control_kind == F2C_IO_CONTROL_DECIMAL || control_kind == F2C_IO_CONTROL_ROUND ||
-               control_kind == F2C_IO_CONTROL_SIGN;
+               control_kind == F2C_IO_CONTROL_SIGN || control_kind == F2C_IO_CONTROL_DELIM;
     if (statement_kind == F2C_STMT_OPEN)
         return control_kind == F2C_IO_CONTROL_UNIT || control_kind == F2C_IO_CONTROL_FILE ||
                control_kind == F2C_IO_CONTROL_STATUS || control_kind == F2C_IO_CONTROL_ERR ||
@@ -169,7 +169,7 @@ static F2cIoControlKind positional_io_control_kind(F2cStatementKind statement_ki
         return F2C_IO_CONTROL_FMT;
     if (statement_kind == F2C_STMT_PRINT && position == 0U)
         return F2C_IO_CONTROL_FMT;
-    if (statement_kind == F2C_STMT_OPEN && position == 0U)
+    if ((statement_kind == F2C_STMT_OPEN || statement_kind == F2C_STMT_INQUIRE) && position == 0U)
         return F2C_IO_CONTROL_UNIT;
     if ((statement_kind == F2C_STMT_CLOSE || statement_kind == F2C_STMT_REWIND ||
          statement_kind == F2C_STMT_BACKSPACE || statement_kind == F2C_STMT_ENDFILE) &&
@@ -607,6 +607,7 @@ static void validate_transfer_relations(Context *context, Unit *unit, const F2cS
     static const char *const round[] = {"up",      "down",       "zero",
                                         "nearest", "compatible", "processor_defined"};
     static const char *const sign[] = {"plus", "suppress", "processor_defined"};
+    static const char *const delim[] = {"none", "apostrophe", "quote"};
     const F2cIoControl *unit_control;
     const F2cIoControl *record;
     const F2cIoControl *format;
@@ -630,6 +631,12 @@ static void validate_transfer_relations(Context *context, Unit *unit, const F2cS
                                sizeof(round) / sizeof(round[0]));
     validate_character_choices(context, statement, F2C_IO_CONTROL_SIGN, sign,
                                sizeof(sign) / sizeof(sign[0]));
+    validate_character_choices(context, statement, F2C_IO_CONTROL_DELIM, delim,
+                               sizeof(delim) / sizeof(delim[0]));
+    if (seen[F2C_IO_CONTROL_DELIM] && !seen[F2C_IO_CONTROL_NML] &&
+        (format == NULL || !format->asterisk))
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &statement->span, 1,
+                                 "DELIM= requires list-directed or NAMELIST output");
     if (advance != NULL) {
         validate_character_choices(context, statement, F2C_IO_CONTROL_ADVANCE, yes_no,
                                    sizeof(yes_no) / sizeof(yes_no[0]));
