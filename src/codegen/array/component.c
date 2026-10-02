@@ -88,13 +88,12 @@ static int emit_temporary_declaration(Context *context, Unit *unit, const F2cExp
                           *character_length);
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output,
-                          "if (f2c_component_length != 0U && f2c_component_count > "
-                          "SIZE_MAX / f2c_component_length) abort();\n");
+                          "const size_t f2c_component_bytes = f2c_size_multiply_checked("
+                          "f2c_component_count, f2c_component_length);\n");
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output,
                           "char *f2c_component_values = (char *)malloc("
-                          "f2c_component_count == 0U || f2c_component_length == 0U ? 1U : "
-                          "f2c_component_count * f2c_component_length);\n");
+                          "f2c_component_bytes == 0U ? 1U : f2c_component_bytes);\n");
     } else {
         f2c_buffer_printf(&context->output,
                           "if (f2c_component_count > SIZE_MAX / sizeof(%s)) abort();\n",
