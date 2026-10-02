@@ -1,6 +1,7 @@
 #include "codegen/descriptor/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -150,13 +151,44 @@ failed:
     return 0;
 }
 
+static int lowered_array_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView *view) {
+    const char *data = f2c_lowering_code(unit, expression);
+    size_t dimension;
+    if (data == NULL)
+        return 0;
+    view->data = f2c_strdup(data);
+    view->rank = expression->rank;
+    if (expression->type == TYPE_CHARACTER)
+        view->character_length = f2c_character_length_expression(unit, expression);
+    for (dimension = 0U; dimension < view->rank; ++dimension) {
+        Buffer stride = {0};
+        size_t prior;
+        view->lower[dimension] = f2c_strdup("1");
+        view->extent[dimension] = f2c_array_expression_extent(unit, expression, dimension);
+        f2c_buffer_append(&stride, "((ptrdiff_t)1");
+        for (prior = 0U; prior < dimension; ++prior)
+            f2c_buffer_printf(&stride, " * (ptrdiff_t)(%s)", view->extent[prior]);
+        f2c_buffer_append(&stride, ")");
+        view->stride[dimension] = f2c_buffer_take(&stride);
+        if (view->lower[dimension] == NULL || view->extent[dimension] == NULL ||
+            view->stride[dimension] == NULL)
+            return 0;
+    }
+    return view->data != NULL &&
+           (expression->type != TYPE_CHARACTER || view->character_length != NULL);
+}
+
 int f2c_descriptor_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView *view) {
     int result = 0;
-    if (unit == NULL || expression == NULL || view == NULL || expression->symbol == NULL)
+    if (unit == NULL || expression == NULL || view == NULL)
         return 0;
     memset(view, 0, sizeof(*view));
-    if (expression->kind == F2C_EXPR_NAME ||
-        (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U))
+    if (f2c_lowering_is_array_temporary(unit, expression))
+        result = lowered_array_view(unit, expression, view);
+    else if (expression->symbol == NULL)
+        return 0;
+    else if (expression->kind == F2C_EXPR_NAME ||
+             (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U))
         result = whole_array_view(unit, expression, view);
     else if (expression->kind == F2C_EXPR_ARRAY_REFERENCE || expression->kind == F2C_EXPR_COMPONENT)
         result = section_view(unit, expression, view);
