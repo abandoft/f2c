@@ -45,7 +45,9 @@ static int emit_shape(Buffer *output, Unit *unit, const F2cExpr *target, const F
                       int depth, char **target_extents, char **right_extents) {
     size_t dimension;
     for (dimension = 0U; dimension < target->rank; ++dimension) {
-        target_extents[dimension] = target->child_count == 1U
+        target_extents[dimension] = target->kind == F2C_EXPR_COMPONENT &&
+                                            target->child_count == 1U &&
+                                            target->children[0]->rank == 0U
                                         ? f2c_descriptor_dimension_extent(unit, target, dimension)
                                         : f2c_array_expression_extent(unit, target, dimension);
         if (right->rank != 0U)
@@ -117,11 +119,13 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
     char *right_extents[F2C_MAX_RANK] = {0};
     char ordinal_names[F2C_MAX_RANK][64];
     const char *ordinals[F2C_MAX_RANK] = {0};
+    F2cExpr *prepared_target = NULL;
     F2cExpr *prepared_right = NULL;
     F2cExpr *right_element = NULL;
     F2cExpr *left_element = NULL;
     char *right_code = NULL;
     char *left_code = NULL;
+    char *left_pointer = NULL;
     char *storage = NULL;
     char *character_length = NULL;
     Buffer prelude = {0};
@@ -131,7 +135,8 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
     int emitted_depth;
     int result = 0;
     if (context == NULL || unit == NULL || target == NULL || right == NULL || symbol == NULL ||
-        target->kind != F2C_EXPR_COMPONENT || target->child_count == 0U || target->rank == 0U)
+        (target->kind != F2C_EXPR_COMPONENT && target->kind != F2C_EXPR_SUBSTRING) ||
+        target->child_count == 0U || target->rank == 0U)
         return 0;
     if (symbol->allocatable && target->child_count == 1U &&
         right->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
@@ -147,11 +152,16 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
                        "component array assignment requires compatible type and kind");
         return 1;
     }
+    prepared_target = f2c_array_clone_expression(unit, target);
     prepared_right = f2c_array_clone_expression(unit, right);
-    if (prepared_right == NULL ||
+    if (prepared_target == NULL || prepared_right == NULL ||
+        !f2c_array_materialize_constructors(context, unit, prepared_target, line,
+                                            "component_target", &temporary, &prelude, &cleanup,
+                                            depth + 1) ||
         !f2c_array_materialize_constructors(context, unit, prepared_right, line, "component",
                                             &temporary, &prelude, &cleanup, depth + 1))
         goto unsupported;
+    target = prepared_target;
     for (dimension = 0U; dimension < target->rank; ++dimension) {
         (void)snprintf(ordinal_names[dimension], sizeof(ordinal_names[dimension]),
                        "f2c_component_ordinal_%zu", dimension);
@@ -164,9 +174,14 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
     if (symbol->type != TYPE_DERIVED)
         right_code = f2c_array_emit_expression(unit, right_element);
     left_code = f2c_array_emit_expression(unit, left_element);
-    storage = f2c_descriptor_storage_designator(unit, target);
+    if (left_code != NULL && symbol->type == TYPE_CHARACTER)
+        left_pointer = f2c_character_source_pointer(unit, left_element, left_code);
+    if (symbol->pointer || symbol->allocatable)
+        storage = f2c_descriptor_storage_designator(
+            unit, target->kind == F2C_EXPR_SUBSTRING ? f2c_substring_parent(target) : target);
     if ((symbol->type != TYPE_DERIVED && right_code == NULL) || left_code == NULL ||
-        storage == NULL)
+        (symbol->type == TYPE_CHARACTER && left_pointer == NULL) ||
+        ((symbol->pointer || symbol->allocatable) && storage == NULL))
         goto unsupported;
 
     f2c_array_indent(&context->output, depth);
@@ -264,10 +279,10 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
     if (symbol->type == TYPE_CHARACTER) {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output,
-                          "if (f2c_component_length != 0U) memmove(&(%s), "
+                          "if (f2c_component_length != 0U) memmove(%s, "
                           "f2c_component_values + f2c_component_linear * "
                           "f2c_component_length, f2c_component_length);\n",
-                          left_code);
+                          left_pointer);
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "++f2c_component_linear;\n");
     } else if (symbol->type == TYPE_DERIVED) {
@@ -319,11 +334,13 @@ cleanup_all:
     free_dimensions(right_extents, target->rank);
     free(right_code);
     free(left_code);
+    free(left_pointer);
     free(storage);
     free(character_length);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);
     f2c_codegen_expression_free(unit, prepared_right);
+    f2c_codegen_expression_free(unit, prepared_target);
     f2c_codegen_expression_free(unit, right_element);
     f2c_codegen_expression_free(unit, left_element);
     return result;
