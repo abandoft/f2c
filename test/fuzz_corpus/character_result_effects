@@ -2,18 +2,26 @@ module zero_character_effects
 integer :: calls = 0
 contains
 function make_text(n) result(value)
-integer, intent(in) :: n
+integer, intent(inout) :: n
 character(n) :: value
 calls = calls + 1
 value = 'x'
+n = n + 3
 end function
 end module
 program zero_character_result
 use zero_character_effects
 character(:), allocatable :: text
+character(2) :: values(2)
 integer :: n
 n = 0
 text = make_text(n)
-if (calls /= 1) stop 1
+if (calls /= 1 .or. n /= 3 .or. len(text) /= 0) stop 1
+n = 2
+text = make_text(n)
+if (calls /= 2 .or. n /= 5 .or. len(text) /= 2) stop 2
+n = 0
+values = make_text(n)
+if (calls /= 3 .or. n /= 3 .or. any(values /= '  ')) stop 3
 deallocate(text)
 end program
