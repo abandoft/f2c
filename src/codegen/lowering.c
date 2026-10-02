@@ -499,7 +499,12 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
     size_t i;
     if (symbol->equivalence_unaligned)
         return f2c_emit_unaligned_load(unit, symbol, indices, count);
-    f2c_buffer_printf(&result, "%s[", f2c_symbol_c_name(unit, symbol));
+    if (symbol->module_entity && symbol->volatile_entity && !symbol->pointer &&
+        !symbol->allocatable && symbol->type != TYPE_CHARACTER && symbol->type != TYPE_DERIVED)
+        f2c_buffer_printf(&result, "((volatile %s *)%s)[", f2c_symbol_c_type(symbol),
+                          f2c_symbol_c_name(unit, symbol));
+    else
+        f2c_buffer_printf(&result, "%s[", f2c_symbol_c_name(unit, symbol));
     if (symbol->type == TYPE_CHARACTER) {
         character_length = f2c_symbol_character_length(unit, symbol);
         if (character_length == NULL)
