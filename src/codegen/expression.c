@@ -159,6 +159,8 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
         return f2c_strdup(strcmp(expression->text, ".true.") == 0 ? "true" : "false");
     case F2C_EXPR_NAME:
         return f2c_expression_name(unit, expression, supported);
+    case F2C_EXPR_PARENTHESIZED:
+        return f2c_expression_parenthesized(unit, expression, supported);
     case F2C_EXPR_COMPONENT:
         if (expression->child_count < 1U || expression->symbol == NULL) {
             *supported = 0;

@@ -5,6 +5,7 @@
 char *f2c_expression_emit_substring(Unit *unit, const F2cExpr *expression, int *supported);
 
 char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported);
+char *f2c_expression_parenthesized(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_emit_array_reference(Unit *unit, const F2cExpr *expression, int *supported);
 void f2c_expression_append_component(Buffer *output, const char *base,
                                      const F2cDerivedType *dynamic_type, const Symbol *component);

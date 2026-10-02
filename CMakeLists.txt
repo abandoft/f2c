@@ -135,6 +135,7 @@ set(
     src/codegen/expression/call.c
     src/codegen/expression/time.c
     src/codegen/expression/character.c
+    src/codegen/expression/value.c
     src/codegen/expression/conversion.c
     src/codegen/expression/descriptor.c
     src/codegen/expression/derived_actual.c
