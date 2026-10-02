@@ -1,0 +1,19 @@
+module zero_character_effects
+integer :: calls = 0
+contains
+function make_text(n) result(value)
+integer, intent(in) :: n
+character(n) :: value
+calls = calls + 1
+value = 'x'
+end function
+end module
+program zero_character_result
+use zero_character_effects
+character(:), allocatable :: text
+integer :: n
+n = 0
+text = make_text(n)
+if (calls /= 1) stop 1
+deallocate(text)
+end program
