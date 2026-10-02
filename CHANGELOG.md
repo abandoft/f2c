@@ -6,6 +6,8 @@
 - Made formatted real input target-kind-aware, including directed rounding, implicit decimal points, scale factors, special values, and dynamically allocated wide fields.
 - Added `DECIMAL`, `ROUND`, and `SIGN` connection defaults and statement-level overrides with validation and scoped restoration.
 - Added `OPEN` and `INQUIRE` support for formatted connection controls, including dynamic-value error reporting.
+- Fixed memory leaks for malformed `WHERE` statements and preserved original source locations for continued masks and assignments.
+- Included the public version header in release archives so packaged headers can be used independently.
 
 ## 1.38.0
 
