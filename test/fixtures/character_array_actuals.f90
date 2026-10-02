@@ -1,4 +1,10 @@
+module character_actual_storage
+  implicit none
+  character(:), allocatable :: dynamic(:)
+end module
+
 program character_array_actuals
+  use character_actual_storage, only: dynamic
   implicit none
   type :: record_t
     character(8) :: label
@@ -6,7 +12,6 @@ program character_array_actuals
     integer :: marker
   end type
   character(8) :: records(-1:2,3:4)
-  character(:), allocatable :: dynamic(:)
   type(record_t) :: data(3), selected
   character(3) :: text
   character(:), allocatable :: result_text
