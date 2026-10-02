@@ -1,6 +1,7 @@
 #include "codegen/expression/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -55,6 +56,39 @@ static int reduction_code(F2cIntrinsicId intrinsic) {
     if (intrinsic == F2C_INTRINSIC_COUNT)
         return 2;
     return -1;
+}
+
+static int direct_relation_operand(const F2cExpr *operand) {
+    if (operand == NULL)
+        return 0;
+    if (operand->rank != 0U)
+        return operand->kind == F2C_EXPR_NAME && operand->symbol != NULL &&
+               (operand->rank == 1U ||
+                (!operand->symbol->pointer && !f2c_symbol_uses_descriptor(operand->symbol)));
+    return operand->kind == F2C_EXPR_NAME || operand->kind == F2C_EXPR_INTEGER_LITERAL ||
+           operand->kind == F2C_EXPR_REAL_LITERAL || operand->kind == F2C_EXPR_STRING_LITERAL ||
+           operand->kind == F2C_EXPR_LOGICAL_LITERAL;
+}
+
+int f2c_expression_direct_relation_reduction(const F2cExpr *expression) {
+    const F2cExpr *mask;
+    const F2cExpr *left;
+    const F2cExpr *right;
+    int relation;
+    if (expression == NULL || expression->kind != F2C_EXPR_CALL ||
+        reduction_code(expression->intrinsic) < 0 || expression->child_count != 1U)
+        return 0;
+    mask = reduction_argument_value(expression->children[0]);
+    if (mask == NULL || mask->kind != F2C_EXPR_BINARY || mask->rank == 0U ||
+        mask->child_count != 2U)
+        return 0;
+    relation = relation_code(mask->text);
+    left = mask->children[0];
+    right = mask->children[1];
+    return relation >= 0 && direct_relation_operand(left) && direct_relation_operand(right) &&
+           left->type == right->type && left->type_kind == right->type_kind &&
+           left->type != TYPE_DERIVED &&
+           ((left->type != TYPE_COMPLEX && left->type != TYPE_DOUBLE_COMPLEX) || relation <= 1);
 }
 
 static int scalar_view(Unit *unit, const F2cExpr *expression, char **pointer, char **count,
@@ -206,6 +240,8 @@ char *f2c_expression_relation_reduction(Unit *unit, const F2cExpr *expression, i
     if (reduction < 0 || expression->child_count != 1U)
         return NULL;
     array = reduction_argument_value(expression->children[0]);
+    if (f2c_lowering_code(unit, array) != NULL)
+        return NULL;
     if (array == NULL || array->kind != F2C_EXPR_BINARY || array->child_count != 2U ||
         array->rank == 0U)
         return NULL;
@@ -314,8 +350,7 @@ static char *reduction_conformance(Unit *unit, const F2cExpr *array, const F2cEx
             free(result.data);
             return NULL;
         }
-        f2c_buffer_printf(&result, " && ((size_t)(%s) == (size_t)(%s))", array_extent,
-                          mask_extent);
+        f2c_buffer_printf(&result, " && ((size_t)(%s) == (size_t)(%s))", array_extent, mask_extent);
         free(array_extent);
         free(mask_extent);
     }
@@ -450,10 +485,9 @@ unsupported:
 }
 
 char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, int *supported) {
-    const int logical = expression != NULL &&
-                        (expression->intrinsic == F2C_INTRINSIC_ALL ||
-                         expression->intrinsic == F2C_INTRINSIC_ANY ||
-                         expression->intrinsic == F2C_INTRINSIC_COUNT);
+    const int logical = expression != NULL && (expression->intrinsic == F2C_INTRINSIC_ALL ||
+                                               expression->intrinsic == F2C_INTRINSIC_ANY ||
+                                               expression->intrinsic == F2C_INTRINSIC_COUNT);
     const F2cExpr *array;
     const F2cExpr *dimension;
     const F2cExpr *mask;
@@ -461,10 +495,9 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
     const F2cExpr *back;
     const char *macro;
     const int integer_result =
-        expression != NULL &&
-        (expression->intrinsic == F2C_INTRINSIC_COUNT ||
-         expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
-         expression->intrinsic == F2C_INTRINSIC_MINLOC);
+        expression != NULL && (expression->intrinsic == F2C_INTRINSIC_COUNT ||
+                               expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
+                               expression->intrinsic == F2C_INTRINSIC_MINLOC);
     char *pointer = NULL;
     char *count = NULL;
     char *stride = NULL;
@@ -490,11 +523,10 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
     }
     array = f2c_intrinsic_argument(expression->children, expression->child_count,
                                    logical ? "mask" : "array", 0U);
-    dimension =
-        f2c_intrinsic_argument(expression->children, expression->child_count, "dim", 1U);
-    mask = logical ? NULL
-                   : f2c_intrinsic_argument(expression->children, expression->child_count, "mask",
-                                            2U);
+    dimension = f2c_intrinsic_argument(expression->children, expression->child_count, "dim", 1U);
+    mask = logical
+               ? NULL
+               : f2c_intrinsic_argument(expression->children, expression->child_count, "mask", 2U);
     kind = expression->intrinsic == F2C_INTRINSIC_COUNT
                ? f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 2U)
                : NULL;
@@ -527,8 +559,7 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
         mask_scalar = f2c_strdup("true");
         conformance = reduction_conformance(unit, array, mask, count, mask_count);
     }
-    back_code =
-        back != NULL ? f2c_expression_emit(unit, back, supported) : f2c_strdup("false");
+    back_code = back != NULL ? f2c_expression_emit(unit, back, supported) : f2c_strdup("false");
     if (dimension != NULL)
         dimension_code = f2c_expression_emit(unit, dimension, supported);
     if (!*supported || mask_pointer == NULL || mask_count == NULL || mask_stride == NULL ||
@@ -553,8 +584,8 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
         f2c_buffer_printf(&result, "%s((const void *)(%s), sizeof(*(%s)), %s, %s)", macro, pointer,
                           pointer, count, stride);
     } else {
-        f2c_buffer_printf(&result, "%s(%s, %s, %s, (const void *)(%s), %s, %s, (%s)",
-                          macro, pointer, count, stride, mask_pointer, mask_size, mask_stride,
+        f2c_buffer_printf(&result, "%s(%s, %s, %s, (const void *)(%s), %s, %s, (%s)", macro,
+                          pointer, count, stride, mask_pointer, mask_size, mask_stride,
                           mask_scalar);
         if (expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
             expression->intrinsic == F2C_INTRINSIC_MINLOC)

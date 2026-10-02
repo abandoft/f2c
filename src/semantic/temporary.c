@@ -27,6 +27,13 @@ static F2cOwnedTemporaryKind owned_temporary_kind(const F2cExpr *expression) {
         return F2C_OWNED_TEMPORARY_ARRAY_FUNCTION_RESULT;
     if (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY)
         return F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE;
+    if (expression->kind == F2C_EXPR_CALL) {
+        const F2cIntrinsicSignature *intrinsic =
+            f2c_intrinsic_canonical_signature(expression->intrinsic);
+        if ((intrinsic != NULL && intrinsic->rank_rule == F2C_INTRINSIC_RANK_ELEMENTAL) ||
+            (expression->resolved_procedure != NULL && expression->resolved_procedure->elemental))
+            return F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE;
+    }
     return F2C_OWNED_TEMPORARY_NONE;
 }
 

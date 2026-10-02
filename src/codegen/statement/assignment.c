@@ -148,6 +148,7 @@ static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
     const size_t output_start = context != NULL ? context->output.length : 0U;
     const size_t previous_errors = context != NULL ? context->result.error_count : 0U;
     F2cStatement prepared_statement;
+    F2cExpr *prepared_left = NULL;
     F2cExpr *prepared_right = NULL;
     Buffer prelude = {0};
     F2cArrayCleanupList cleanup = {0};
@@ -155,10 +156,14 @@ static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
     int emitted = 0;
     if (context == NULL || unit == NULL || statement == NULL || statement->left == NULL ||
         statement->right == NULL || statement->left->rank != 0U || statement->right->rank != 0U ||
-        !f2c_array_contains_unmaterialized_value(unit, statement->right))
+        (!f2c_array_contains_unmaterialized_value(unit, statement->right) &&
+         !f2c_array_contains_unmaterialized_value(unit, statement->left)))
         return 0;
+    prepared_left = f2c_array_clone_expression(unit, statement->left);
     prepared_right = f2c_array_clone_expression(unit, statement->right);
-    if (prepared_right == NULL ||
+    if (prepared_left == NULL || prepared_right == NULL ||
+        !f2c_array_materialize_constructors(context, unit, prepared_left, line, "designator",
+                                            &temporary, &prelude, &cleanup, depth + 1) ||
         !f2c_array_materialize_constructors(context, unit, prepared_right, line, "scalar",
                                             &temporary, &prelude, &cleanup, depth + 1) ||
         prelude.length == 0U) {
@@ -172,6 +177,7 @@ static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
     f2c_buffer_append(&context->output, "{\n");
     f2c_buffer_append(&context->output, prelude.data);
     prepared_statement = *statement;
+    prepared_statement.left = prepared_left;
     prepared_statement.right = prepared_right;
     if (!f2c_emit_assignment_statement(context, unit, &prepared_statement, line, depth + 1)) {
         context->output.length = output_start;
@@ -186,6 +192,7 @@ static int emit_prepared_scalar_assignment(Context *context, Unit *unit,
     emitted = 1;
 
 done:
+    f2c_codegen_expression_free(unit, prepared_left);
     f2c_codegen_expression_free(unit, prepared_right);
     free(prelude.data);
     f2c_array_cleanup_clear(&cleanup);

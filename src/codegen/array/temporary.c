@@ -1,5 +1,6 @@
 #include "codegen/array/private.h"
 
+#include "codegen/expression/private.h"
 #include "codegen/lowering/private.h"
 #include "codegen/transform/private.h"
 
@@ -17,6 +18,19 @@ static int trivial_scalar(const F2cExpr *expression) {
            expression->kind == F2C_EXPR_STRING_LITERAL ||
            expression->kind == F2C_EXPR_LOGICAL_LITERAL || expression->kind == F2C_EXPR_NAME ||
            expression->kind == F2C_EXPR_ABSENT_ARGUMENT;
+}
+
+static int has_unlowered_call(const Unit *unit, const F2cExpr *expression) {
+    size_t child;
+    if (expression == NULL || f2c_lowering_code(unit, expression) != NULL)
+        return 0;
+    if (expression->kind == F2C_EXPR_CALL && expression->rank == 0U &&
+        expression->has_order_sensitive_call)
+        return 1;
+    for (child = 0U; child < expression->child_count; ++child)
+        if (has_unlowered_call(unit, expression->children[child]))
+            return 1;
+    return 0;
 }
 
 static int array_inquiry_call(const F2cExpr *expression) {
@@ -54,7 +68,7 @@ int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_
         char *code;
         int supported = 0;
         if (expression->type == TYPE_DERIVED || expression->type == TYPE_CHARACTER)
-            return 1;
+            goto children;
         if (expression->type == TYPE_UNKNOWN)
             return 0;
         code = f2c_emit_expression_ast(unit, expression, &supported);
@@ -80,6 +94,7 @@ int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_
                 return 0;
         return 1;
     }
+children:
     for (child = 0U; child < expression->child_count; ++child)
         if (!transfer_mold_argument(expression, child) &&
             !f2c_array_hoist_scalar_subexpressions(unit, expression->children[child], identifier,
@@ -107,10 +122,17 @@ static int array_transform_call(const Unit *unit, const F2cExpr *expression) {
 
 int f2c_array_contains_unmaterialized_value(const Unit *unit, const F2cExpr *expression) {
     size_t child;
+    if (f2c_expression_direct_relation_reduction(expression))
+        return 0;
     if (array_transform_call(unit, expression) || f2c_array_function_result_call(unit, expression))
         return 1;
     if (expression == NULL)
         return 0;
+    if (f2c_lowering_code(unit, expression) == NULL &&
+        (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR ||
+         expression->owned_temporary_kind == F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE ||
+         (expression->kind == F2C_EXPR_SUBSTRING && has_unlowered_call(unit, expression))))
+        return 1;
     if (expression->owned_temporary_kind == F2C_OWNED_TEMPORARY_TRANSFER_SOURCE &&
         f2c_lowering_code(unit, expression) == NULL)
         return 1;
@@ -213,16 +235,17 @@ static int materialize_transform(Context *context, Unit *unit, F2cExpr *expressi
     return f2c_array_cleanup_append(unit, cleanup, expression, depth);
 }
 
-static int scalar_context_requires_elemental_temporary(const Unit *unit, const F2cExpr *expression,
-                                                       const char *role) {
-    return expression != NULL && role != NULL && strcmp(role, "scalar") == 0 &&
-           expression->rank != 0U && f2c_lowering_code(unit, expression) == NULL &&
-           (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY);
+static int requires_elemental_temporary(const Unit *unit, const F2cExpr *expression,
+                                        int array_value_required) {
+    return expression != NULL && array_value_required && expression->rank != 0U &&
+           f2c_lowering_code(unit, expression) == NULL &&
+           expression->owned_temporary_kind == F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE;
 }
 
 static int materialize_elemental_value(Context *context, Unit *unit, F2cExpr *expression,
                                        size_t identifier, const char *role, size_t *temporary,
-                                       Buffer *prelude, F2cArrayCleanupList *cleanup, int depth) {
+                                       Buffer *prelude, F2cArrayCleanupList *cleanup, int depth,
+                                       int array_value_required) {
     const size_t output_start = prelude->length;
     const size_t current = expression->owned_temporary_index;
     const size_t previous_errors = context->result.error_count;
@@ -232,7 +255,7 @@ static int materialize_elemental_value(Context *context, Unit *unit, F2cExpr *ex
     int output_state;
     int emitted;
     (void)temporary;
-    if (!scalar_context_requires_elemental_temporary(unit, expression, role))
+    if (!requires_elemental_temporary(unit, expression, array_value_required))
         return 1;
     if (!f2c_array_owned_temporary_valid(unit, expression,
                                          F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE))
@@ -357,7 +380,7 @@ static int materialize_transfer_source(Context *context, Unit *unit, F2cExpr *ex
 static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expression,
                                     size_t identifier, const char *role, size_t *temporary,
                                     Buffer *prelude, F2cArrayCleanupList *cleanup, int depth,
-                                    int skip_root_transfer) {
+                                    int skip_root_transfer, int array_value_required) {
     size_t child;
     if (context == NULL || unit == NULL || temporary == NULL || prelude == NULL ||
         cleanup == NULL || role == NULL)
@@ -366,13 +389,31 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
         return 1;
     if (array_inquiry_call(expression))
         return 1;
+    if (f2c_expression_direct_relation_reduction(expression))
+        return 1;
+    if (expression->kind == F2C_EXPR_SUBSTRING && has_unlowered_call(unit, expression) &&
+        !f2c_array_hoist_scalar_subexpressions(unit, expression, identifier, role, temporary,
+                                               prelude, depth, 1))
+        return 0;
     if (expression->kind != F2C_EXPR_ARRAY_CONSTRUCTOR) {
         for (child = 0U; child < expression->child_count; ++child) {
             if (transfer_mold_argument(expression, child))
                 continue;
-            if (!materialize_constructors(context, unit, expression->children[child], identifier,
-                                          role, temporary, prelude, cleanup, depth, 0))
-                return 0;
+            {
+                const F2cIntrinsicSignature *intrinsic =
+                    expression->kind == F2C_EXPR_CALL
+                        ? f2c_intrinsic_canonical_signature(expression->intrinsic)
+                        : NULL;
+                const int elemental =
+                    (intrinsic != NULL && intrinsic->rank_rule == F2C_INTRINSIC_RANK_ELEMENTAL) ||
+                    (expression->resolved_procedure != NULL &&
+                     expression->resolved_procedure->elemental);
+                const int child_value_required = expression->kind == F2C_EXPR_CALL && !elemental;
+                if (!materialize_constructors(context, unit, expression->children[child],
+                                              identifier, role, temporary, prelude, cleanup, depth,
+                                              0, child_value_required))
+                    return 0;
+            }
         }
     }
     if (!f2c_array_materialize_function_result(unit, expression, identifier, role, temporary,
@@ -382,7 +423,7 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
                                cleanup, depth))
         return 0;
     if (!materialize_elemental_value(context, unit, expression, identifier, role, temporary,
-                                     prelude, cleanup, depth))
+                                     prelude, cleanup, depth, array_value_required))
         return 0;
     if (!skip_root_transfer && !materialize_transfer_source(context, unit, expression, identifier,
                                                             role, prelude, cleanup, depth))
@@ -416,6 +457,9 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
                                   f2c_expression_c_type(expression), name.data, code);
             }
             free(code);
+            /* A constant shape may consume the value only in the typed shape plan. */
+            f2c_array_indent(prelude, depth);
+            f2c_buffer_printf(prelude, "(void)%s;\n", name.data);
             return f2c_lowering_take_code(unit, expression, f2c_buffer_take(&name));
         } else {
             Buffer count = {0};
@@ -478,8 +522,9 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
 int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *expression,
                                        size_t identifier, const char *role, size_t *temporary,
                                        Buffer *prelude, F2cArrayCleanupList *cleanup, int depth) {
-    return materialize_constructors(context, unit, expression, identifier, role, temporary, prelude,
-                                    cleanup, depth, 0);
+    return materialize_constructors(
+        context, unit, expression, identifier, role, temporary, prelude, cleanup, depth, 0,
+        expression != NULL && (expression->rank == 0U || strcmp(role, "call") == 0));
 }
 
 int f2c_array_materialize_without_root_transfer(Context *context, Unit *unit, F2cExpr *expression,
@@ -487,7 +532,7 @@ int f2c_array_materialize_without_root_transfer(Context *context, Unit *unit, F2
                                                 size_t *temporary, Buffer *prelude,
                                                 F2cArrayCleanupList *cleanup, int depth) {
     return materialize_constructors(context, unit, expression, identifier, role, temporary, prelude,
-                                    cleanup, depth, 1);
+                                    cleanup, depth, 1, 0);
 }
 
 int f2c_array_emit_prepared_transform_assignment(Context *context, Unit *unit, const F2cExpr *left,
