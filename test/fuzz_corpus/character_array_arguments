@@ -1,0 +1,19 @@
+program character_array_arguments
+  implicit none
+  character(8) :: values(3)
+  character(:), allocatable :: text
+  values = 'abcdefgh'
+  call edit(values(3:1:-2)(2:4))
+  text = first(values([3,1])(2:4), 2)
+contains
+  subroutine edit(items)
+    character(*), intent(inout) :: items(:)
+    items = 'XYZ'
+  end subroutine
+  function first(items, n) result(result)
+    character(*), intent(in) :: items(:)
+    integer, intent(in) :: n
+    character(len=n+len(items)+size(items)) :: result
+    result = items(1)
+  end function
+end program
