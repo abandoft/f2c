@@ -25,6 +25,46 @@ static int push_expression(AstParser *parser, F2cExpr *parent, F2cExpr *child) {
     return f2c_ast_push_expression(parser, parent, child);
 }
 
+static F2cSourceSpan expression_range_span(const AstParser *parser, const char *begin,
+                                           const char *end) {
+    F2cSourceSpan span = {0};
+    size_t first = 0U;
+    size_t past = 0U;
+    size_t low = 0U;
+    size_t high = parser->token_count;
+    if (parser->tokens == NULL || parser->token_count == 0U) {
+        span.begin.line = 1U;
+        span.begin.column = (size_t)(begin - parser->source) + 1U;
+        span.end.line = 1U;
+        span.end.column = (size_t)(end - parser->source) + 1U;
+        return span;
+    }
+    /* Canonical tokens are ordered in the normalized source buffer. Binary
+     * searches retain physical/macro locations without rescanning or quadratic
+     * work for deeply nested expression trees. */
+    while (low < high) {
+        const size_t middle = low + (high - low) / 2U;
+        const F2cToken *token = &parser->tokens[middle];
+        if (token->begin + token->length <= begin)
+            low = middle + 1U;
+        else
+            high = middle;
+    }
+    first = low;
+    high = parser->token_count;
+    while (low < high) {
+        const size_t middle = low + (high - low) / 2U;
+        if (parser->tokens[middle].begin < end)
+            low = middle + 1U;
+        else
+            high = middle;
+    }
+    past = low;
+    if (first < past)
+        span = f2c_source_span_cover(&parser->tokens[first].span, &parser->tokens[past - 1U].span);
+    return span;
+}
+
 void f2c_ast_set_expression_range(const AstParser *parser, F2cExpr *expression, const char *begin,
                                   const char *end) {
     if (parser == NULL || expression == NULL || parser->source == NULL || begin == NULL ||
@@ -36,6 +76,7 @@ void f2c_ast_set_expression_range(const AstParser *parser, F2cExpr *expression, 
         --end;
     expression->source_offset = (size_t)(begin - parser->source);
     expression->source_length = (size_t)(end - begin);
+    expression->span = expression_range_span(parser, begin, end);
 }
 
 static void set_combined_expression_range(F2cExpr *expression, const F2cExpr *left,
@@ -49,6 +90,7 @@ static void set_combined_expression_range(F2cExpr *expression, const F2cExpr *le
         return;
     expression->source_offset = left->source_offset;
     expression->source_length = end - left->source_offset;
+    expression->span = f2c_source_span_cover(&left->span, &right->span);
 }
 
 static int token_begins_implied_do_control(const AstParser *parser) {
