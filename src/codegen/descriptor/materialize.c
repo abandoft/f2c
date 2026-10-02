@@ -250,9 +250,12 @@ int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit
         if (view->character_length == NULL)
             goto failed;
         indent(prelude, depth);
+        f2c_buffer_printf(prelude, "(void)f2c_size_multiply_checked(%s, %s);\n", storage_count,
+                          character_length);
+        indent(prelude, depth);
         f2c_buffer_printf(prelude,
                           "char *%s = (char *)malloc(%s == 0U || %s == 0U ? 1U : "
-                          "f2c_size_multiply_checked(%s, %s));\n",
+                          "%s * %s);\n",
                           view->data, storage_count, character_length, storage_count,
                           character_length);
     } else if (expression->type == TYPE_DERIVED) {
