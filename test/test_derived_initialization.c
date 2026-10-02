@@ -47,8 +47,44 @@ static void check_expansion_budget(void) {
     f2c_result_free(&result);
 }
 
+static void check_expansion_work_budget(void) {
+    static const char source[] = "module bounded_defaults\n"
+                                 " type :: large\n"
+                                 "  integer :: values(1000000) = 1\n"
+                                 " end type\n"
+                                 "end module\n";
+    F2cInput input = {source, sizeof(source) - 1U, {"bounded-defaults.f90", F2C_SOURCE_FREE, 0}};
+    F2cConfig config = {.structure_size = sizeof(config)};
+    F2cResult result;
+    config.limits.max_constant_steps = 64U;
+    result = f2c_transpile_project_config(&input, 1U, &config);
+    if (result.code != NULL || result.error_count == 0U || result.diagnostics == NULL ||
+        strstr(result.diagnostics, "constant-evaluation step limit") == NULL) {
+        fprintf(stderr, "FAIL: derived broadcast work must fit the constant budget\n");
+        ++failures;
+    }
+    f2c_result_free(&result);
+    {
+        static const char characters[] = "module bounded_characters\n"
+                                         " type :: large\n"
+                                         "  character :: values(1000000) = 'a'\n"
+                                         " end type\n"
+                                         "end module\n";
+        input.source = characters;
+        input.length = sizeof(characters) - 1U;
+        result = f2c_transpile_project_config(&input, 1U, &config);
+        if (result.code != NULL || result.error_count == 0U || result.diagnostics == NULL ||
+            strstr(result.diagnostics, "constant-evaluation step limit") == NULL) {
+            fprintf(stderr, "FAIL: character-component expansion must fit the work budget\n");
+            ++failures;
+        }
+        f2c_result_free(&result);
+    }
+}
+
 int main(void) {
     check_expansion_budget();
+    check_expansion_work_budget();
     check("module legal_recursive_type\n"
           " type :: node\n"
           "  integer :: value = 2\n"
