@@ -1,4 +1,5 @@
 #include "frontend/declaration/private.h"
+#include "frontend/declaration/symbol.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -93,31 +94,49 @@ void f2c_parse_entity_attribute_declaration(Context *context, Unit *unit, Line *
     }
     while (index < source_line->token_count) {
         const F2cToken *token = &source_line->tokens[index];
-        char *entity_name;
         Symbol *symbol;
         int *storage;
+        unsigned int scoped_attribute = 0U;
         if (token->kind != F2C_TOKEN_IDENTIFIER) {
             f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SYNTAX, source_line, token, 1,
                                       "malformed %s declaration entity", name);
             return;
         }
-        entity_name = f2c_token_text(token);
         ++index;
-        symbol = entity_name != NULL ? f2c_ensure_symbol_impl(unit, entity_name) : NULL;
-        free(entity_name);
+        if (attribute != F2C_ENTITY_ATTRIBUTE_TARGET) {
+            char *entity_name = f2c_token_text(token);
+            if (attribute == F2C_ENTITY_ATTRIBUTE_ASYNCHRONOUS)
+                scoped_attribute = F2C_SCOPED_ASYNCHRONOUS;
+            else if (attribute == F2C_ENTITY_ATTRIBUTE_VOLATILE)
+                scoped_attribute = F2C_SCOPED_VOLATILE;
+            symbol = entity_name != NULL ? f2c_ensure_symbol(unit, entity_name) : NULL;
+            free(entity_name);
+            if (symbol == NULL)
+                f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line, token,
+                                          1, "out of memory in %s declaration", name);
+            else if (scoped_attribute == 0U && symbol->association != F2C_ASSOCIATION_LOCAL) {
+                f2c_diagnostic_token_code(
+                    context, F2C_DIAGNOSTIC_SEMANTIC, source_line, token, 1,
+                    "%s cannot change the attributes of %s-associated entity '%s'", name,
+                    symbol->association == F2C_ASSOCIATION_USE ? "USE" : "HOST", symbol->name);
+                return;
+            }
+        } else {
+            symbol = f2c_declaration_symbol(context, unit, source_line, token);
+        }
         if (symbol == NULL) {
-            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, source_line, token, 1,
-                                      "out of memory in %s declaration", name);
             return;
         }
         storage = attribute_storage(symbol, attribute);
         if (storage == NULL)
             return;
-        if (*storage) {
+        if (*storage && (symbol->association == F2C_ASSOCIATION_LOCAL || scoped_attribute == 0U ||
+                         (symbol->scoped_attributes & scoped_attribute) != 0U)) {
             f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, source_line, token, 1,
                                       "duplicate %s attribute for '%s'", name, symbol->name);
         } else {
             *storage = 1;
+            symbol->scoped_attributes |= scoped_attribute;
             if (symbol->declaration_line == 0U) {
                 symbol->declaration_line = source_line->number;
                 symbol->declaration_span = token->span;
