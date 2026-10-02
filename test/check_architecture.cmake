@@ -65,6 +65,9 @@ foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
             )
         endif()
     endif()
+    if(CONTENT MATCHES "f2c_parse_statement[ \t\r\n]*\\(unit[ \t\r\n]*,")
+        message(FATAL_ERROR "${RELATIVE_FILE} retokenizes a nested source statement")
+    endif()
     if(
         CONTENT MATCHES
             "f2c_(identifier|split_arguments|split_actual_arguments|split_comma_list|starts_word|evaluate_integer_text|expression_type|expression_is_designator)[ \t\r\n]*\\("
