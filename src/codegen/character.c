@@ -1,5 +1,6 @@
 #include "internal/f2c.h"
 
+#include "codegen/call/private.h"
 #include "codegen/lowering/private.h"
 
 #include <ctype.h>
@@ -281,6 +282,9 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
                 source = source->children[0];
             return f2c_character_length_expression(unit, source);
         }
+        if (expression->intrinsic == F2C_INTRINSIC_NONE && expression->symbol != NULL &&
+            expression->symbol->character_length_scope != NULL)
+            return f2c_call_result_character_length(unit, expression);
         return f2c_symbol_character_length(unit, expression->symbol);
     }
     if (expression->kind == F2C_EXPR_BINARY && expression->text != NULL &&
