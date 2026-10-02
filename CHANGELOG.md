@@ -9,6 +9,8 @@
 - Added scalar constant broadcast initialization for fixed-shape numeric, logical, and complex module arrays while preserving floating-point negative zero.
 - Corrected static storage generation for zero-element arrays, zero-length characters, and overflowing array sizes, sharing shape calculation between modules and derived components.
 - Optimized derived-component broadcast initializers to avoid repeated per-element evaluation and check actual output bytes before expansion.
+- Corrected explicit intrinsic procedure declarations and host/imported bindings, preventing spurious undeclared-variable errors and storage while rejecting conflicting data attributes.
+- Implemented the covered legacy `ETIME` function form with user/system CPU timing and explicit unavailable-platform handling, replacing unresolved intrinsic calls.
 
 ## 1.42.0
 
