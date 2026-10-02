@@ -553,6 +553,16 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
     for (i = 0U; i < expression->child_count; ++i)
         f2c_validation_expression_calls(context, unit, line, statement_text,
                                         expression->children[i]);
+    if (expression->kind == F2C_EXPR_PARENTHESIZED) {
+        f2c_expr_refresh_parenthesized(expression);
+        if (expression->child_count != 1U || expression->children[0] == NULL ||
+            expression->children[0]->value_category == F2C_VALUE_PROCEDURE ||
+            expression->children[0]->value_category == F2C_VALUE_TYPE)
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &expression->span, 1,
+                                     "a parenthesized primary requires a data expression");
+        else if (f2c_expression_is_initialization_constant(expression))
+            expression->value_category = F2C_VALUE_CONSTANT;
+    }
     operator_handled = resolve_operator(context, unit, line, statement_text, expression);
     refresh_intrinsic_operator_shape(expression, operator_handled);
     f2c_validate_designator_components(context, expression);
