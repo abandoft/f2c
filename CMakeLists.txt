@@ -96,6 +96,10 @@ set(
     src/codegen/array/value.c
     src/codegen/array/value.h
     src/codegen/call.c
+    src/codegen/call/actual.c
+    src/codegen/call/expression.c
+    src/codegen/call/private.h
+    src/codegen/call/specification.c
     src/codegen/character.c
     src/codegen/codegen.h
     src/codegen/data.c
