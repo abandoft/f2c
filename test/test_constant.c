@@ -16,6 +16,30 @@ static void expect(int condition, const char *message) {
     }
 }
 
+static void test_expansion_reservation(void) {
+    Context context = {0};
+    Unit unit = {.context = &context};
+    context.limits.max_constant_steps = 10U;
+    context.constant_evaluation_steps = 7U;
+    expect(f2c_reserve_constant_steps(&unit, 3U) && context.constant_evaluation_steps == 10U,
+           "bulk expansion can consume the exact remaining request budget");
+    expect(!f2c_reserve_constant_steps(&unit, 1U) && context.constant_evaluation_steps == 10U &&
+               context.result.error_count == 1U,
+           "oversized expansion is rejected without incrementing or iterating");
+    expect(!f2c_reserve_constant_steps(&unit, SIZE_MAX) && context.result.error_count == 1U,
+           "repeated budget failures produce only one resource diagnostic");
+    free(context.diagnostics.data);
+    memset(&context, 0, sizeof(context));
+    context.constant_evaluation_steps = SIZE_MAX - 1U;
+    expect(!f2c_reserve_constant_steps(&unit, 2U) &&
+               context.constant_evaluation_steps == SIZE_MAX - 1U,
+           "bulk reservation cannot overflow an unrestricted counter");
+    free(context.diagnostics.data);
+    expect(f2c_reserve_constant_steps(NULL, F2C_DEFAULT_MAX_CONSTANT_STEPS) &&
+               !f2c_reserve_constant_steps(NULL, F2C_DEFAULT_MAX_CONSTANT_STEPS + 1U),
+           "detached scopes retain a finite default expansion budget");
+}
+
 static Symbol *add_parameter(Symbol *symbols, size_t index, const char *name,
                              const char *initializer) {
     Symbol *symbol = &symbols[index];
@@ -390,6 +414,7 @@ static void test_normalized_character_lengths(void) {
 }
 
 int main(void) {
+    test_expansion_reservation();
     test_normalized_character_lengths();
     Symbol symbols[3];
     Unit unit;
