@@ -1,5 +1,6 @@
 #include "internal/f2c.h"
 #include "semantic/constant/private.h"
+#include "semantic/scope.h"
 
 #include "semantic/numeric_model.h"
 
@@ -220,10 +221,11 @@ int f2c_constant_evaluate_real(F2cConstantEvaluation *evaluation, const F2cExpr 
         const F2cExpr *initializer = expression->symbol->initializer_expression;
         int result;
         if (initializer == NULL && expression->symbol->initializer_syntax.count != 0U) {
-            temporary =
-                f2c_parse_expression_tokens(unit, expression->symbol->initializer_syntax.tokens,
-                                            expression->symbol->initializer_syntax.count,
-                                            expression->symbol->initializer_syntax.source, NULL);
+            temporary = f2c_parse_expression_tokens(
+                f2c_symbol_specification_scope(unit, expression->symbol),
+                expression->symbol->initializer_syntax.tokens,
+                expression->symbol->initializer_syntax.count,
+                expression->symbol->initializer_syntax.source, NULL);
             initializer = temporary;
         }
         result = f2c_constant_evaluate_real(evaluation, initializer, value, depth + 1U);
