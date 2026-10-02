@@ -6,6 +6,10 @@ set(
     print_formats
     format_matrix
     format_real_matrix
+    format_integer_matrix
+    list_controls
+    dtio_controls
+    dtio_connection_controls
     formatted_internal
     formatted_record_input
     namelist_internal

@@ -871,6 +871,18 @@ if(F2C_BUILD_TESTING)
             )
             find_program(F2C_GFORTRAN_EXECUTABLE gfortran)
             if(F2C_GFORTRAN_EXECUTABLE)
+                foreach(io_differential IN ITEMS io_controls file_control format)
+                    add_test(
+                        NAME ${io_differential}_differential
+                        COMMAND
+                            ${CMAKE_COMMAND} -E env
+                            CC=${CMAKE_C_COMPILER}
+                            FC=${F2C_GFORTRAN_EXECUTABLE}
+                            ${F2C_SH_EXECUTABLE}
+                            ${CMAKE_CURRENT_SOURCE_DIR}/test/${io_differential}_differential.sh
+                            $<TARGET_FILE:f2c>
+                    )
+                endforeach()
                 add_test(
                     NAME namelist_ordered_differential
                     COMMAND

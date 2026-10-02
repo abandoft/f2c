@@ -101,6 +101,38 @@ foreach(io_fixture IN LISTS F2C_GENERATED_FIXTURES)
         message(FATAL_ERROR
                 "${io_fixture} generated executable failed: ${io_run_error}")
     endif()
+    if(io_fixture STREQUAL "list_controls")
+        set(number_source "${SOURCE_DIR}/test/generated/io_number_test.c")
+        set(number_executable "${BINARY_DIR}/generated_io_number_test")
+        if(F2C_MSVC_FRONTEND)
+            set(number_executable "${number_executable}.exe")
+            set(number_compile_command ${CC_COMMAND} /std:c17 /O2 /W4
+                "/I${BINARY_DIR}" "${number_source}" "/Fe${number_executable}")
+        else()
+            set(number_compile_command ${CC_COMMAND} -std=c17 -O2 -Wall -Wextra
+                -Wpedantic -Wconversion -Wshadow -Wstrict-prototypes -Wmissing-prototypes
+                -Werror "-I${BINARY_DIR}" "${number_source}" -lm -o "${number_executable}")
+        endif()
+        execute_process(COMMAND ${number_compile_command}
+            RESULT_VARIABLE number_compile_status OUTPUT_VARIABLE number_compile_output
+            ERROR_VARIABLE number_compile_error)
+        if(NOT number_compile_status EQUAL 0)
+            message(FATAL_ERROR "generated numeric helper test did not compile: ${number_compile_error}${number_compile_output}")
+        endif()
+        execute_process(COMMAND "${number_executable}"
+            RESULT_VARIABLE number_run_status OUTPUT_VARIABLE number_run_output
+            ERROR_VARIABLE number_run_error)
+        if(NOT number_run_status EQUAL 0)
+            message(FATAL_ERROR "generated numeric helper test failed: ${number_run_error}${number_run_output}")
+        endif()
+    elseif(io_fixture STREQUAL "dtio_controls")
+        file(READ "${SOURCE_DIR}/test/generated/dtio_controls.txt" dtio_expected)
+        string(REPLACE "\r\n" "\n" io_run_output "${io_run_output}")
+        string(REPLACE "\r\n" "\n" dtio_expected "${dtio_expected}")
+        if(NOT io_run_output STREQUAL dtio_expected)
+            message(FATAL_ERROR "DT child record positioning differs from the standard assertions: [${io_run_output}]")
+        endif()
+    endif()
     if(io_fixture STREQUAL "print_formats")
         string(REPLACE "\r\n" "\n" io_run_output "${io_run_output}")
         set(print_formats_expected
