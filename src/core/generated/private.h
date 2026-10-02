@@ -5,6 +5,7 @@
 
 void f2c_emit_bit_intrinsic_support(Buffer *output);
 void f2c_emit_character_intrinsic_support(Buffer *output);
+void f2c_emit_qualified_character_support(Buffer *output);
 void f2c_emit_extremum_support(Buffer *output, int needs_minimum, int needs_maximum);
 void f2c_emit_numeric_conversion_support(Buffer *output);
 void f2c_emit_numeric_model_contract(Buffer *output);
@@ -14,8 +15,8 @@ void f2c_emit_real_representation_support(Buffer *output);
 void f2c_emit_time_intrinsic_support(Buffer *output);
 void f2c_emit_process_cpu_time_support(Buffer *output);
 void f2c_emit_transfer_support(Buffer *output, int needs_complex);
-void f2c_emit_reduction_support(Buffer *output, int needs_complex);
-void f2c_emit_relation_reduction_support(Buffer *output, int needs_complex);
+void f2c_emit_reduction_support(Buffer *output, int needs_complex, int needs_qualified);
+void f2c_emit_relation_reduction_support(Buffer *output, int needs_complex, int needs_qualified);
 void f2c_emit_io_stream_support(Buffer *output);
 void f2c_emit_io_control_model(Buffer *output);
 void f2c_emit_io_control_support(Buffer *output);
