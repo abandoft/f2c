@@ -1,4 +1,5 @@
 #include "internal/f2c.h"
+#include "semantic/scope.h"
 
 #include <string.h>
 
@@ -137,6 +138,7 @@ static F2cShapeKind shape_kind_for_dimension(F2cDimensionKind kind) {
 
 void f2c_shape_from_symbol(Unit *unit, F2cShape *shape, const Symbol *symbol) {
     size_t dimension;
+    Unit *scope = f2c_symbol_specification_scope(unit, symbol);
     if (shape == NULL)
         return;
     memset(shape, 0, sizeof(*shape));
@@ -157,21 +159,24 @@ void f2c_shape_from_symbol(Unit *unit, F2cShape *shape, const Symbol *symbol) {
             shape->kind = dimension_shape;
         target->lower_known =
             source->lower_expression != NULL
-                ? f2c_evaluate_integer_constant(unit, source->lower_expression, &lower)
-                : symbol->dimension_lower_syntax[dimension].count != 0U
-                      ? f2c_evaluate_integer_syntax(
-                            unit, symbol->dimension_lower_syntax[dimension], &lower)
-                      : (lower = 1, 1);
+                ? f2c_evaluate_integer_constant(scope, source->lower_expression, &lower)
+            : symbol->dimension_lower_syntax[dimension].count != 0U
+                ? f2c_evaluate_integer_syntax(scope, symbol->dimension_lower_syntax[dimension],
+                                              &lower)
+                : (lower = 1, 1);
         if (target->lower_known)
             target->lower = lower;
         if (source->kind == F2C_DIMENSION_EXPLICIT &&
             (source->upper_expression != NULL
-                 ? f2c_evaluate_integer_constant(unit, source->upper_expression, &upper)
-                 : f2c_evaluate_integer_syntax(
-                       unit, symbol->dimension_upper_syntax[dimension], &upper)) &&
+                 ? f2c_evaluate_integer_constant(scope, source->upper_expression, &upper)
+                 : f2c_evaluate_integer_syntax(scope, symbol->dimension_upper_syntax[dimension],
+                                               &upper)) &&
             target->lower_known) {
+            const uint64_t distance = upper >= lower ? (uint64_t)upper - (uint64_t)lower : 0U;
+            if (upper >= lower && distance == UINT64_MAX)
+                continue;
             target->extent_known = 1;
-            target->extent = upper >= lower ? (uint64_t)upper - (uint64_t)lower + UINT64_C(1) : 0U;
+            target->extent = upper >= lower ? distance + UINT64_C(1) : 0U;
         }
     }
 }

@@ -1,3 +1,4 @@
+#include "semantic/scope.h"
 #include "semantic/validation/private.h"
 
 #include "ast/format.h"
@@ -555,6 +556,12 @@ static void validate_declaration_initializer(Context *context, size_t line, cons
 static void validate_entity_attributes(Context *context, Unit *unit, const Symbol *symbol,
                                        size_t line) {
     int64_t character_length;
+    if (symbol->association == F2C_ASSOCIATION_USE &&
+        (symbol->inconsistent_association_attributes & ~symbol->scoped_attributes) != 0U)
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->association_span, 1,
+                                 "USE paths for '%s' have different ASYNCHRONOUS or VOLATILE "
+                                 "attributes without an explicit local attribute declaration",
+                                 symbol->name);
     if (symbol->derived_owner != NULL && (symbol->optional || symbol->target || symbol->value ||
                                           symbol->asynchronous || symbol->volatile_entity)) {
         f2c_diagnostic_at(context, line, 1U, 1,
@@ -600,8 +607,9 @@ static void validate_entity_attributes(Context *context, Unit *unit, const Symbo
 }
 
 static void validate_character_length_expression(Context *context, Unit *unit, Symbol *symbol) {
-    Unit *length_scope =
-        symbol->character_length_scope != NULL ? symbol->character_length_scope : unit;
+    Unit *length_scope = symbol->character_length_scope != NULL
+                             ? symbol->character_length_scope
+                             : f2c_symbol_specification_scope(unit, symbol);
     const size_t line = symbol->declaration_line != 0U ? symbol->declaration_line
                                                        : context->lines.items[unit->begin].number;
     const char *source_line = f2c_validation_unit_line(context, unit, line);
@@ -632,13 +640,20 @@ static void validate_character_length_expression(Context *context, Unit *unit, S
 
 static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *symbol) {
     size_t dimension;
+    Unit *specification_scope = f2c_symbol_specification_scope(unit, symbol);
     const size_t line = symbol->declaration_line != 0U ? symbol->declaration_line
                                                        : context->lines.items[unit->begin].number;
     const char *source_line = f2c_validation_unit_line(context, unit, line);
+    if (specification_scope == NULL) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_INTERNAL, &symbol->declaration_span, 1,
+                                 "declaration scope for '%s' is unavailable", symbol->name);
+        return;
+    }
     if (symbol->initializer_syntax.count != 0U) {
         f2c_expr_free(symbol->initializer_expression);
-        symbol->initializer_expression = parse_specification_syntax(
-            context, unit, line, symbol->initializer_syntax, "declaration initializer");
+        symbol->initializer_expression =
+            parse_specification_syntax(context, specification_scope, line,
+                                       symbol->initializer_syntax, "declaration initializer");
     } else if (symbol->initializer == NULL) {
         f2c_expr_free(symbol->initializer_expression);
         symbol->initializer_expression = NULL;
@@ -681,13 +696,13 @@ static void validate_symbol_expressions(Context *context, Unit *unit, Symbol *sy
         f2c_expr_free(shape->upper_expression);
         shape->lower_expression =
             symbol->dimension_lower_syntax[dimension].count != 0U
-                ? parse_specification_syntax(context, unit, line,
+                ? parse_specification_syntax(context, specification_scope, line,
                                              symbol->dimension_lower_syntax[dimension],
                                              "array lower bound")
                 : f2c_expr_new_integer_constant(1);
         shape->upper_expression =
             shape->kind == F2C_DIMENSION_EXPLICIT
-                ? parse_specification_syntax(context, unit, line,
+                ? parse_specification_syntax(context, specification_scope, line,
                                              symbol->dimension_upper_syntax[dimension],
                                              "array upper bound")
                 : NULL;
