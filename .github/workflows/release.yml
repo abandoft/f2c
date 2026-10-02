@@ -78,8 +78,15 @@ jobs:
           cmake -E make_directory build/release/stage/bin build/release/stage/include/f2c
           cmake -E copy "${{ matrix.binary }}" "build/release/stage/bin/${{ matrix.packaged_binary }}"
           cmake -E copy include/f2c/f2c.h build/release/stage/include/f2c/f2c.h
+          cmake -E copy include/f2c/version.h build/release/stage/include/f2c/version.h
           cmake -E copy README.md README-ZH.md CHANGELOG.md CHANGELOG-ZH.md LICENSE build/release/stage
           printf '%s\n' "$archive" > build/release/archive-name.txt
+      - name: Verify staged public headers
+        shell: bash
+        run: |
+          cmake -S test/package -B build/release/header-check \
+            -DPACKAGED_INCLUDE_DIR="$PWD/build/release/stage/include"
+          cmake --build build/release/header-check --config Release --parallel
       - name: Create archive and SHA-256 checksum
         shell: bash
         run: |
