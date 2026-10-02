@@ -283,8 +283,9 @@ static int validate_member_contract(Context *context, Unit *unit, const Symbol *
     uint64_t size;
     uint64_t alignment;
     int valid = 1;
-    if (symbol->argument || symbol->parameter || symbol->external || symbol->allocatable ||
-        symbol->pointer || symbol->automatic_character || symbol->deferred_character) {
+    if (symbol->argument || symbol->parameter || symbol->external || symbol->intrinsic != NULL ||
+        symbol->allocatable || symbol->pointer || symbol->automatic_character ||
+        symbol->deferred_character) {
         f2c_diagnostic_span_code(
             context, F2C_DIAGNOSTIC_SEMANTIC, &symbol->common_span, 1,
             "COMMON entity '%s' must have static non-dummy, non-parameter storage", symbol->name);
@@ -652,9 +653,9 @@ static int validate_equivalence_member(Context *context, Unit *unit,
     uint64_t size;
     uint64_t alignment;
     int64_t designator_offset;
-    if (symbol->argument || symbol->parameter || symbol->external || symbol->allocatable ||
-        symbol->pointer || symbol->procedure_pointer || symbol->automatic_character ||
-        symbol->deferred_character || symbol->module_entity) {
+    if (symbol->argument || symbol->parameter || symbol->external || symbol->intrinsic != NULL ||
+        symbol->allocatable || symbol->pointer || symbol->procedure_pointer ||
+        symbol->automatic_character || symbol->deferred_character || symbol->module_entity) {
         f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &member->span, 1,
                                  "EQUIVALENCE entity '%s' must have fixed local non-dummy storage",
                                  symbol->name);
