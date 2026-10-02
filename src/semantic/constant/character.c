@@ -154,7 +154,7 @@ static int evaluate_substring(F2cCharacterConstantEvaluation *evaluation, const 
     if (parent == NULL || range == NULL || range->kind != F2C_EXPR_ARRAY_SECTION ||
         range->child_count != 3U || range->children[2]->kind != F2C_EXPR_INVALID ||
         !evaluate(evaluation, parent, &source, &source_length, depth + 1U) ||
-        source_length > (uint64_t)INT64_MAX ||
+        (uint64_t)source_length > (uint64_t)INT64_MAX ||
         (lower != NULL && !f2c_evaluate_integer_constant(evaluation->unit, lower, &first))) {
         free(source);
         return 0;
