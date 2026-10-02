@@ -198,6 +198,22 @@ static void emit_formatted_derived(Context *context, Unit *unit, const char *val
     f2c_io_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output,
                       "if (f2c_format_take_dt(&f2c_io_format, &f2c_dtio_descriptor)) {\n");
+    f2c_io_indent(&context->output, depth + 2);
+    f2c_buffer_append(
+        &context->output,
+        "f2c_format_flush_spaces(&f2c_io_format);\n"
+        "const long f2c_dtio_start = f2c_stream_tell(f2c_io_format.file);\n"
+        "const size_t f2c_dtio_column = f2c_stream_current_column(f2c_io_format.file);\n"
+        "const uint64_t f2c_dtio_record = f2c_stream_current_record(f2c_io_format.file);\n"
+        "const f2c_io_controls f2c_dtio_saved_controls = "
+        "f2c_io_format.file->controls;\n"
+        "const bool f2c_dtio_saved_active = f2c_io_format.file->controls_active;\n"
+        "f2c_io_format.file->controls.decimal_comma = "
+        "f2c_io_format.decimal_comma != 0;\n"
+        "f2c_io_format.file->controls.rounding = f2c_io_format.rounding;\n"
+        "f2c_io_format.file->controls.sign = f2c_io_format.sign_plus ? "
+        "F2C_SIGN_PLUS : F2C_SIGN_SUPPRESS;\n"
+        "f2c_io_format.file->controls_active = true;\n");
     if (!f2c_io_emit_defined_io_call(context, value, derived, kind, unit_number,
                                      "f2c_dtio_descriptor.iotype", "f2c_dtio_descriptor.v_list",
                                      "f2c_dtio_descriptor.v_list_count", "f2c_io_format.status",
@@ -205,6 +221,12 @@ static void emit_formatted_derived(Context *context, Unit *unit, const char *val
         f2c_io_indent(&context->output, depth + 2);
         f2c_buffer_append(&context->output, "f2c_io_format.status = 0;\n");
     }
+    f2c_io_indent(&context->output, depth + 2);
+    f2c_buffer_append(&context->output,
+                      "f2c_format_sync_child(&f2c_io_format, f2c_dtio_start, "
+                      "f2c_dtio_column, f2c_dtio_record);\n"
+                      "f2c_io_format.file->controls = f2c_dtio_saved_controls;\n"
+                      "f2c_io_format.file->controls_active = f2c_dtio_saved_active;\n");
     f2c_io_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "} else {\n");
     if (default_formatted_derived_supported(derived))
