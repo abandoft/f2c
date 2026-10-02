@@ -1,3 +1,21 @@
+## 1.41.0
+
+- Unified character substring designators for array elements, sections, and derived-type components.
+- Completed omitted endpoints, reversed empty substrings, and declared-length padding, truncation, and embedded NUL handling for character constants.
+- Added substring assignment for multidimensional character arrays and derived-array components, including reverse sections, scalar broadcasting, and overlapping reads and writes.
+- Improved substring pointer association, inherited component `TARGET` attributes, and `ASSOCIATED` checks without corrupting parent strings through alias writes.
+- Evaluated index and bound functions once on supported substring assignment, argument, and scalar pointer-association paths.
+- Lowered nested array constructors, `ABS`, `RESHAPE/SHAPE`, and `ANY/ALL/COUNT/SUM` expressions.
+- Retained direct reductions for simple array/scalar comparisons without allocating a complete logical mask.
+- Corrected assignment recognition for keyword-named variables and components, including valid `data(...) = ...` designators.
+- Split core implementation by designator parsing, character-length semantics, and substring emission while retaining libc/libm-only generated-code dependencies.
+- Fixed 32-bit character-length checks and extended strict filesystem-free WebAssembly compilation and execution coverage.
+- Unified copy-in/copy-out for noncontiguous character substring arguments in subroutine and function calls, covering explicit/assumed shapes, dynamic lengths, derived components, and character and derived-type function results.
+- Resolved character function result lengths in their procedure scope, substituted actual arguments into typed specification expressions, and evaluated specification arguments once.
+- Completed strict code generation for empty arrays and zero-length arguments and rejected illegal allocatable/pointer components following array references.
+- Made argument-lowering failures hard, source-located errors and rolled back incomplete output instead of silently omitting procedure calls.
+- Fixed a memory leak in invalid construct-prefix and branch-name combinations.
+
 ## 1.40.0
 
 - Unified scoped `DECIMAL/ROUND/SIGN/DELIM` controls across explicit-format, list-directed, and NAMELIST transfers, including nested overrides, invalid-value checks, and restoration on exit.
