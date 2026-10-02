@@ -68,18 +68,6 @@ static void append_c_character_constant(Buffer *output, unsigned char value, siz
     }
 }
 
-static int declaration_character_length(Unit *unit, const Symbol *symbol, int64_t *length) {
-    if (symbol->character_length_expression != NULL)
-        return f2c_evaluate_integer_constant(unit, symbol->character_length_expression, length);
-    if (symbol->character_length_syntax.count != 0U)
-        return f2c_evaluate_integer_syntax(unit, symbol->character_length_syntax, length);
-    if (symbol->character_length == NULL || strcmp(symbol->character_length, "1") == 0) {
-        *length = 1;
-        return 1;
-    }
-    return 0;
-}
-
 char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, int *supported) {
     const F2cExpr *initializer;
     const F2cExpr *const *values = NULL;
@@ -95,7 +83,7 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
     if (symbol == NULL || symbol->type != TYPE_CHARACTER || symbol->initializer == NULL ||
         symbol->initializer_expression == NULL ||
         symbol->initializer_expression->parse_error_offset != SIZE_MAX ||
-        !declaration_character_length(unit, symbol, &evaluated_length) ||
+        !f2c_character_declaration_length(unit, symbol, &evaluated_length) ||
         !character_element_count(unit, symbol, &element_count))
         return NULL;
     if (evaluated_length > 0 && (uint64_t)evaluated_length > SIZE_MAX)
@@ -135,6 +123,8 @@ char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, in
         }
         free(literal);
     }
+    if (symbol->rank != 0U && output_index == 0U)
+        f2c_buffer_append(&result, "0");
     f2c_buffer_append(&result, symbol->rank == 0U ? "\"" : "}");
     if (supported != NULL)
         *supported = 1;
@@ -165,7 +155,7 @@ char *f2c_symbol_character_length(Unit *unit, const Symbol *symbol) {
         return f2c_buffer_take(&result);
     }
     if (symbol->character_length != NULL)
-        return f2c_emit_typed_expression(unit, symbol->character_length_expression);
+        return f2c_character_parameter_length(unit, symbol->character_length_expression);
     if (symbol->parameter && symbol->initializer != NULL &&
         (symbol->initializer[0] == '\'' || symbol->initializer[0] == '"')) {
         f2c_buffer_printf(&result, "%zuU", f2c_character_literal_length(symbol->initializer));
@@ -344,22 +334,10 @@ static void emit_indent(Buffer *output, int depth) {
 }
 
 static char *character_target_length(Unit *unit, const Symbol *symbol) {
-    Buffer result = {0};
     if (unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER &&
         unit->result_name != NULL && strcmp(symbol->name, unit->result_name) == 0)
         return f2c_strdup("f2c_result_len");
-    if (symbol->deferred_character)
-        return f2c_symbol_character_length(unit, symbol);
-    if (symbol->automatic_character)
-        return f2c_symbol_character_length(unit, symbol);
-    if (symbol->argument && symbol->character_length != NULL &&
-        strcmp(symbol->character_length, "*") == 0) {
-        f2c_buffer_printf(&result, "f2c_len_%s", f2c_symbol_c_name(unit, symbol));
-        return f2c_buffer_take(&result);
-    }
-    if (symbol->character_length != NULL)
-        return f2c_emit_typed_expression(unit, symbol->character_length_expression);
-    return f2c_strdup("1U");
+    return f2c_symbol_character_length(unit, symbol);
 }
 
 char *f2c_character_source_pointer(Unit *unit, const F2cExpr *right, const char *right_code) {

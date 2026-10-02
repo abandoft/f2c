@@ -611,6 +611,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             "static inline F2C_UNUSED size_t f2c_character_trim_length(const char *value, "
             "size_t length) { while (length != 0U && value[length - 1U] == ' ') --length; "
             "return length; }\n");
+        f2c_emit_character_length_support(&context.output);
         f2c_buffer_append(
             &context.output,
             "static inline F2C_UNUSED char *f2c_character_temporary_resize(char *storage, "

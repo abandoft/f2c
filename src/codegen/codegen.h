@@ -39,6 +39,8 @@ char *f2c_emit_expression_ast(Unit *unit, const F2cExpr *expression, int *suppor
 char *f2c_emit_pointer_designator(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_emit_typed_expression(Unit *unit, const F2cExpr *expression);
 char *f2c_character_declaration_initializer(Unit *unit, const Symbol *symbol, int *supported);
+char *f2c_character_parameter_length(Unit *unit, const F2cExpr *expression);
+void f2c_emit_character_length_support(Buffer *output);
 char *f2c_symbol_character_length(Unit *unit, const Symbol *symbol);
 char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression);
 char *f2c_character_source_pointer(Unit *unit, const F2cExpr *expression,

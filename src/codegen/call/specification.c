@@ -44,7 +44,6 @@ char *f2c_call_result_character_length(Unit *unit, const F2cExpr *expression) {
     const Unit *scope = procedure != NULL ? procedure->character_length_scope : NULL;
     F2cExpr *specialized;
     char *code;
-    int supported = 0;
     if (procedure == NULL || scope == NULL || procedure->character_length_expression == NULL)
         return NULL;
     specialized = f2c_array_clone_expression(unit, procedure->character_length_expression);
@@ -52,11 +51,7 @@ char *f2c_call_result_character_length(Unit *unit, const F2cExpr *expression) {
         f2c_codegen_expression_free(unit, specialized);
         return NULL;
     }
-    code = f2c_emit_expression_ast(unit, specialized, &supported);
+    code = f2c_character_parameter_length(unit, specialized);
     f2c_codegen_expression_free(unit, specialized);
-    if (!supported) {
-        free(code);
-        return NULL;
-    }
     return code;
 }

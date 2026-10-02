@@ -93,5 +93,9 @@ int f2c_array_emit_allocatable_character_constructor(Context *context, Unit *uni
 int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symbol *left_symbol,
                                               const F2cExpr *right, Symbol *right_symbol,
                                               const char *element_count, int depth);
+int f2c_array_emit_fixed_character_constructor_values(Context *context, Unit *unit, Symbol *target,
+                                                      const F2cExpr *constructor,
+                                                      const char *storage, const char *count,
+                                                      const char *character_length, int depth);
 
 #endif
