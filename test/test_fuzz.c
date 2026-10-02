@@ -36,6 +36,32 @@ static void mutate(char *buffer, size_t *length, uint32_t *state) {
     buffer[*length] = '\0';
 }
 
+static int check_malformed_where(void) {
+    static const struct {
+        const char *source;
+        F2cSourceForm form;
+    } cases[] = {{"program p\nwhere()=\nend", F2C_SOURCE_FREE},
+                 {"subroutine t\nwhere (.true.) x=\nend", F2C_SOURCE_FREE},
+                 {"      program p\n      where()=\n      end\n", F2C_SOURCE_FIXED},
+                 {"      subroutine fixed(a,n)\n      integer n\n      real a(n)\n"
+                  "      where do 10 i=1,(i)=i+()a1.0\n      end\n",
+                  F2C_SOURCE_FIXED}};
+    size_t index;
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        F2cOptions options = {"malformed-where", cases[index].form, 0};
+        F2cResult result =
+            f2c_transpile(cases[index].source, strlen(cases[index].source), &options);
+        const int valid =
+            result.diagnostics != NULL && result.error_count != 0U && result.code == NULL;
+        f2c_result_free(&result);
+        if (!valid) {
+            fputs("malformed WHERE must fail without emitting code\n", stderr);
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int main(void) {
     static const char *const seeds[] = {
         "program p\ninteger :: i\ndo i=1,3\nprint *, i\nend do\nend program p\n",
@@ -46,6 +72,8 @@ int main(void) {
     F2cOptions options = {"fuzz.f90", F2C_SOURCE_FREE, 0};
     uint32_t state = UINT32_C(0x9e3779b9);
     size_t seed_index;
+    if (!check_malformed_where())
+        return EXIT_FAILURE;
     for (seed_index = 0U; seed_index < sizeof(seeds) / sizeof(seeds[0]); ++seed_index) {
         int iteration;
         for (iteration = 0; iteration < FUZZ_ITERATIONS; ++iteration) {
