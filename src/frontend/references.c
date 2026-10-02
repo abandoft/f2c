@@ -73,7 +73,7 @@ void f2c_mark_call_targets(Unit *unit, const Line *line) {
             return;
         if (!f2c_is_intrinsic_name(name) && !f2c_is_intrinsic_subroutine(name)) {
             symbol = f2c_ensure_symbol_impl(unit, name);
-            if (symbol != NULL) {
+            if (symbol != NULL && symbol->intrinsic == NULL) {
                 symbol->external = 1;
                 symbol->external_subroutine = 1;
             }
@@ -97,8 +97,8 @@ void f2c_mark_function_references(Unit *unit, const Line *line) {
             leading_designator_assignment(line, index, index + 1U))
             continue;
         symbol = symbol_for_token(unit, &line->tokens[index]);
-        if (symbol == NULL || symbol->argument || symbol->parameter || symbol->rank != 0U ||
-            symbol->type == TYPE_CHARACTER || symbol->statement_function ||
+        if (symbol == NULL || symbol->intrinsic != NULL || symbol->argument || symbol->parameter ||
+            symbol->rank != 0U || symbol->type == TYPE_CHARACTER || symbol->statement_function ||
             f2c_token_equals(&line->tokens[index], "if") || f2c_is_intrinsic_name(symbol->name) ||
             f2c_is_intrinsic_subroutine(symbol->name))
             continue;

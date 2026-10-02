@@ -103,8 +103,16 @@ F2cExpr *f2c_ast_parse_name(AstParser *parser, const F2cToken *name_token) {
             kind = F2C_EXPR_STRUCTURE_CONSTRUCTOR;
         else if (symbol != NULL && symbol->rank != 0U)
             kind = F2C_EXPR_ARRAY_REFERENCE;
-        else if (symbol == NULL || symbol->type != TYPE_CHARACTER || symbol->external)
+        else if (symbol == NULL || symbol->type != TYPE_CHARACTER || symbol->external ||
+                 symbol->intrinsic != NULL)
             kind = F2C_EXPR_CALL;
+    }
+    if (kind == F2C_EXPR_CALL && symbol != NULL && symbol->intrinsic != NULL) {
+        char *intrinsic_name = f2c_strdup(symbol->intrinsic->name);
+        free(name);
+        name = intrinsic_name;
+        if (name == NULL)
+            return NULL;
     }
     expression = f2c_expr_new(kind,
                               kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR
@@ -146,14 +154,15 @@ F2cExpr *f2c_ast_parse_name(AstParser *parser, const F2cToken *name_token) {
             else
                 f2c_shape_from_symbol(parser->unit, &expression->shape, symbol);
             expression->rank = symbol->rank;
-            expression->value_category = symbol->external    ? F2C_VALUE_PROCEDURE
+            expression->value_category = (symbol->external || symbol->intrinsic != NULL)
+                                             ? F2C_VALUE_PROCEDURE
                                          : symbol->parameter ? F2C_VALUE_CONSTANT
                                                              : F2C_VALUE_VARIABLE;
         } else {
             f2c_ast_set_expression_shape(expression, 0U, F2C_SHAPE_SCALAR);
         }
-        expression->definable = symbol != NULL && !symbol->external && !symbol->parameter &&
-                                symbol->intent != F2C_INTENT_IN;
+        expression->definable = symbol != NULL && !symbol->external && symbol->intrinsic == NULL &&
+                                !symbol->parameter && symbol->intent != F2C_INTENT_IN;
     } else if (kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR) {
         expression->type_kind = 0;
         expression->value_category = F2C_VALUE_TEMPORARY;

@@ -220,7 +220,7 @@ void f2c_discover_implicit_line_symbols(Context *context, Unit *unit, const Line
                    line->tokens[index + 1U].kind == F2C_TOKEN_LEFT_PAREN &&
                    (symbol == NULL || (symbol->rank == 0U && symbol->type != TYPE_CHARACTER))) {
             symbol = f2c_ensure_symbol(unit, name);
-            if (symbol != NULL && !preceded_by_call(line, index)) {
+            if (symbol != NULL && symbol->intrinsic == NULL && !preceded_by_call(line, index)) {
                 symbol->external = 1;
                 symbol->external_subroutine = 0;
             }
