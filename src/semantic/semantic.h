@@ -18,6 +18,8 @@ int f2c_validation_procedure_signatures_compatible(const Symbol *expected, const
 int f2c_symbol_uses_descriptor(const Symbol *symbol);
 int f2c_symbol_is_assumed_size(const Symbol *symbol);
 int f2c_expression_is_whole_assumed_size(const F2cExpr *expression);
+int f2c_expression_has_target_attribute(const F2cExpr *expression);
+int f2c_expression_has_vector_subscript(const F2cExpr *expression);
 int f2c_unit_has_descriptor_result(const Unit *unit);
 int f2c_procedure_has_descriptor_result(const Symbol *procedure);
 int f2c_expression_has_allocatable_result(const F2cExpr *expression);
@@ -47,6 +49,7 @@ int f2c_evaluate_integer_syntax(Unit *unit, F2cTokenRange syntax, int64_t *value
 int f2c_expression_is_initialization_constant(const F2cExpr *expression);
 int f2c_integer_iteration_count(int64_t first, int64_t last, int64_t step, uint64_t *count);
 size_t f2c_character_literal_length(const char *text);
+int f2c_character_constant_length(Unit *unit, const F2cExpr *expression, int64_t *length);
 char *f2c_character_literal_bytes(const char *text, size_t *length);
 int f2c_evaluate_character_constant(Unit *unit, const F2cExpr *expression, char **value,
                                     size_t *length);
