@@ -357,11 +357,8 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
                           dimension);
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output,
-                          "if (f2c_section_extent_%zu != 0U && f2c_section_count > "
-                          "SIZE_MAX / f2c_section_extent_%zu) abort();\n",
-                          dimension, dimension);
-        f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_printf(&context->output, "f2c_section_count *= f2c_section_extent_%zu;\n",
+                          "f2c_section_count = f2c_size_multiply_checked("
+                          "f2c_section_count, f2c_section_extent_%zu);\n",
                           dimension);
     }
     if (right != NULL && right->rank != 0U) {
@@ -381,11 +378,9 @@ int f2c_emit_array_section_assignment(Context *context, Unit *unit, const F2cExp
         f2c_buffer_printf(&context->output, "const size_t f2c_character_length = (size_t)(%s);\n",
                           character_length);
         f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_append(&context->output, "if (f2c_character_length != 0U && f2c_section_count > "
-                                            "SIZE_MAX / f2c_character_length) abort();\n");
-        f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_append(&context->output, "const size_t f2c_section_bytes = f2c_section_count * "
-                                            "f2c_character_length;\n");
+        f2c_buffer_append(&context->output,
+                          "const size_t f2c_section_bytes = f2c_size_multiply_checked("
+                          "f2c_section_count, f2c_character_length);\n");
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output,
                           "char *f2c_section_values = f2c_section_count == 0U ? NULL : "
