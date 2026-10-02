@@ -187,7 +187,9 @@ static int evaluate(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *e
                     char **value, size_t *length, size_t depth) {
     if (expression == NULL || value == NULL || length == NULL || !consume_step(evaluation, depth))
         return 0;
-    if (expression->kind == F2C_EXPR_KEYWORD_ARGUMENT && expression->child_count == 1U)
+    if ((expression->kind == F2C_EXPR_KEYWORD_ARGUMENT ||
+         expression->kind == F2C_EXPR_PARENTHESIZED) &&
+        expression->child_count == 1U)
         return evaluate(evaluation, expression->children[0], value, length, depth + 1U);
     if (expression->kind == F2C_EXPR_STRING_LITERAL) {
         *value = f2c_character_literal_bytes(expression->text, length);

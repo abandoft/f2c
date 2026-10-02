@@ -83,6 +83,8 @@ int f2c_character_constant_length(Unit *unit, const F2cExpr *expression, int64_t
     const F2cExpr *source;
     if (expression == NULL || length == NULL || expression->type != TYPE_CHARACTER)
         return 0;
+    if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
+        return f2c_character_constant_length(unit, expression->children[0], length);
     if (expression->kind == F2C_EXPR_STRING_LITERAL) {
         const size_t value = f2c_character_literal_length(expression->text);
         if ((uint64_t)value > (uint64_t)INT64_MAX)
