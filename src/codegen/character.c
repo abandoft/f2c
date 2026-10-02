@@ -571,10 +571,12 @@ int f2c_emit_character_assignment(Context *context, Unit *unit, Symbol *left_sym
         emit_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "if (f2c_deferred_value == NULL) abort();\n");
         emit_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output,
-                          "if (f2c_deferred_length != 0U) memmove(f2c_deferred_value, %s, "
-                          "f2c_deferred_length);\n",
+        f2c_buffer_printf(&context->output, "const char *f2c_deferred_source = (%s);\n",
                           source_pointer);
+        emit_indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output,
+                          "if (f2c_deferred_length != 0U) memmove(f2c_deferred_value, "
+                          "f2c_deferred_source, f2c_deferred_length);\n");
         emit_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "f2c_deferred_value[f2c_deferred_length] = '\\0';\n");
         emit_indent(&context->output, depth + 1);
