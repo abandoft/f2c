@@ -57,7 +57,8 @@ static void emit_formatted_scalar(Context *context, Unit *unit, const F2cExpr *e
                                              : f2c_expression_c_type(expression));
         } else {
             f2c_buffer_printf(&context->output,
-                              "f2c_format_write_integer(&f2c_io_format, (int64_t)(%s));\n", value);
+                              "f2c_format_write_integer(&f2c_io_format, (int64_t)(%s), %d);\n",
+                              value, scalar_kind);
         }
     } else if (type == TYPE_COMPLEX || type == TYPE_DOUBLE_COMPLEX) {
         if (input) {

@@ -135,9 +135,10 @@ static int emit_instruction(Context *context, const F2cFormatNode *node, const c
                       override_opcode != NULL ? override_opcode : opcode(node->kind),
                       node->repeat != 0U ? node->repeat : 1U, node->unlimited ? "true" : "false",
                       runtime_control(node), node->code[0] != '\0' ? node->code[0] : ' ',
-                      node->code[1] != '\0' ? node->code[1] : ' ', node->width, node->digits,
-                      node->exponent, node->has_exponent ? "true" : "false",
-                      literal != NULL ? literal : "NULL", text_length, v_list, node->v_list_count);
+                      node->code[1] != '\0' ? node->code[1] : ' ', node->width,
+                      node->has_digits ? node->digits : -1, node->exponent,
+                      node->has_exponent ? "true" : "false", literal != NULL ? literal : "NULL",
+                      text_length, v_list, node->v_list_count);
     if (node->v_list_count != 0U)
         ++*v_list_index;
     free(owned_v_list);

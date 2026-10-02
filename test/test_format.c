@@ -152,6 +152,10 @@ static void test_invalid_formats(void) {
     expect_error("(0(I2))", F2C_FORMAT_ERROR_INVALID_REPEAT, "zero group repetition is rejected");
     expect_error("(I)", F2C_FORMAT_ERROR_INVALID_DESCRIPTOR_FIELD,
                  "required data edit descriptor fields are validated");
+    expect_error("(I5.1000)", F2C_FORMAT_ERROR_INVALID_DESCRIPTOR_FIELD,
+                 "integer minimum digits cannot exceed a nonzero field width");
+    expect_error("(Z4.5)", F2C_FORMAT_ERROR_INVALID_DESCRIPTOR_FIELD,
+                 "BOZ minimum digits cannot exceed a nonzero field width");
     expect_error("(Y4)", F2C_FORMAT_ERROR_INVALID_DESCRIPTOR,
                  "unknown edit descriptors are hard syntax errors");
     expect_error("(DT'X'(1,))", F2C_FORMAT_ERROR_INVALID_DT_LIST,

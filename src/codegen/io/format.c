@@ -93,22 +93,6 @@ void f2c_emit_format_support(Context *context) {
         "f2c_format_flush_spaces(state); (void)f2c_stream_write(field, length, state->file); "
         "state->column += length; if (state->column > state->record_extent) "
         "state->record_extent = state->column; } }\n"
-        "static inline F2C_UNUSED void f2c_format_write_integer(f2c_format_state *state, "
-        "int64_t value) { f2c_format_descriptor descriptor; char field[128]; char digits[96]; "
-        "size_t length = 0U, minimum; unsigned base = 10U; uint64_t magnitude; int negative; if "
-        "(!f2c_format_next(state, &descriptor)) return; if "
-        "(!f2c_format_integer_descriptor(&descriptor)) { state->status = 0; return; } if "
-        "(descriptor.code[0] == 'B') base = 2U; "
-        "else if (descriptor.code[0] == 'O') base = 8U; else if (descriptor.code[0] == 'Z') base "
-        "= 16U; negative = value < 0 && base == 10U; magnitude = negative ? "
-        "(uint64_t)(-(value + 1)) + 1U : (uint64_t)value; do { unsigned digit = "
-        "(unsigned)(magnitude % base); digits[length++] = (char)(digit < 10U ? '0' + digit : 'A' "
-        "+ digit - 10U); magnitude /= base; } while (magnitude != 0U && length < "
-        "sizeof(digits)); minimum = descriptor.digits > 0 ? (size_t)descriptor.digits : 0U; "
-        "while (length < minimum) digits[length++] = '0'; { size_t i = 0U; if (negative) "
-        "field[i++] = '-'; else if (state->sign_plus && base == 10U) field[i++] = '+'; while "
-        "(length != 0U) field[i++] = digits[--length]; f2c_format_field(state, field, i, "
-        "descriptor.width); } }\n"
         "static inline F2C_UNUSED void f2c_format_write_real(f2c_format_state *state, double "
         "value, int significant_digits) { f2c_format_descriptor descriptor; char *field; size_t "
         "length; if "
@@ -117,6 +101,7 @@ void f2c_emit_format_support(Context *context) {
         "f2c_format_render_real(state, &descriptor, value, significant_digits, &length); if "
         "(field == NULL) return; "
         "f2c_format_field(state, field, length, descriptor.width); free(field); }\n");
+    f2c_io_emit_format_integer_support(context);
     f2c_buffer_append(
         &context->output,
         "static inline F2C_UNUSED void f2c_format_write_logical(f2c_format_state *state, bool "

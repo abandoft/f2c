@@ -296,6 +296,11 @@ static int parse_data_descriptor(FormatParser *parser, F2cFormatNode *node, int 
         if (!parse_required_unsigned(parser, &node->exponent, &node->has_exponent))
             return 0;
     }
+    if (strchr("IBOZ", code) != NULL && node->width > 0 && node->has_digits &&
+        node->digits > node->width) {
+        set_error(parser, F2C_FORMAT_ERROR_INVALID_DESCRIPTOR_FIELD, parser->position);
+        return 0;
+    }
     if (!descriptor_boundary(parser)) {
         set_error(parser, F2C_FORMAT_ERROR_INVALID_DESCRIPTOR_FIELD, parser->position);
         return 0;
