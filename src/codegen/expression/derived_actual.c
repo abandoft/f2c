@@ -26,6 +26,10 @@ static char *emit_pointer(Unit *unit, const F2cExpr *expression, size_t temporar
         return NULL;
     }
     type_name = expression->derived_type->c_name;
+    /* A variable primary is copied, whereas an already owned function or
+     * constructor value is moved. Parentheses do not invent a second owner. */
+    if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
+        return emit_pointer(unit, expression->children[0], temporary, supported);
     if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_MERGE) {
         const F2cExpr *true_source =
             f2c_intrinsic_argument(expression->children, expression->child_count, "tsource", 0U);

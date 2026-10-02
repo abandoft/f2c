@@ -11,6 +11,7 @@ typedef struct F2cTransferSource {
 } F2cTransferSource;
 
 static int scalar_source_is_owned(const F2cExpr *source) {
+    source = f2c_expr_value_source(source);
     return source != NULL && source->type == TYPE_DERIVED && source->derived_type != NULL &&
            (source->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR ||
             (source->kind == F2C_EXPR_CALL && source->intrinsic != F2C_INTRINSIC_MERGE) ||
@@ -111,6 +112,8 @@ static char *emit_transfer_value(Unit *unit, const F2cExpr *expression, const F2
     F2cTransferSource storage = {0};
     Buffer result = {0};
     const char *helper;
+    if (source != NULL && source->type == TYPE_DERIVED && source->rank == 0U)
+        source = f2c_expr_value_source(source);
     if (source != NULL && source->rank == 0U && source->type == TYPE_DERIVED &&
         source->kind == F2C_EXPR_CALL && source->intrinsic == F2C_INTRINSIC_MERGE) {
         const F2cExpr *true_source =

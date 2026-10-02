@@ -23,6 +23,9 @@ static int emit_clone(Buffer *output, Unit *unit, const F2cExpr *source, const c
         source->type != TYPE_DERIVED || source->derived_type == NULL || source->rank != 0U)
         return 0;
     type_name = source->derived_type->c_name;
+    if (source->kind == F2C_EXPR_PARENTHESIZED && source->child_count == 1U)
+        return emit_clone(output, unit, source->children[0], destination, scope, identifier, depth,
+                          merge_depth);
     if (source->kind == F2C_EXPR_CALL && source->intrinsic == F2C_INTRINSIC_MERGE) {
         const F2cExpr *true_source =
             f2c_intrinsic_argument(source->children, source->child_count, "tsource", 0U);
