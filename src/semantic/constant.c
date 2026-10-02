@@ -101,12 +101,35 @@ static size_t evaluation_line(const F2cConstantEvaluation *evaluation) {
     return 1U;
 }
 
+static int consume_steps(F2cConstantEvaluation *evaluation, size_t count) {
+    Context *context = evaluation->context;
+    const size_t step_limit =
+        context != NULL ? context->limits.max_constant_steps : F2C_DEFAULT_MAX_CONSTANT_STEPS;
+    const size_t used = context != NULL ? context->constant_evaluation_steps : evaluation->steps;
+    if (count > SIZE_MAX - used ||
+        (step_limit != 0U && (used > step_limit || count > step_limit - used))) {
+        if (context != NULL && !context->constant_step_limit_reported) {
+            context->constant_step_limit_reported = 1;
+            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, evaluation_line(evaluation),
+                                1, "constant-evaluation step limit of %zu exceeded", step_limit);
+        }
+        return 0;
+    }
+    evaluation->steps += count;
+    if (context != NULL)
+        context->constant_evaluation_steps += count;
+    return 1;
+}
+
+int f2c_reserve_constant_steps(Unit *unit, size_t steps) {
+    F2cConstantEvaluation evaluation = {unit, unit != NULL ? unit->context : NULL, 0U};
+    return consume_steps(&evaluation, steps);
+}
+
 int f2c_constant_consume_step(F2cConstantEvaluation *evaluation, size_t depth) {
     Context *context = evaluation->context;
     const size_t depth_limit =
         context != NULL ? context->limits.max_parse_depth : F2C_DEFAULT_MAX_PARSE_DEPTH;
-    const size_t step_limit =
-        context != NULL ? context->limits.max_constant_steps : F2C_DEFAULT_MAX_CONSTANT_STEPS;
     if (depth_limit != 0U && depth >= depth_limit) {
         if (context != NULL && !context->constant_depth_limit_reported) {
             context->constant_depth_limit_reported = 1;
@@ -115,19 +138,7 @@ int f2c_constant_consume_step(F2cConstantEvaluation *evaluation, size_t depth) {
         }
         return 0;
     }
-    if (step_limit != 0U &&
-        (context != NULL ? context->constant_evaluation_steps : evaluation->steps) >= step_limit) {
-        if (context != NULL && !context->constant_step_limit_reported) {
-            context->constant_step_limit_reported = 1;
-            f2c_diagnostic_code(context, F2C_DIAGNOSTIC_RESOURCE_LIMIT, evaluation_line(evaluation),
-                                1, "constant-evaluation step limit of %zu exceeded", step_limit);
-        }
-        return 0;
-    }
-    ++evaluation->steps;
-    if (context != NULL)
-        ++context->constant_evaluation_steps;
-    return 1;
+    return consume_steps(evaluation, 1U);
 }
 
 static int evaluate_bit_intrinsic(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
