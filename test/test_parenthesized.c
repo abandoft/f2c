@@ -63,6 +63,11 @@ static void test_metadata(void) {
         expect(expression->source_length == 9U && expression->children[0]->source_length == 7U &&
                    source != NULL && source->source_length == 5U,
                "nested parentheses retain independent full physical ranges");
+        expect(expression->span.begin.column == 1U && expression->span.end.column == 10U &&
+                   expression->children[0]->span.begin.column == 2U &&
+                   expression->children[0]->span.end.column == 9U && source != NULL &&
+                   source->span.begin.column == 3U && source->span.end.column == 8U,
+               "every nested node retains its own complete structured span");
         clone = f2c_expr_clone_substitute_integers(expression, NULL, 0U);
         expect(clone != NULL && clone->kind == F2C_EXPR_PARENTHESIZED && clone->symbol == NULL &&
                    clone->rank == 2U && !clone->definable &&
@@ -124,6 +129,53 @@ static void check_source(const char *source, const char *diagnostic) {
     f2c_result_free(&result);
 }
 
+typedef struct PolymorphicDiagnostic {
+    size_t count;
+    size_t line;
+    size_t column;
+    size_t end_line;
+    size_t end_column;
+} PolymorphicDiagnostic;
+
+static void capture_polymorphic_diagnostic(const F2cDiagnostic *diagnostic, void *data) {
+    PolymorphicDiagnostic *capture = data;
+    if (strstr(diagnostic->message, "parenthesized polymorphic values") == NULL)
+        return;
+    expect(diagnostic->code == F2C_DIAGNOSTIC_UNSUPPORTED &&
+               diagnostic->severity == F2C_DIAGNOSTIC_ERROR,
+           "unsupported dynamic values are hard errors, not warnings");
+    expect(diagnostic->begin.source_name != NULL &&
+               strcmp(diagnostic->begin.source_name, "poly_group.f90") == 0,
+           "polymorphic grouping diagnostics retain the original source name");
+    ++capture->count;
+    capture->line = diagnostic->begin.line;
+    capture->column = diagnostic->begin.column;
+    capture->end_line = diagnostic->end.line;
+    capture->end_column = diagnostic->end.column;
+}
+
+static void test_polymorphic_diagnostic(void) {
+    const char *source = "module m\ntype :: base\ninteger :: n\nend type\ncontains\n"
+                         "subroutine p(a)\nclass(base),intent(in)::a\ncall consume(((a)))\nend\n"
+                         "subroutine consume(a)\nclass(base),intent(in)::a\nend\nend module\n";
+    F2cInput input = {source, strlen(source), {"poly_group.f90", F2C_SOURCE_FREE, 0}};
+    PolymorphicDiagnostic capture = {0};
+    F2cConfig config = {.structure_size = sizeof(config),
+                        .diagnostic_callback = capture_polymorphic_diagnostic,
+                        .diagnostic_user_data = &capture};
+    F2cResult result = f2c_transpile_project_config(&input, 1U, &config);
+    expect(result.code == NULL && result.error_count != 0U && capture.count == 1U,
+           "a nested polymorphic value fails atomically with one specific diagnostic");
+    expect(capture.line == 8U && capture.column == 15U && capture.end_line == 8U &&
+               capture.end_column == 18U,
+           "the unsupported value reports the innermost complete parenthesized span");
+    if (capture.line != 8U || capture.column != 15U || capture.end_line != 8U ||
+        capture.end_column != 18U)
+        fprintf(stderr, "polymorphic diagnostic range: %zu:%zu-%zu:%zu\n", capture.line,
+                capture.column, capture.end_line, capture.end_column);
+    f2c_result_free(&result);
+}
+
 static void test_constraints(void) {
     check_source("program p\ninteger :: x\ncall change((x))\ncontains\n"
                  "subroutine change(v)\ninteger,intent(out)::v\nv=1\nend\nend\n",
@@ -148,6 +200,25 @@ static void test_constraints(void) {
                  "a parenthesized primary requires a data expression");
     check_source("subroutine p(a)\ninteger :: a(*)\ninteger :: n\nn=size((a))\nend\n",
                  "whole assumed-size array");
+    check_source("module m\ntype :: base\ninteger :: n\nend type\ncontains\n"
+                 "subroutine p(a)\nclass(base),intent(in)::a\ncall consume(((a)))\nend\n"
+                 "subroutine consume(a)\nclass(base),intent(in)::a\nend\nend module\n",
+                 "parenthesized polymorphic values require dynamic-type-aware owned storage");
+    check_source("module m\ntype :: base\ninteger :: n\nend type\ncontains\n"
+                 "subroutine p(a)\nclass(base),intent(in)::a(:)\ncall consume((a))\nend\n"
+                 "subroutine consume(a)\nclass(base),intent(in)::a(:)\nend\nend module\n",
+                 "parenthesized polymorphic values require dynamic-type-aware owned storage");
+    check_source("module m\ntype :: base\ninteger :: n\nend type\n"
+                 "type :: holder\nclass(base),allocatable::value\nend type\ncontains\n"
+                 "subroutine p(a)\ntype(holder),intent(in)::a\ncall consume((a%value))\nend\n"
+                 "subroutine consume(a)\nclass(base),intent(in)::a\nend\nend module\n",
+                 "parenthesized polymorphic values require dynamic-type-aware owned storage");
+    check_source("module m\ntype :: base\ninteger :: n\nend type\ncontains\n"
+                 "subroutine p()\ncall consume((make()))\nend\n"
+                 "function make() result(value)\nclass(base),allocatable::value\n"
+                 "allocate(value)\nend\nsubroutine consume(a)\n"
+                 "class(base),intent(in)::a\nend\nend module\n",
+                 "parenthesized polymorphic values require dynamic-type-aware owned storage");
 }
 
 static void test_owned_plan(void) {
@@ -178,6 +249,7 @@ int main(void) {
     test_metadata();
     test_constants();
     test_constraints();
+    test_polymorphic_diagnostic();
     test_owned_plan();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
