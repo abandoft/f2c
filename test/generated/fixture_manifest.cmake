@@ -16,6 +16,8 @@ set(
     pointer_semantics
     character_designators
     character_array_actuals
+    character_length_parameters
+    character_broadcast_reallocation
     character_actual_evaluation
     scalar_component_actuals
     reduction_designators
