@@ -1,0 +1,5 @@
+0program invalid
+intrinsic :: sin
+external :: sin
+real :: sin(2)
+end program

@@ -1,0 +1,14 @@
+0module provider
+implicit none
+intrinsic :: max, conjg, cpu_time
+public :: max, conjg, cpu_time
+end module
+program bindings
+use provider, only: biggest=>max, mirror=>conjg, clock=>cpu_time
+implicit none
+real :: elapsed
+complex :: value
+value=mirror((1.0,2.0))
+call clock(elapsed)
+if(biggest(1,2)/=2) stop 1
+end program

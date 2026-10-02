@@ -1,0 +1,7 @@
+0program timing
+implicit none
+intrinsic :: etime
+real :: values(-3:0), elapsed
+values=27.0
+elapsed=etime(values)
+end program
