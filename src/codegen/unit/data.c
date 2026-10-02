@@ -1,11 +1,14 @@
 #include "codegen/unit/private.h"
 
+#include "codegen/array/static_shape.h"
 #include "codegen/literal/real.h"
 #include "codegen/type/initialization.h"
 
 #include <inttypes.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 char *f2c_unit_data_array_initializer(Unit *unit, const Symbol *symbol) {
     Buffer initializer = {0};
@@ -223,6 +226,55 @@ static char *numeric_array_constructor_initializer(Unit *unit, const Symbol *sym
     return f2c_buffer_take(&initializer);
 }
 
+static int numeric_initializer_is_zero(Unit *unit, const Symbol *symbol) {
+    int64_t integer;
+    double real;
+    double imaginary;
+    if (symbol->type == TYPE_INTEGER || symbol->type == TYPE_LOGICAL)
+        return f2c_evaluate_integer_constant(unit, symbol->initializer_expression, &integer) &&
+               integer == 0;
+    if (symbol->type == TYPE_COMPLEX || symbol->type == TYPE_DOUBLE_COMPLEX)
+        return f2c_evaluate_complex_constant(unit, symbol->initializer_expression, &real,
+                                             &imaginary) &&
+               real == 0.0 && imaginary == 0.0 && !signbit(real) && !signbit(imaginary);
+    return f2c_evaluate_real_constant(unit, symbol->initializer_expression, &real) && real == 0.0 &&
+           !signbit(real);
+}
+
+static char *numeric_scalar_array_initializer(Unit *unit, const Symbol *symbol) {
+    Buffer output = {.limit = unit->context != NULL ? unit->context->output.limit : 0U};
+    size_t count;
+    size_t element;
+    char *value;
+    if (!f2c_static_array_element_count(unit, symbol, &count))
+        return NULL;
+    if (count == 0U || numeric_initializer_is_zero(unit, symbol))
+        return f2c_strdup("{0}");
+    value = static_numeric_initializer(unit, symbol->type, symbol->initializer_expression);
+    if (value == NULL)
+        return NULL;
+    if (output.limit != 0U && count > output.limit / strlen(value)) {
+        unit->context->output.limit_exceeded = 1;
+        free(value);
+        return NULL;
+    }
+    f2c_buffer_append(&output, "{");
+    for (element = 0U; element < count && !output.failed && !output.limit_exceeded; ++element) {
+        if (element != 0U)
+            f2c_buffer_append(&output, ", ");
+        f2c_buffer_append(&output, value);
+    }
+    f2c_buffer_append(&output, "}");
+    free(value);
+    if (output.failed || output.limit_exceeded) {
+        if (output.limit_exceeded && unit->context != NULL)
+            unit->context->output.limit_exceeded = 1;
+        free(f2c_buffer_take(&output));
+        return NULL;
+    }
+    return f2c_buffer_take(&output);
+}
+
 char *f2c_unit_static_storage_initializer(Unit *unit, const Symbol *symbol) {
     if (unit == NULL || symbol == NULL)
         return NULL;
@@ -243,7 +295,9 @@ char *f2c_unit_static_storage_initializer(Unit *unit, const Symbol *symbol) {
     if (symbol->rank != 0U && symbol->data_element_initializers != NULL)
         return numeric_data_array_initializer(unit, symbol);
     if (symbol->rank != 0U && symbol->initializer_expression != NULL)
-        return numeric_array_constructor_initializer(unit, symbol);
+        return symbol->initializer_expression->rank == 0U
+                   ? numeric_scalar_array_initializer(unit, symbol)
+                   : numeric_array_constructor_initializer(unit, symbol);
     if (symbol->initializer_expression != NULL)
         return static_numeric_initializer(unit, symbol->type, symbol->initializer_expression);
     return NULL;
