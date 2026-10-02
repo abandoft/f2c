@@ -135,6 +135,10 @@ The currently tested implementation includes:
 - normalized free and fixed source forms, continuations, labels, bounded object-macro and
   conditional preprocessing, callback-provided includes, line remapping, program units, internal
   procedures, modules, host association, and `USE` association;
+- tested local declarations and dummy/result bindings shadowing module or procedure hosts,
+  nearest-host lookup, explicit `USE` rebinding, and sibling-call capture forwarding;
+  imported constants and module shapes retain their defining scope, including private dependencies
+  and re-exports; scope-local `ASYNCHRONOUS/VOLATILE` attributes preserve associated storage;
 - intrinsic numeric, logical, CHARACTER, and complex types; explicit and implicit typing; typed
   expressions, array constructors, sections, vector subscripts, reductions, and selected
   transformational intrinsics;
