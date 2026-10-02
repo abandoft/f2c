@@ -1,0 +1,11 @@
+0module parent_scope
+  integer, parameter :: wide = 8, extent = wide / 2
+  integer :: values(extent) = 3
+contains
+  subroutine child
+    integer :: wide
+    integer :: local(extent)
+    wide = 9
+    local = values
+  end subroutine
+end module

@@ -1,0 +1,10 @@
+0progra=m p
+integer :: values(
+enogra=m p
+integer :: values(
+end
+module large_default
+  type :: data
+    integer :: values(1000000000) = 1
+  end type
+end module

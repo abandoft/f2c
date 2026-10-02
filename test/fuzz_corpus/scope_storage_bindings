@@ -1,0 +1,10 @@
+0module parent_scope
+  integer :: target
+contains
+  subroutine child
+    data (target(i), (other(i,j), j=1,2), i=1,2) /6*3/
+    dimension target(2), other(2,2)
+    equivalence (target(1), value)
+    common /local_store/ value
+  end subroutine
+end module
