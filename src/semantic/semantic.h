@@ -51,6 +51,7 @@ int f2c_expression_is_initialization_constant(const F2cExpr *expression);
 int f2c_integer_iteration_count(int64_t first, int64_t last, int64_t step, uint64_t *count);
 size_t f2c_character_literal_length(const char *text);
 int f2c_character_constant_length(Unit *unit, const F2cExpr *expression, int64_t *length);
+int f2c_character_declaration_length(Unit *unit, const Symbol *symbol, int64_t *length);
 char *f2c_character_literal_bytes(const char *text, size_t *length);
 int f2c_evaluate_character_constant(Unit *unit, const F2cExpr *expression, char **value,
                                     size_t *length);

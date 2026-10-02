@@ -23,18 +23,23 @@ static int same_scalar_expression(const F2cExpr *left, const F2cExpr *right) {
     return 1;
 }
 
-static int declared_character_length(Unit *unit, const Symbol *symbol, int64_t *length) {
-    if (symbol == NULL || length == NULL)
+int f2c_character_declaration_length(Unit *unit, const Symbol *symbol, int64_t *length) {
+    int known;
+    if (symbol == NULL || length == NULL || symbol->type != TYPE_CHARACTER)
         return 0;
     if (symbol->character_length_expression != NULL)
-        return f2c_evaluate_integer_constant(unit, symbol->character_length_expression, length);
-    if (symbol->character_length_syntax.count != 0U)
-        return f2c_evaluate_integer_syntax(unit, symbol->character_length_syntax, length);
-    if (symbol->character_length == NULL || strcmp(symbol->character_length, "1") == 0) {
+        known = f2c_evaluate_integer_constant(unit, symbol->character_length_expression, length);
+    else if (symbol->character_length_syntax.count != 0U)
+        known = f2c_evaluate_integer_syntax(unit, symbol->character_length_syntax, length);
+    else if (symbol->character_length == NULL || strcmp(symbol->character_length, "1") == 0) {
         *length = 1;
-        return 1;
-    }
-    return 0;
+        known = 1;
+    } else
+        known = 0;
+    /* A length parameter is not an array bound: all negative values mean zero. */
+    if (known && *length < 0)
+        *length = 0;
+    return known;
 }
 
 static int constant_substring_length(Unit *unit, const F2cExpr *expression, int64_t *length) {
@@ -88,7 +93,7 @@ int f2c_character_constant_length(Unit *unit, const F2cExpr *expression, int64_t
     if (expression->kind == F2C_EXPR_SUBSTRING)
         return constant_substring_length(unit, expression, length);
     if (expression->symbol != NULL)
-        return declared_character_length(unit, expression->symbol, length);
+        return f2c_character_declaration_length(unit, expression->symbol, length);
     if (expression->kind != F2C_EXPR_CALL)
         return 0;
     if (expression->intrinsic == F2C_INTRINSIC_CHAR ||

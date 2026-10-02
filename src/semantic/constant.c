@@ -526,6 +526,8 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
                 }
                 result = f2c_constant_evaluate_integer(evaluation, length, value, depth + 1U);
                 f2c_expr_free(temporary);
+                if (result && *value < 0)
+                    *value = 0;
                 return result;
             }
             return 0;
