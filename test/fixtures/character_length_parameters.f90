@@ -71,6 +71,13 @@ program character_length_parameters
   empty_array = 'changed'
   local_scalar = 'changed'
   local_array = 'changed'
+  local_array = [empty_constant,empty_constant]
+  local_array = [empty_array]
+  local_array(:) = empty_array(:)
+  where (local_array == '') local_array = 'ignored'
+  local_array = reshape(empty_array,[2])
+  local_array = pack(empty_array,[.true.,.true.])
+  local_array = cshift(empty_array,1)
   if (len(local_scalar) /= 0 .or. len(local_array) /= 0) stop 3
   record%label = 'changed'
   record%pieces = 'changed'
@@ -81,6 +88,7 @@ program character_length_parameters
   nullify(empty_pointer)
   if (associated(empty_pointer,empty_pointer)) stop 19
   empty_pointers => empty_targets
+  empty_pointers = 'ignored'
   if (len(empty_pointers) /= 0 .or. .not. associated(empty_pointers)) stop 36
   if (associated(empty_pointers,empty_targets)) stop 37
   nullify(empty_pointers)
@@ -100,6 +108,9 @@ program character_length_parameters
   wide = 2_8
   value = make_wide_text(wide)
   if (len(value) /= 2 .or. value /= 'X ') stop 10
+  pieces = ['aBCde','xYZuv']
+  pieces = spread('aBCde',1,2)
+  if (any(pieces /= 'aBCde')) stop 38
   pieces = ['aBCde','xYZuv']
   value = take_piece(-2,pieces(:)(2:3))
   if (len(value) /= 0 .or. any(pieces /= ['aBCde','xYZuv'])) stop 11
