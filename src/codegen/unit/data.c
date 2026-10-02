@@ -106,9 +106,16 @@ static void append_character_constant(Buffer *output, unsigned char value) {
         f2c_buffer_printf(output, "0x%02X", (unsigned int)value);
 }
 
+static char *take_bounded_initializer(Unit *unit, Buffer *output) {
+    if (output->limit_exceeded && unit->context != NULL)
+        unit->context->output.limit_exceeded = 1;
+    return f2c_buffer_take(output);
+}
+
 static char *fixed_character_initializer(Unit *unit, const Symbol *symbol,
                                          const F2cExpr *expression) {
-    Buffer initializer = {0};
+    Buffer initializer = {.limit = unit->context != NULL ? unit->context->output.limit
+                                                         : F2C_DEFAULT_MAX_OUTPUT_BYTES};
     int64_t declared_length;
     char *value = NULL;
     size_t value_length = 0U;
@@ -120,8 +127,12 @@ static char *fixed_character_initializer(Unit *unit, const Symbol *symbol,
         free(value);
         return NULL;
     }
+    if (!f2c_reserve_constant_steps(unit, (size_t)declared_length)) {
+        free(value);
+        return NULL;
+    }
     f2c_buffer_append(&initializer, "{");
-    for (offset = 0U; offset < (size_t)declared_length; ++offset) {
+    for (offset = 0U; offset < (size_t)declared_length && !initializer.failed; ++offset) {
         if (offset != 0U)
             f2c_buffer_append(&initializer, ", ");
         append_character_constant(&initializer, offset < value_length ? (unsigned char)value[offset]
@@ -131,30 +142,38 @@ static char *fixed_character_initializer(Unit *unit, const Symbol *symbol,
         f2c_buffer_append(&initializer, "0");
     f2c_buffer_append(&initializer, "}");
     free(value);
-    return f2c_buffer_take(&initializer);
+    return take_bounded_initializer(unit, &initializer);
 }
 
 static char *character_data_array_initializer(Unit *unit, const Symbol *symbol) {
-    Buffer initializer = {0};
+    Buffer initializer = {.limit = unit->context != NULL ? unit->context->output.limit
+                                                         : F2C_DEFAULT_MAX_OUTPUT_BYTES};
     int64_t declared_length;
     size_t element;
     int emitted = 0;
     if (!f2c_character_declaration_length(unit, symbol, &declared_length) ||
         (uint64_t)declared_length > SIZE_MAX)
         return NULL;
+    if (!f2c_reserve_constant_steps(unit, symbol->data_element_initializer_count))
+        return NULL;
     f2c_buffer_append(&initializer, "{");
-    for (element = 0U; element < symbol->data_element_initializer_count; ++element) {
+    for (element = 0U; element < symbol->data_element_initializer_count && !initializer.failed;
+         ++element) {
         const F2cExpr *expression = symbol->data_element_initializers[element];
         char *value = NULL;
         size_t value_length = 0U;
         size_t offset;
         if (expression == NULL)
             continue;
+        if (!f2c_reserve_constant_steps(unit, (size_t)declared_length)) {
+            free(f2c_buffer_take(&initializer));
+            return NULL;
+        }
         if (!f2c_evaluate_character_constant(unit, expression, &value, &value_length)) {
             free(f2c_buffer_take(&initializer));
             return NULL;
         }
-        for (offset = 0U; offset < (size_t)declared_length; ++offset) {
+        for (offset = 0U; offset < (size_t)declared_length && !initializer.failed; ++offset) {
             if (emitted)
                 f2c_buffer_append(&initializer, ", ");
             f2c_buffer_printf(&initializer, "[%zu] = ", element * (size_t)declared_length + offset);
@@ -168,7 +187,7 @@ static char *character_data_array_initializer(Unit *unit, const Symbol *symbol) 
     if (!emitted)
         f2c_buffer_append(&initializer, "0");
     f2c_buffer_append(&initializer, "}");
-    return f2c_buffer_take(&initializer);
+    return take_bounded_initializer(unit, &initializer);
 }
 
 static char *numeric_data_array_initializer(Unit *unit, const Symbol *symbol) {
@@ -245,6 +264,7 @@ static char *numeric_scalar_array_initializer(Unit *unit, const Symbol *symbol) 
     Buffer output = {.limit = unit->context != NULL ? unit->context->output.limit : 0U};
     size_t count;
     size_t element;
+    size_t value_length;
     char *value;
     if (!f2c_static_array_element_count(unit, symbol, &count))
         return NULL;
@@ -253,8 +273,16 @@ static char *numeric_scalar_array_initializer(Unit *unit, const Symbol *symbol) 
     value = static_numeric_initializer(unit, symbol->type, symbol->initializer_expression);
     if (value == NULL)
         return NULL;
-    if (output.limit != 0U && count > output.limit / strlen(value)) {
-        unit->context->output.limit_exceeded = 1;
+    value_length = strlen(value);
+    /* The two braces replace the missing final separator: count * (length + 2). */
+    if (value_length > SIZE_MAX - 2U || count > SIZE_MAX / (value_length + 2U) ||
+        (output.limit != 0U && count > output.limit / (value_length + 2U))) {
+        if (unit->context != NULL)
+            unit->context->output.limit_exceeded = 1;
+        free(value);
+        return NULL;
+    }
+    if (!f2c_reserve_constant_steps(unit, count)) {
         free(value);
         return NULL;
     }
@@ -262,7 +290,7 @@ static char *numeric_scalar_array_initializer(Unit *unit, const Symbol *symbol) 
     for (element = 0U; element < count && !output.failed && !output.limit_exceeded; ++element) {
         if (element != 0U)
             f2c_buffer_append(&output, ", ");
-        f2c_buffer_append(&output, value);
+        f2c_buffer_append_n(&output, value, value_length);
     }
     f2c_buffer_append(&output, "}");
     free(value);
