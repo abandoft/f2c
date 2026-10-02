@@ -17,6 +17,7 @@ set(
     character_designators
     character_array_actuals
     character_length_parameters
+    character_result_effects
     character_broadcast_reallocation
     character_actual_evaluation
     scalar_component_actuals
