@@ -1,12 +1,12 @@
-#include "codegen/array/private.h"
 #include "codegen/call/private.h"
+#include "codegen/result/private.h"
 
 #include "codegen/lowering/private.h"
 
 #include <stdlib.h>
 
-int f2c_array_function_result_call(const Unit *unit, const F2cExpr *expression) {
-    return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->rank != 0U &&
+int f2c_result_requires_materialization(const Unit *unit, const F2cExpr *expression) {
+    return expression != NULL && expression->kind == F2C_EXPR_CALL &&
            f2c_lowering_code(unit, expression) == NULL &&
            expression->intrinsic == F2C_INTRINSIC_NONE &&
            f2c_expression_has_descriptor_result(expression);
@@ -19,6 +19,21 @@ static void append_shape_validation(Buffer *prelude, const F2cExpr *expression,
     f2c_buffer_printf(prelude,
                       "if (!f2c_descriptor_bridge_valid(&%s, %zuU, sizeof(%s))) abort();\n",
                       descriptor, expression->rank, f2c_expression_c_type(expression));
+    if (expression->rank == 0U) {
+        f2c_array_indent(prelude, depth);
+        f2c_buffer_printf(prelude, "const size_t %s_count = 1U;\n", storage);
+        f2c_array_indent(prelude, depth);
+        f2c_buffer_printf(prelude, "(void)%s_count;\n", storage);
+        if (expression->result_use != F2C_FUNCTION_RESULT_REFERENCE) {
+            f2c_array_indent(prelude, depth);
+            f2c_buffer_printf(prelude, "if (%s.data == NULL) abort();\n", descriptor);
+        }
+        if (f2c_result_kind_owns_storage(expression->result_kind)) {
+            f2c_array_indent(prelude, depth);
+            f2c_buffer_printf(prelude, "if (!%s.deallocatable) abort();\n", descriptor);
+        }
+        return;
+    }
     for (dimension = 0U; dimension < expression->rank; ++dimension) {
         f2c_array_indent(prelude, depth);
         f2c_buffer_printf(prelude, "const size_t %s_extent_%zu = (size_t)%s.extent[%zu];\n",
@@ -34,8 +49,11 @@ static void append_shape_validation(Buffer *prelude, const F2cExpr *expression,
                           dimension + 1U);
     f2c_buffer_append(prelude, "});\n");
     f2c_array_indent(prelude, depth);
-    f2c_buffer_printf(prelude, "if (%s_count != 0U && %s.data == NULL) abort();\n", storage,
-                      descriptor);
+    if (expression->result_use != F2C_FUNCTION_RESULT_REFERENCE)
+        f2c_buffer_printf(prelude, "if (%s_count != 0U && %s.data == NULL) abort();\n", storage,
+                          descriptor);
+    else
+        f2c_buffer_printf(prelude, "(void)%s_count;\n", storage);
     f2c_array_indent(prelude, depth);
     f2c_buffer_printf(prelude,
                       "const bool %s_contiguous = f2c_descriptor_is_contiguous(%zuU, "
@@ -46,13 +64,22 @@ static void append_shape_validation(Buffer *prelude, const F2cExpr *expression,
                           dimension + 1U);
     f2c_buffer_printf(prelude, "}, %s.stride);\n", descriptor);
     f2c_array_indent(prelude, depth);
-    f2c_buffer_printf(prelude, "if (%s.deallocatable && !%s_contiguous) abort();\n", descriptor,
-                      storage);
+    if (f2c_result_kind_owns_storage(expression->result_kind))
+        f2c_buffer_printf(prelude, "if (!%s.deallocatable || !%s_contiguous) abort();\n",
+                          descriptor, storage);
+    else
+        f2c_buffer_printf(prelude, "(void)%s_contiguous;\n", storage);
 }
 
 static void append_nonowning_copy(Buffer *prelude, const F2cExpr *expression,
                                   const char *descriptor, const char *storage, int depth) {
     const char *c_type = f2c_expression_c_type(expression);
+    Buffer offset = {0};
+    if (expression->rank == 0U)
+        f2c_buffer_append(&offset, "0");
+    else
+        f2c_buffer_printf(&offset, "f2c_descriptor_linear_offset(&%s, %s_index)", descriptor,
+                          storage);
     f2c_array_indent(prelude, depth);
     if (expression->type == TYPE_CHARACTER) {
         f2c_buffer_printf(prelude,
@@ -72,13 +99,13 @@ static void append_nonowning_copy(Buffer *prelude, const F2cExpr *expression,
         f2c_array_indent(prelude, depth);
         f2c_buffer_printf(prelude,
                           "for (size_t %s_index = 0U; %s_index < %s_count; ++%s_index) { "
-                          "ptrdiff_t f2c_offset = f2c_descriptor_linear_offset(&%s, %s_index); "
-                          "if (%s.character_length != 0U) memmove(%s + %s_index * "
-                          "%s.character_length, (const char *)%s.data + "
+                          "ptrdiff_t f2c_offset = %s; "
+                          "f2c_descriptor_read_record(%s + %s_index * "
+                          "%s.character_length, &%s, "
                           "f2c_descriptor_stride_multiply(f2c_offset, "
                           "(ptrdiff_t)%s.character_length), %s.character_length); }\n",
-                          storage, storage, storage, storage, descriptor, storage, descriptor,
-                          storage, storage, descriptor, descriptor, descriptor, descriptor);
+                          storage, storage, storage, storage, offset.data, storage, storage,
+                          descriptor, descriptor, descriptor, descriptor);
     } else {
         f2c_buffer_printf(prelude, "if (%s_count > SIZE_MAX / sizeof(%s)) abort();\n", storage,
                           c_type);
@@ -98,34 +125,38 @@ static void append_nonowning_copy(Buffer *prelude, const F2cExpr *expression,
             f2c_buffer_printf(
                 prelude,
                 "for (size_t %s_index = 0U; %s_index < %s_count; ++%s_index) { "
-                "ptrdiff_t f2c_offset = f2c_descriptor_linear_offset(&%s, %s_index); "
-                "f2c_clone_%s(&%s[%s_index], &((const %s *)%s.data)[f2c_offset]); }\n",
-                storage, storage, storage, storage, descriptor, storage,
-                expression->derived_type->c_name, storage, storage, c_type, descriptor);
+                "ptrdiff_t f2c_offset = %s; %s f2c_snapshot; "
+                "f2c_descriptor_read_record(&f2c_snapshot, &%s, "
+                "f2c_descriptor_stride_multiply(f2c_offset, (ptrdiff_t)sizeof(%s)), sizeof(%s)); "
+                "f2c_clone_%s(&%s[%s_index], &f2c_snapshot); }\n",
+                storage, storage, storage, storage, offset.data, c_type, descriptor, c_type, c_type,
+                expression->derived_type->c_name, storage, storage);
         else
             f2c_buffer_printf(prelude,
                               "for (size_t %s_index = 0U; %s_index < %s_count; ++%s_index) { "
-                              "ptrdiff_t f2c_offset = f2c_descriptor_linear_offset(&%s, %s_index); "
-                              "%s[%s_index] = ((const %s *)%s.data)[f2c_offset]; }\n",
-                              storage, storage, storage, storage, descriptor, storage, storage,
-                              storage, c_type, descriptor);
+                              "ptrdiff_t f2c_offset = %s; "
+                              "f2c_descriptor_read_record(&%s[%s_index], &%s, "
+                              "f2c_descriptor_stride_multiply(f2c_offset, (ptrdiff_t)sizeof(%s)), "
+                              "sizeof(%s)); }\n",
+                              storage, storage, storage, storage, offset.data, storage, storage,
+                              descriptor, c_type, c_type);
     }
+    free(offset.data);
 }
 
-int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_t identifier,
-                                          const char *role, size_t *temporary, Buffer *prelude,
-                                          F2cArrayCleanupList *cleanup, int depth) {
+int f2c_result_materialize(Unit *unit, F2cExpr *expression, size_t identifier, const char *role,
+                           size_t *temporary, Buffer *prelude, F2cArrayCleanupList *cleanup,
+                           int depth) {
     Buffer storage = {0};
     Buffer descriptor = {0};
     char *call = NULL;
-    if (!f2c_array_function_result_call(unit, expression))
+    if (!f2c_result_requires_materialization(unit, expression))
         return 1;
     if (unit == NULL || role == NULL || temporary == NULL || prelude == NULL || cleanup == NULL ||
         expression->rank > F2C_MAX_RANK || expression->type == TYPE_UNKNOWN ||
         (expression->type == TYPE_DERIVED && expression->derived_type == NULL))
         return 0;
-    if (!f2c_array_owned_temporary_valid(unit, expression,
-                                         F2C_OWNED_TEMPORARY_ARRAY_FUNCTION_RESULT))
+    if (!f2c_array_owned_temporary_valid(unit, expression, F2C_OWNED_TEMPORARY_FUNCTION_RESULT))
         return 0;
     const int state_parameters = f2c_call_has_object_state_parameters(expression);
     if (!state_parameters) {
@@ -154,18 +185,47 @@ int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_
         f2c_buffer_printf(prelude, "f2c_descriptor %s = %s;\n", descriptor.data, call);
     }
     append_shape_validation(prelude, expression, descriptor.data, storage.data, depth);
+    if (f2c_expression_temporary_release_kind(expression) == F2C_TEMPORARY_STACK_VALUE) {
+        f2c_array_indent(prelude, depth);
+        f2c_buffer_printf(prelude, "%s %s;\n", f2c_expression_c_type(expression), storage.data);
+        f2c_array_indent(prelude, depth);
+        f2c_buffer_printf(prelude, "f2c_descriptor_read_record(&%s, &%s, 0, sizeof(%s));\n",
+                          storage.data, descriptor.data, storage.data);
+        const int success =
+            f2c_lowering_copy_result_descriptor(unit, expression, descriptor.data) &&
+            f2c_lowering_take_code(unit, expression, f2c_buffer_take(&storage));
+        free(storage.data);
+        free(descriptor.data);
+        free(call);
+        return success;
+    }
     f2c_array_indent(prelude, depth);
     f2c_buffer_printf(prelude, "%s *%s = NULL;\n", f2c_expression_c_type(expression), storage.data);
-    f2c_array_indent(prelude, depth);
-    f2c_buffer_printf(prelude, "if (%s.deallocatable) %s = (%s *)%s.data;\n", descriptor.data,
-                      storage.data, f2c_expression_c_type(expression), descriptor.data);
-    f2c_array_indent(prelude, depth);
-    f2c_buffer_append(prelude, "else {\n");
-    append_nonowning_copy(prelude, expression, descriptor.data, storage.data, depth + 1);
-    f2c_array_indent(prelude, depth);
-    f2c_buffer_append(prelude, "}\n");
-    if (!f2c_lowering_take_code(unit, expression, f2c_buffer_take(&storage)) ||
-        !f2c_lowering_set_array_temporary(unit, expression, 1)) {
+    const int reference = expression->result_use == F2C_FUNCTION_RESULT_REFERENCE;
+    if (f2c_result_kind_owns_storage(expression->result_kind) || reference) {
+        f2c_array_indent(prelude, depth);
+        f2c_buffer_printf(prelude, "%s = (%s *)%s.data;\n", storage.data,
+                          f2c_expression_c_type(expression), descriptor.data);
+    } else {
+        append_nonowning_copy(prelude, expression, descriptor.data, storage.data, depth);
+    }
+    if (reference) {
+        f2c_array_indent(prelude, depth);
+        f2c_buffer_printf(prelude, "(void)%s;\n", storage.data);
+    }
+    Buffer value = {0};
+    if (expression->rank == 0U && expression->type != TYPE_CHARACTER)
+        f2c_buffer_printf(&value, "(*%s)", storage.data);
+    else
+        f2c_buffer_append(&value, storage.data);
+    const int lowered =
+        f2c_lowering_copy_result_descriptor(unit, expression, descriptor.data) &&
+        (reference || f2c_lowering_copy_owned_storage(unit, expression, storage.data)) &&
+        f2c_lowering_take_code(unit, expression, f2c_buffer_take(&value)) &&
+        f2c_lowering_set_array_temporary(unit, expression, expression->rank != 0U);
+    free(storage.data);
+    free(value.data);
+    if (!lowered) {
         free(call);
         free(descriptor.data);
         return 0;
@@ -179,7 +239,7 @@ int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_
             return 0;
         }
     }
-    if (!f2c_array_cleanup_append(unit, cleanup, expression, depth)) {
+    if (!reference && !f2c_array_cleanup_append(unit, cleanup, expression, depth)) {
         free(call);
         free(descriptor.data);
         return 0;

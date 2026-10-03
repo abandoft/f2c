@@ -26,10 +26,6 @@ char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t 
 int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *expression,
                                        size_t identifier, const char *role, size_t *temporary,
                                        Buffer *prelude, F2cArrayCleanupList *cleanup, int depth);
-int f2c_array_function_result_call(const Unit *unit, const F2cExpr *expression);
-int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_t identifier,
-                                          const char *role, size_t *temporary, Buffer *prelude,
-                                          F2cArrayCleanupList *cleanup, int depth);
 int f2c_array_cleanup_append(Unit *unit, F2cArrayCleanupList *list, const F2cExpr *expression,
                              int depth);
 int f2c_array_owned_temporary_valid(const Unit *unit, const F2cExpr *expression,

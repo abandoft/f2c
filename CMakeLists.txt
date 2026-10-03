@@ -102,7 +102,7 @@ set(
     src/codegen/array/copy.c
     src/codegen/array/copy.h
     src/codegen/array/element.c
-    src/codegen/array/function.c
+    src/codegen/result/materialize.c
     src/codegen/array/inquiry.c
     src/codegen/array/ownership.c
     src/codegen/array/private.h
@@ -225,6 +225,7 @@ set(
     src/codegen/transform/private.h
     src/codegen/transform/view.c
     src/codegen/type/derived.c
+    src/codegen/type/snapshot.c
     src/codegen/call/address.c
     src/codegen/call/binding.c
     src/codegen/type/initialization.c
