@@ -509,7 +509,7 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
         character_length = f2c_symbol_character_length(unit, symbol);
         if (character_length == NULL)
             character_length = f2c_strdup("1U");
-        f2c_buffer_printf(&result, "(size_t)(%s) * (size_t)(", character_length);
+        f2c_buffer_append(&result, "f2c_descriptor_stride_extent((ptrdiff_t)(");
     }
     if (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol))) {
         f2c_buffer_printf(&result, "f2c_array_descriptor_offset(%zuU, (const int64_t[]){", count);
@@ -529,7 +529,7 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
                               f2c_symbol_c_name(unit, symbol), i + 1U);
         f2c_buffer_append(&result, "})");
         if (character_length != NULL)
-            f2c_buffer_append(&result, ")");
+            f2c_buffer_printf(&result, "), (size_t)(%s))", character_length);
         f2c_buffer_append(&result, "]");
         free(character_length);
         return f2c_buffer_take(&result);
@@ -542,7 +542,7 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
     }
     f2c_buffer_append(&result, offset);
     if (character_length != NULL)
-        f2c_buffer_append(&result, ")");
+        f2c_buffer_printf(&result, "), (size_t)(%s))", character_length);
     f2c_buffer_append(&result, "]");
     free(offset);
     free(character_length);

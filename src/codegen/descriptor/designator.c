@@ -207,10 +207,10 @@ char *f2c_descriptor_element_designator(Unit *unit, const F2cExpr *expression, c
     }
     f2c_buffer_printf(&result, "%s[", storage);
     if (character_length != NULL)
-        f2c_buffer_printf(&result, "(size_t)(%s) * (size_t)(", character_length);
+        f2c_buffer_append(&result, "f2c_descriptor_stride_extent((ptrdiff_t)(");
     f2c_buffer_append(&result, offset);
     if (character_length != NULL)
-        f2c_buffer_append(&result, ")");
+        f2c_buffer_printf(&result, "), (size_t)(%s))", character_length);
     f2c_buffer_append(&result, "]");
     free(storage);
     free(offset);
