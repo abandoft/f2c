@@ -1,4 +1,5 @@
 #include "codegen/type/initialization.h"
+#include "codegen/type/snapshot.h"
 #include "internal/f2c.h"
 
 #include <stdlib.h>
@@ -907,6 +908,7 @@ void f2c_emit_derived_types(Context *context, int needs_transfer, int needs_name
     emit_unit_types(context, &context->units);
     emit_lifecycle_prototypes(context, &context->modules);
     emit_lifecycle_prototypes(context, &context->units);
+    f2c_emit_snapshot_type_prototypes(context);
     if (needs_namelist)
         f2c_emit_namelist_type_prototypes(context);
     if (needs_transfer) {
@@ -919,6 +921,7 @@ void f2c_emit_derived_types(Context *context, int needs_transfer, int needs_name
     f2c_buffer_append(&context->output, "\n");
     emit_lifecycle_definitions(context, &context->modules);
     emit_lifecycle_definitions(context, &context->units);
+    f2c_emit_snapshot_type_definitions(context);
     emit_dynamic_destroy_definitions(context, &context->modules);
     emit_dynamic_destroy_definitions(context, &context->units);
     if (needs_namelist)
