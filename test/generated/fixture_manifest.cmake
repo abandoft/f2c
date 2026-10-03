@@ -33,6 +33,9 @@ set(
     allocation_model
     allocation_model_rich
     allocation_model_guard
+    allocation_result
+    allocation_result_values
+    allocation_result_finalization
     pointer_deallocation_errors
     pointer_dummy
     procedure_pointer
