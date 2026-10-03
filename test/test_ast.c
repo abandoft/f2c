@@ -810,6 +810,7 @@ static void test_character_designator_tree(void) {
         symbols[index].character_length_expression = f2c_expr_new_integer_constant(8);
     }
     symbols[1].intent = F2C_INTENT_IN;
+    symbols[1].argument = 1;
     symbols[2].parameter = 1;
     unit.symbols = symbols;
     unit.symbol_count = 3U;

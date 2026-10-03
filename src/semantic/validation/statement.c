@@ -1,3 +1,4 @@
+#include "ir/storage.h"
 #include "semantic/scope.h"
 #include "semantic/validation/private.h"
 
@@ -257,6 +258,9 @@ static void validate_pointer_statement(Context *context, Unit *unit, F2cStatemen
                 f2c_diagnostic_at(context, statement->line,
                                   f2c_validation_expression_start_column(statement->text, argument),
                                   1, "NULLIFY object must be a whole POINTER object");
+            } else if (!f2c_ir_storage_state_definable(argument)) {
+                f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &argument->span, 1,
+                                         "NULLIFY object state is not definable");
             }
         }
         return;
@@ -276,6 +280,11 @@ static void validate_pointer_statement(Context *context, Unit *unit, F2cStatemen
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, left), 1,
                               "pointer-assignment target must be a whole POINTER object");
+            return;
+        }
+        if (!f2c_ir_storage_state_definable(left)) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &left->span, 1,
+                                     "pointer-assignment object state is not definable");
             return;
         }
         if (pointer->procedure_pointer) {

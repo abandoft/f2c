@@ -1,3 +1,4 @@
+#include "ir/storage.h"
 #include "semantic/validation/private.h"
 
 #include <ctype.h>
@@ -448,6 +449,12 @@ void f2c_validation_procedure_actual(Context *context, Unit *caller, const Unit 
     if (value->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return;
     if (dummy->external) {
+        if (dummy->procedure_pointer &&
+            (dummy->intent == F2C_INTENT_OUT || dummy->intent == F2C_INTENT_INOUT) &&
+            !f2c_ir_storage_state_definable(value)) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &value->span, 1,
+                                     "procedure pointer actual object state is not definable");
+        }
         const Symbol *procedure =
             value->kind == F2C_EXPR_NAME ||
                     (value->kind == F2C_EXPR_COMPONENT && value->rank == 0U &&
@@ -568,7 +575,8 @@ void f2c_validation_procedure_actual(Context *context, Unit *caller, const Unit 
                                                            : definition->name,
                           dummy->name, dummy->intent == F2C_INTENT_OUT ? "OUT" : "INOUT");
     } else if ((dummy->intent == F2C_INTENT_OUT || dummy->intent == F2C_INTENT_INOUT) &&
-               !value->definable) {
+               ((dummy->pointer || dummy->allocatable) ? !f2c_ir_storage_state_definable(value)
+                                                       : !value->definable)) {
         f2c_diagnostic_at(context, line, column, 1,
                           "argument %zu of procedure '%s' is not definable but dummy '%s' has "
                           "INTENT(%s)",

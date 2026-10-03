@@ -1,4 +1,5 @@
 #include "ast/internal.h"
+#include "ir/storage.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -163,7 +164,7 @@ F2cExpr *f2c_ast_parse_name(AstParser *parser, const F2cToken *name_token) {
             f2c_ast_set_expression_shape(expression, 0U, F2C_SHAPE_SCALAR);
         }
         expression->definable = symbol != NULL && !symbol->external && symbol->intrinsic == NULL &&
-                                !symbol->parameter && symbol->intent != F2C_INTENT_IN;
+                                !f2c_ir_symbol_storage_reference(symbol).readonly_storage;
     } else if (kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR) {
         expression->type_kind = 0;
         expression->value_category = F2C_VALUE_TEMPORARY;
@@ -171,7 +172,7 @@ F2cExpr *f2c_ast_parse_name(AstParser *parser, const F2cToken *name_token) {
     } else if (kind == F2C_EXPR_ARRAY_REFERENCE) {
         f2c_ast_set_array_reference_shape(parser, expression, symbol);
         expression->definable =
-            symbol != NULL && !symbol->parameter && symbol->intent != F2C_INTENT_IN;
+            symbol != NULL && !f2c_ir_symbol_storage_reference(symbol).readonly_storage;
     } else if ((f2c_is_intrinsic_name(expression->text) ||
                 f2c_ast_is_generated_c_intrinsic(expression->text)) &&
                (symbol == NULL || (!symbol->external && !symbol->statement_function))) {
@@ -376,7 +377,8 @@ F2cExpr *f2c_ast_parse_designator(AstParser *parser, F2cExpr *expression) {
             f2c_ast_set_expression_shape(selection, F2C_MAX_RANK, F2C_SHAPE_UNKNOWN);
         }
         selection->value_category = F2C_VALUE_VARIABLE;
-        selection->definable = expression->definable && !component->parameter;
+        selection->definable =
+            !component->parameter && (expression->definable || component->pointer);
         f2c_analyze_expression_access(selection);
         f2c_ast_set_expression_range(parser, selection, begin, parser->token.begin);
         expression = selection;

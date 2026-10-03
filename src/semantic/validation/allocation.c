@@ -1,3 +1,4 @@
+#include "ir/storage.h"
 #include "semantic/validation/private.h"
 
 #include <ctype.h>
@@ -262,6 +263,12 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
                               allocating ? "ALLOCATE" : "DEALLOCATE", symbol->name);
             continue;
         }
+        if (!f2c_ir_storage_state_definable(target)) {
+            f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &target->span, 1,
+                                     "%s object state is not definable",
+                                     allocating ? "ALLOCATE" : "DEALLOCATE");
+            continue;
+        }
         if (allocating && symbol->rank != 0U && target->kind != F2C_EXPR_ARRAY_REFERENCE &&
             !(target->kind == F2C_EXPR_COMPONENT && target->child_count > 1U) && model == NULL) {
             f2c_diagnostic_at(context, statement->line,
@@ -496,6 +503,11 @@ static Symbol *validate_move_alloc_object(Context *context, const F2cStatement *
         f2c_diagnostic_at(context, statement->line,
                           f2c_validation_expression_start_column(statement->text, expression), 1,
                           "MOVE_ALLOC %s= object '%s' is not ALLOCATABLE", role, symbol->name);
+        return NULL;
+    }
+    if (!f2c_ir_storage_state_definable(expression)) {
+        f2c_diagnostic_span_code(context, F2C_DIAGNOSTIC_SEMANTIC, &expression->span, 1,
+                                 "MOVE_ALLOC %s= object state is not definable", role);
         return NULL;
     }
     return symbol;

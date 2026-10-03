@@ -629,6 +629,11 @@ if(F2C_BUILD_TESTING)
     f2c_configure_internal_test_target(f2c_access_tests)
     add_test(NAME access_qualifiers COMMAND f2c_access_tests)
 
+    add_executable(f2c_storage_state_tests test/test_storage_state.c)
+    target_include_directories(f2c_storage_state_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_storage_state_tests)
+    add_test(NAME object_state_references COMMAND f2c_storage_state_tests)
+
     add_executable(f2c_contiguity_tests test/test_contiguity.c)
     target_include_directories(f2c_contiguity_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_contiguity_tests)
