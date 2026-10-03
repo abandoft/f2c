@@ -1,8 +1,54 @@
-#include "benchmark_statistics.h"
+#include "performance/samples.h"
 
 #include <stdlib.h>
 
 static int close_enough(double left, double right) { return fabs(left - right) < 1.0e-12; }
+
+static int test_sample_report(void) {
+    F2cBenchmarkSample samples[] = {
+        {1.0, 2.0, 0.5}, {1.0, 2.0, 0.5}, {1.0, 2.0, 0.5}, {1.0, 2.0, 0.5}};
+    static const char *const expected[] = {"F2C_PERF_SAMPLE,TEST,n=1,0,ABBA,0,1,2,0.5\n",
+                                           "F2C_PERF_SAMPLE,TEST,n=1,1,BAAB,0,1,2,0.5\n",
+                                           "F2C_PERF_SAMPLE,TEST,n=1,2,ABBA,1,1,2,0.5\n",
+                                           "F2C_PERF_SAMPLE,TEST,n=1,3,BAAB,1,1,2,0.5\n"};
+    char line[128];
+    FILE *stream = NULL;
+    int passed = 1;
+#if defined(_MSC_VER)
+    if (tmpfile_s(&stream) != 0)
+        return 0;
+#else
+    stream = tmpfile();
+#endif
+    if (stream == NULL)
+        return 0;
+    samples[3].ratio = NAN;
+    if (f2c_benchmark_write_samples(stream, "TEST", "n=1", samples, 4U) || ftell(stream) != 0L)
+        passed = 0;
+    samples[3].ratio = 0.5;
+    if (f2c_benchmark_write_samples(NULL, "TEST", "n=1", samples, 4U) ||
+        f2c_benchmark_write_samples(stream, NULL, "n=1", samples, 4U) ||
+        f2c_benchmark_write_samples(stream, "TEST", NULL, samples, 4U) ||
+        f2c_benchmark_write_samples(stream, "TEST", "n=1", NULL, 4U) ||
+        f2c_benchmark_write_samples(stream, "TEST", "n=1", samples, 0U) ||
+        f2c_benchmark_write_samples(stream, "TEST,bad", "n=1", samples, 4U) ||
+        f2c_benchmark_write_samples(stream, "TEST", "n=1\n", samples, 4U) ||
+        f2c_benchmark_write_samples(stream, "", "n=1", samples, 4U) || ftell(stream) != 0L)
+        passed = 0;
+    if (!f2c_benchmark_write_samples(stream, "TEST", "n=1", samples, 4U))
+        passed = 0;
+    rewind(stream);
+    for (size_t i = 0U; i < 4U; ++i) {
+        if (fgets(line, sizeof(line), stream) == NULL || strcmp(line, expected[i]) != 0 ||
+            !close_enough(samples[i].ratio, 0.5))
+            passed = 0;
+    }
+    if (fgetc(stream) != EOF || ferror(stream))
+        passed = 0;
+    if (fclose(stream) != 0)
+        passed = 0;
+    return passed;
+}
 
 int main(void) {
     F2cBenchmarkSample generated_outer = f2c_benchmark_symmetric_sample(0U, 1.0, 2.0, 3.0, 4.0);
@@ -44,7 +90,8 @@ int main(void) {
     if (!close_enough(median.generated_seconds, 4.0) ||
         !close_enough(median.fortran_seconds, 4.0) || !close_enough(median.ratio, 1.0))
         return EXIT_FAILURE;
-    if (!f2c_benchmark_sample_valid(&median) || f2c_benchmark_seconds() < 0.0)
+    if (!f2c_benchmark_sample_valid(&median) || f2c_benchmark_seconds() < 0.0 ||
+        !test_sample_report())
         return EXIT_FAILURE;
     return EXIT_SUCCESS;
 }
