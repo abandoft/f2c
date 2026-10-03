@@ -9,7 +9,7 @@ fi
 F2C=$1
 CC=${CC:-cc}
 FC=${FC:-gfortran}
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 WORK=$ROOT/build/function-result-differential
 
 if ! command -v "$CC" >/dev/null 2>&1; then
@@ -62,7 +62,7 @@ for OPTIMIZATION in 0 2 3; do
         -DF2C_RESULT_SOURCE="\"$WORK/external.c\"" \
         "$ROOT/test/generated/result_contracts.c" -lm -o "$WORK/external-O$OPTIMIZATION"
     "$WORK/external-O$OPTIMIZATION"
-    for CONTRACT in rank size ownership allocation; do
+    for CONTRACT in rank size ownership allocation retention_growth; do
         STATUS=0
         "$WORK/external-O$OPTIMIZATION" "$CONTRACT" || STATUS=$?
         if [ "$STATUS" -ne 99 ]; then
