@@ -906,6 +906,13 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_compilation(f2c_benchmark_statistics_tests)
     add_test(NAME benchmark_statistics COMMAND f2c_benchmark_statistics_tests)
 
+    add_executable(f2c_benchmark_workspace_tests test/test_benchmark_workspaces.c)
+    f2c_configure_test_compilation(f2c_benchmark_workspace_tests)
+    if(NOT MSVC)
+        target_link_libraries(f2c_benchmark_workspace_tests PRIVATE m)
+    endif()
+    add_test(NAME benchmark_workspace_contract COMMAND f2c_benchmark_workspace_tests)
+
     add_test(
         NAME generated_c17
         COMMAND
