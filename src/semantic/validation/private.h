@@ -47,7 +47,7 @@ int f2c_validation_bind_procedure_arguments(Context *context, Unit *definition, 
                                             char ***items, size_t *count, F2cStatement *statement,
                                             size_t implicit_parameter, F2cExpr *passed_object);
 void f2c_validation_procedure_actual(Context *context, Unit *caller, const Unit *definition,
-                                     const Symbol *dummy, const F2cExpr *actual, size_t index,
+                                     const Symbol *dummy, F2cExpr *actual, size_t index,
                                      size_t line, const char *statement_text);
 void f2c_validation_actual_storage(Context *context, const Unit *definition, const Symbol *dummy,
                                    const F2cExpr *actual);

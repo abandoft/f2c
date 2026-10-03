@@ -440,10 +440,13 @@ void f2c_resolve_derived_semantics(Context *context) {
 }
 
 void f2c_validation_procedure_actual(Context *context, Unit *caller, const Unit *definition,
-                                     const Symbol *dummy, const F2cExpr *actual, size_t index,
+                                     const Symbol *dummy, F2cExpr *actual, size_t index,
                                      size_t line, const char *statement_text) {
     const size_t column = f2c_validation_expression_start_column(statement_text, actual);
-    const F2cExpr *value = f2c_validation_actual_value(actual);
+    F2cExpr *value =
+        actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT && actual->child_count == 1U
+            ? actual->children[0]
+            : actual;
     if (dummy == NULL || value == NULL)
         return;
     if (value->kind == F2C_EXPR_ABSENT_ARGUMENT)
@@ -528,9 +531,13 @@ void f2c_validation_procedure_actual(Context *context, Unit *caller, const Unit 
                           "dummy '%s'",
                           index + 1U, definition->name, dummy->name);
     }
-    if (dummy->pointer && ((value->kind != F2C_EXPR_NAME && value->kind != F2C_EXPR_COMPONENT) ||
-                           (value->kind == F2C_EXPR_COMPONENT && value->child_count != 1U) ||
-                           value->symbol == NULL || !value->symbol->pointer)) {
+    const int pointer_result = f2c_expression_has_pointer_result(value);
+    if (pointer_result && !dummy->value && (!dummy->pointer || dummy->intent == F2C_INTENT_IN))
+        value->result_use = F2C_FUNCTION_RESULT_REFERENCE;
+    if (dummy->pointer && !(pointer_result && dummy->intent == F2C_INTENT_IN) &&
+        ((value->kind != F2C_EXPR_NAME && value->kind != F2C_EXPR_COMPONENT) ||
+         (value->kind == F2C_EXPR_COMPONENT && value->child_count != 1U) || value->symbol == NULL ||
+         !value->symbol->pointer)) {
         f2c_diagnostic_at(context, line, value->source_offset + 1U, 1,
                           "argument %zu of procedure '%s' must be a POINTER whole object for "
                           "dummy '%s'",
