@@ -324,6 +324,8 @@ set(
     src/ir/intrinsic.h
     src/ir/statement.h
     src/ir/type.h
+    src/ir/storage.c
+    src/ir/storage.h
     src/semantic/character/length.c
     src/semantic/character/literal.c
     src/semantic/control_flow.c
