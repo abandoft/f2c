@@ -1,6 +1,7 @@
 #include "codegen/descriptor/private.h"
 
 #include "codegen/expression/private.h"
+#include "codegen/storage/private.h"
 
 #include <stdlib.h>
 
@@ -42,15 +43,10 @@ char *f2c_descriptor_storage_designator(Unit *unit, const F2cExpr *expression) {
     return f2c_buffer_take(&result);
 }
 
-static char *metadata_designator(Unit *unit, const F2cExpr *expression, const char *field,
-                                 size_t dimension) {
-    Buffer result = {0};
-    char *storage = f2c_descriptor_storage_designator(unit, expression);
-    if (storage == NULL)
-        return NULL;
-    f2c_buffer_printf(&result, "%s_%s_%zu", storage, field, dimension + 1U);
-    free(storage);
-    return f2c_buffer_take(&result);
+static char *metadata_designator(Unit *unit, const F2cExpr *expression,
+                                 F2cObjectStateProperty field, size_t dimension) {
+    const F2cStorageReference reference = f2c_ir_storage_reference(expression);
+    return f2c_storage_read_property(unit, &reference, field, dimension);
 }
 
 char *f2c_descriptor_dimension_lower(Unit *unit, const F2cExpr *expression, size_t dimension) {
@@ -58,7 +54,7 @@ char *f2c_descriptor_dimension_lower(Unit *unit, const F2cExpr *expression, size
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
     if (component_designator_supported(expression) && (symbol->pointer || symbol->allocatable))
-        return metadata_designator(unit, expression, "lower", dimension);
+        return metadata_designator(unit, expression, F2C_OBJECT_LOWER, dimension);
     return f2c_symbol_dimension_lower(unit, symbol, dimension);
 }
 
@@ -67,7 +63,7 @@ char *f2c_descriptor_dimension_extent(Unit *unit, const F2cExpr *expression, siz
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
     if (component_designator_supported(expression) && (symbol->pointer || symbol->allocatable))
-        return metadata_designator(unit, expression, "extent", dimension);
+        return metadata_designator(unit, expression, F2C_OBJECT_EXTENT, dimension);
     return f2c_symbol_dimension_extent(unit, symbol, dimension);
 }
 
@@ -117,7 +113,7 @@ char *f2c_descriptor_expression_stride(Unit *unit, const F2cExpr *expression, si
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
     if (component_designator_supported(expression) && symbol->pointer)
-        return metadata_designator(unit, expression, "stride", dimension);
+        return metadata_designator(unit, expression, F2C_OBJECT_STRIDE, dimension);
     if (component_designator_supported(expression))
         return contiguous_stride(unit, expression, dimension);
     return f2c_descriptor_source_stride(unit, symbol, dimension);
@@ -187,13 +183,13 @@ char *f2c_descriptor_element_designator(Unit *unit, const F2cExpr *expression, c
         return NULL;
     if (!component_designator_supported(expression))
         return f2c_emit_array_reference(unit, expression->symbol, indices, count);
-    storage = f2c_descriptor_storage_designator(unit, expression);
+    const F2cStorageReference reference = f2c_ir_storage_reference(expression);
+    storage = f2c_storage_read_property(unit, &reference, F2C_OBJECT_DATA, 0U);
     offset = component_offset(unit, expression, indices, count);
     if (symbol->type == TYPE_CHARACTER) {
         if (symbol->deferred_character) {
-            Buffer length = {0};
-            f2c_buffer_printf(&length, "%s_character_length", storage != NULL ? storage : "");
-            character_length = f2c_buffer_take(&length);
+            character_length =
+                f2c_storage_read_property(unit, &reference, F2C_OBJECT_CHARACTER_LENGTH, 0U);
         } else {
             character_length = f2c_symbol_character_length(unit, symbol);
         }

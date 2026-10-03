@@ -2,6 +2,7 @@
 
 #include "codegen/array/private.h"
 #include "codegen/lowering/private.h"
+#include "codegen/storage/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -40,11 +41,8 @@ static char *contiguous_stride(Unit *unit, const Symbol *symbol, size_t dimensio
 }
 
 char *f2c_descriptor_source_stride(Unit *unit, const Symbol *symbol, size_t dimension) {
-    Buffer result = {0};
     if (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol))) {
-        f2c_buffer_printf(&result, "%s_stride_%zu", f2c_symbol_c_name(unit, symbol),
-                          dimension + 1U);
-        return f2c_buffer_take(&result);
+        return f2c_storage_symbol_property(unit, symbol, F2C_OBJECT_STRIDE, dimension);
     }
     return contiguous_stride(unit, symbol, dimension);
 }
@@ -69,7 +67,8 @@ static char *section_step(Unit *unit, const F2cExpr *section) {
 static int whole_array_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView *view) {
     size_t dimension;
     const Symbol *symbol = expression->symbol;
-    view->data = f2c_descriptor_storage_designator(unit, expression);
+    const F2cStorageReference reference = f2c_ir_storage_reference(expression);
+    view->data = f2c_storage_read_property(unit, &reference, F2C_OBJECT_DATA, 0U);
     view->rank = symbol->rank;
     for (dimension = 0U; dimension < view->rank; ++dimension) {
         view->lower[dimension] = f2c_descriptor_dimension_lower(unit, expression, dimension);

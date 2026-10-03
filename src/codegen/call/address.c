@@ -2,6 +2,7 @@
 
 #include "codegen/expression/private.h"
 #include "codegen/lowering/private.h"
+#include "codegen/storage/private.h"
 
 #include <stdlib.h>
 
@@ -21,7 +22,8 @@ char *f2c_call_emit_actual_address(Unit *unit, const F2cExpr *actual, const char
     if (symbol != NULL && actual->type == TYPE_DERIVED && actual->rank == 0U &&
         (symbol->pointer || symbol->allocatable) &&
         (actual->kind == F2C_EXPR_NAME || actual->kind == F2C_EXPR_COMPONENT)) {
-        char *storage = f2c_descriptor_storage_designator(unit, actual);
+        const F2cStorageReference reference = f2c_ir_storage_reference(actual);
+        char *storage = f2c_storage_read_property(unit, &reference, F2C_OBJECT_DATA, 0U);
         if (storage == NULL)
             *supported = 0;
         return storage;
@@ -62,6 +64,8 @@ char *f2c_call_emit_actual_address(Unit *unit, const F2cExpr *actual, const char
         }
         if (symbol->external && symbol->external_declared)
             return f2c_strdup(f2c_symbol_c_name(unit, symbol));
+        if (symbol->pointer || symbol->allocatable)
+            return f2c_storage_symbol_data(unit, symbol);
         if (symbol->argument || symbol->rank != 0U ||
             (symbol->type == TYPE_CHARACTER && symbol->character_length != NULL))
             return f2c_strdup(f2c_symbol_c_name(unit, symbol));

@@ -4,6 +4,7 @@
 #include "codegen/array/view.h"
 #include "codegen/descriptor/private.h"
 #include "codegen/lowering/private.h"
+#include "codegen/storage/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -144,15 +145,12 @@ static int build_array_view(Unit *unit, const F2cExpr *array, char **pointer, ch
         return *pointer != NULL && *count != NULL && *stride != NULL;
     }
     if (array->kind == F2C_EXPR_NAME && array->symbol != NULL) {
-        Buffer dynamic_stride = {0};
-        *pointer = f2c_strdup(f2c_symbol_c_name(unit, array->symbol));
+        *pointer = f2c_storage_symbol_data(unit, array->symbol);
         *count = f2c_symbol_element_count(unit, array->symbol);
         if (array->symbol->rank == 1U &&
             (array->symbol->pointer ||
              (array->symbol->argument && f2c_symbol_uses_descriptor(array->symbol)))) {
-            f2c_buffer_printf(&dynamic_stride, "%s_stride_1",
-                              f2c_symbol_c_name(unit, array->symbol));
-            *stride = f2c_buffer_take(&dynamic_stride);
+            *stride = f2c_descriptor_source_stride(unit, array->symbol, 0U);
         } else {
             *stride = f2c_strdup("1");
         }
@@ -162,7 +160,8 @@ static int build_array_view(Unit *unit, const F2cExpr *array, char **pointer, ch
         array->rank == 1U) {
         char *component_extent;
         Buffer count_code = {0};
-        *pointer = f2c_descriptor_storage_designator(unit, array);
+        const F2cStorageReference storage = f2c_ir_storage_reference(array);
+        *pointer = f2c_storage_read_property(unit, &storage, F2C_OBJECT_DATA, 0U);
         component_extent = f2c_descriptor_dimension_extent(unit, array, 0U);
         if (component_extent != NULL)
             f2c_buffer_printf(&count_code, "(size_t)(%s)", component_extent);
