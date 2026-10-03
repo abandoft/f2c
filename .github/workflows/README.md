@@ -25,3 +25,11 @@ each ABBA/BAAB pair. The two allocations are rotated independently of execution 
 equal coverage; inputs are restored before timing, while correctness checks retain independent
 outputs. The full gate requires all 71 cases with 24 paired samples and the unchanged 5% limit.
 The manual `diagnostics` and `loop-policies` scopes are investigative reports, not parity gates.
+Every paired timing is retained at full precision before median selection, with its collection
+order, ABBA/BAAB schedule, and workspace number. Reporting happens outside the timed rounds.
+The `diagnostics` scope accepts an optional immutable `baseline_sha`; it builds that translator
+and captures baseline and candidate assembly, optimization reports, and whole-program LTO
+disassembly with the same compiler and pinned numerical sources on one runner. Neither a
+diagnostic run nor a baseline comparison substitutes for the full performance gate.
+Diagnostic scopes have separate concurrency groups, so requesting a report cannot cancel an
+in-progress parity gate for the release candidate.
