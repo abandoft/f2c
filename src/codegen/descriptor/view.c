@@ -177,6 +177,35 @@ static int lowered_array_view(Unit *unit, const F2cExpr *expression, F2cDescript
            (expression->type != TYPE_CHARACTER || view->character_length != NULL);
 }
 
+static int pointer_result_view(const F2cExpr *expression, const char *descriptor,
+                               F2cDescriptorView *view) {
+    Buffer data = {0};
+    f2c_buffer_printf(&data, "(%s *)%s.data", f2c_expression_c_type(expression), descriptor);
+    view->data = f2c_buffer_take(&data);
+    view->rank = expression->rank;
+    if (expression->type == TYPE_CHARACTER) {
+        Buffer length = {0};
+        f2c_buffer_printf(&length, "%s.character_length", descriptor);
+        view->character_length = f2c_buffer_take(&length);
+    }
+    for (size_t dimension = 0U; dimension < view->rank; ++dimension) {
+        Buffer lower = {0};
+        Buffer extent = {0};
+        Buffer stride = {0};
+        f2c_buffer_printf(&lower, "%s.lower[%zu]", descriptor, dimension);
+        f2c_buffer_printf(&extent, "%s.extent[%zu]", descriptor, dimension);
+        f2c_buffer_printf(&stride, "%s.stride[%zu]", descriptor, dimension);
+        view->lower[dimension] = f2c_buffer_take(&lower);
+        view->extent[dimension] = f2c_buffer_take(&extent);
+        view->stride[dimension] = f2c_buffer_take(&stride);
+        if (view->lower[dimension] == NULL || view->extent[dimension] == NULL ||
+            view->stride[dimension] == NULL)
+            return 0;
+    }
+    return view->data != NULL &&
+           (expression->type != TYPE_CHARACTER || view->character_length != NULL);
+}
+
 int f2c_descriptor_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView *view) {
     int result = 0;
     if (unit == NULL || expression == NULL || view == NULL)
@@ -186,7 +215,11 @@ int f2c_descriptor_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView
     view->readonly_storage = f2c_lowering_is_array_temporary(unit, expression)
                                  ? f2c_lowering_readonly_storage(unit, expression)
                                  : f2c_descriptor_readonly_storage(expression);
-    if (f2c_lowering_is_array_temporary(unit, expression))
+    const char *result_descriptor = f2c_lowering_result_descriptor(unit, expression);
+    if (f2c_expression_has_pointer_result(expression) &&
+        expression->result_use == F2C_FUNCTION_RESULT_REFERENCE && result_descriptor != NULL)
+        result = pointer_result_view(expression, result_descriptor, view);
+    else if (f2c_lowering_is_array_temporary(unit, expression))
         result = lowered_array_view(unit, expression, view);
     else if (expression->symbol == NULL)
         return 0;

@@ -126,7 +126,7 @@ int f2c_descriptor_association_view(Buffer *prelude, Unit *unit, const F2cExpr *
     if (prelude == NULL || unit == NULL || expression == NULL || view == NULL ||
         expression->symbol == NULL || expression->rank == 0U)
         return 0;
-    if (expression->kind == F2C_EXPR_NAME ||
+    if (f2c_expression_has_pointer_result(expression) || expression->kind == F2C_EXPR_NAME ||
         (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U))
         return f2c_descriptor_view(unit, expression, view);
     symbol = expression->symbol;
