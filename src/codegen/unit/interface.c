@@ -17,11 +17,9 @@ static int restrictable_argument(const Symbol *symbol) {
                                                 !symbol->volatile_entity));
 }
 
-static void emit_parameter_qualifiers(Buffer *output, int constant, int volatile_parameter) {
+static void emit_parameter_qualifiers(Buffer *output, int constant) {
     if (constant)
         f2c_buffer_append(output, "const ");
-    if (volatile_parameter)
-        f2c_buffer_append(output, "volatile ");
 }
 
 Symbol *f2c_unit_function_result(Unit *unit) {
@@ -66,12 +64,10 @@ void f2c_emit_procedure_pointer_type(Buffer *output, const Symbol *procedure, co
             f2c_buffer_append(output, "f2c_descriptor *");
         else if (procedure->type_bound && parameter == procedure->type_bound_pass_index &&
                  !procedure->type_bound_nopass) {
-            emit_parameter_qualifiers(output, procedure->external_parameter_const[parameter],
-                                      procedure->external_parameter_volatile[parameter]);
+            emit_parameter_qualifiers(output, procedure->external_parameter_const[parameter]);
             f2c_buffer_append(output, "void *");
         } else {
-            emit_parameter_qualifiers(output, procedure->external_parameter_const[parameter],
-                                      procedure->external_parameter_volatile[parameter]);
+            emit_parameter_qualifiers(output, procedure->external_parameter_const[parameter]);
             f2c_buffer_printf(
                 output, "%s *",
                 procedure->external_parameter_types[parameter] == TYPE_DERIVED &&
@@ -125,8 +121,7 @@ void f2c_unit_emit_named_signature(Buffer *output, Unit *unit, const char *name,
                               f2c_symbol_c_name(unit, symbol));
         } else {
             emit_parameter_qualifiers(
-                output, symbol != NULL && (symbol->intent == F2C_INTENT_IN || symbol->value),
-                symbol != NULL && symbol->volatile_entity);
+                output, symbol != NULL && (symbol->intent == F2C_INTENT_IN || symbol->value));
             f2c_buffer_printf(
                 output, "%s *%s%s",
                 symbol != NULL ? f2c_symbol_c_type(symbol) : f2c_c_type(TYPE_REAL),
@@ -221,8 +216,7 @@ static void emit_external_prototypes(Context *context) {
                         f2c_buffer_append(&context->output, "f2c_descriptor *");
                     else {
                         emit_parameter_qualifiers(&context->output,
-                                                  symbol->external_parameter_const[parameter],
-                                                  symbol->external_parameter_volatile[parameter]);
+                                                  symbol->external_parameter_const[parameter]);
                         f2c_buffer_printf(
                             &context->output, "%s *",
                             symbol->external_parameter_types[parameter] == TYPE_DERIVED &&

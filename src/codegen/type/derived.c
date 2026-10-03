@@ -260,8 +260,6 @@ static const char *procedure_parameter_type(const Symbol *procedure, size_t para
 static void emit_parameter_qualifiers(Buffer *output, const Symbol *procedure, size_t parameter) {
     if (procedure->external_parameter_const[parameter])
         f2c_buffer_append(output, "const ");
-    if (procedure->external_parameter_volatile[parameter])
-        f2c_buffer_append(output, "volatile ");
 }
 
 static void emit_dispatch_parameter(Buffer *output, const Symbol *procedure, size_t parameter) {

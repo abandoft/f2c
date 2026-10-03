@@ -243,48 +243,11 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
     {
         int supported = 0;
         char *code = f2c_emit_expression_ast(unit, ast, &supported);
-        Symbol *ast_symbol = ast->symbol;
-        Buffer lowered = {0};
         if (!supported || code == NULL) {
             free(code);
             return NULL;
         }
-        if (ast->kind == F2C_EXPR_NAME && ast_symbol != NULL) {
-            if (ast_symbol->external && ast_symbol->external_declared) {
-                result = f2c_strdup(f2c_symbol_c_name(unit, ast_symbol));
-            } else if (ast_symbol->parameter) {
-                if (ast_symbol->type == TYPE_CHARACTER)
-                    result = f2c_strdup(code);
-                else
-                    result = f2c_emit_scalar_temporary_address(f2c_symbol_c_type(ast_symbol),
-                                                               ast_symbol->type, code);
-            } else if (ast_symbol->argument || ast_symbol->rank != 0U ||
-                       (ast_symbol->type == TYPE_CHARACTER &&
-                        ast_symbol->character_length != NULL)) {
-                result = f2c_strdup(f2c_symbol_c_name(unit, ast_symbol));
-            } else {
-                f2c_buffer_printf(&lowered, "&%s", f2c_symbol_c_name(unit, ast_symbol));
-            }
-        } else if (ast->kind == F2C_EXPR_COMPONENT && ast_symbol != NULL && ast_symbol->external) {
-            result = f2c_strdup(code);
-        } else if (ast->kind == F2C_EXPR_SUBSTRING) {
-            result = f2c_strdup(code);
-        } else if (ast->kind == F2C_EXPR_ARRAY_REFERENCE) {
-            f2c_buffer_printf(&lowered, "&%s", code);
-        } else if (ast->type == TYPE_CHARACTER) {
-            result = f2c_strdup(code);
-        } else if (ast->definable &&
-                   (ast->type == TYPE_DERIVED || ast->kind == F2C_EXPR_COMPONENT)) {
-            f2c_buffer_printf(&lowered, "&(%s)", code);
-        } else {
-            result = f2c_emit_scalar_temporary_address(
-                ast->type != TYPE_UNKNOWN ? f2c_expression_c_type(ast) : f2c_c_type(TYPE_REAL),
-                ast->type != TYPE_UNKNOWN ? ast->type : TYPE_REAL, code);
-        }
-        if (result == NULL)
-            result = f2c_buffer_take(&lowered);
-        else
-            free(f2c_buffer_take(&lowered));
+        result = f2c_call_emit_actual_address(unit, ast, code, &supported);
         free(code);
         return result;
     }
@@ -503,10 +466,8 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
             goto descriptor_failed;
         if (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i]) {
             emit_indent(&call->postlude, depth);
-            f2c_buffer_printf(
-                &call->postlude, "%s = (%s%s *)f2c_call_descriptor_%zu.%s;\n", name,
-                actual->volatile_entity ? "volatile " : "", c_type, i,
-                f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(actual), 0));
+            f2c_buffer_printf(&call->postlude, "%s = (%s *)f2c_call_descriptor_%zu.data;\n", name,
+                              c_type, i);
             if (actual->pointer) {
                 emit_indent(&call->postlude, depth);
                 f2c_buffer_printf(&call->postlude,

@@ -69,16 +69,24 @@ char *f2c_call_emit_actual_address(Unit *unit, const F2cExpr *actual, const char
         return f2c_buffer_take(&result);
     }
     if (actual->kind == F2C_EXPR_ARRAY_REFERENCE) {
-        f2c_buffer_printf(&result, "&%s", code);
+        char *storage = f2c_expression_storage_designator(unit, actual, supported);
+        if (storage == NULL)
+            return NULL;
+        f2c_buffer_printf(&result, "&%s", storage);
+        free(storage);
         return f2c_buffer_take(&result);
     }
     if (actual->kind == F2C_EXPR_SUBSTRING) {
-        return f2c_strdup(code);
+        return f2c_expression_storage_designator(unit, actual, supported);
     }
     if (actual->type == TYPE_CHARACTER)
         return f2c_strdup(code);
     if (actual->definable && (actual->type == TYPE_DERIVED || actual->kind == F2C_EXPR_COMPONENT)) {
-        f2c_buffer_printf(&result, "&(%s)", code);
+        char *storage = f2c_expression_storage_designator(unit, actual, supported);
+        if (storage == NULL)
+            return NULL;
+        f2c_buffer_printf(&result, "&(%s)", storage);
+        free(storage);
         return f2c_buffer_take(&result);
     }
     if (actual->type == TYPE_DERIVED && !actual->definable)

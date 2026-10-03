@@ -33,15 +33,11 @@ static void emit_declarations(Context *context, Unit *unit) {
             output,
             "%s%s *%s = f2c_descriptor_%s != NULL ? (%s%s *)"
             "f2c_descriptor_%s->%s : NULL;\n",
-            symbol->intent == F2C_INTENT_IN && !symbol->pointer ? "const "
-            : symbol->volatile_entity                           ? "volatile "
-                                                                : "",
+            symbol->intent == F2C_INTENT_IN && !symbol->pointer ? "const " : "",
             f2c_symbol_c_type(symbol), name, name,
-            symbol->intent == F2C_INTENT_IN && !symbol->pointer ? "const "
-            : symbol->volatile_entity                           ? "volatile "
-                                                                : "",
+            symbol->intent == F2C_INTENT_IN && !symbol->pointer ? "const " : "",
             f2c_symbol_c_type(symbol), name,
-            f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(symbol),
+            f2c_descriptor_address_member(F2C_STORAGE_UNQUALIFIED,
                                           symbol->intent == F2C_INTENT_IN && !symbol->pointer));
         if (symbol->pointer) {
             f2c_unit_indent(output, 1);
@@ -181,8 +177,7 @@ static void emit_declarations(Context *context, Unit *unit) {
             f2c_buffer_append(output, "const ");
         if (symbol->allocatable || symbol->pointer) {
             size_t d;
-            f2c_buffer_printf(output, "%s%s *%s = NULL;\n",
-                              symbol->volatile_entity ? "volatile " : "", f2c_symbol_c_type(symbol),
+            f2c_buffer_printf(output, "%s *%s = NULL;\n", f2c_symbol_c_type(symbol),
                               f2c_symbol_c_name(unit, symbol));
             if (symbol->pointer) {
                 f2c_unit_indent(output, 1);
@@ -266,8 +261,8 @@ static void emit_declarations(Context *context, Unit *unit) {
             free(count);
             continue;
         }
-        f2c_buffer_printf(output, "%s%s %s", symbol->volatile_entity ? "volatile " : "",
-                          f2c_symbol_c_type(symbol), f2c_symbol_c_name(unit, symbol));
+        f2c_buffer_printf(output, "%s %s", f2c_symbol_c_type(symbol),
+                          f2c_symbol_c_name(unit, symbol));
         if (symbol->type == TYPE_CHARACTER && symbol->rank == 0U &&
             symbol->character_length != NULL) {
             char *length = f2c_symbol_character_length(unit, symbol);
@@ -345,8 +340,9 @@ static void emit_declarations(Context *context, Unit *unit) {
                 f2c_buffer_printf(output,
                                   "for (size_t %s = 0U; "
                                   "%s < sizeof(%s) / sizeof(%s[0]); "
-                                  "++%s) %s[%s] = (%s){0};\n",
-                                  index_name, index_name, name, name, index_name, name, index_name,
+                                  "++%s) ((volatile %s *)%s)[%s] = (%s){0};\n",
+                                  index_name, index_name, name, name, index_name,
+                                  f2c_symbol_c_type(symbol), name, index_name,
                                   f2c_symbol_c_type(symbol));
                 free(index_name);
             } else {

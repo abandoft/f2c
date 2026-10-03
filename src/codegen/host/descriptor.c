@@ -160,11 +160,9 @@ static int emit_descriptor_writeback(Buffer *output, Unit *caller, const Symbol 
                        descriptor_is_pointer ? "" : "&", descriptor, actual->rank, c_type);
     F2C_HOST_WRITEBACK(
         "%s = (%s%s *)%s%s%s%s", name,
-        actual->intent == F2C_INTENT_IN && !actual->pointer ? "const "
-        : actual->volatile_entity                           ? "volatile "
-                                                            : "",
-        c_type, member_prefix, descriptor, member_operator,
-        f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(actual),
+        actual->intent == F2C_INTENT_IN && !actual->pointer ? "const " : "", c_type, member_prefix,
+        descriptor, member_operator,
+        f2c_descriptor_address_member(F2C_STORAGE_UNQUALIFIED,
                                       actual->intent == F2C_INTENT_IN && !actual->pointer));
     if (actual->pointer)
         F2C_HOST_WRITEBACK("%s_deallocatable = %s%s%sdeallocatable", name, member_prefix,
