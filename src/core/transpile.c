@@ -433,16 +433,7 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             "memmove(target, message, "
             "copy_length); if (length > copy_length) memset(target + copy_length, ' ', length - "
             "copy_length); }\n");
-        f2c_buffer_append(&context.output, "typedef struct f2c_descriptor {\n"
-                                           "    void *data;\n"
-                                           "    bool deallocatable;\n"
-                                           "    size_t element_size;\n"
-                                           "    size_t rank;\n"
-                                           "    int64_t lower[15];\n"
-                                           "    int64_t extent[15];\n"
-                                           "    ptrdiff_t stride[15];\n"
-                                           "    size_t character_length;\n"
-                                           "} f2c_descriptor;\n");
+        f2c_emit_descriptor_declaration(&context.output);
         f2c_buffer_append(&context.output,
                           "static inline F2C_UNUSED size_t f2c_array_offset(int64_t subscript, "
                           "int64_t lower, size_t extent) { uint64_t offset; if (subscript < lower) "
@@ -497,42 +488,9 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             "extent; if (ordinal > (size_t)PTRDIFF_MAX) abort(); offset = "
             "f2c_descriptor_offset_add(offset, f2c_descriptor_stride_multiply("
             "descriptor->stride[dimension], (ptrdiff_t)ordinal)); } return offset; }\n");
+        f2c_emit_descriptor_contiguous_support(&context.output);
         f2c_buffer_append(
             &context.output,
-            "static inline F2C_UNUSED void f2c_descriptor_prepare_contiguous(f2c_descriptor "
-            "*destination, const f2c_descriptor *source, bool character, bool copy_in) { size_t "
-            "dimension; size_t index; size_t count; size_t record_size; ptrdiff_t expected = 1; "
-            "if (destination == NULL || source == NULL || destination->data != NULL) abort(); "
-            "count = f2c_descriptor_element_count(source); record_size = "
-            "f2c_descriptor_record_size(source, character); if (record_size != 0U && count > "
-            "SIZE_MAX / record_size) abort(); *destination = *source; destination->data = "
-            "malloc(count == 0U || record_size == 0U ? 1U : count * record_size); if "
-            "(destination->data == NULL) abort(); destination->deallocatable = false; for "
-            "(dimension = 0U; dimension < source->rank; ++dimension) { "
-            "destination->stride[dimension] = expected; expected = "
-            "f2c_descriptor_stride_extent(expected, (size_t)source->extent[dimension]); } if "
-            "(copy_in && count != 0U && record_size != 0U) { if (source->data == NULL || "
-            "record_size > (size_t)PTRDIFF_MAX) abort(); for (index = 0U; index < count; "
-            "++index) { ptrdiff_t offset = f2c_descriptor_linear_offset(source, index); "
-            "ptrdiff_t byte_offset = f2c_descriptor_stride_multiply(offset, "
-            "(ptrdiff_t)record_size); memcpy((unsigned char *)destination->data + index * "
-            "record_size, (const unsigned char *)source->data + byte_offset, record_size); } } "
-            "}\n");
-        f2c_buffer_append(
-            &context.output,
-            "static inline F2C_UNUSED void f2c_descriptor_finish_contiguous(const "
-            "f2c_descriptor *source, f2c_descriptor *temporary, bool character, bool copy_out) "
-            "{ size_t index; size_t count; size_t record_size; if (source == NULL || temporary "
-            "== NULL || temporary->data == NULL) abort(); count = "
-            "f2c_descriptor_element_count(source); record_size = "
-            "f2c_descriptor_record_size(source, character); if (copy_out && count != 0U && "
-            "record_size != 0U) { if (source->data == NULL || record_size > "
-            "(size_t)PTRDIFF_MAX) abort(); for (index = 0U; index < count; ++index) { ptrdiff_t "
-            "offset = f2c_descriptor_linear_offset(source, index); ptrdiff_t byte_offset = "
-            "f2c_descriptor_stride_multiply(offset, (ptrdiff_t)record_size); memcpy((unsigned "
-            "char *)source->data + byte_offset, (const unsigned char *)temporary->data + index * "
-            "record_size, record_size); } } free(temporary->data); memset(temporary, 0, "
-            "sizeof(*temporary)); }\n"
             "static inline F2C_UNUSED ptrdiff_t f2c_array_descriptor_offset(size_t rank, const "
             "int64_t *subscripts, const int64_t *lowers, const size_t *extents, const ptrdiff_t "
             "*strides) { size_t dimension; ptrdiff_t result = 0; for (dimension = 0U; dimension "
