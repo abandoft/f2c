@@ -350,12 +350,21 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
         if (features.process_cpu_time)
             f2c_emit_process_cpu_time_support(&context.output);
         f2c_buffer_append(&context.output,
+                          "#if !defined(F2C_COLUMN_UPDATE_LOOP)\n"
+                          "#if !defined(F2C_LOOP_UNROLL) && defined(__GNUC__) && "
+                          "!defined(__clang__)\n"
+                          "/* Leave contiguous cross-column updates to the target cost model. */\n"
+                          "#define F2C_COLUMN_UPDATE_LOOP\n"
+                          "#else\n"
+                          "#define F2C_COLUMN_UPDATE_LOOP F2C_LOOP_UNROLL\n"
+                          "#endif\n"
+                          "#endif\n"
                           "#if !defined(F2C_LOOP_UNROLL)\n"
                           "#if defined(__clang__) && defined(__OPTIMIZE__)\n"
                           "#define F2C_LOOP_UNROLL _Pragma(\"clang loop unroll_count(4)\")\n"
+                          "#elif defined(__GNUC__) && !defined(__clang__)\n"
+                          "#define F2C_LOOP_UNROLL _Pragma(\"GCC unroll 4\")\n"
                           "#else\n"
-                          "/* Use the backend target cost model instead of forcing GCC loop "
-                          "expansion. */\n"
                           "#define F2C_LOOP_UNROLL\n"
                           "#endif\n"
                           "#endif\n");
