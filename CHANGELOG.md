@@ -12,7 +12,7 @@
 - Rejected parenthesized values in argument positions requiring definable, pointer, or allocatable objects, and added source-located diagnostics for invalid procedure primaries.
 - Added explicit diagnostics for unsupported parenthesized polymorphic values instead of silently losing extension components or dynamic types in generated programs.
 - Preserved complete physical and macro-expansion ranges for nested expressions, fixed empty locations in structured diagnostics, and used binary token lookup to avoid repeated scanning.
-- Let GCC select loop expansion for its target platform while preserving other compiler backends and explicit overrides.
+- Split loop-policy analysis into a dedicated semantic module and identified cross-column array updates in typed IR for GCC's target cost model, preserving other loops, compiler backends, and explicit overrides.
 - Checked cumulative work budgets before expanding module-array, character, and derived-component initializers, preventing oversized initializers from stalling compilation and improving output-size and counter-overflow checks.
 
 ## 1.43.0
