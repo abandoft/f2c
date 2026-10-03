@@ -406,31 +406,31 @@ const char *f2c_unaligned_access_suffix(const Symbol *symbol) {
         /* fall through */
     case TYPE_INTEGER:
         if (kind == 1)
-            return "i8";
+            return symbol->volatile_entity ? "i8_volatile" : "i8";
         if (kind == 2)
-            return "i16";
+            return symbol->volatile_entity ? "i16_volatile" : "i16";
         if (kind == 4)
-            return "i32";
+            return symbol->volatile_entity ? "i32_volatile" : "i32";
         if (kind == 8)
-            return "i64";
+            return symbol->volatile_entity ? "i64_volatile" : "i64";
         return NULL;
     case TYPE_REAL:
     case TYPE_DOUBLE:
         if (kind == 4)
-            return "r4";
+            return symbol->volatile_entity ? "r4_volatile" : "r4";
         if (kind == 8)
-            return "r8";
+            return symbol->volatile_entity ? "r8_volatile" : "r8";
         if (kind == 16)
-            return "r16";
+            return symbol->volatile_entity ? "r16_volatile" : "r16";
         return NULL;
     case TYPE_COMPLEX:
     case TYPE_DOUBLE_COMPLEX:
         if (kind == 4)
-            return "c4";
+            return symbol->volatile_entity ? "c4_volatile" : "c4";
         if (kind == 8)
-            return "c8";
+            return symbol->volatile_entity ? "c8_volatile" : "c8";
         if (kind == 16)
-            return "c16";
+            return symbol->volatile_entity ? "c16_volatile" : "c16";
         return NULL;
     case TYPE_CHARACTER:
     case TYPE_DERIVED:
@@ -492,15 +492,15 @@ char *f2c_emit_unaligned_load(Unit *unit, Symbol *symbol, char **indices, size_t
     return f2c_buffer_take(&result);
 }
 
-char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count) {
+static char *emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count,
+                                  int physical_storage) {
     Buffer result = {0};
     char *character_length = NULL;
     char *offset;
     size_t i;
     if (symbol->equivalence_unaligned)
         return f2c_emit_unaligned_load(unit, symbol, indices, count);
-    if (symbol->module_entity && symbol->volatile_entity && !symbol->pointer &&
-        !symbol->allocatable && symbol->type != TYPE_CHARACTER && symbol->type != TYPE_DERIVED)
+    if (!physical_storage && symbol->volatile_entity && symbol->type != TYPE_CHARACTER)
         f2c_buffer_printf(&result, "((volatile %s *)%s)[", f2c_symbol_c_type(symbol),
                           f2c_symbol_c_name(unit, symbol));
     else
@@ -547,6 +547,14 @@ char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_
     free(offset);
     free(character_length);
     return f2c_buffer_take(&result);
+}
+
+char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count) {
+    return emit_array_reference(unit, symbol, indices, count, 0);
+}
+
+char *f2c_emit_array_storage_reference(Unit *unit, Symbol *symbol, char **indices, size_t count) {
+    return emit_array_reference(unit, symbol, indices, count, 1);
 }
 
 char *f2c_find_assignment(char *line) {

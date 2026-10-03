@@ -31,7 +31,7 @@ char *f2c_descriptor_storage_designator(Unit *unit, const F2cExpr *expression) {
         return f2c_strdup(f2c_symbol_c_name(unit, expression->symbol));
     if (!component_designator_supported(expression))
         return NULL;
-    base = f2c_emit_expression_ast(unit, expression->children[0], &supported);
+    base = f2c_expression_storage_designator(unit, expression->children[0], &supported);
     if (!supported || base == NULL) {
         free(base);
         return NULL;

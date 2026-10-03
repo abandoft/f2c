@@ -25,6 +25,7 @@ char *f2c_emit_scalar_temporary_address(const char *c_type, Type type, const cha
 char *f2c_emit_binary(Unit *unit, const char *left, Type left_type, const char *operator_text,
                       const char *right, Type right_type, Type *result_type);
 char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count);
+char *f2c_emit_array_storage_reference(Unit *unit, Symbol *symbol, char **indices, size_t count);
 const char *f2c_unaligned_access_suffix(const Symbol *symbol);
 char *f2c_emit_unaligned_address(Unit *unit, Symbol *symbol, char **indices, size_t count);
 char *f2c_emit_unaligned_load(Unit *unit, Symbol *symbol, char **indices, size_t count);

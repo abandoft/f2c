@@ -67,6 +67,20 @@ char *f2c_expression_emit_array_reference(Unit *unit, const F2cExpr *expression,
     return result;
 }
 
+char *f2c_expression_array_storage(Unit *unit, const F2cExpr *expression, int *supported) {
+    char **indices = NULL;
+    Type *types = NULL;
+    char *result;
+    if (!emit_array_indices(unit, expression, &indices, &types, supported))
+        return NULL;
+    result = f2c_emit_array_storage_reference(unit, expression->symbol, indices,
+                                              expression->child_count);
+    f2c_expression_free_arguments(indices, types, expression->child_count);
+    if (result == NULL)
+        *supported = 0;
+    return result;
+}
+
 char *f2c_emit_unaligned_designator_address(Unit *unit, const F2cExpr *expression, int *supported) {
     char **indices = NULL;
     Type *types = NULL;
@@ -133,7 +147,7 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
     }
     lowered_code = f2c_lowering_code(unit, expression);
     if (lowered_code != NULL)
-        return f2c_strdup(lowered_code);
+        return f2c_expression_apply_access(unit, expression, f2c_strdup(lowered_code));
     if (expression->resolved_procedure != NULL &&
         (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY))
         return f2c_expression_call(unit, expression, supported);
@@ -158,71 +172,12 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
     case F2C_EXPR_LOGICAL_LITERAL:
         return f2c_strdup(strcmp(expression->text, ".true.") == 0 ? "true" : "false");
     case F2C_EXPR_NAME:
-        return f2c_expression_name(unit, expression, supported);
+        return f2c_expression_apply_access(unit, expression,
+                                           f2c_expression_name(unit, expression, supported));
     case F2C_EXPR_PARENTHESIZED:
         return f2c_expression_parenthesized(unit, expression, supported);
     case F2C_EXPR_COMPONENT:
-        if (expression->child_count < 1U || expression->symbol == NULL) {
-            *supported = 0;
-            return NULL;
-        }
-        left = f2c_expression_emit(unit, expression->children[0], supported);
-        if (!*supported || left == NULL)
-            return NULL;
-        if (expression->children[0]->kind == F2C_EXPR_NAME &&
-            expression->children[0]->symbol != NULL &&
-            expression->children[0]->symbol->polymorphic &&
-            expression->children[0]->derived_type != NULL &&
-            expression->children[0]->symbol->derived_type !=
-                expression->children[0]->derived_type) {
-            Buffer cast = {0};
-            f2c_buffer_printf(&cast, "(*((%s *)&(%s)))",
-                              expression->children[0]->derived_type->c_name, left);
-            free(left);
-            left = f2c_buffer_take(&cast);
-        }
-        if (expression->child_count > 1U && expression->symbol->rank != 0U) {
-            char *indices[F2C_MAX_RANK] = {0};
-            char *designator = NULL;
-            size_t selector;
-            if (expression->child_count != expression->symbol->rank + 1U) {
-                free(left);
-                *supported = 0;
-                return NULL;
-            }
-            for (selector = 0U; selector < expression->symbol->rank; ++selector) {
-                const F2cExpr *index = expression->children[selector + 1U];
-                if (index == NULL || index->kind == F2C_EXPR_ARRAY_SECTION || index->rank != 0U) {
-                    *supported = 0;
-                    break;
-                }
-                indices[selector] = f2c_expression_emit(unit, index, supported);
-                if (!*supported || indices[selector] == NULL)
-                    break;
-            }
-            if (*supported)
-                designator = f2c_descriptor_element_designator(unit, expression, indices,
-                                                               expression->symbol->rank);
-            for (selector = 0U; selector < expression->symbol->rank; ++selector)
-                free(indices[selector]);
-            free(left);
-            if (!*supported || designator == NULL) {
-                free(designator);
-                *supported = 0;
-                return NULL;
-            }
-            return designator;
-        } else if (expression->symbol->pointer && expression->symbol->rank == 0U) {
-            f2c_buffer_append(&result, "(*(");
-            f2c_expression_append_component(&result, left, expression->children[0]->derived_type,
-                                            expression->symbol);
-            f2c_buffer_append(&result, "))");
-        } else {
-            f2c_expression_append_component(&result, left, expression->children[0]->derived_type,
-                                            expression->symbol);
-        }
-        free(left);
-        return f2c_buffer_take(&result);
+        return f2c_expression_emit_component(unit, expression, supported);
     case F2C_EXPR_UNARY:
         left = f2c_expression_emit(unit, expression->children[0], supported);
         if (!*supported || left == NULL)

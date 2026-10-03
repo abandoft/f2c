@@ -2,7 +2,7 @@
 
 #include <stdlib.h>
 
-char *f2c_expression_emit_substring(Unit *unit, const F2cExpr *expression, int *supported) {
+char *f2c_expression_substring_storage(Unit *unit, const F2cExpr *expression, int *supported) {
     const F2cExpr *parent = f2c_substring_parent(expression);
     const F2cExpr *range = f2c_substring_range(expression);
     const F2cExpr *lower_expression = f2c_substring_lower(expression);
@@ -18,7 +18,7 @@ char *f2c_expression_emit_substring(Unit *unit, const F2cExpr *expression, int *
         *supported = 0;
         return NULL;
     }
-    parent_code = f2c_expression_emit(unit, parent, supported);
+    parent_code = f2c_expression_storage_designator(unit, parent, supported);
     if (*supported && parent_code != NULL)
         pointer = f2c_character_source_pointer(unit, parent, parent_code);
     length = f2c_character_length_expression(unit, parent);
@@ -40,4 +40,8 @@ char *f2c_expression_emit_substring(Unit *unit, const F2cExpr *expression, int *
     free(lower);
     free(upper);
     return *supported ? f2c_buffer_take(&result) : NULL;
+}
+
+char *f2c_expression_emit_substring(Unit *unit, const F2cExpr *expression, int *supported) {
+    return f2c_expression_substring_storage(unit, expression, supported);
 }

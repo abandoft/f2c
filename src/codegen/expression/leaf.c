@@ -161,14 +161,6 @@ char *f2c_expression_name(Unit *unit, const F2cExpr *expression, int *supported)
             *supported = 0;
         return value;
     }
-    if (symbol != NULL && symbol->module_entity && symbol->volatile_entity && symbol->rank == 0U &&
-        !symbol->pointer && !symbol->allocatable && !symbol->external &&
-        symbol->type != TYPE_CHARACTER && symbol->type != TYPE_DERIVED) {
-        Buffer access = {0};
-        f2c_buffer_printf(&access, "(*(volatile %s *)&%s)", f2c_symbol_c_type(symbol),
-                          f2c_symbol_c_name(unit, symbol));
-        return f2c_buffer_take(&access);
-    }
     if (symbol != NULL && (symbol->pointer || symbol->allocatable) && symbol->rank == 0U &&
         symbol->type != TYPE_CHARACTER && !symbol->external) {
         Buffer dereference = {0};

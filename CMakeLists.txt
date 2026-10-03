@@ -128,6 +128,7 @@ set(
     src/codegen/descriptor/view.c
     src/codegen/expression.c
     src/codegen/expression/designator.c
+    src/codegen/expression/access.c
     src/codegen/host/capture.c
     src/codegen/host/descriptor.c
     src/codegen/host/private.h

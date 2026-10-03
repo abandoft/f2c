@@ -3,6 +3,11 @@
 
 #include "internal/f2c.h"
 char *f2c_expression_emit_substring(Unit *unit, const F2cExpr *expression, int *supported);
+char *f2c_expression_storage_designator(Unit *unit, const F2cExpr *expression, int *supported);
+char *f2c_expression_apply_access(Unit *unit, const F2cExpr *expression, char *storage);
+char *f2c_expression_emit_component(Unit *unit, const F2cExpr *expression, int *supported);
+char *f2c_expression_array_storage(Unit *unit, const F2cExpr *expression, int *supported);
+char *f2c_expression_substring_storage(Unit *unit, const F2cExpr *expression, int *supported);
 
 char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported);
 char *f2c_expression_parenthesized(Unit *unit, const F2cExpr *expression, int *supported);
