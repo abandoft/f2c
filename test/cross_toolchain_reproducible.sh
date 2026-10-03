@@ -35,7 +35,10 @@ generate_outputs() {
         -o "$output/deferred.c" --header "$output/deferred.h"
     for fixture in function_result scalar_result result_identity result_snapshot result_kinds \
         constructor_result constructor_finalization result_external \
-        allocation_result allocation_result_values allocation_result_finalization; do
+        allocation_result allocation_result_values allocation_result_finalization \
+        allocation_controls allocation_control_values allocation_control_bounds \
+        allocation_control_finalization allocation_control_errors allocation_control_unaligned \
+        allocation_control_pointers allocation_control_names; do
         "$translator" "$ROOT/test/fixtures/$fixture.f90" \
             -o "$output/$fixture.c" --header "$output/$fixture.h"
     done
@@ -52,7 +55,14 @@ result_identity.c result_identity.h result_snapshot.c result_snapshot.h result_k
 constructor_result.c constructor_result.h constructor_finalization.c constructor_finalization.h
 result_external.c result_external.h
 allocation_result.c allocation_result.h allocation_result_values.c allocation_result_values.h
-allocation_result_finalization.c allocation_result_finalization.h'
+allocation_result_finalization.c allocation_result_finalization.h
+allocation_controls.c allocation_controls.h allocation_control_values.c allocation_control_values.h
+allocation_control_bounds.c allocation_control_bounds.h
+allocation_control_finalization.c allocation_control_finalization.h
+allocation_control_errors.c allocation_control_errors.h
+allocation_control_unaligned.c allocation_control_unaligned.h
+allocation_control_pointers.c allocation_control_pointers.h
+allocation_control_names.c allocation_control_names.h'
 for file in $FILES; do
     if ! cmake -E compare_files "$WORK/first/$file" "$WORK/second/$file"; then
         echo "cross-toolchain generated output differs: $file" >&2
