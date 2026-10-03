@@ -265,7 +265,7 @@ static void test_zero_length_result_is_evaluated(void) {
     F2cOptions options = {"zero_length_result.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
     const char *source_evaluation =
-        result.code != NULL ? strstr(result.code, "const char *f2c_deferred_source = (") : NULL;
+        result.code != NULL ? strstr(result.code, "const char *f2c_deferred_source_0 = (") : NULL;
     const char *conditional_copy =
         result.code != NULL ? strstr(result.code, "if (f2c_deferred_length_0 != 0U) memmove")
                             : NULL;
