@@ -1,6 +1,7 @@
 #include "codegen/host/private.h"
 
 #include "codegen/descriptor/private.h"
+#include "codegen/storage/private.h"
 
 #include <stdlib.h>
 
@@ -18,11 +19,21 @@ static void emit_indent(Buffer *output, int depth) {
 static int emit_descriptor_initialization(Buffer *output, Unit *caller, const Symbol *actual,
                                           size_t identifier, F2cHostDescriptorStyle style,
                                           int depth) {
-    const char *name = f2c_symbol_c_name(caller, actual);
     const char *c_type = f2c_symbol_c_type(actual);
+    char *data = f2c_storage_symbol_data(caller, actual);
+    char *deallocatable =
+        actual->pointer ? f2c_storage_symbol_property(caller, actual, F2C_OBJECT_DEALLOCATABLE, 0U)
+                        : NULL;
     char *character_length =
         actual->type == TYPE_CHARACTER ? f2c_symbol_character_length(caller, actual) : NULL;
     size_t dimension;
+    if (data == NULL || (actual->pointer && deallocatable == NULL) ||
+        (actual->type == TYPE_CHARACTER && character_length == NULL)) {
+        free(data);
+        free(deallocatable);
+        free(character_length);
+        return 0;
+    }
     if (style == F2C_HOST_DESCRIPTOR_STATEMENT)
         emit_indent(output, depth);
     f2c_buffer_printf(
@@ -35,11 +46,13 @@ static int emit_descriptor_initialization(Buffer *output, Unit *caller, const Sy
         style == F2C_HOST_DESCRIPTOR_STATEMENT ? "" : "(f2c_descriptor)",
         f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(actual),
                                       actual->intent == F2C_INTENT_IN && !actual->pointer),
-        name, f2c_symbol_storage_qualifiers(actual));
+        data, f2c_symbol_storage_qualifiers(actual));
     if (actual->pointer)
-        f2c_buffer_printf(output, "%s_deallocatable", name);
+        f2c_buffer_append(output, deallocatable);
     else
-        f2c_buffer_printf(output, "(%s != NULL)", name);
+        f2c_buffer_printf(output, "(%s != NULL)", data);
+    free(data);
+    free(deallocatable);
     f2c_buffer_printf(output, ", .element_size = sizeof(%s), .rank = %zuU", c_type, actual->rank);
     if (actual->rank != 0U) {
         f2c_buffer_append(output, ", .lower = {");
@@ -85,11 +98,21 @@ static int emit_descriptor_initialization(Buffer *output, Unit *caller, const Sy
 static int emit_descriptor_forward_sync(Buffer *output, Unit *caller, const Symbol *actual,
                                         const char *descriptor, F2cHostDescriptorStyle style,
                                         int descriptor_nonnull, int depth) {
-    const char *name = f2c_symbol_c_name(caller, actual);
     const char *c_type = f2c_symbol_c_type(actual);
+    char *data = f2c_storage_symbol_data(caller, actual);
+    char *deallocatable =
+        actual->pointer ? f2c_storage_symbol_property(caller, actual, F2C_OBJECT_DEALLOCATABLE, 0U)
+                        : NULL;
     char *character_length =
         actual->type == TYPE_CHARACTER ? f2c_symbol_character_length(caller, actual) : NULL;
     size_t dimension;
+    if (data == NULL || (actual->pointer && deallocatable == NULL) ||
+        (actual->type == TYPE_CHARACTER && character_length == NULL)) {
+        free(data);
+        free(deallocatable);
+        free(character_length);
+        return 0;
+    }
 #define F2C_HOST_SYNC(format, ...)                                                                 \
     do {                                                                                           \
         if (style == F2C_HOST_DESCRIPTOR_STATEMENT)                                                \
@@ -104,13 +127,15 @@ static int emit_descriptor_forward_sync(Buffer *output, Unit *caller, const Symb
         "(%s)->%s = %s", descriptor,
         f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(actual),
                                       actual->intent == F2C_INTENT_IN && !actual->pointer),
-        name);
+        data);
     F2C_HOST_SYNC("(%s)->storage_qualifiers = %uU", descriptor,
                   f2c_symbol_storage_qualifiers(actual));
     if (actual->pointer)
-        F2C_HOST_SYNC("(%s)->deallocatable = %s_deallocatable", descriptor, name);
+        F2C_HOST_SYNC("(%s)->deallocatable = %s", descriptor, deallocatable);
     else
-        F2C_HOST_SYNC("(%s)->deallocatable = (%s != NULL)", descriptor, name);
+        F2C_HOST_SYNC("(%s)->deallocatable = (%s != NULL)", descriptor, data);
+    free(data);
+    free(deallocatable);
     F2C_HOST_SYNC("(%s)->element_size = sizeof(%s)", descriptor, c_type);
     F2C_HOST_SYNC("(%s)->rank = %zuU", descriptor, actual->rank);
     F2C_HOST_SYNC("(%s)->character_length = (size_t)(%s)", descriptor,
@@ -142,45 +167,17 @@ static int emit_descriptor_forward_sync(Buffer *output, Unit *caller, const Symb
 static int emit_descriptor_writeback(Buffer *output, Unit *caller, const Symbol *actual,
                                      const char *descriptor, int descriptor_is_pointer,
                                      F2cHostDescriptorStyle style, int depth) {
-    const char *name = f2c_symbol_c_name(caller, actual);
-    const char *c_type = f2c_symbol_c_type(actual);
-    const char *member_prefix = descriptor_is_pointer ? "(" : "";
-    const char *member_operator = descriptor_is_pointer ? ")->" : ".";
-    size_t dimension;
-#define F2C_HOST_WRITEBACK(format, ...)                                                            \
-    do {                                                                                           \
-        if (style == F2C_HOST_DESCRIPTOR_STATEMENT)                                                \
-            emit_indent(output, depth);                                                            \
-        f2c_buffer_printf(output, format, __VA_ARGS__);                                            \
-        f2c_buffer_append(output, style == F2C_HOST_DESCRIPTOR_STATEMENT ? ";\n" : ", ");          \
-    } while (0)
-
-    F2C_HOST_WRITEBACK("f2c_descriptor_bridge_valid(%s%s, %zuU, sizeof(%s)) ? "
-                       "(void)0 : abort()",
-                       descriptor_is_pointer ? "" : "&", descriptor, actual->rank, c_type);
-    F2C_HOST_WRITEBACK(
-        "%s = (%s%s *)%s%s%s%s", name,
-        actual->intent == F2C_INTENT_IN && !actual->pointer ? "const " : "", c_type, member_prefix,
-        descriptor, member_operator,
-        f2c_descriptor_address_member(F2C_STORAGE_UNQUALIFIED,
-                                      actual->intent == F2C_INTENT_IN && !actual->pointer));
-    if (actual->pointer)
-        F2C_HOST_WRITEBACK("%s_deallocatable = %s%s%sdeallocatable", name, member_prefix,
-                           descriptor, member_operator);
-    if (actual->deferred_character)
-        F2C_HOST_WRITEBACK("f2c_char_len_%s = %s%s%scharacter_length", name, member_prefix,
-                           descriptor, member_operator);
-    for (dimension = 0U; dimension < actual->rank; ++dimension) {
-        F2C_HOST_WRITEBACK("%s_lower_%zu = (int32_t)%s%s%slower[%zu]", name, dimension + 1U,
-                           member_prefix, descriptor, member_operator, dimension);
-        F2C_HOST_WRITEBACK("%s_extent_%zu = (int32_t)%s%s%sextent[%zu]", name, dimension + 1U,
-                           member_prefix, descriptor, member_operator, dimension);
-        if (actual->pointer || (actual->argument && f2c_symbol_uses_descriptor(actual)))
-            F2C_HOST_WRITEBACK("%s_stride_%zu = %s%s%sstride[%zu]", name, dimension + 1U,
-                               member_prefix, descriptor, member_operator, dimension);
-    }
-#undef F2C_HOST_WRITEBACK
-    return !output->failed;
+    const F2cStorageReference reference = f2c_ir_symbol_storage_reference(actual);
+    Buffer pointer = {0};
+    f2c_buffer_printf(&pointer, "%s%s", descriptor_is_pointer ? "" : "&", descriptor);
+    const int emitted = pointer.data != NULL &&
+                        f2c_storage_emit_descriptor_commit(
+                            output, caller, &reference, NULL, pointer.data,
+                            style == F2C_HOST_DESCRIPTOR_STATEMENT ? F2C_STORAGE_STATEMENT
+                                                                   : F2C_STORAGE_COMMA_EXPRESSION,
+                            depth);
+    free(f2c_buffer_take(&pointer));
+    return emitted;
 }
 
 static int emit_descriptors(Buffer *setup, Buffer *cleanup, Unit *caller, const Unit *procedure,
@@ -200,6 +197,11 @@ static int emit_descriptors(Buffer *setup, Buffer *cleanup, Unit *caller, const 
         const int function_result =
             f2c_host_function_result_symbol(caller, actual) && actual->allocatable;
         if (!f2c_host_capture_needs_descriptor_lifecycle(actual))
+            continue;
+        /* A captured dummy already denotes the authoritative state record.
+         * Forward its identity; synchronizing an entry cache would overwrite
+         * state changed by another visible procedure. */
+        if (f2c_ir_symbol_storage_reference(actual).state_source == F2C_OBJECT_STATE_DESCRIPTOR)
             continue;
         if (local) {
             if (descriptor_begin == SIZE_MAX ||

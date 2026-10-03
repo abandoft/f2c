@@ -143,7 +143,7 @@ static void test_dynamic_descriptor_capture_lowering(void) {
                     "a statement call materializes a scoped host descriptor");
     expect_contains(result.code, "host_allocatable__resize(&f2c_host_call_descriptor_0);",
                     "the internal subroutine receives the scoped descriptor");
-    expect_contains(result.code, "values = (int32_t *)f2c_host_call_descriptor_0.data;",
+    expect_contains(result.code, "values = (int32_t *)(&f2c_host_call_descriptor_0)->data;",
                     "the statement bridge writes reallocated storage back to the host");
     expect_contains(result.code, "f2c_expression_result_",
                     "a function result is materialized before descriptor writeback");
@@ -178,9 +178,10 @@ static void test_dynamic_character_and_pointer_capture_lowering(void) {
            "pointer and deferred CHARACTER host entities complete descriptor lowering");
     expect_contains(result.code, ".deallocatable = view_deallocatable",
                     "pointer allocation provenance enters the capture descriptor");
-    expect_contains(result.code, "view_stride_1 = f2c_host_call_descriptor_",
+    expect_contains(result.code,
+                    "view_stride_1 = f2c_descriptor_state_stride(&f2c_host_call_descriptor_",
                     "pointer association stride metadata is written back");
-    expect_contains(result.code, "f2c_char_len_text = f2c_host_call_descriptor_",
+    expect_contains(result.code, "f2c_char_len_text = (&f2c_host_call_descriptor_",
                     "deferred CHARACTER length is written back");
     expect(result.code == NULL || strstr(result.code, ".lower = {}") == NULL,
            "rank-zero descriptor bridges remain strict C17");
