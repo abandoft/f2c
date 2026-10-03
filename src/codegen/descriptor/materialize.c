@@ -118,8 +118,8 @@ static int append_copy_in(Buffer *prelude, Unit *unit, const F2cExpr *expression
             free(pointer);
             return 0;
         }
-        f2c_array_copy_snapshot(prelude, unit, destination.data, pointer, character_length,
-                                element->storage_qualifiers, depth + 1);
+        f2c_array_copy_snapshot(prelude, unit, destination.data, pointer, character_length, "char",
+                                F2C_STORAGE_UNQUALIFIED, element->storage_qualifiers, depth + 1);
         free(destination.data);
         free(pointer);
     } else if (expression->type == TYPE_DERIVED) {
@@ -164,8 +164,8 @@ static int append_copy_out(Buffer *cleanup, Unit *unit, const F2cExpr *expressio
             free(pointer);
             return 0;
         }
-        f2c_array_copy_snapshot(cleanup, unit, pointer, source.data, character_length,
-                                element->storage_qualifiers, depth + 1);
+        f2c_array_copy_snapshot(cleanup, unit, pointer, source.data, character_length, "char",
+                                element->storage_qualifiers, F2C_STORAGE_UNQUALIFIED, depth + 1);
         f2c_buffer_append(cleanup, "}\n");
         free(source.data);
         free(pointer);

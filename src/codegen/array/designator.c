@@ -312,7 +312,8 @@ int f2c_array_emit_designator_assignment(Context *context, Unit *unit, const F2c
         f2c_array_copy_snapshot(
             &context->output, unit, left_pointer,
             "(f2c_designator_values + f2c_designator_linear * f2c_designator_length)",
-            "f2c_designator_length", left_element->storage_qualifiers, emitted_depth);
+            "f2c_designator_length", "char", left_element->storage_qualifiers,
+            F2C_STORAGE_UNQUALIFIED, emitted_depth);
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "++f2c_designator_linear;\n");
     } else if (symbol->type == TYPE_DERIVED) {

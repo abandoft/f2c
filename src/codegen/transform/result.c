@@ -135,13 +135,11 @@ void f2c_transform_emit_result_commit(Context *context, Unit *unit, Symbol *targ
                               "f2c_transform_result_count, %zuU);\n",
                               target->derived_type->c_name, rank);
         } else if (target->type == TYPE_CHARACTER) {
-            f2c_array_copy_snapshot(
-                &context->output, unit, name, "f2c_transform_result", "f2c_transform_result_bytes",
-                target->volatile_entity ? F2C_STORAGE_VOLATILE : F2C_STORAGE_UNQUALIFIED, 0);
+            f2c_array_copy_to_symbol(&context->output, unit, target, "f2c_transform_result",
+                                     "f2c_transform_result_bytes", 0);
         } else {
-            f2c_array_copy_snapshot(
-                &context->output, unit, name, "f2c_transform_result", "f2c_transform_result_count",
-                target->volatile_entity ? F2C_STORAGE_VOLATILE : F2C_STORAGE_UNQUALIFIED, 0);
+            f2c_array_copy_to_symbol(&context->output, unit, target, "f2c_transform_result",
+                                     "f2c_transform_result_count", 0);
         }
         f2c_transform_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "free(f2c_transform_result);\n");

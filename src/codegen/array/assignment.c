@@ -283,10 +283,8 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
                               target_name, dimension + 1U, target_name, dimension + 1U, dimension);
         }
     } else if (target->type == TYPE_CHARACTER)
-        f2c_array_copy_snapshot(
-            &context->output, unit, f2c_symbol_c_name(unit, target), "f2c_element_values",
-            "f2c_element_bytes",
-            target->volatile_entity ? F2C_STORAGE_VOLATILE : F2C_STORAGE_UNQUALIFIED, 0);
+        f2c_array_copy_to_symbol(&context->output, unit, target, "f2c_element_values",
+                                 "f2c_element_bytes", 0);
     else if (target->type == TYPE_DERIVED) {
         f2c_buffer_printf(&context->output, "f2c_destroy_array_%s(%s, f2c_element_count, %zuU);\n",
                           target->derived_type->c_name, f2c_symbol_c_name(unit, target),
@@ -297,10 +295,8 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
                           "f2c_element_count * sizeof(*f2c_element_values));\n",
                           f2c_symbol_c_name(unit, target));
     } else
-        f2c_array_copy_snapshot(
-            &context->output, unit, f2c_symbol_c_name(unit, target), "f2c_element_values",
-            "f2c_element_count",
-            target->volatile_entity ? F2C_STORAGE_VOLATILE : F2C_STORAGE_UNQUALIFIED, 0);
+        f2c_array_copy_to_symbol(&context->output, unit, target, "f2c_element_values",
+                                 "f2c_element_count", 0);
     if (!target->allocatable) {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "free(f2c_element_values);\n");
