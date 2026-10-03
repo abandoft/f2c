@@ -190,9 +190,11 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
                           loop_id, c_type, step_expression.code);
         (void)f2c_array_cleanup_emit(&context->output, unit, &step_expression.cleanup);
     }
-    if (statement->unroll_hint) {
+    if (statement->loop_hint != F2C_LOOP_HINT_NONE) {
         indent(&context->output, *depth);
-        f2c_buffer_append(&context->output, "F2C_LOOP_UNROLL\n");
+        f2c_buffer_append(&context->output, statement->loop_hint == F2C_LOOP_HINT_COLUMN_UPDATE
+                                                ? "F2C_COLUMN_UPDATE_LOOP\n"
+                                                : "F2C_LOOP_UNROLL\n");
     }
     indent(&context->output, *depth);
     if (statement->left->type == TYPE_INTEGER) {
