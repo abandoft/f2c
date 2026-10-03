@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "benchmark_statistics.h"
+#include "performance/samples.h"
 
 typedef void (*dgemv_function)(char *, int32_t *, int32_t *, double *, double *, int32_t *,
                                double *, int32_t *, double *, double *, int32_t *);
@@ -109,6 +109,13 @@ static int run_case(const DgemvCase *test, double *a, double *x, double *y, doub
         }
         samples[round] = f2c_benchmark_paired_sample(round, generated_first, fortran_first,
                                                      fortran_second, generated_second);
+    }
+    {
+        char description[64];
+        (void)snprintf(description, sizeof(description), "n=%d;trans=%c", test->n, test->transpose);
+        if (!f2c_benchmark_write_samples(stdout, "DGEMV", description, samples,
+                                         sizeof(samples) / sizeof(samples[0])))
+            return 0;
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
     printf("DGEMV n=%d trans=%c: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", test->n,
