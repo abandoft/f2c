@@ -117,6 +117,46 @@ static void test_unavailable_source_guard(void) {
     f2c_result_free(&result);
 }
 
+static void test_descriptor_scalar_source(void) {
+    static const char source[] = "program scalar_model\n"
+                                 "integer,allocatable :: a,b(:)\n"
+                                 "interface\nfunction number() result(value)\n"
+                                 "integer,allocatable :: value\nend function\nend interface\n"
+                                 "allocate(a,b(3),source=number())\nend program\n";
+    F2cResult result = transpile(source, "descriptor-scalar-source.f90");
+    expect(result.code != NULL && result.error_count == 0U,
+           "descriptor scalar SOURCE lowers through the common result materializer");
+    expect_contains(result.code, "_descriptor = number();",
+                    "the model captures one descriptor rather than casting it to a scalar");
+    expect_contains(result.code, "_scalar = (int32_t)((*f2c_array_allocate_function_",
+                    "SOURCE snapshots the descriptor value once before initializing targets");
+    expect_contains(result.code, "free(f2c_array_allocate_function_",
+                    "owned SOURCE storage participates in statement cleanup");
+    f2c_result_free(&result);
+}
+
+static void test_pointer_mold_metadata(void) {
+    static const char source[] =
+        "program pointer_mold\n"
+        "character(len=:),allocatable :: a(:)\n"
+        "interface\nfunction words() result(value)\n"
+        "character(len=:),pointer :: value(:)\nend function\nend interface\n"
+        "allocate(a,mold=words())\nend program\n";
+    F2cResult result = transpile(source, "pointer-mold-metadata.f90");
+    expect(result.code != NULL && result.error_count == 0U,
+           "pointer MOLD metadata is planned after binding external result characteristics");
+    expect_contains(result.code, "_descriptor = words();",
+                    "MOLD obtains pointer descriptor metadata in one call");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_descriptor_read_record(f2c_array_allocate_function_") ==
+                   NULL &&
+               strstr(result.code, "free(f2c_array_allocate_function_") == NULL,
+           "MOLD never reads or releases borrowed character result targets");
+    expect_contains(result.code, ".character_length);",
+                    "the allocation uses the returned dynamic character length");
+    f2c_result_free(&result);
+}
+
 static void test_dependency_constraints(void) {
     static const char source_dependency[] = "program source_dependency\n"
                                             "  integer, allocatable :: a(:), b(:)\n"
@@ -150,6 +190,8 @@ int main(void) {
     test_scalar_single_evaluation();
     test_runtime_shape_guard();
     test_unavailable_source_guard();
+    test_descriptor_scalar_source();
+    test_pointer_mold_metadata();
     test_dependency_constraints();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
