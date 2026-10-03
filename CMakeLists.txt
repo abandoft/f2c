@@ -1030,6 +1030,15 @@ if(F2C_BUILD_TESTING)
                     ${CMAKE_CURRENT_SOURCE_DIR}/test/constructor_result_contract.sh
                     $<TARGET_FILE:f2c>
             )
+            add_test(
+                NAME allocation_result_contract
+                COMMAND
+                    ${CMAKE_COMMAND} -E env
+                    CC=${CMAKE_C_COMPILER}
+                    ${F2C_SH_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/test/allocation_result_contract.sh
+                    $<TARGET_FILE:f2c>
+            )
             if(F2C_GFORTRAN_EXECUTABLE)
                 foreach(io_differential IN ITEMS io_controls file_control format)
                     add_test(
