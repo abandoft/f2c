@@ -5,92 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int statement_begins_block(const F2cStatement *statement) {
-    return statement->kind == F2C_STMT_DO || statement->kind == F2C_STMT_DO_WHILE ||
-           statement->kind == F2C_STMT_SELECT_CASE || statement->kind == F2C_STMT_SELECT_TYPE ||
-           statement->kind == F2C_STMT_BLOCK_SCOPE ||
-           (statement->kind == F2C_STMT_WHERE && statement->block) ||
-           (statement->kind == F2C_STMT_IF && statement->block);
-}
-
-static int statement_begins_loop(const F2cStatement *statement) {
-    return statement->kind == F2C_STMT_DO || statement->kind == F2C_STMT_DO_WHILE;
-}
-
-static F2cStatement *statement_body(F2cStatement *statement) {
-    return statement != NULL && statement->kind == F2C_STMT_LABEL && statement->nested != NULL
-               ? statement->nested
-               : statement;
-}
-
-static int statement_prevents_loop_unrolling(const F2cStatement *statement) {
-    int prevents_unrolling = statement->kind == F2C_STMT_CYCLE ||
-                             statement->kind == F2C_STMT_EXIT || statement->kind == F2C_STMT_GOTO ||
-                             statement->kind == F2C_STMT_ASSIGNED_GOTO ||
-                             statement->kind == F2C_STMT_ARITHMETIC_IF ||
-                             statement->kind == F2C_STMT_RETURN || statement->kind == F2C_STMT_STOP;
-    return prevents_unrolling ||
-           (statement->nested != NULL && statement_prevents_loop_unrolling(statement->nested));
-}
-
-static void annotate_loop_hints(Unit *unit) {
-    size_t *blocks;
-    size_t *loops;
-    size_t block_count = 0U;
-    size_t loop_count = 0U;
-    size_t i;
-    if (unit->statement_count == 0U)
-        return;
-    blocks = (size_t *)calloc(unit->statement_count, sizeof(*blocks));
-    loops = (size_t *)calloc(unit->statement_count, sizeof(*loops));
-    if (blocks == NULL || loops == NULL) {
-        free(blocks);
-        free(loops);
-        return;
-    }
-    for (i = 0U; i < unit->statement_count; ++i) {
-        F2cStatement *root = &unit->statements[i];
-        F2cStatement *statement = statement_body(root);
-        if (statement_prevents_loop_unrolling(root)) {
-            size_t active_loop;
-            for (active_loop = 0U; active_loop < loop_count; ++active_loop)
-                statement_body(&unit->statements[loops[active_loop]])->unroll_hint = 0;
-        }
-        if (statement_begins_loop(statement)) {
-            size_t ancestor;
-            for (ancestor = 0U; ancestor < loop_count; ++ancestor)
-                statement_body(&unit->statements[loops[ancestor]])->unroll_hint = 0;
-            statement->unroll_hint = statement->kind == F2C_STMT_DO;
-            loops[loop_count++] = i;
-        }
-        if (statement_begins_block(statement)) {
-            blocks[block_count++] = i;
-        } else if (root->terminal_loop_count != 0U) {
-            size_t terminal;
-            for (terminal = 0U; terminal < root->terminal_loop_count; ++terminal) {
-                F2cStatement *loop = root->terminal_loops[terminal];
-                if (block_count != 0U &&
-                    statement_body(&unit->statements[blocks[block_count - 1U]]) == loop)
-                    --block_count;
-                if (loop_count != 0U &&
-                    statement_body(&unit->statements[loops[loop_count - 1U]]) == loop)
-                    --loop_count;
-            }
-        } else if ((statement->kind == F2C_STMT_END_IF || statement->kind == F2C_STMT_END_DO ||
-                    statement->kind == F2C_STMT_END_WHERE ||
-                    statement->kind == F2C_STMT_END_BLOCK_SCOPE ||
-                    statement->kind == F2C_STMT_END_SELECT) &&
-                   block_count != 0U) {
-            const size_t opener = blocks[--block_count];
-            if (statement_begins_loop(statement_body(&unit->statements[opener])) &&
-                loop_count != 0U)
-                --loop_count;
-        }
-    }
-    free(blocks);
-    free(loops);
-}
-
 static void annotate_block_scopes(Context *context, Unit *unit) {
     size_t *stack;
     size_t depth = 0U;
@@ -219,6 +133,6 @@ void f2c_build_statement_ir(Context *context, Unit *unit) {
         annotate_block_scopes(context, unit);
     }
     f2c_validate_unit_expressions(context, unit);
-    annotate_loop_hints(unit);
+    f2c_analyze_loop_hints(unit);
     unit->phase = F2C_UNIT_TYPED_IR;
 }
