@@ -136,11 +136,45 @@ static void test_result_contract_mismatch(void) {
     f2c_result_free(&result);
 }
 
+static void test_pointer_result_contexts(void) {
+    static const char prefix[] =
+        "module pointer_context\n"
+        "integer,target :: backing=7\n"
+        "contains\n"
+        "function selected() result(value)\ninteger,pointer :: value\nvalue=>backing\nend "
+        "function\n"
+        "subroutine accept(value)\ninteger,pointer,intent(in) :: value\nvalue=9\nend subroutine\n"
+        "subroutine alter(value)\ninteger,pointer,intent(out) :: value\nnullify(value)\nend "
+        "subroutine\n"
+        "subroutine allocate_value(value)\ninteger,allocatable :: value\nend subroutine\n"
+        "end module\nprogram main\nuse pointer_context\ninteger,pointer :: alias\n";
+    static const char *const actions[] = {
+        "alias=>selected()\ncall accept(selected())\n", "call alter(selected())\n",
+        "call allocate_value(selected())\n", "alias=>(selected())\n"};
+    for (size_t index = 0U; index < sizeof(actions) / sizeof(actions[0]); ++index) {
+        char source[4096];
+        const int length =
+            snprintf(source, sizeof(source), "%s%send program\n", prefix, actions[index]);
+        expect(length > 0 && (size_t)length < sizeof(source), "result context fixture fits");
+        F2cResult result = transpile(source, "pointer-result-context.f90");
+        if (index == 0U) {
+            expect(result.code != NULL && result.error_count == 0U,
+                   "pointer function results preserve target identity in legal contexts");
+        } else {
+            expect(result.code == NULL && result.error_count != 0U,
+                   "pointer results cannot change state, supply allocatable state, or retain "
+                   "target identity through parentheses");
+        }
+        f2c_result_free(&result);
+    }
+}
+
 int main(void) {
     test_explicit_array_result();
     test_character_and_derived_results();
     test_pointer_result_view();
     test_result_contract_mismatch();
+    test_pointer_result_contexts();
     if (failures != 0)
         fprintf(stderr, "%d function-result test(s) failed\n", failures);
     return failures == 0 ? 0 : 1;
