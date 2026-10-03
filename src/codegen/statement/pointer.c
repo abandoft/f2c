@@ -1,6 +1,7 @@
 #include "codegen/statement/private.h"
 
 #include "codegen/descriptor/private.h"
+#include "codegen/lowering/private.h"
 #include "codegen/storage/private.h"
 
 #include <stdlib.h>
@@ -32,6 +33,12 @@ static char *pointer_property_designator(Unit *unit, const F2cExpr *expression,
 
 static char *pointer_target_deallocatable(Unit *unit, const F2cExpr *target) {
     const Symbol *symbol;
+    const char *descriptor = f2c_lowering_result_descriptor(unit, target);
+    if (f2c_expression_has_pointer_result(target) && descriptor != NULL) {
+        Buffer property = {0};
+        f2c_buffer_printf(&property, "%s.deallocatable", descriptor);
+        return f2c_buffer_take(&property);
+    }
     if (target == NULL || target->symbol == NULL ||
         (target->kind != F2C_EXPR_NAME && target->kind != F2C_EXPR_COMPONENT))
         return f2c_strdup("false");
@@ -357,6 +364,19 @@ static int emit_scalar_pointer_assignment(Context *context, Unit *unit,
     if (null_target) {
         indent(&context->output, depth);
         f2c_buffer_printf(&context->output, "%s = NULL;\n", pointer_name);
+    } else if (f2c_expression_has_pointer_result(target_expression)) {
+        const char *descriptor = f2c_lowering_result_descriptor(unit, target_expression);
+        Buffer target_address = {0};
+        if (descriptor == NULL) {
+            free(target_code);
+            free(deallocatable_name);
+            free(target_deallocatable);
+            return 0;
+        }
+        f2c_buffer_printf(&target_address, "(%s *)%s.data",
+                          f2c_expression_c_type(target_expression), descriptor);
+        emit_scalar_pointer_store(context, statement, pointer_name, target_address.data, depth);
+        free(target_address.data);
     } else if (target_code != NULL) {
         Buffer target_address = {0};
         f2c_buffer_printf(&target_address, "%s%s%s",
@@ -549,7 +569,7 @@ int f2c_emit_pointer_assignment_statement(Context *context, Unit *unit,
     Symbol *pointer = statement->left != NULL ? statement->left->symbol : NULL;
     Symbol *target = statement->right != NULL ? statement->right->symbol : NULL;
     const int null_target = null_pointer_value(statement->right);
-    if (pointer != NULL && pointer->pointer && pointer->rank == 0U &&
+    if (pointer != NULL && pointer->pointer &&
         (f2c_array_contains_unmaterialized_value(unit, statement->left) ||
          f2c_array_contains_unmaterialized_value(unit, statement->right)))
         return emit_prepared_pointer_assignment(context, unit, statement, line, depth);
