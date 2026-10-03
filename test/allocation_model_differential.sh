@@ -11,7 +11,7 @@ CC=${CC:-cc}
 FC=${FC:-gfortran}
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 WORK=$ROOT/build/allocation-model-differential
-SOURCES="allocation_model allocation_model_rich allocation_result_values"
+SOURCES="allocation_model allocation_model_rich allocation_result_values allocation_control_bounds allocation_control_names"
 
 if ! command -v "$CC" >/dev/null 2>&1; then
     echo "C compiler not found: $CC" >&2

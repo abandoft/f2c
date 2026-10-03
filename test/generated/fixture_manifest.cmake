@@ -36,6 +36,14 @@ set(
     allocation_result
     allocation_result_values
     allocation_result_finalization
+    allocation_controls
+    allocation_control_values
+    allocation_control_bounds
+    allocation_control_finalization
+    allocation_control_errors
+    allocation_control_unaligned
+    allocation_control_pointers
+    allocation_control_names
     pointer_deallocation_errors
     pointer_dummy
     procedure_pointer
