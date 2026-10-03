@@ -38,6 +38,8 @@ set(
     vector_subscript
     reduction_intrinsics
     volatile_reductions
+    qualified_descriptors
+    qualified_contiguous
     parenthesized_intrinsic_values
     parenthesized_values
     parenthesized_character_values
