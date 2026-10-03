@@ -492,6 +492,10 @@ char *f2c_array_expression_extent(Unit *unit, const F2cExpr *expression, size_t 
         expression->children[0]->rank == expression->rank)
         return f2c_array_expression_extent(unit, expression->children[0], dimension);
     lowered_code = f2c_lowering_code(unit, expression);
+    lowered_extent = f2c_lowering_extent(unit, expression);
+    if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && dimension == 0U && lowered_code != NULL &&
+        lowered_extent != NULL)
+        return f2c_strdup(lowered_extent);
     if (f2c_lowering_is_array_temporary(unit, expression) && lowered_code != NULL) {
         Buffer extent = {0};
         f2c_buffer_printf(&extent, "%s_extent_%zu", lowered_code, dimension + 1U);
