@@ -3,8 +3,9 @@
 
 #include "internal/f2c.h"
 
-/* Source is a distinct, completely evaluated value buffer. */
+/* Source and target are distinct storage regions with stable addresses.
+ * A qualified source or destination requires typed element accesses. */
 void f2c_array_copy_snapshot(Buffer *output, Unit *unit, const char *target, const char *source,
-                             const char *count, unsigned int target_qualifiers, int depth);
+                             const char *count, unsigned int storage_qualifiers, int depth);
 
 #endif

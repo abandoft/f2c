@@ -1,4 +1,7 @@
+#include "codegen/array/private.h"
 #include "codegen/array/view.h"
+#include "codegen/descriptor/private.h"
+#include "codegen/lowering/private.h"
 #include "internal/f2c.h"
 
 #include <stdio.h>
@@ -36,6 +39,20 @@ static void expect_view(Unit *unit, const char *source, unsigned int qualifiers)
     f2c_expr_free(expression);
 }
 
+static void expect_descriptor_view(Unit *unit, const char *source, unsigned int qualifiers,
+                                   int readonly_storage) {
+    F2cExpr *expression = parse(unit, source);
+    F2cDescriptorView view = {0};
+    expect(f2c_descriptor_view(unit, expression, &view) && view.data != NULL &&
+               view.storage_qualifiers == qualifiers && view.readonly_storage == readonly_storage,
+           source);
+    f2c_descriptor_view_free(&view);
+    expect(view.data == NULL && view.storage_qualifiers == F2C_STORAGE_UNQUALIFIED &&
+               !view.readonly_storage,
+           "descriptor disposal clears both address ownership and access metadata");
+    f2c_expr_free(expression);
+}
+
 static void initialize_symbol(Symbol *symbol, const char *name, Type type, size_t rank) {
     memset(symbol, 0, sizeof(*symbol));
     symbol->name = (char *)name;
@@ -53,6 +70,7 @@ static void initialize_symbol(Symbol *symbol, const char *name, Type type, size_
 }
 
 int main(void) {
+    Context context = {0};
     Symbol symbols[6];
     Symbol component;
     F2cDerivedType derived = {0};
@@ -82,6 +100,7 @@ int main(void) {
     derived.components = &component;
     derived.component_count = 1U;
     unit.symbols = symbols;
+    unit.context = &context;
     unit.symbol_count = sizeof(symbols) / sizeof(symbols[0]);
     unit.derived_types = &derived;
     unit.derived_type_count = 1U;
@@ -109,6 +128,44 @@ int main(void) {
     expect_view(&unit, "pending", F2C_STORAGE_ASYNCHRONOUS);
     expect_view(&unit, "reshape(observed,[2,2])", F2C_STORAGE_VOLATILE);
     expect_view(&unit, "[observed(1),ordinary(2)]", F2C_STORAGE_UNQUALIFIED);
+    expect_descriptor_view(&unit, "observed", F2C_STORAGE_VOLATILE, 0);
+    expect_descriptor_view(&unit, "observed(4:1:-1)", F2C_STORAGE_VOLATILE, 0);
+    expect_descriptor_view(&unit, "pending", F2C_STORAGE_ASYNCHRONOUS, 0);
+    expect_descriptor_view(&unit, "record%values(:)",
+                           F2C_STORAGE_VOLATILE | F2C_STORAGE_ASYNCHRONOUS, 0);
+    symbols[2].argument = 1;
+    symbols[2].intent = F2C_INTENT_IN;
+    expect_descriptor_view(&unit, "ordinary", F2C_STORAGE_UNQUALIFIED, 1);
+    symbols[2].pointer = 1;
+    expect_descriptor_view(&unit, "ordinary", F2C_STORAGE_UNQUALIFIED, 0);
+    symbols[2].pointer = 0;
+    symbols[2].argument = 0;
+    symbols[2].intent = F2C_INTENT_UNSPECIFIED;
+    expect(strcmp(f2c_descriptor_address_member(F2C_STORAGE_VOLATILE, 1),
+                  "readonly_volatile_data") == 0 &&
+               strcmp(f2c_descriptor_address_member(F2C_STORAGE_ASYNCHRONOUS, 1),
+                      "readonly_data") == 0,
+           "descriptor addresses preserve CV qualification without conflating ASYNCHRONOUS");
+
+    expression = parse(&unit, "observed");
+    if (expression != NULL) {
+        const char *ordinals[] = {"index"};
+        F2cExpr *element;
+        expect(f2c_lowering_copy_code(&unit, expression, "snapshot") &&
+                   f2c_lowering_set_array_temporary(&unit, expression, 1),
+               "an owned array snapshot is available for scalarization");
+        element = f2c_array_element_expression(&unit, expression, 1U, ordinals);
+        expect(element != NULL && element->storage_qualifiers == F2C_STORAGE_UNQUALIFIED,
+               "owned snapshot elements do not inherit volatile source storage");
+        f2c_codegen_expression_free(&unit, element);
+        expect(f2c_lowering_set_storage_access(&unit, expression, F2C_STORAGE_VOLATILE, 1),
+               "a cached alias view has explicit storage metadata");
+        element = f2c_array_element_expression(&unit, expression, 1U, ordinals);
+        expect(element != NULL && element->storage_qualifiers == F2C_STORAGE_VOLATILE,
+               "alias view elements retain access qualification during scalarization");
+        f2c_codegen_expression_free(&unit, element);
+    }
+    f2c_codegen_expression_free(&unit, expression);
 
     expression = parse(&unit, "pending");
     expect(expression != NULL && expression->storage_qualifiers == F2C_STORAGE_ASYNCHRONOUS,
@@ -171,5 +228,6 @@ int main(void) {
     }
     f2c_expr_free(component.dimensions[0].lower_expression);
     f2c_expr_free(component.dimensions[0].upper_expression);
+    f2c_lowering_clear(&context);
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

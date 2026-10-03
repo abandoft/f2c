@@ -6,9 +6,9 @@
 #include <stdlib.h>
 
 void f2c_array_copy_snapshot(Buffer *output, Unit *unit, const char *target, const char *source,
-                             const char *count, unsigned int target_qualifiers, int depth) {
+                             const char *count, unsigned int storage_qualifiers, int depth) {
     f2c_array_indent(output, depth);
-    if ((target_qualifiers & F2C_STORAGE_VOLATILE) != 0U) {
+    if ((storage_qualifiers & F2C_STORAGE_VOLATILE) != 0U) {
         char *index = f2c_codegen_local_name(unit, "f2c_copy_index");
         if (index == NULL) {
             output->failed = 1;
