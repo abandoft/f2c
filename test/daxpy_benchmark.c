@@ -65,28 +65,29 @@ static int run_case(const DaxpyCase *test, double *x, double *c_y, double *fortr
     }
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
         const int generated_outer = f2c_benchmark_generated_is_outer(round);
+        double *workspace = f2c_benchmark_use_second_workspace(round) ? fortran_y : c_y;
         double outer_first;
         double outer_second;
         double inner_first;
         double inner_second;
         if (generated_outer) {
-            initialize(x, c_y, count);
-            outer_first = measure(daxpy, x, c_y, test);
-            initialize(x, c_y, count);
-            inner_first = measure(daxpy_, x, c_y, test);
-            initialize(x, c_y, count);
-            inner_second = measure(daxpy_, x, c_y, test);
-            initialize(x, c_y, count);
-            outer_second = measure(daxpy, x, c_y, test);
+            initialize(x, workspace, count);
+            outer_first = measure(daxpy, x, workspace, test);
+            initialize(x, workspace, count);
+            inner_first = measure(daxpy_, x, workspace, test);
+            initialize(x, workspace, count);
+            inner_second = measure(daxpy_, x, workspace, test);
+            initialize(x, workspace, count);
+            outer_second = measure(daxpy, x, workspace, test);
         } else {
-            initialize(x, c_y, count);
-            outer_first = measure(daxpy_, x, c_y, test);
-            initialize(x, c_y, count);
-            inner_first = measure(daxpy, x, c_y, test);
-            initialize(x, c_y, count);
-            inner_second = measure(daxpy, x, c_y, test);
-            initialize(x, c_y, count);
-            outer_second = measure(daxpy_, x, c_y, test);
+            initialize(x, workspace, count);
+            outer_first = measure(daxpy_, x, workspace, test);
+            initialize(x, workspace, count);
+            inner_first = measure(daxpy, x, workspace, test);
+            initialize(x, workspace, count);
+            inner_second = measure(daxpy, x, workspace, test);
+            initialize(x, workspace, count);
+            outer_second = measure(daxpy_, x, workspace, test);
         }
         samples[round] = f2c_benchmark_symmetric_sample(round, outer_first, inner_first,
                                                         inner_second, outer_second);
