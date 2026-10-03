@@ -382,8 +382,10 @@ static void test_program_and_control_flow(void) {
                     "generated source defines a portable loop optimization hint");
     expect_contains(result.code, "clang loop unroll_count(4)",
                     "LLVM retains the established loop backend policy");
-    expect_not_contains(result.code, "GCC unroll",
-                        "GCC chooses loop expansion through its target cost model");
+    expect_contains(result.code, "GCC unroll 4",
+                    "ordinary GCC loops retain the established backend policy");
+    expect_contains(result.code, "#if !defined(F2C_COLUMN_UPDATE_LOOP)",
+                    "cross-column updates expose an independently selectable backend policy");
     expect_contains(result.code, "#if !defined(F2C_LOOP_UNROLL)",
                     "explicit loop backend overrides remain independently selectable");
     expect_contains(result.code, "__STDC_VERSION__ < 201710L",
@@ -575,6 +577,43 @@ static void test_nested_loop_optimization_hints(void) {
     expect_not_contains(result.code, "((*n)) - (1) + 1",
                         "known one-based dimensions omit cancelling stride arithmetic");
     f2c_result_free(&result);
+
+    {
+        static const struct {
+            const char *declarations;
+            const char *assignment;
+            int column_update;
+        } cases[] = {
+            {"real :: x(n,n), scale", "x(i,j)=x(i,j)-scale*x(i,k)", 1},
+            {"real :: x(n,n), scale", "if (scale /= 0.0) x(i,j)=x(i,j)-scale*x(i,k)", 1},
+            {"real :: x(n), y(n), scale", "x(i)=x(i)-scale*y(i)", 0},
+            {"real :: x(n,n), y(n,n), scale", "x(i,j)=x(i,j)-scale*y(i,k)", 0},
+            {"real :: x(n,n), scale", "x(i,j)=scale*x(i,j)", 0},
+            {"real :: x(n,n), scale", "x(i,j)=scale*x(k,j)", 0},
+            {"real :: x(n,n), scale", "x(j,i)=x(j,i)-scale*x(k,i)", 0},
+            {"real :: x(n,n), y(n,n), scale", "scale=scale+x(i,j)*y(i,k)", 0},
+        };
+        size_t index;
+        for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+            char input[512];
+            F2cResult value;
+            (void)snprintf(input, sizeof(input),
+                           "subroutine generic_kernel(n,j,k)\n integer :: n,j,k,i\n %s\n"
+                           " do i=1,n\n %s\n end do\nend\n",
+                           cases[index].declarations, cases[index].assignment);
+            value = f2c_transpile(input, strlen(input), &options);
+            expect(value.error_count == 0U, "typed loop-policy fixture translates");
+            expect_contains(value.code,
+                            cases[index].column_update ? "F2C_COLUMN_UPDATE_LOOP\n    for (;"
+                                                       : "F2C_LOOP_UNROLL\n    for (;",
+                            "loop policy follows array access shape rather than procedure name");
+            if (!cases[index].column_update)
+                expect_not_contains(
+                    value.code, "F2C_COLUMN_UPDATE_LOOP\n    for (;",
+                    "reductions, rank-one, and non-column accesses keep their policy");
+            f2c_result_free(&value);
+        }
+    }
 
     {
         static const char transfer_source[] = "subroutine transfer_loop(value)\n"
