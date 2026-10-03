@@ -742,6 +742,8 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
         apply_function_result(expression, definition);
         bind_specific_expression(unit, expression, definition);
     }
+    if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_NONE)
+        f2c_bind_expression_result(expression);
 }
 
 void f2c_validation_io_item_calls(Context *context, Unit *unit, size_t line,
