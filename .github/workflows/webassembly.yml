@@ -55,6 +55,7 @@ jobs:
             qualified_descriptors qualified_contiguous scoped_storage_access scoped_unaligned_storage \
             live_object_state live_character_result_state live_namelist_transaction \
             live_component_assignment \
+            function_result scalar_result result_identity result_snapshot result_kinds \
             parenthesized_intrinsic_values parenthesized_values parenthesized_character_values; do
             build/host/f2c -o "build/wasm/generated-$fixture.c" "test/fixtures/$fixture.f90"
             emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
@@ -76,6 +77,13 @@ jobs:
             -sFILESYSTEM=0 -sEXIT_RUNTIME=1 \
             test/generated/live_state_contracts.c -o build/wasm/live-state-contracts.js
           node build/wasm/live-state-contracts.js
+          build/host/f2c -o build/wasm/result-external.c test/fixtures/result_external.f90
+          emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+            -Wstrict-prototypes -Wmissing-prototypes -Werror -Ibuild/wasm \
+            -DF2C_RESULT_SOURCE='"result-external.c"' \
+            -sFILESYSTEM=0 -sEXIT_RUNTIME=1 \
+            test/generated/result_contracts.c -o build/wasm/result-contracts.js
+          node build/wasm/result-contracts.js
           emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
             -Wstrict-prototypes -Wmissing-prototypes -Werror -Ibuild/wasm \
             -DF2C_CHARACTER_LENGTH_SOURCE='"generated-character_length_parameters.c"' \
