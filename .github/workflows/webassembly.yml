@@ -52,7 +52,7 @@ jobs:
             intrinsic_bindings intrinsic_alias_bindings etime \
             scalar_component_actuals procedure_pointer_component \
             reduction_designators nested_array_reductions volatile_reductions \
-            qualified_descriptors qualified_contiguous \
+            qualified_descriptors qualified_contiguous scoped_storage_access scoped_unaligned_storage \
             parenthesized_intrinsic_values parenthesized_values parenthesized_character_values; do
             build/host/f2c -o "build/wasm/generated-$fixture.c" "test/fixtures/$fixture.f90"
             emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
