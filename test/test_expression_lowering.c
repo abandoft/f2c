@@ -164,6 +164,7 @@ static void test_clone_across_growth(void) {
     unit = test_unit(&context);
     expect(f2c_lowering_copy_code(&unit, &expressions[0], "growth_source") &&
                f2c_lowering_set_array_temporary(&unit, &expressions[0], 1) &&
+               f2c_lowering_set_storage_access(&unit, &expressions[0], F2C_STORAGE_VOLATILE, 1) &&
                f2c_lowering_set_argument_materialized(&unit, &expressions[0], 1),
            "the growth clone source is initialized");
     for (index = 1U; index < 8U; ++index)
@@ -174,9 +175,42 @@ static void test_clone_across_growth(void) {
     expect(f2c_lowering_code(&unit, &expressions[8]) != NULL &&
                strcmp(f2c_lowering_code(&unit, &expressions[8]), "growth_source") == 0 &&
                f2c_lowering_is_array_temporary(&unit, &expressions[8]) &&
+               f2c_lowering_storage_qualifiers(&unit, &expressions[8]) == F2C_STORAGE_VOLATILE &&
+               f2c_lowering_readonly_storage(&unit, &expressions[8]) &&
                f2c_lowering_argument_materialized(&unit, &expressions[8]),
            "growth-safe cloning preserves strings and flags");
     f2c_lowering_clear(&context);
+}
+
+static void test_storage_access(void) {
+    Context context = {0};
+    Unit unit = test_unit(&context);
+    F2cExpr expression = {.storage_qualifiers = F2C_STORAGE_VOLATILE | F2C_STORAGE_ASYNCHRONOUS};
+    F2cExpr clone = {0};
+    expect(f2c_lowering_storage_qualifiers(&unit, &expression) == expression.storage_qualifiers,
+           "an uncached designator uses its typed access attributes");
+    expect(f2c_lowering_set_array_temporary(&unit, &expression, 1) &&
+               f2c_lowering_storage_qualifiers(&unit, &expression) == F2C_STORAGE_UNQUALIFIED,
+           "fresh owned array snapshots do not inherit source-object qualifiers");
+    expect(f2c_lowering_set_storage_access(&unit, &expression, expression.storage_qualifiers, 1) &&
+               f2c_lowering_storage_qualifiers(&unit, &expression) ==
+                   expression.storage_qualifiers &&
+               f2c_lowering_readonly_storage(&unit, &expression),
+           "cached alias views retain access qualification and read-only intent");
+    expect(f2c_lowering_clone(&unit, &clone, &expression) &&
+               f2c_lowering_storage_qualifiers(&unit, &clone) == expression.storage_qualifiers &&
+               f2c_lowering_readonly_storage(&unit, &clone),
+           "alias cloning retains storage attributes independently of AST object identity");
+    f2c_lowering_forget(&unit, &clone);
+    expect(f2c_lowering_storage_qualifiers(&unit, &clone) == F2C_STORAGE_UNQUALIFIED &&
+               !f2c_lowering_readonly_storage(&unit, &clone),
+           "forgetting an alias view clears its access overlay");
+    expect(expression.storage_qualifiers == (F2C_STORAGE_VOLATILE | F2C_STORAGE_ASYNCHRONOUS),
+           "storage lowering does not mutate validated AST metadata");
+    f2c_lowering_clear(&context);
+    expect(f2c_lowering_storage_qualifiers(NULL, NULL) == F2C_STORAGE_UNQUALIFIED &&
+               !f2c_lowering_readonly_storage(NULL, NULL),
+           "absent lowering state is safe to inspect");
 }
 
 static void test_codegen_expression_free(void) {
@@ -211,6 +245,7 @@ int main(void) {
     test_clone_and_forget_tree();
     test_growth_and_tombstone_reuse();
     test_clone_across_growth();
+    test_storage_access();
     test_codegen_expression_free();
     if (failures != 0)
         fprintf(stderr, "%d expression lowering test(s) failed\n", failures);

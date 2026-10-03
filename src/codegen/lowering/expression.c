@@ -16,6 +16,9 @@ typedef struct F2cExpressionLowering {
     char *character_length;
     int array_temporary;
     int argument_materialized;
+    unsigned int storage_qualifiers;
+    int readonly_storage;
+    int has_storage_access;
     F2cLoweringSlotState state;
 } F2cExpressionLowering;
 
@@ -194,6 +197,31 @@ int f2c_lowering_argument_materialized(const Unit *unit, const F2cExpr *expressi
     return lowering != NULL && lowering->argument_materialized;
 }
 
+unsigned int f2c_lowering_storage_qualifiers(const Unit *unit, const F2cExpr *expression) {
+    const F2cExpressionLowering *lowering = unit_lowering_const(unit, expression);
+    if (lowering != NULL && lowering->has_storage_access)
+        return lowering->storage_qualifiers;
+    if (expression == NULL || (lowering != NULL && lowering->array_temporary))
+        return F2C_STORAGE_UNQUALIFIED;
+    return expression->storage_qualifiers;
+}
+
+int f2c_lowering_readonly_storage(const Unit *unit, const F2cExpr *expression) {
+    const F2cExpressionLowering *lowering = unit_lowering_const(unit, expression);
+    return lowering != NULL && lowering->has_storage_access && lowering->readonly_storage;
+}
+
+int f2c_lowering_set_storage_access(Unit *unit, const F2cExpr *expression, unsigned int qualifiers,
+                                    int readonly_storage) {
+    F2cExpressionLowering *lowering = unit_lowering(unit, expression, 1);
+    if (lowering == NULL)
+        return 0;
+    lowering->storage_qualifiers = qualifiers;
+    lowering->readonly_storage = readonly_storage != 0;
+    lowering->has_storage_access = 1;
+    return 1;
+}
+
 static int take_string(Unit *unit, const F2cExpr *expression, char *value, size_t member) {
     F2cExpressionLowering *lowering = unit_lowering(unit, expression, value != NULL);
     char **target;
@@ -267,6 +295,9 @@ int f2c_lowering_clone(Unit *unit, const F2cExpr *target, const F2cExpr *source)
     char *character_length = NULL;
     int array_temporary;
     int argument_materialized;
+    unsigned int storage_qualifiers;
+    int readonly_storage;
+    int has_storage_access;
     if (unit == NULL || target == NULL || source == NULL)
         return 0;
     if (target == source)
@@ -276,6 +307,9 @@ int f2c_lowering_clone(Unit *unit, const F2cExpr *target, const F2cExpr *source)
         return 1;
     array_temporary = source_lowering->array_temporary;
     argument_materialized = source_lowering->argument_materialized;
+    storage_qualifiers = source_lowering->storage_qualifiers;
+    readonly_storage = source_lowering->readonly_storage;
+    has_storage_access = source_lowering->has_storage_access;
     if ((source_lowering->code != NULL && (code = f2c_strdup(source_lowering->code)) == NULL) ||
         (source_lowering->extent != NULL &&
          (extent = f2c_strdup(source_lowering->extent)) == NULL) ||
@@ -298,6 +332,9 @@ int f2c_lowering_clone(Unit *unit, const F2cExpr *target, const F2cExpr *source)
     target_lowering->character_length = character_length;
     target_lowering->array_temporary = array_temporary;
     target_lowering->argument_materialized = argument_materialized;
+    target_lowering->storage_qualifiers = storage_qualifiers;
+    target_lowering->readonly_storage = readonly_storage;
+    target_lowering->has_storage_access = has_storage_access;
     return 1;
 }
 
@@ -314,6 +351,9 @@ void f2c_lowering_forget(Unit *unit, const F2cExpr *expression) {
     lowering->expression = NULL;
     lowering->array_temporary = 0;
     lowering->argument_materialized = 0;
+    lowering->storage_qualifiers = F2C_STORAGE_UNQUALIFIED;
+    lowering->readonly_storage = 0;
+    lowering->has_storage_access = 0;
     lowering->state = F2C_LOWERING_SLOT_TOMBSTONE;
     --store->count;
     ++store->tombstone_count;
