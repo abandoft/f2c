@@ -804,6 +804,11 @@ if(F2C_BUILD_TESTING)
     f2c_configure_test_target(f2c_function_result_tests)
     add_test(NAME function_result_semantics COMMAND f2c_function_result_tests)
 
+    add_executable(f2c_result_retention_tests test/test_result_retention.c)
+    target_include_directories(f2c_result_retention_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_result_retention_tests)
+    add_test(NAME result_instance_retention COMMAND f2c_result_retention_tests)
+
     add_executable(f2c_procedure_signature_tests test/test_procedure_signature.c)
     f2c_configure_test_target(f2c_procedure_signature_tests)
     add_test(NAME procedure_signature_semantics COMMAND f2c_procedure_signature_tests)
@@ -1016,6 +1021,15 @@ if(F2C_BUILD_TESTING)
                     $<TARGET_FILE:f2c>
             )
             find_program(F2C_GFORTRAN_EXECUTABLE gfortran)
+            add_test(
+                NAME constructor_result_contract
+                COMMAND
+                    ${CMAKE_COMMAND} -E env
+                    CC=${CMAKE_C_COMPILER}
+                    ${F2C_SH_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/test/constructor_result_contract.sh
+                    $<TARGET_FILE:f2c>
+            )
             if(F2C_GFORTRAN_EXECUTABLE)
                 foreach(io_differential IN ITEMS io_controls file_control format)
                     add_test(
