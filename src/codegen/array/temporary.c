@@ -120,6 +120,37 @@ static int flat_array_constructor(const F2cExpr *expression) {
     return 1;
 }
 
+static int emit_flat_constructor_storage(Unit *unit, const F2cExpr *expression, const char *name,
+                                         Buffer *prelude, int depth) {
+    Buffer initializer = {0};
+    if (name == NULL)
+        return 0;
+    for (size_t child = 0U; child < expression->child_count; ++child) {
+        int supported = 0;
+        char *value = f2c_emit_expression_ast(unit, expression->children[child], &supported);
+        if (!supported || value == NULL) {
+            free(value);
+            free(initializer.data);
+            return 0;
+        }
+        f2c_buffer_printf(&initializer, "%s%s", child == 0U ? "" : ", ", value);
+        free(value);
+    }
+    if (expression->child_count == 0U)
+        f2c_buffer_append(&initializer, "0");
+    if (initializer.data == NULL)
+        return 0;
+    /* Give the snapshot an explicit, initialized C object. Besides making its
+     * lifetime visible, this avoids GCC's maybe-uninitialized diagnostic for
+     * anonymous compound arrays indexed by dynamic component extents. */
+    f2c_array_indent(prelude, depth);
+    f2c_buffer_printf(prelude, "const %s %s[%zu] = {%s};\n", f2c_expression_c_type(expression),
+                      name, expression->child_count == 0U ? 1U : expression->child_count,
+                      initializer.data);
+    free(initializer.data);
+    return 1;
+}
+
 static int array_transform_call(const Unit *unit, const F2cExpr *expression) {
     return expression != NULL && expression->kind == F2C_EXPR_CALL && expression->rank != 0U &&
            f2c_lowering_code(unit, expression) == NULL &&
@@ -449,8 +480,6 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
     if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR &&
         f2c_lowering_code(unit, expression) == NULL) {
         Buffer name = {0};
-        char *code = NULL;
-        int supported = 0;
         if (expression->rank != 1U || expression->type == TYPE_UNKNOWN)
             return 0;
         if (!f2c_array_owned_temporary_valid(unit, expression,
@@ -460,21 +489,10 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
             flat_array_constructor(expression)) {
             f2c_buffer_printf(&name, "f2c_array_%s_constructor_%zu_%zu", role, identifier,
                               expression->owned_temporary_index);
-            f2c_array_indent(prelude, depth);
-            if (expression->child_count == 0U) {
-                f2c_buffer_printf(prelude, "const %s %s[1] = {0};\n",
-                                  f2c_expression_c_type(expression), name.data);
-            } else {
-                code = f2c_emit_expression_ast(unit, expression, &supported);
-                if (!supported || code == NULL) {
-                    free(code);
-                    free(name.data);
-                    return 0;
-                }
-                f2c_buffer_printf(prelude, "const %s *const %s = %s;\n",
-                                  f2c_expression_c_type(expression), name.data, code);
+            if (!emit_flat_constructor_storage(unit, expression, name.data, prelude, depth)) {
+                free(name.data);
+                return 0;
             }
-            free(code);
             /* A constant shape may consume the value only in the typed shape plan. */
             f2c_array_indent(prelude, depth);
             f2c_buffer_printf(prelude, "(void)%s;\n", name.data);
