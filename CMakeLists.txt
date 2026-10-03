@@ -174,6 +174,8 @@ set(
     src/codegen/io/namelist/parser.c
     src/codegen/io/namelist/support.c
     src/codegen/io/namelist/transaction.c
+    src/codegen/io/namelist/state.c
+    src/codegen/io/namelist/state.h
     src/codegen/io/private.h
     src/codegen/io/program.c
     src/codegen/io/support.c

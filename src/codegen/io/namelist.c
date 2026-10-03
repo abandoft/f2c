@@ -1,4 +1,5 @@
 #include "codegen/io/private.h"
+#include "codegen/storage/private.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,8 +27,10 @@ void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
                           "F2C_NAMELIST_ITEM_END)) %s = F2C_IO_STATUS_RECORD;\n",
                           status, status);
         f2c_io_indent(&context->output, depth);
-        f2c_buffer_append(&context->output,
-                          "if (f2c_namelist_item == F2C_NAMELIST_ITEM_VALUE) {\n");
+        f2c_buffer_printf(&context->output,
+                          "if (%s == F2C_IO_STATUS_OK && "
+                          "f2c_namelist_item == F2C_NAMELIST_ITEM_VALUE) {\n",
+                          status);
         ++depth;
         io_file = "&f2c_namelist_item_file";
     }
@@ -894,6 +897,7 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
         Symbol staged_symbol;
         char staged_name[96];
         const char *name;
+        char *state_data = NULL;
         char *path;
         if (symbol == NULL)
             continue;
@@ -901,10 +905,22 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
             staged_symbol = *symbol;
             (void)snprintf(staged_name, sizeof(staged_name), "f2c_namelist_stage_%zu", i);
             staged_symbol.c_name = staged_name;
+            if (staged_symbol.pointer || staged_symbol.allocatable)
+                staged_symbol.argument = 0;
+            staged_symbol.intent = F2C_INTENT_UNSPECIFIED;
+            staged_symbol.volatile_entity = 0;
+            staged_symbol.asynchronous = 0;
             symbol = &staged_symbol;
             name = staged_name;
         } else {
-            name = f2c_symbol_c_name(unit, symbol);
+            if (symbol->pointer || symbol->allocatable) {
+                state_data = f2c_storage_symbol_data(unit, symbol);
+                if (state_data == NULL)
+                    return 0;
+                name = state_data;
+            } else {
+                name = f2c_symbol_c_name(unit, symbol);
+            }
         }
         path = f2c_io_c_string_literal(group->members[i], strlen(group->members[i]));
         emit_namelist_object(context, unit, value_file, symbol, name, NULL,
@@ -913,6 +929,7 @@ int f2c_io_emit_namelist(Context *context, Unit *unit, const char *file,
                              symbol->rank == 0U && (symbol->allocatable || symbol->pointer) &&
                                  symbol->type != TYPE_CHARACTER);
         free(path);
+        free(state_data);
     }
     f2c_io_indent(&context->output, depth);
     if (input) {

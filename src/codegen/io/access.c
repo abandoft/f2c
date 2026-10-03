@@ -1,16 +1,19 @@
 #include "codegen/io/private.h"
 
 #include "codegen/names.h"
+#include "codegen/storage/private.h"
 
 #include <stdlib.h>
 
 void f2c_io_append_symbol_element(Buffer *output, Unit *unit, const Symbol *symbol,
                                   const char *index) {
-    if (symbol->volatile_entity)
-        f2c_buffer_printf(output, "((volatile %s *)%s)[%s]", f2c_symbol_c_type(symbol),
-                          f2c_symbol_c_name(unit, symbol), index);
+    const F2cStorageReference reference = f2c_ir_symbol_storage_reference(symbol);
+    char *element = f2c_storage_linear_element(unit, &reference, index);
+    if (element == NULL)
+        output->failed = 1;
     else
-        f2c_buffer_printf(output, "%s[%s]", f2c_symbol_c_name(unit, symbol), index);
+        f2c_buffer_append(output, element);
+    free(element);
 }
 
 void f2c_io_emit_qualified_input(Context *context, Unit *unit, const char *file, const char *value,

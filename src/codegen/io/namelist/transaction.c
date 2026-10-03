@@ -1,3 +1,4 @@
+#include "codegen/io/namelist/state.h"
 #include "codegen/io/private.h"
 
 #include <stdio.h>
@@ -23,6 +24,11 @@ static void stage_name(char *buffer, size_t capacity, size_t member) {
 
 static void emit_target_reference(Context *context, Unit *unit, const Symbol *symbol, size_t member,
                                   int depth) {
+    if (f2c_namelist_has_descriptor_state(symbol)) {
+        if (!f2c_namelist_emit_state_snapshot(context, unit, symbol, member, depth))
+            context->output.failed = 1;
+        return;
+    }
     const char *name = f2c_symbol_c_name(unit, symbol);
     const char *type = f2c_symbol_c_type(symbol);
     size_t dimension;
@@ -571,6 +577,9 @@ static void emit_commit_root(Context *context, Unit *unit, const Symbol *symbol,
                               member, dimension + 1U, name, dimension + 1U, member, dimension + 1U,
                               name, dimension + 1U);
         }
+        if (f2c_namelist_has_descriptor_state(symbol) &&
+            !f2c_namelist_emit_state_commit(context, unit, symbol, member, depth))
+            context->output.failed = 1;
         return;
     }
     if (pointer_storage(symbol)) {
