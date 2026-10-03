@@ -1,3 +1,14 @@
+## 1.45.0
+
+- Preserved access qualifiers and read-only intent across supported assumed-shape, optional, function, and host-associated array arguments.
+- Corrected noncontiguous whole-array reads, writes, and scalar broadcasts, sharing overlap-safe lowering with array sections and multidimensional designators.
+- Preserved qualified character reads and writes during legal argument copying and copy-back, distinguishing temporary values from source storage.
+- Fixed negative-stride character element addressing with checked signed byte offsets.
+- Unified static contiguity analysis and avoided unnecessary copies for supported simply contiguous column sections.
+- Added source-located semantic errors for forbidden qualified array association, vector arguments, and `CONTIGUOUS` pointer arguments.
+- Corrected logical array assignment across kinds in the shared section and descriptor path.
+- Improved descriptor copying and cleanup for read-only input, reverse strides, empty arrays, zero-length characters, and allocation failures.
+
 ## 1.44.0
 
 - Preserved `VOLATILE/ASYNCHRONOUS` object attributes in typed IR, expression clones, and array views, distinguishing original objects from computed values.
