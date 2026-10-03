@@ -531,6 +531,14 @@ static void test_scalar_result_ownership(void) {
     expression.result_use = F2C_FUNCTION_RESULT_REFERENCE;
     expect(f2c_expression_temporary_release_kind(&expression) == F2C_TEMPORARY_BORROWED_REFERENCE,
            "a pointer reference has no owned-storage cleanup action");
+    expression.result_use = F2C_FUNCTION_RESULT_METADATA;
+    expect(f2c_expression_temporary_release_kind(&expression) == F2C_TEMPORARY_BORROWED_REFERENCE,
+           "a pointer MOLD consumes metadata without reading or owning target values");
+    Symbol scalar_symbol = {0};
+    char *scalar_count = f2c_symbol_element_count(&unit, &scalar_symbol);
+    expect(scalar_count != NULL && strcmp(scalar_count, "1U") == 0,
+           "rank-zero managed storage has one element for cleanup, not an empty count");
+    free(scalar_count);
 }
 
 int main(void) {

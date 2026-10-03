@@ -17,7 +17,7 @@ typedef struct ExpressionTemporaryAssigner {
 
 F2cTemporaryReleaseKind f2c_expression_temporary_release_kind(const F2cExpr *expression) {
     if (f2c_expression_has_pointer_result(expression) &&
-        expression->result_use == F2C_FUNCTION_RESULT_REFERENCE)
+        expression->result_use != F2C_FUNCTION_RESULT_VALUE)
         return F2C_TEMPORARY_BORROWED_REFERENCE;
     if (f2c_expression_has_pointer_result(expression) && expression->rank == 0U &&
         expression->type != TYPE_CHARACTER && expression->type != TYPE_DERIVED)

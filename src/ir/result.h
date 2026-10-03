@@ -13,10 +13,12 @@ typedef enum F2cFunctionResultKind {
     F2C_FUNCTION_RESULT_POINTER
 } F2cFunctionResultKind;
 
-/* A pointer result may supply either a value snapshot or its target identity. */
+/* Pointer results distinguish value snapshots, target identity, and metadata. */
 typedef enum F2cFunctionResultUse {
     F2C_FUNCTION_RESULT_VALUE,
-    F2C_FUNCTION_RESULT_REFERENCE
+    F2C_FUNCTION_RESULT_REFERENCE,
+    /* MOLD consumes descriptor metadata, never the pointer target's value. */
+    F2C_FUNCTION_RESULT_METADATA
 } F2cFunctionResultUse;
 
 F2cFunctionResultKind f2c_unit_result_kind(const Unit *unit);
