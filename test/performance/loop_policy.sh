@@ -32,17 +32,19 @@ for name in loop_policy level3; do
         -c "$root/test/performance/$name.c" -o "$work/$name.o"
 done
 
-for policy in 4 2 auto; do
+for policy in 4 2 auto typed; do
     directory=$work/$policy
     cmake -E make_directory "$directory"
     case "$policy" in
         4) flag='-DF2C_LOOP_UNROLL=_Pragma("GCC unroll 4")' ;;
         2) flag='-DF2C_LOOP_UNROLL=_Pragma("GCC unroll 2")' ;;
         auto) flag='-DF2C_LOOP_UNROLL=' ;;
+        typed) flag='' ;;
     esac
+    if [ -n "$flag" ]; then set -- "$flag"; else set --; fi
     for name in dtrsm dsyrk lsame xerbla; do
         "$cc" -std=c17 -O3 -flto -ffp-contract=fast -DF2C_FP_CONTRACT=1 \
-            "$flag" -DNDEBUG -c "$work/$name.c" -o "$directory/$name-c.o"
+            "$@" -DNDEBUG -c "$work/$name.c" -o "$directory/$name-c.o"
     done
     gfortran -flto "$work/loop_policy.o" "$work/level3.o" \
         "$directory/dtrsm-c.o" "$directory/dsyrk-c.o" \
