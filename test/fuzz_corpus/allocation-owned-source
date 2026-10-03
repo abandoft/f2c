@@ -1,0 +1,13 @@
+0module allocation_results
+contains
+function value() result(output)
+integer,allocatable :: output
+allocate(output)
+output=7
+end function
+end module
+program main
+use allocation_results
+integer,allocatable :: a,b(:)
+allocate(a,b(17),source=value())
+end program
