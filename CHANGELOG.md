@@ -1,3 +1,13 @@
+## 1.49.0
+
+- Support scalar allocatable function results in `SOURCE` allocation models, sharing one materialized value across multiple targets and releasing result storage after allocation failures.
+- Correct dynamic lengths and evaluation of character `SOURCE` concatenations, preserving embedded NUL and zero-length data.
+- Support descriptor-returning character functions in `MOLD`, using returned element lengths and releasing owned result storage.
+- Consume only metadata when pointer function results supply `MOLD`, without reading undefined target values, allocating snapshots, or freeing borrowed targets.
+- Reject disassociated pointer function results used as values or allocation models, preventing zero extents from masking invalid association states.
+- Correct cleanup of derived allocation models and array operand snapshots without introducing extra user-defined `FINAL` calls.
+- Correct storage element counts for allocatable derived scalars, restoring strict compilation and finalization cleanup on procedure and `BLOCK` exit.
+
 ## 1.48.0
 
 - Improved numeric, character, and derived-value use of scalar allocatable function results, fixing invalid storage releases and duplicate cleanup.
