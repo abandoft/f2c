@@ -60,6 +60,11 @@ static void test_runtime_instances(void) {
     expect(scope.count == 1U && output.data != NULL &&
                strstr(output.data, "{owned_value, 1U, 0U}") != NULL,
            "the release-policy catalog is unique but runtime captures are not deduplicated");
+    expect(output.data != NULL &&
+               strstr(output.data, "memcpy(values_replacement, values_retained_inline, "
+                                   "sizeof(values_retained_inline))") != NULL &&
+               strstr(output.data, "values_retained_count * sizeof(*values_retained)") == NULL,
+           "initial growth copies exactly the full inline store, never a later runtime count");
     expect(f2c_result_retention_release(&scope, &release, 0) && release.data != NULL &&
                strstr(release.data, "--values_retained_count") != NULL &&
                strstr(release.data, "free(values_value.data)") != NULL &&
