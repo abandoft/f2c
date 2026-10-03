@@ -8,7 +8,7 @@ fi
 
 FIRST=$1
 SECOND=$2
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 WORK=$ROOT/build/reproducible-toolchains
 
 cmake -E remove_directory "$WORK"
@@ -33,22 +33,32 @@ generate_outputs() {
         -o "$output/procedure.c" --header "$output/procedure.h"
     "$translator" "$ROOT/test/fixtures/deferred_character.f90" \
         -o "$output/deferred.c" --header "$output/deferred.h"
+    for fixture in function_result scalar_result result_identity result_snapshot result_kinds \
+        constructor_result constructor_finalization result_external; do
+        "$translator" "$ROOT/test/fixtures/$fixture.f90" \
+            -o "$output/$fixture.c" --header "$output/$fixture.h"
+    done
     "$translator" --version > "$output/version.txt"
 }
 
 generate_outputs "$FIRST" "$WORK/first"
 generate_outputs "$SECOND" "$WORK/second"
 
-for file in character.c character.h fixed.c fixed.h project.c project.h optional.c optional.h \
-    interface.c interface.h procedure.c procedure.h deferred.c deferred.h version.txt; do
+FILES='character.c character.h fixed.c fixed.h project.c project.h optional.c optional.h
+interface.c interface.h procedure.c procedure.h deferred.c deferred.h version.txt
+function_result.c function_result.h scalar_result.c scalar_result.h
+result_identity.c result_identity.h result_snapshot.c result_snapshot.h result_kinds.c result_kinds.h
+constructor_result.c constructor_result.h constructor_finalization.c constructor_finalization.h
+result_external.c result_external.h'
+for file in $FILES; do
     if ! cmake -E compare_files "$WORK/first/$file" "$WORK/second/$file"; then
         echo "cross-toolchain generated output differs: $file" >&2
         exit 1
     fi
 done
 
-(cd "$WORK/first" && cmake -E sha256sum \
-    character.c character.h fixed.c fixed.h project.c project.h optional.c optional.h \
-    interface.c interface.h procedure.c procedure.h deferred.c deferred.h version.txt) \
+# Deliberate splitting: FILES contains only fixed, repository-owned artifact names.
+# shellcheck disable=SC2086
+(cd "$WORK/first" && cmake -E sha256sum $FILES) \
     > "$WORK/SHA256SUMS"
-echo "cross-toolchain reproducibility: 15/15 outputs are byte-identical"
+echo "cross-toolchain reproducibility: all compared outputs are byte-identical"
