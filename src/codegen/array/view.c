@@ -178,8 +178,7 @@ static int build_array_view(Unit *unit, const F2cExpr *array, char **pointer, ch
             f2c_buffer_printf(&grouped, "(%s)", constructor);
         free(constructor);
         *pointer = f2c_buffer_take(&grouped);
-        f2c_buffer_printf(&extent, "%zuU", array->child_count);
-        *count = f2c_buffer_take(&extent);
+        *count = f2c_array_expression_extent(unit, array, 0U);
         *stride = f2c_strdup("1");
         return *supported && *pointer != NULL && *count != NULL && *stride != NULL;
     }
