@@ -104,6 +104,8 @@ jobs:
         run: sh test/function_result_differential.sh build/numerical/f2c
       - name: Validate constructor result lifetime and finalization contracts
         run: sh test/constructor_result_contract.sh build/numerical/f2c
+      - name: Validate allocation model result lifetime and finalization contracts
+        run: sh test/allocation_result_contract.sh build/numerical/f2c
       - name: Differential-test random intrinsics
         run: sh test/random_intrinsic_differential.sh build/numerical/f2c
       - name: Differential-test time intrinsics
@@ -169,6 +171,8 @@ jobs:
             build/function-result-differential/**/*.out
             build/constructor-result-contract/**/*.c
             build/constructor-result-contract/**/*.out
+            build/allocation-result-contract/**/*.c
+            build/allocation-result-contract/**/*.out
             build/reference-lapack-core/native-results/
             build/reference-lapack-core/differential-reports/
             build/reference-lapack-core/xlintst*.out
