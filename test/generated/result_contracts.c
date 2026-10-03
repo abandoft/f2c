@@ -8,8 +8,34 @@
 static void *allocations[128];
 static size_t allocation_count;
 static int fail_allocations;
+static int fail_reallocations;
 static int mode;
 static int32_t *result_contract_target;
+static void *retained_results[32];
+static size_t retained_result_count;
+static int check_retention;
+
+static int is_live_allocation(const void *storage) {
+    for (size_t index = 0U; index < allocation_count; ++index)
+        if (allocations[index] == storage)
+            return 1;
+    return 0;
+}
+
+static void check_previous_results(void) {
+    if (check_retention)
+        for (size_t index = 0U; index < retained_result_count; ++index)
+            if (!is_live_allocation(retained_results[index]))
+                abort(); /* Earlier loop results must survive until the construct ends. */
+}
+
+static void remember_result(void *storage) {
+    if (check_retention) {
+        if (retained_result_count == sizeof(retained_results) / sizeof(retained_results[0]))
+            abort();
+        retained_results[retained_result_count++] = storage;
+    }
+}
 
 static void *tracked_malloc(size_t size) {
     if (fail_allocations)
@@ -36,11 +62,28 @@ static void tracked_free(void *storage) {
     abort(); /* Reject freeing a borrowed target or a non-base array address. */
 }
 
+static void *tracked_realloc(void *storage, size_t size) {
+    if (fail_reallocations)
+        return NULL;
+    if (storage == NULL)
+        return tracked_malloc(size);
+    for (size_t index = 0U; index < allocation_count; ++index)
+        if (allocations[index] == storage) {
+            void *replacement = realloc(storage, size);
+            if (replacement != NULL)
+                allocations[index] = replacement;
+            return replacement;
+        }
+    abort();
+}
+
 #define malloc tracked_malloc
 #define free tracked_free
+#define realloc tracked_realloc
 #include F2C_RESULT_SOURCE
 #undef malloc
 #undef free
+#undef realloc
 
 f2c_descriptor borrowed_scalar(void) {
     return (f2c_descriptor){.data = result_contract_target,
@@ -50,10 +93,12 @@ f2c_descriptor borrowed_scalar(void) {
 }
 
 f2c_descriptor owned_scalar(void) {
+    check_previous_results();
     int32_t *value = (int32_t *)tracked_malloc(sizeof(*value));
     if (value == NULL)
         abort();
     *value = 73;
+    remember_result(value);
     return (f2c_descriptor){.data = value,
                             .deallocatable = true,
                             .element_size = mode == 2 ? 1U : sizeof(*value),
@@ -71,10 +116,12 @@ f2c_descriptor borrowed_array(void) {
 }
 
 f2c_descriptor owned_character(void) {
+    check_previous_results();
     char *value = (char *)tracked_malloc(3U);
     if (value == NULL)
         abort();
     memcpy(value, "a\0b", 3U);
+    remember_result(value);
     return (f2c_descriptor){.data = value,
                             .deallocatable = mode != 3,
                             .element_size = 1U,
@@ -91,6 +138,8 @@ int main(int argc, char **argv) {
     int32_t scalar = 0;
     int32_t array[3] = {0};
     char characters[5] = {0};
+    int32_t constructor_values[17] = {0};
+    char constructor_characters[15] = {0};
     result_contract_target = (int32_t *)tracked_malloc(5U * sizeof(*result_contract_target));
     if (result_contract_target == NULL)
         return 1;
@@ -111,6 +160,10 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[1], "allocation") == 0) {
             fail_allocations = 1;
             fetch_array(array);
+        } else if (strcmp(argv[1], "retention_growth") == 0) {
+            check_retention = 1;
+            fail_reallocations = 1;
+            fetch_owned_constructor(constructor_values);
         } else
             return 2;
         return 1;
@@ -128,6 +181,25 @@ int main(int argc, char **argv) {
     fetch_character(characters, sizeof(characters));
     if (memcmp(characters, "a\0b  ", 5U) != 0 || allocation_count != 1U)
         return 6;
+    check_retention = 1;
+    fetch_owned_constructor(constructor_values);
+    if (retained_result_count != 17U || allocation_count != 1U)
+        return 8;
+    for (size_t index = 0U; index < 17U; ++index)
+        if (constructor_values[index] != 73)
+            return 9;
+    retained_result_count = 0U;
+    fetch_nested_constructor(constructor_values);
+    if (retained_result_count != 18U || allocation_count != 1U ||
+        constructor_values[0] != 17 * 73 || constructor_values[1] != 73)
+        return 12;
+    retained_result_count = 0U;
+    fetch_character_constructor(constructor_characters, 5U);
+    if (retained_result_count != 3U || allocation_count != 1U)
+        return 10;
+    for (size_t index = 0U; index < 3U; ++index)
+        if (memcmp(constructor_characters + index * 5U, "a\0b  ", 5U) != 0)
+            return 11;
     tracked_free(result_contract_target);
     if (allocation_count != 0U)
         return 7;
