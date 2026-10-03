@@ -1,0 +1,16 @@
+0module owned_constructor
+contains
+function value(n) result(output)
+integer, intent(in) :: n
+integer, allocatable :: output
+allocate(output)
+output=n
+end function
+end module
+program test
+use owned_constructor
+integer, allocatable :: values(:)
+integer :: i
+values=[(value(i),i=1,17)]
+values=[sum([(value(i),i=1,17)]),value(3)]
+end program

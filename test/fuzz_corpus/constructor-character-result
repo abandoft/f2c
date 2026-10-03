@@ -1,0 +1,13 @@
+0module character_constructor
+contains
+function value() result(output)
+character(len=:), allocatable :: output
+output='a'//achar(0)//'b'
+end function
+end module
+program test
+use character_constructor
+character(len=:), allocatable :: values(:)
+integer :: i
+values=[(value(),i=1,17)]
+end program
