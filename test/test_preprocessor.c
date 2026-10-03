@@ -752,6 +752,68 @@ static void test_resource_limits(void) {
     f2c_result_free(&result);
 }
 
+static void test_condition_expression_depth(void) {
+    for (size_t kind = 0U; kind < 4U; ++kind) {
+        for (size_t depth = 4U; depth <= 5U; ++depth) {
+            TestBuffer source = {0};
+            DiagnosticCapture capture = {0};
+            F2cConfig config = config_with_definitions(NULL, 0U, &capture);
+            config.limits.max_parse_depth = 4U;
+            append(&source, kind == 3U ? "#if 0 && " : "#if ");
+            for (size_t index = 0U; index < depth; ++index)
+                append(&source, kind == 1U ? "!" : kind == 2U ? "1 ? 1 : " : "(");
+            append(&source, "1");
+            if (kind == 0U || kind == 3U)
+                for (size_t index = 0U; index < depth; ++index)
+                    append(&source, ")");
+            append(&source, "\n#endif\nsubroutine depth_case()\nend subroutine depth_case\n");
+            F2cResult result = translate(source.data, &config);
+            if (depth == 4U) {
+                expect(result.error_count == 0U,
+                       "parenthesis, unary and ternary recursion accept the exact depth budget");
+            } else {
+                expect(result.error_count != 0U && result.code == NULL &&
+                           capture.first.code == F2C_DIAGNOSTIC_RESOURCE_LIMIT &&
+                           capture.first.begin.line == 1U && capture.first.begin.column >= 5U,
+                       "recursive condition edges report a located resource limit, even when "
+                       "unevaluated");
+                expect_contains(result.diagnostics, "condition expression depth limit",
+                                "the depth diagnostic identifies conditional expression recursion");
+            }
+            f2c_result_free(&result);
+            free(source.data);
+        }
+    }
+    TestBuffer deep = {0};
+    append(&deep, "#if ");
+    for (size_t index = 0U; index <= F2C_DEFAULT_MAX_PARSE_DEPTH; ++index)
+        append(&deep, "(");
+    append(&deep, "1");
+    for (size_t index = 0U; index <= F2C_DEFAULT_MAX_PARSE_DEPTH; ++index)
+        append(&deep, ")");
+    append(&deep, "\n#endif\n");
+    F2cResult result = translate(deep.data, NULL);
+    expect(result.error_count != 0U && result.code == NULL,
+           "default budgets stop deeply nested fuzz input before stack exhaustion");
+    expect_contains(result.diagnostics, "condition expression depth limit",
+                    "default depth exhaustion is a bounded diagnostic rather than a crash");
+    f2c_result_free(&result);
+    free(deep.data);
+
+    TestBuffer flat = {0};
+    F2cConfig config = config_with_definitions(NULL, 0U, NULL);
+    config.limits.max_parse_depth = 1U;
+    append(&flat, "#if 1");
+    for (size_t index = 0U; index < 1000U; ++index)
+        append(&flat, " && 1");
+    append(&flat, "\n#endif\nsubroutine flat_case()\nend subroutine flat_case\n");
+    result = translate(flat.data, &config);
+    expect(result.error_count == 0U,
+           "iterative binary chains do not consume recursive expression depth");
+    f2c_result_free(&result);
+    free(flat.data);
+}
+
 static void test_invalid_configuration(void) {
     static const F2cPreprocessorDefinition invalid_name[] = {{"1INVALID", "1"}};
     static const F2cPreprocessorDefinition multiline_value[] = {{"INVALID", "1\n2"}};
@@ -816,6 +878,7 @@ int main(void) {
     test_expansion_and_spelling_locations();
     test_malformed_conditions();
     test_resource_limits();
+    test_condition_expression_depth();
     test_invalid_configuration();
     test_bom_crlf_and_final_line();
     if (failures != 0)
