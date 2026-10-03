@@ -240,6 +240,48 @@ static void test_owned_array_temporary_flow(void) {
     free(context.diagnostics.data);
 }
 
+static void test_flat_constructor_storage(void) {
+    Context context = {0};
+    Unit unit = {0};
+    F2cStatement statement = {0};
+    F2cExpr constructor = {0};
+    F2cExpr *children[] = {f2c_expr_new_integer_constant(1), f2c_expr_new_integer_constant(2)};
+    F2cArrayCleanupList cleanup = {0};
+    Buffer prelude = {0};
+    size_t temporary = 0U;
+    unit.context = &context;
+    unit.phase = F2C_UNIT_TYPED_IR;
+    unit.statements = &statement;
+    unit.statement_count = 1U;
+    constructor.kind = F2C_EXPR_ARRAY_CONSTRUCTOR;
+    constructor.type = TYPE_INTEGER;
+    constructor.type_kind = f2c_default_kind(TYPE_INTEGER);
+    constructor.rank = 1U;
+    constructor.children = children;
+    constructor.child_count = 2U;
+    statement.kind = F2C_STMT_ASSIGNMENT;
+    statement.right = &constructor;
+    expect(children[0] != NULL && children[1] != NULL &&
+               f2c_plan_expression_lifetimes(&context, &unit) &&
+               f2c_array_materialize_constructors(&context, &unit, &constructor, 0U, "condition",
+                                                  &temporary, &prelude, &cleanup, 0),
+           "a flat constructor is lowered from its typed lifetime plan");
+    expect(prelude.data != NULL &&
+               strstr(prelude.data,
+                      "const int32_t f2c_array_condition_constructor_0_0[2] = {1, 2};") != NULL,
+           "flat constructor snapshots use explicitly initialized named array storage");
+    expect(cleanup.count == 0U,
+           "fixed flat constructor storage needs neither heap allocation nor runtime retention");
+    f2c_array_cleanup_clear(&cleanup);
+    f2c_codegen_expression_free(&unit, children[0]);
+    f2c_codegen_expression_free(&unit, children[1]);
+    f2c_lowering_clear(&context);
+    free(prelude.data);
+    free(unit.owned_temporaries);
+    free(statement.temporary_plan.owned_temporaries);
+    free(context.diagnostics.data);
+}
+
 static void test_expression_call_lowering_is_immutable(void) {
     F2cExpr inner;
     F2cExpr outer;
@@ -497,6 +539,7 @@ int main(void) {
     test_statement_function_plan();
     test_emitter_rejects_unplanned_ir();
     test_owned_array_temporary_flow();
+    test_flat_constructor_storage();
     test_expression_call_lowering_is_immutable();
     test_statement_call_lowering_is_immutable();
     test_reduction_designator_ownership();
