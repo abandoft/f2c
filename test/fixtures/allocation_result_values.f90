@@ -25,6 +25,11 @@ contains
     allocate(value)
     value = cmplx(3.0d0, -2.0d0, kind=8)
   end function
+  function single_complex_value() result(value)
+    complex(kind=4), allocatable :: value
+    allocate(value)
+    value = cmplx(0.25, -1.0, kind=4)
+  end function
   function logical_value() result(value)
     logical, allocatable :: value
     allocate(value)
@@ -49,6 +54,7 @@ program allocation_result_values
   integer(kind=8),allocatable :: wide
   real(kind=8),allocatable :: real_scalar
   complex(kind=8),allocatable :: complex_scalar
+  complex(kind=4),allocatable :: complex_array(:), complex_copy(:)
   logical,allocatable :: logical_array(:)
   character(len=:),allocatable :: text, empty, molded
   type(item),allocatable :: first, second
@@ -60,6 +66,10 @@ program allocation_result_values
   if (abs(real_scalar - 0.125d0) > epsilon(real_scalar)) stop 3
   allocate(complex_scalar, source=complex_value())
   if (abs(complex_scalar - cmplx(3.0d0,-2.0d0,kind=8)) > epsilon(real_scalar)) stop 4
+  allocate(complex_array(3), source=single_complex_value())
+  if (any(abs(complex_array - cmplx(0.25,-1.0,kind=4)) > epsilon(0.0))) stop 11
+  allocate(complex_copy, source=complex_array)
+  if (any(abs(complex_copy - complex_array) > epsilon(0.0))) stop 12
   allocate(logical_array(4), source=logical_value())
   if (.not.all(logical_array)) stop 5
   allocate(text, source=word(2) // achar(0) // word(3))
@@ -73,5 +83,6 @@ program allocation_result_values
   first%values(1) = 99
   if (second%values(1) /= 2 .or. second%text /= 'a' // achar(0) // 'b') stop 10
   deallocate(bytes, wide, real_scalar, complex_scalar, logical_array, text, empty, molded, first, second)
+  deallocate(complex_array, complex_copy)
   print '(A)', 'allocation result values passed'
 end program
