@@ -121,6 +121,7 @@ set(
     src/codegen/codegen.h
     src/codegen/data.c
     src/codegen/descriptor/association.c
+    src/codegen/descriptor/access.c
     src/codegen/descriptor/designator.c
     src/codegen/descriptor/materialize.c
     src/codegen/descriptor/private.h

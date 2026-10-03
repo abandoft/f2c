@@ -1,4 +1,5 @@
 #include "codegen/descriptor/private.h"
+#include "codegen/lowering/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -131,6 +132,9 @@ int f2c_descriptor_association_view(Buffer *prelude, Unit *unit, const F2cExpr *
     symbol = expression->symbol;
     selector_offset = f2c_descriptor_selector_offset(expression);
     memset(view, 0, sizeof(*view));
+    view->storage_qualifiers = f2c_lowering_storage_qualifiers(unit, expression);
+    view->readonly_storage = f2c_lowering_readonly_storage(unit, expression) ||
+                             f2c_descriptor_readonly_storage(expression);
     if ((expression->kind != F2C_EXPR_ARRAY_REFERENCE && expression->kind != F2C_EXPR_COMPONENT) ||
         expression->child_count != symbol->rank + selector_offset)
         return 0;

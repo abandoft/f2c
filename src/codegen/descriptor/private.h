@@ -10,7 +10,15 @@ typedef struct F2cDescriptorView {
     char *extent[F2C_MAX_RANK];
     char *stride[F2C_MAX_RANK];
     size_t rank;
+    unsigned int storage_qualifiers;
+    int readonly_storage;
 } F2cDescriptorView;
+
+/* C address qualification is independent of Fortran object identity and intent.
+ * A materialized value owns ordinary storage; an alias view keeps its source's
+ * qualification. No cast that drops a qualifier is needed at transport. */
+const char *f2c_descriptor_address_member(unsigned int qualifiers, int readonly_storage);
+int f2c_descriptor_readonly_storage(const F2cExpr *expression);
 
 int f2c_descriptor_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView *view);
 char *f2c_descriptor_source_stride(Unit *unit, const Symbol *symbol, size_t dimension);

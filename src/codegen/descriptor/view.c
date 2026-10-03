@@ -183,6 +183,10 @@ int f2c_descriptor_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView
     if (unit == NULL || expression == NULL || view == NULL)
         return 0;
     memset(view, 0, sizeof(*view));
+    view->storage_qualifiers = f2c_lowering_storage_qualifiers(unit, expression);
+    view->readonly_storage = f2c_lowering_is_array_temporary(unit, expression)
+                                 ? f2c_lowering_readonly_storage(unit, expression)
+                                 : f2c_descriptor_readonly_storage(expression);
     if (f2c_lowering_is_array_temporary(unit, expression))
         result = lowered_array_view(unit, expression, view);
     else if (expression->symbol == NULL)
