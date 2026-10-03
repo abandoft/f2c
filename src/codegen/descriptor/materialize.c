@@ -302,9 +302,12 @@ int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit
                                      count, character_length, identifier, depth, view))
         goto failed;
     if (expression->type == TYPE_DERIVED) {
+        /* The contiguous bridge is compiler-owned storage, not a separate
+         * Fortran object. Copy-out handles any language assignment to the
+         * actual; discarding this deep snapshot must not invoke FINAL again. */
         indent(cleanup, depth);
-        f2c_buffer_printf(cleanup, "f2c_destroy_array_%s(%s, %s, %zuU);\n",
-                          expression->derived_type->c_name, view->data, count, view->rank);
+        f2c_buffer_printf(cleanup, "f2c_discard_array_%s(%s, %s);\n",
+                          expression->derived_type->c_name, view->data, count);
     }
     indent(cleanup, depth);
     f2c_buffer_printf(cleanup, "free(%s);\n", view->data);
