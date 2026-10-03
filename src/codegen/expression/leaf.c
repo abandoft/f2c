@@ -1,4 +1,5 @@
 #include "codegen/expression/private.h"
+#include "codegen/storage/private.h"
 
 #include <ctype.h>
 #include <stdint.h>
@@ -164,7 +165,13 @@ char *f2c_expression_name(Unit *unit, const F2cExpr *expression, int *supported)
     if (symbol != NULL && (symbol->pointer || symbol->allocatable) && symbol->rank == 0U &&
         symbol->type != TYPE_CHARACTER && !symbol->external) {
         Buffer dereference = {0};
-        f2c_buffer_printf(&dereference, "(*%s)", f2c_symbol_c_name(unit, symbol));
+        char *data = f2c_storage_symbol_data(unit, symbol);
+        if (data == NULL) {
+            *supported = 0;
+            return NULL;
+        }
+        f2c_buffer_printf(&dereference, "(*(%s))", data);
+        free(data);
         return f2c_buffer_take(&dereference);
     }
     if (symbol != NULL && symbol->argument && symbol->rank == 0U && !symbol->external) {
@@ -175,6 +182,8 @@ char *f2c_expression_name(Unit *unit, const F2cExpr *expression, int *supported)
     if (unit->kind == UNIT_FUNCTION && unit->result_name != NULL && expression->text != NULL &&
         strcmp(expression->text, unit->result_name) == 0)
         return f2c_strdup("f2c_result");
+    if (symbol != NULL && !symbol->external && (symbol->pointer || symbol->allocatable))
+        return f2c_storage_symbol_data(unit, symbol);
     return f2c_strdup(symbol != NULL ? f2c_symbol_c_name(unit, symbol)
                                      : (expression->text != NULL ? expression->text : "0"));
 }

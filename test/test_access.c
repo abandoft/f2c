@@ -5,6 +5,7 @@
 #include "codegen/expression/private.h"
 #include "codegen/lowering/private.h"
 #include "internal/f2c.h"
+#include "ir/storage.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,8 +61,11 @@ static void expect_scoped_access(Unit *unit, const char *source) {
     int supported = 1;
     char *access = f2c_emit_expression_ast(unit, expression, &supported);
     char *storage = f2c_expression_storage_designator(unit, expression, &supported);
+    const F2cStorageReference reference = f2c_ir_storage_reference(expression);
+    const int live_state = (reference.state_qualifiers & F2C_STORAGE_VOLATILE) != 0U;
     expect(supported && access != NULL && storage != NULL && strstr(access, "volatile ") != NULL &&
-               strstr(storage, "volatile ") == NULL,
+               (live_state ? strstr(storage, "const volatile") != NULL
+                           : strstr(storage, "volatile ") == NULL),
            "scoped reads preserve qualification independently of physical argument addresses");
     free(access);
     free(storage);

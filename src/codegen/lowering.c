@@ -1,3 +1,4 @@
+#include "codegen/storage/private.h"
 #include "internal/f2c.h"
 
 #include <ctype.h>
@@ -263,8 +264,7 @@ char *f2c_symbol_dimension_lower(Unit *unit, const Symbol *symbol, size_t dimens
         return f2c_buffer_take(&result);
     }
     if (f2c_symbol_uses_descriptor(symbol)) {
-        f2c_buffer_printf(&result, "%s_lower_%zu", f2c_symbol_c_name(unit, symbol), dimension + 1U);
-        return f2c_buffer_take(&result);
+        return f2c_storage_symbol_property(unit, symbol, F2C_OBJECT_LOWER, dimension);
     }
     return f2c_emit_typed_expression(unit, symbol->dimensions[dimension].lower_expression);
 }
@@ -282,9 +282,16 @@ char *f2c_symbol_dimension_upper(Unit *unit, const Symbol *symbol, size_t dimens
         return f2c_buffer_take(&result);
     }
     if (f2c_symbol_uses_descriptor(symbol)) {
-        f2c_buffer_printf(&result, "(%s_lower_%zu + %s_extent_%zu - 1)",
-                          f2c_symbol_c_name(unit, symbol), dimension + 1U,
-                          f2c_symbol_c_name(unit, symbol), dimension + 1U);
+        char *lower = f2c_symbol_dimension_lower(unit, symbol, dimension);
+        char *extent = f2c_symbol_dimension_extent(unit, symbol, dimension);
+        if (lower == NULL || extent == NULL) {
+            free(lower);
+            free(extent);
+            return NULL;
+        }
+        f2c_buffer_printf(&result, "((int64_t)(%s) + (int64_t)(%s) - INT64_C(1))", lower, extent);
+        free(lower);
+        free(extent);
         return f2c_buffer_take(&result);
     }
     return f2c_emit_typed_expression(unit, symbol->dimensions[dimension].upper_expression);
@@ -313,9 +320,7 @@ char *f2c_symbol_dimension_extent(Unit *unit, const Symbol *symbol, size_t dimen
         return f2c_buffer_take(&result);
     }
     if (f2c_symbol_uses_descriptor(symbol)) {
-        f2c_buffer_printf(&result, "%s_extent_%zu", f2c_symbol_c_name(unit, symbol),
-                          dimension + 1U);
-        return f2c_buffer_take(&result);
+        return f2c_storage_symbol_property(unit, symbol, F2C_OBJECT_EXTENT, dimension);
     }
     lower = f2c_symbol_dimension_lower(unit, symbol, dimension);
     upper = f2c_symbol_dimension_upper(unit, symbol, dimension);
@@ -351,8 +356,15 @@ static char *emit_contiguous_array_offset(Unit *unit, Symbol *symbol, char **ind
             for (j = 0U; j < i; ++j) {
                 int64_t lower_value;
                 if (f2c_symbol_uses_descriptor(symbol)) {
-                    f2c_buffer_printf(&result, "%s%s_extent_%zu", j == 0U ? "" : " * ",
-                                      f2c_symbol_c_name(unit, symbol), j + 1U);
+                    char *prior_extent = f2c_symbol_dimension_extent(unit, symbol, j);
+                    if (prior_extent == NULL) {
+                        free(lower);
+                        free(extent);
+                        free(result.data);
+                        return NULL;
+                    }
+                    f2c_buffer_printf(&result, "%s(%s)", j == 0U ? "" : " * ", prior_extent);
+                    free(prior_extent);
                     continue;
                 }
                 char *lo_c;
@@ -500,11 +512,16 @@ static char *emit_array_reference(Unit *unit, Symbol *symbol, char **indices, si
     size_t i;
     if (symbol->equivalence_unaligned)
         return f2c_emit_unaligned_load(unit, symbol, indices, count);
-    if (!physical_storage && symbol->volatile_entity && symbol->type != TYPE_CHARACTER)
-        f2c_buffer_printf(&result, "((volatile %s *)%s)[", f2c_symbol_c_type(symbol),
-                          f2c_symbol_c_name(unit, symbol));
-    else
-        f2c_buffer_printf(&result, "%s[", f2c_symbol_c_name(unit, symbol));
+    {
+        char *data = f2c_storage_symbol_data(unit, symbol);
+        if (data == NULL)
+            return NULL;
+        if (!physical_storage && symbol->volatile_entity && symbol->type != TYPE_CHARACTER)
+            f2c_buffer_printf(&result, "((volatile %s *)%s)[", f2c_symbol_c_type(symbol), data);
+        else
+            f2c_buffer_printf(&result, "%s[", data);
+        free(data);
+    }
     if (symbol->type == TYPE_CHARACTER) {
         character_length = f2c_symbol_character_length(unit, symbol);
         if (character_length == NULL)
@@ -516,17 +533,38 @@ static char *emit_array_reference(Unit *unit, Symbol *symbol, char **indices, si
         for (i = 0U; i < count; ++i)
             f2c_buffer_printf(&result, "%s(int64_t)(%s)", i == 0U ? "" : ", ", indices[i]);
         f2c_buffer_append(&result, "}, (const int64_t[]){");
-        for (i = 0U; i < count; ++i)
-            f2c_buffer_printf(&result, "%s(int64_t)%s_lower_%zu", i == 0U ? "" : ", ",
-                              f2c_symbol_c_name(unit, symbol), i + 1U);
+        for (i = 0U; i < count; ++i) {
+            char *lower = f2c_symbol_dimension_lower(unit, symbol, i);
+            if (lower == NULL) {
+                free(f2c_buffer_take(&result));
+                free(character_length);
+                return NULL;
+            }
+            f2c_buffer_printf(&result, "%s(int64_t)(%s)", i == 0U ? "" : ", ", lower);
+            free(lower);
+        }
         f2c_buffer_append(&result, "}, (const size_t[]){");
-        for (i = 0U; i < count; ++i)
-            f2c_buffer_printf(&result, "%s(size_t)%s_extent_%zu", i == 0U ? "" : ", ",
-                              f2c_symbol_c_name(unit, symbol), i + 1U);
+        for (i = 0U; i < count; ++i) {
+            char *extent = f2c_symbol_dimension_extent(unit, symbol, i);
+            if (extent == NULL) {
+                free(f2c_buffer_take(&result));
+                free(character_length);
+                return NULL;
+            }
+            f2c_buffer_printf(&result, "%s(size_t)(%s)", i == 0U ? "" : ", ", extent);
+            free(extent);
+        }
         f2c_buffer_append(&result, "}, (const ptrdiff_t[]){");
-        for (i = 0U; i < count; ++i)
-            f2c_buffer_printf(&result, "%s%s_stride_%zu", i == 0U ? "" : ", ",
-                              f2c_symbol_c_name(unit, symbol), i + 1U);
+        for (i = 0U; i < count; ++i) {
+            char *stride = f2c_storage_symbol_property(unit, symbol, F2C_OBJECT_STRIDE, i);
+            if (stride == NULL) {
+                free(f2c_buffer_take(&result));
+                free(character_length);
+                return NULL;
+            }
+            f2c_buffer_printf(&result, "%s(%s)", i == 0U ? "" : ", ", stride);
+            free(stride);
+        }
         f2c_buffer_append(&result, "})");
         if (character_length != NULL)
             f2c_buffer_printf(&result, "), (size_t)(%s))", character_length);
