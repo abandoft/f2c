@@ -11,7 +11,6 @@ CC=${CC:-cc}
 FC=${FC:-gfortran}
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 WORK=$ROOT/build/function-result-differential
-SOURCE=$ROOT/test/fixtures/function_result.f90
 
 if ! command -v "$CC" >/dev/null 2>&1; then
     echo "C compiler not found: $CC" >&2
@@ -25,29 +24,57 @@ fi
 cmake -E remove_directory "$WORK"
 cmake -E make_directory "$WORK"
 
-"$F2C" "$SOURCE" -o "$WORK/generated.c"
-"$CC" -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
-    -Wstrict-prototypes -Wmissing-prototypes -Werror "$WORK/generated.c" -lm \
-    -o "$WORK/generated"
+for CASE in function_result scalar_result result_identity result_snapshot result_kinds; do
+    SOURCE=$ROOT/test/fixtures/$CASE.f90
+    CASE_WORK=$WORK/$CASE
+    cmake -E make_directory "$CASE_WORK"
+    "$F2C" "$SOURCE" -o "$CASE_WORK/generated.c"
+    "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -Wno-surprising \
+        -Wno-aggressive-loop-optimizations -J"$CASE_WORK" -I"$CASE_WORK" "$SOURCE" \
+        -o "$CASE_WORK/native"
+    "$CASE_WORK/native" >"$CASE_WORK/native.out"
+    for OPTIMIZATION in 0 2 3; do
+        "$CC" -std=c17 -O"$OPTIMIZATION" -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+            -Wstrict-prototypes -Wmissing-prototypes -Werror "$CASE_WORK/generated.c" -lm \
+            -o "$CASE_WORK/generated-O$OPTIMIZATION"
+        "$CASE_WORK/generated-O$OPTIMIZATION" >"$CASE_WORK/generated-O$OPTIMIZATION.out"
+        if ! cmp -s "$CASE_WORK/generated-O$OPTIMIZATION.out" "$CASE_WORK/native.out"; then
+            echo "$CASE: generated/native result mismatch at O$OPTIMIZATION" >&2
+            diff -u "$CASE_WORK/native.out" "$CASE_WORK/generated-O$OPTIMIZATION.out" >&2 || true
+            exit 1
+        fi
+    done
+    "$CC" -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+        -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
+        -fno-sanitize-recover=all "$CASE_WORK/generated.c" -lm -o "$CASE_WORK/sanitized"
+    "$CASE_WORK/sanitized" >"$CASE_WORK/sanitized.out"
+    if ! cmp -s "$CASE_WORK/native.out" "$CASE_WORK/sanitized.out"; then
+        echo "$CASE: native/sanitized result mismatch" >&2
+        diff -u "$CASE_WORK/native.out" "$CASE_WORK/sanitized.out" >&2 || true
+        exit 1
+    fi
+done
+
+"$F2C" "$ROOT/test/fixtures/result_external.f90" -o "$WORK/external.c"
+for OPTIMIZATION in 0 2 3; do
+    "$CC" -std=c17 -O"$OPTIMIZATION" -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+        -Wstrict-prototypes -Wmissing-prototypes -Werror \
+        -DF2C_RESULT_SOURCE="\"$WORK/external.c\"" \
+        "$ROOT/test/generated/result_contracts.c" -lm -o "$WORK/external-O$OPTIMIZATION"
+    "$WORK/external-O$OPTIMIZATION"
+    for CONTRACT in rank size ownership allocation; do
+        STATUS=0
+        "$WORK/external-O$OPTIMIZATION" "$CONTRACT" || STATUS=$?
+        if [ "$STATUS" -ne 99 ]; then
+            echo "result contract failed to abort: $CONTRACT ($STATUS)" >&2
+            exit 1
+        fi
+    done
+done
 "$CC" -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
     -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
-    -fno-sanitize-recover=all "$WORK/generated.c" -lm -o "$WORK/generated-sanitized"
-"$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -Wno-surprising \
-    -Wno-aggressive-loop-optimizations -J"$WORK" -I"$WORK" "$SOURCE" -o "$WORK/native"
-
-"$WORK/generated" >"$WORK/generated.out"
-"$WORK/generated-sanitized" >"$WORK/generated-sanitized.out"
-"$WORK/native" >"$WORK/native.out"
-
-if ! cmp -s "$WORK/generated.out" "$WORK/native.out"; then
-    echo "generated/native function-result behavior mismatch" >&2
-    diff -u "$WORK/native.out" "$WORK/generated.out" >&2 || true
-    exit 1
-fi
-if ! cmp -s "$WORK/generated.out" "$WORK/generated-sanitized.out"; then
-    echo "optimized/sanitized function-result output mismatch" >&2
-    diff -u "$WORK/generated.out" "$WORK/generated-sanitized.out" >&2 || true
-    exit 1
-fi
+    -fno-sanitize-recover=all -DF2C_RESULT_SOURCE="\"$WORK/external.c\"" \
+    "$ROOT/test/generated/result_contracts.c" -lm -o "$WORK/external-sanitized"
+"$WORK/external-sanitized"
 
 echo "function-result differential and sanitizer validation passed"
