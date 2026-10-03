@@ -114,81 +114,82 @@ static int run_case(const Level1Case *test, double *x, double *y, double *native
             continue;
         for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
             const int generated_outer = f2c_benchmark_generated_is_outer(round);
+            double *workspace = f2c_benchmark_use_second_workspace(round) ? native : x;
             double generated_first;
             double generated_second;
             double fortran_first;
             double fortran_second;
             if (kernel == 0U) {
                 if (generated_outer) {
-                    initialize(x, count, 7);
+                    initialize(workspace, count, 7);
                     initialize(y, count, 31);
-                    generated_first = measure_ddot(ddot, test, x, y);
-                    initialize(native, count, 7);
+                    generated_first = measure_ddot(ddot, test, workspace, y);
+                    initialize(workspace, count, 7);
                     initialize(y, count, 31);
-                    fortran_first = measure_ddot(ddot_, test, native, y);
-                    initialize(native, count, 7);
+                    fortran_first = measure_ddot(ddot_, test, workspace, y);
+                    initialize(workspace, count, 7);
                     initialize(y, count, 31);
-                    fortran_second = measure_ddot(ddot_, test, native, y);
-                    initialize(x, count, 7);
+                    fortran_second = measure_ddot(ddot_, test, workspace, y);
+                    initialize(workspace, count, 7);
                     initialize(y, count, 31);
-                    generated_second = measure_ddot(ddot, test, x, y);
+                    generated_second = measure_ddot(ddot, test, workspace, y);
                 } else {
-                    initialize(native, count, 7);
+                    initialize(workspace, count, 7);
                     initialize(y, count, 31);
-                    fortran_first = measure_ddot(ddot_, test, native, y);
-                    initialize(x, count, 7);
+                    fortran_first = measure_ddot(ddot_, test, workspace, y);
+                    initialize(workspace, count, 7);
                     initialize(y, count, 31);
-                    generated_first = measure_ddot(ddot, test, x, y);
-                    initialize(x, count, 7);
+                    generated_first = measure_ddot(ddot, test, workspace, y);
+                    initialize(workspace, count, 7);
                     initialize(y, count, 31);
-                    generated_second = measure_ddot(ddot, test, x, y);
-                    initialize(native, count, 7);
+                    generated_second = measure_ddot(ddot, test, workspace, y);
+                    initialize(workspace, count, 7);
                     initialize(y, count, 31);
-                    fortran_second = measure_ddot(ddot_, test, native, y);
+                    fortran_second = measure_ddot(ddot_, test, workspace, y);
                 }
             } else if (kernel == 1U) {
                 if (generated_outer) {
-                    initialize(x, count, 7);
-                    generated_first = measure_dnrm2(dnrm2, test, x);
-                    initialize(native, count, 7);
-                    fortran_first = measure_dnrm2(dnrm2_, test, native);
-                    initialize(native, count, 7);
-                    fortran_second = measure_dnrm2(dnrm2_, test, native);
-                    initialize(x, count, 7);
-                    generated_second = measure_dnrm2(dnrm2, test, x);
+                    initialize(workspace, count, 7);
+                    generated_first = measure_dnrm2(dnrm2, test, workspace);
+                    initialize(workspace, count, 7);
+                    fortran_first = measure_dnrm2(dnrm2_, test, workspace);
+                    initialize(workspace, count, 7);
+                    fortran_second = measure_dnrm2(dnrm2_, test, workspace);
+                    initialize(workspace, count, 7);
+                    generated_second = measure_dnrm2(dnrm2, test, workspace);
                 } else {
-                    initialize(native, count, 7);
-                    fortran_first = measure_dnrm2(dnrm2_, test, native);
-                    initialize(x, count, 7);
-                    generated_first = measure_dnrm2(dnrm2, test, x);
-                    initialize(x, count, 7);
-                    generated_second = measure_dnrm2(dnrm2, test, x);
-                    initialize(native, count, 7);
-                    fortran_second = measure_dnrm2(dnrm2_, test, native);
+                    initialize(workspace, count, 7);
+                    fortran_first = measure_dnrm2(dnrm2_, test, workspace);
+                    initialize(workspace, count, 7);
+                    generated_first = measure_dnrm2(dnrm2, test, workspace);
+                    initialize(workspace, count, 7);
+                    generated_second = measure_dnrm2(dnrm2, test, workspace);
+                    initialize(workspace, count, 7);
+                    fortran_second = measure_dnrm2(dnrm2_, test, workspace);
                 }
             } else {
                 if (generated_outer) {
-                    initialize(x, count, 7);
-                    generated_first = measure_dscal(dscal, test, x);
-                    initialize(native, count, 7);
-                    fortran_first = measure_dscal(dscal_, test, native);
-                    initialize(native, count, 7);
-                    fortran_second = measure_dscal(dscal_, test, native);
-                    initialize(x, count, 7);
-                    generated_second = measure_dscal(dscal, test, x);
+                    initialize(workspace, count, 7);
+                    generated_first = measure_dscal(dscal, test, workspace);
+                    initialize(workspace, count, 7);
+                    fortran_first = measure_dscal(dscal_, test, workspace);
+                    initialize(workspace, count, 7);
+                    fortran_second = measure_dscal(dscal_, test, workspace);
+                    initialize(workspace, count, 7);
+                    generated_second = measure_dscal(dscal, test, workspace);
                 } else {
-                    initialize(native, count, 7);
-                    fortran_first = measure_dscal(dscal_, test, native);
-                    initialize(x, count, 7);
-                    generated_first = measure_dscal(dscal, test, x);
-                    initialize(x, count, 7);
-                    generated_second = measure_dscal(dscal, test, x);
-                    initialize(native, count, 7);
-                    fortran_second = measure_dscal(dscal_, test, native);
+                    initialize(workspace, count, 7);
+                    fortran_first = measure_dscal(dscal_, test, workspace);
+                    initialize(workspace, count, 7);
+                    generated_first = measure_dscal(dscal, test, workspace);
+                    initialize(workspace, count, 7);
+                    generated_second = measure_dscal(dscal, test, workspace);
+                    initialize(workspace, count, 7);
+                    fortran_second = measure_dscal(dscal_, test, workspace);
                 }
             }
-            samples[round] = f2c_benchmark_paired_sample(
-                round, generated_first, fortran_first, fortran_second, generated_second);
+            samples[round] = f2c_benchmark_paired_sample(round, generated_first, fortran_first,
+                                                         fortran_second, generated_second);
         }
         passed = f2c_benchmark_report(kernels[kernel], description, samples,
                                       sizeof(samples) / sizeof(samples[0])) &&
