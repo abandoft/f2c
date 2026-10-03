@@ -13,7 +13,7 @@ cmake -E make_directory "$WORK"
 # Keep the complete original evaluation and FINAL assertions. These contracts
 # are separate from the raw-source native differential matrix.
 for CASE in allocation_result allocation_result_finalization allocation_controls \
-    allocation_control_values allocation_control_finalization allocation_control_errors \
+    allocation_control_values allocation_control_bounds allocation_control_finalization allocation_control_errors \
     allocation_control_unaligned allocation_control_pointers allocation_control_names; do
     CASE_WORK=$WORK/$CASE
     cmake -E make_directory "$CASE_WORK"
