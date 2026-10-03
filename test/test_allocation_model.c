@@ -46,7 +46,7 @@ static void test_expression_model_lowering(void) {
     expect_contains(result.code, "f2c_allocate_model_4_extent_1",
                     "the allocation model snapshots shape before allocating any target");
     expect_contains(result.code, "bool f2c_alloc_statement_ok",
-                    "multiple targets share one transactional statement state");
+                    "multiple targets share statement-level success tracking");
     expect(result.code == NULL ||
                strstr(result.code, "currently requires a whole named array") == NULL,
            "no legacy whole-name restriction leaks into generated C");
@@ -93,8 +93,12 @@ static void test_runtime_shape_guard(void) {
            "dynamic explicit shapes retain a runtime SOURCE conformance guard");
     expect_contains(result.code, "if (f2c_alloc_extent_1 != (size_t)(f2c_allocate_model_",
                     "shape mismatch is detected before storage is committed");
-    expect_contains(result.code, "f2c_store_message(message, (size_t)(32), \"allocation failed\")",
-                    "a guarded mismatch is reported through STAT and ERRMSG");
+    expect_contains(result.code, "_errmsg = message;",
+                    "ERRMSG destination is cached before allocation");
+    expect_contains(result.code, "_errmsg_length = (size_t)(32);",
+                    "ERRMSG length is cached before allocation");
+    expect_contains(result.code, "\"allocation failed\");",
+                    "a guarded mismatch is reported through the cached ERRMSG destination");
     f2c_result_free(&result);
 }
 
@@ -130,7 +134,9 @@ static void test_descriptor_scalar_source(void) {
                     "the model captures one descriptor rather than casting it to a scalar");
     expect_contains(result.code, "_scalar = (int32_t)((*f2c_array_allocate_function_",
                     "SOURCE snapshots the descriptor value once before initializing targets");
-    expect_contains(result.code, "free(f2c_array_allocate_function_",
+    expect_contains(result.code, "{f2c_array_allocate_function_",
+                    "owned SOURCE storage is captured by the statement retention frame");
+    expect_contains(result.code, "free(f2c_allocation_statement_0_value.data);",
                     "owned SOURCE storage participates in statement cleanup");
     f2c_result_free(&result);
 }
@@ -204,6 +210,40 @@ static void test_dependency_constraints(void) {
     f2c_result_free(&result);
 }
 
+static void test_status_definition_order(void) {
+    static const char source[] = "program status_order\n"
+                                 "integer,allocatable :: value\ninteger :: status\n"
+                                 "status=17\nallocate(value,source=status,stat=status)\n"
+                                 "end program\n";
+    F2cResult result = transpile(source, "allocation-status-order.f90");
+    const char *model =
+        result.code != NULL ? strstr(result.code, "_scalar = (int32_t)(status)") : NULL;
+    const char *definition =
+        result.code != NULL ? strstr(result.code, "*f2c_allocation_statement_") : NULL;
+    expect(result.code != NULL && result.error_count == 0U,
+           "SOURCE may read the previous value of its STAT destination");
+    expect(model != NULL && definition != NULL && definition > model,
+           "define STAT only after the original SOURCE value has been captured");
+    f2c_result_free(&result);
+}
+
+static void test_control_access_attributes(void) {
+    static const char source[] = "program qualified_controls\n"
+                                 "integer,allocatable :: value\n"
+                                 "integer,volatile :: status\n"
+                                 "character(len=32),volatile :: message\n"
+                                 "allocate(value,stat=status,errmsg=message)\n"
+                                 "deallocate(value,stat=status,errmsg=message)\nend program\n";
+    F2cResult result = transpile(source, "allocation-qualified-controls.f90");
+    expect(result.code != NULL && result.error_count == 0U,
+           "qualified status and message destinations support allocation and deallocation");
+    expect_contains(result.code, "volatile int32_t *const", "cache a qualified STAT address");
+    expect_contains(result.code, "volatile char *const", "cache a qualified ERRMSG address");
+    expect_contains(result.code, "_message_index < sizeof(\"allocation failed\")",
+                    "volatile ERRMSG uses scoped byte definitions, not unqualified memmove");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_expression_model_lowering();
     test_scalar_single_evaluation();
@@ -213,5 +253,7 @@ int main(void) {
     test_complex_source_assignment();
     test_pointer_mold_metadata();
     test_dependency_constraints();
+    test_status_definition_order();
+    test_control_access_attributes();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

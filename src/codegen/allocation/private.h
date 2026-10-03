@@ -3,6 +3,7 @@
 
 #include "codegen/array/private.h"
 #include "codegen/array/value.h"
+#include "codegen/storage/private.h"
 
 typedef struct F2cAllocationModel {
     F2cExpr *owned_expression;
@@ -17,6 +18,11 @@ typedef struct F2cAllocationModel {
     int prepared;
     int guarded;
 } F2cAllocationModel;
+
+char *f2c_allocation_target_storage(Unit *unit, const F2cExpr *target, Buffer *prelude);
+void f2c_allocation_store(Buffer *output, Unit *unit, const F2cStorageReference *reference,
+                          F2cObjectStateProperty property, size_t dimension, const char *binding,
+                          const char *value, int depth);
 
 int f2c_allocation_model_prepare(Context *context, Unit *unit, const F2cStatement *statement,
                                  const F2cExpr *expression, int source, int depth,

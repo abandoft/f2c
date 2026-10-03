@@ -88,8 +88,13 @@ set(
     src/ast/unit.c
     src/ast/unit.h
     src/ast/visit.c
-    src/codegen/allocation.c
+    src/codegen/allocation/allocate.c
+    src/codegen/allocation/context.c
+    src/codegen/allocation/context.h
+    src/codegen/allocation/controls.c
+    src/codegen/allocation/deallocate.c
     src/codegen/allocation/model.c
+    src/codegen/allocation/object.c
     src/codegen/allocation/private.h
     src/codegen/array.c
     src/codegen/array/assignment.c

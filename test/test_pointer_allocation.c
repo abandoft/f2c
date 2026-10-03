@@ -77,8 +77,10 @@ static void test_allocation_lowering(void) {
                     "whole-target pointer aliases inherit deallocation capability");
     expect_contains(result.code, "f2c_allocation_object->values_deallocatable",
                     "derived pointer components retain deallocation metadata");
-    expect_contains(result.code, "f2c_store_message(message, (size_t)(32)",
-                    "allocation failure paths populate a Fortran ERRMSG variable");
+    expect_contains(result.code, "_errmsg = message;",
+                    "allocation failure paths cache the Fortran ERRMSG destination");
+    expect_contains(result.code, "_errmsg_length = (size_t)(32);",
+                    "allocation failure paths cache the Fortran ERRMSG length");
     f2c_result_free(&result);
 }
 

@@ -134,6 +134,7 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
     F2cExpr *source = allocating ? allocation_keyword_value(statement, "source") : NULL;
     F2cExpr *mold = allocating ? allocation_keyword_value(statement, "mold") : NULL;
     F2cExpr *errmsg = allocation_keyword_value(statement, "errmsg");
+    F2cExpr *stat = allocation_keyword_value(statement, "stat");
     F2cExpr *model = source != NULL ? source : mold;
     size_t target_count = 0U;
     size_t stat_count = 0U;
@@ -143,6 +144,12 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
     size_t i;
     if (f2c_expression_has_pointer_result(mold))
         mold->result_use = F2C_FUNCTION_RESULT_METADATA;
+    /* A pointer function can denote the variable that receives the control
+     * definition. Preserve association identity rather than copying its value. */
+    if (f2c_expression_has_pointer_result(stat))
+        stat->result_use = F2C_FUNCTION_RESULT_REFERENCE;
+    if (f2c_expression_has_pointer_result(errmsg))
+        errmsg->result_use = F2C_FUNCTION_RESULT_REFERENCE;
     if (source != NULL && mold != NULL) {
         f2c_diagnostic_at(context, statement->line, 1U, 1,
                           "ALLOCATE cannot specify both SOURCE= and MOLD=");
@@ -348,11 +355,10 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
                               symbol->name);
         }
         if (allocating && statement->allocation_character_length != NULL &&
-            !symbol->deferred_character) {
+            symbol->type != TYPE_CHARACTER) {
             f2c_diagnostic_at(context, statement->line,
                               f2c_validation_expression_start_column(statement->text, target), 1,
-                              "ALLOCATE CHARACTER type specification requires a deferred-length "
-                              "CHARACTER target");
+                              "ALLOCATE CHARACTER type specification requires a CHARACTER target");
         }
     }
     if (target_count == 0U) {
