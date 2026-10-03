@@ -1,3 +1,16 @@
+## 1.48.0
+
+- Improved numeric, character, and derived-value use of scalar allocatable function results, fixing invalid storage releases and duplicate cleanup.
+- Distinguished pointer function result snapshots from target references, preserving target identity, lower bounds, and strides without freeing borrowed targets.
+- Improved function result association with ordinary and pointer input arguments, explicitly rejecting invalid pointer, allocatable-state, and parenthesized-value associations.
+- Corrected length passing for deferred-length character pointer results, preserving zero-length values and embedded NUL data.
+- Corrected deep copying, scalar component access, and storage release for derived results containing allocatable components.
+- Improved scalar and array function results in array constructors, including covered negative-stride and column-major expansion cases.
+- Retained each evaluated result in nested constructors and implied DO loops, avoiding leaks and premature finalization while evaluating loop controls once.
+- Fixed array constructor growth beyond eight elements, eliminating out-of-bounds writes.
+- Corrected constructor element counts in nested SUM, RESHAPE, SIZE, and character COUNT expressions so implied DO elements are not omitted.
+- Corrected derived-value cleanup for constructors and contiguous argument bridge copies without introducing extra user-defined FINAL calls.
+
 ## 1.47.0
 
 - Corrected live state reads, updates, and host forwarding for pointer and allocatable dummy arguments, avoiding stale addresses, lengths, and array bounds or overwriting updated state on return.
