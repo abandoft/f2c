@@ -34,7 +34,8 @@ generate_outputs() {
     "$translator" "$ROOT/test/fixtures/deferred_character.f90" \
         -o "$output/deferred.c" --header "$output/deferred.h"
     for fixture in function_result scalar_result result_identity result_snapshot result_kinds \
-        constructor_result constructor_finalization result_external; do
+        constructor_result constructor_finalization result_external \
+        allocation_result allocation_result_values allocation_result_finalization; do
         "$translator" "$ROOT/test/fixtures/$fixture.f90" \
             -o "$output/$fixture.c" --header "$output/$fixture.h"
     done
@@ -49,7 +50,9 @@ interface.c interface.h procedure.c procedure.h deferred.c deferred.h version.tx
 function_result.c function_result.h scalar_result.c scalar_result.h
 result_identity.c result_identity.h result_snapshot.c result_snapshot.h result_kinds.c result_kinds.h
 constructor_result.c constructor_result.h constructor_finalization.c constructor_finalization.h
-result_external.c result_external.h'
+result_external.c result_external.h
+allocation_result.c allocation_result.h allocation_result_values.c allocation_result_values.h
+allocation_result_finalization.c allocation_result_finalization.h'
 for file in $FILES; do
     if ! cmake -E compare_files "$WORK/first/$file" "$WORK/second/$file"; then
         echo "cross-toolchain generated output differs: $file" >&2
