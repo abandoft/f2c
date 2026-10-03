@@ -23,8 +23,12 @@ F2cTemporaryReleaseKind f2c_expression_temporary_release_kind(const F2cExpr *exp
         expression->type != TYPE_CHARACTER && expression->type != TYPE_DERIVED)
         return F2C_TEMPORARY_STACK_VALUE;
     if (expression != NULL && expression->type == TYPE_DERIVED && expression->derived_type != NULL)
-        return f2c_expression_has_pointer_result(expression) ? F2C_TEMPORARY_DISCARD_SNAPSHOT
-                                                             : F2C_TEMPORARY_FINALIZE_VALUE;
+        /* Constructor storage represents a value, not an additional language
+         * object or function result. Its deep copies must not introduce FINAL. */
+        return f2c_expression_has_pointer_result(expression) ||
+                       expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR
+                   ? F2C_TEMPORARY_DISCARD_SNAPSHOT
+                   : F2C_TEMPORARY_FINALIZE_VALUE;
     return F2C_TEMPORARY_RELEASE_STORAGE;
 }
 
