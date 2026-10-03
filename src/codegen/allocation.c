@@ -1,4 +1,6 @@
 #include "codegen/allocation/private.h"
+#include "codegen/expression/private.h"
+#include "codegen/storage/private.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -45,7 +47,12 @@ static char *allocation_target_storage(Unit *unit, const F2cExpr *target, Buffer
     if (target->kind != F2C_EXPR_COMPONENT || target->child_count == 0U || prelude == NULL ||
         target->children[0] == NULL || target->children[0]->derived_type == NULL)
         return NULL;
-    base = emit_expression(unit, target->children[0]);
+    int supported = 0;
+    base = f2c_expression_storage_designator(unit, target->children[0], &supported);
+    if (!supported) {
+        free(base);
+        return NULL;
+    }
     if (base == NULL)
         return NULL;
     f2c_buffer_printf(prelude, "%s *f2c_allocation_object = &(%s);\n",
@@ -54,6 +61,14 @@ static char *allocation_target_storage(Unit *unit, const F2cExpr *target, Buffer
                       f2c_symbol_c_name(unit, target->symbol));
     free(base);
     return f2c_buffer_take(&result);
+}
+
+static void allocation_store(Buffer *output, Unit *unit, const F2cStorageReference *reference,
+                             F2cObjectStateProperty property, size_t dimension, const char *binding,
+                             const char *value, int depth) {
+    if (!f2c_storage_emit_store(output, unit, reference, property, dimension, binding, value,
+                                depth))
+        output->failed = 1;
 }
 
 static char *emit_lower_bound(Unit *unit, const F2cExpr *bound) {
@@ -140,6 +155,8 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
     F2cAllocationModel model = {0};
     const int has_model = model_expression != NULL;
     const int outer_depth = depth;
+    char *target_name = NULL;
+    char *target_binding = NULL;
     size_t i;
     if (statement->arguments == NULL && statement->item_count != 0U)
         return 0;
@@ -169,7 +186,6 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
     for (i = 0U; i < statement->item_count; ++i) {
         const F2cExpr *target = statement->arguments[i];
         Symbol *symbol;
-        char *target_name;
         Buffer target_prelude = {0};
         size_t d;
         if (is_allocation_option(target))
@@ -179,10 +195,13 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
             (target->kind != F2C_EXPR_NAME && target->kind != F2C_EXPR_ARRAY_REFERENCE &&
              target->kind != F2C_EXPR_COMPONENT))
             continue;
-        target_name = allocation_target_storage(unit, target, &target_prelude);
-        if (target_name == NULL) {
+        const F2cStorageReference reference = f2c_ir_storage_reference(target);
+        target_binding = allocation_target_storage(unit, target, &target_prelude);
+        target_name =
+            f2c_storage_bound_property(unit, &reference, F2C_OBJECT_DATA, 0U, target_binding, 1);
+        if (target_binding == NULL || target_name == NULL) {
             free(target_prelude.data);
-            continue;
+            goto failed;
         }
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "{\n");
@@ -223,9 +242,7 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
             if (lower == NULL || upper == NULL) {
                 free(lower);
                 free(upper);
-                f2c_allocation_model_clear(unit, &model);
-                allocation_controls_free(&controls);
-                return 0;
+                goto failed;
             }
             indent(&context->output, depth + 1);
             f2c_buffer_printf(&context->output,
@@ -264,9 +281,7 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
                 if (source_extent == NULL) {
                     free(lower);
                     free(upper);
-                    f2c_allocation_model_clear(unit, &model);
-                    allocation_controls_free(&controls);
-                    return 0;
+                    goto failed;
                 }
                 indent(&context->output, depth + 1);
                 f2c_buffer_printf(&context->output,
@@ -286,9 +301,7 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
                            : f2c_allocation_model_character_length(unit, &model))
                     : f2c_symbol_character_length(unit, symbol);
             if (length == NULL) {
-                f2c_allocation_model_clear(unit, &model);
-                allocation_controls_free(&controls);
-                return 0;
+                goto failed;
             }
             indent(&context->output, depth + 1);
             f2c_buffer_printf(&context->output,
@@ -325,33 +338,26 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
             f2c_buffer_append(&context->output, "if (f2c_alloc_ok) {\n");
             if (!f2c_allocation_model_emit_source(context, symbol, &model, depth + 2)) {
                 free(length);
-                f2c_allocation_model_clear(unit, &model);
-                allocation_controls_free(&controls);
-                return 0;
+                goto failed;
             }
             indent(&context->output, depth + 2);
             f2c_buffer_printf(&context->output, "%s = f2c_alloc_storage;\n", target_name);
             if (symbol->pointer) {
-                indent(&context->output, depth + 2);
-                f2c_buffer_printf(&context->output, "%s_deallocatable = true;\n", target_name);
+                allocation_store(&context->output, unit, &reference, F2C_OBJECT_DEALLOCATABLE, 0U,
+                                 target_binding, "true", depth + 2);
             }
             if (symbol->deferred_character) {
-                indent(&context->output, depth + 2);
-                if (target->kind == F2C_EXPR_COMPONENT)
-                    f2c_buffer_printf(&context->output,
-                                      "%s_character_length = f2c_alloc_char_len;\n", target_name);
-                else
-                    f2c_buffer_printf(&context->output, "f2c_char_len_%s = f2c_alloc_char_len;\n",
-                                      target_name);
+                allocation_store(&context->output, unit, &reference, F2C_OBJECT_CHARACTER_LENGTH,
+                                 0U, target_binding, "f2c_alloc_char_len", depth + 2);
             }
             free(length);
         } else {
             indent(&context->output, depth + 1);
-            f2c_buffer_printf(
-                &context->output,
-                "%s *f2c_alloc_storage = f2c_alloc_ok ? (%s *)calloc("
-                "f2c_alloc_count == 0U ? 1U : f2c_alloc_count, sizeof(*%s)) : NULL;\n",
-                f2c_symbol_c_type(symbol), f2c_symbol_c_type(symbol), target_name);
+            f2c_buffer_printf(&context->output,
+                              "%s *f2c_alloc_storage = f2c_alloc_ok ? (%s *)calloc("
+                              "f2c_alloc_count == 0U ? 1U : f2c_alloc_count, sizeof(%s)) : NULL;\n",
+                              f2c_symbol_c_type(symbol), f2c_symbol_c_type(symbol),
+                              f2c_symbol_c_type(symbol));
             indent(&context->output, depth + 1);
             f2c_buffer_append(&context->output, "if (f2c_alloc_ok && f2c_alloc_storage == NULL) "
                                                 "f2c_alloc_ok = false;\n");
@@ -366,34 +372,44 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
                                   symbol->derived_type->c_name);
             }
             if (!f2c_allocation_model_emit_source(context, symbol, &model, depth + 2)) {
-                f2c_allocation_model_clear(unit, &model);
-                allocation_controls_free(&controls);
-                return 0;
+                goto failed;
             }
             indent(&context->output, depth + 2);
             f2c_buffer_printf(&context->output, "%s = f2c_alloc_storage;\n", target_name);
             if (symbol->pointer) {
-                indent(&context->output, depth + 2);
-                f2c_buffer_printf(&context->output, "%s_deallocatable = true;\n", target_name);
+                allocation_store(&context->output, unit, &reference, F2C_OBJECT_DEALLOCATABLE, 0U,
+                                 target_binding, "true", depth + 2);
             }
         }
         for (d = 0U; d < symbol->rank; ++d) {
-            indent(&context->output, depth + 2);
-            f2c_buffer_printf(&context->output, "%s_lower_%zu = (int32_t)f2c_alloc_lower_%zu;\n",
-                              target_name, d + 1U, d + 1U);
-            indent(&context->output, depth + 2);
-            f2c_buffer_printf(&context->output, "%s_extent_%zu = (int32_t)f2c_alloc_extent_%zu;\n",
-                              target_name, d + 1U, d + 1U);
-            if (symbol->pointer || (target->kind == F2C_EXPR_NAME && symbol->argument &&
-                                    f2c_symbol_uses_descriptor(symbol))) {
-                indent(&context->output, depth + 2);
+            Buffer lower = {0};
+            Buffer extent = {0};
+            f2c_buffer_printf(&lower, "(int32_t)f2c_alloc_lower_%zu", d + 1U);
+            f2c_buffer_printf(&extent, "(int32_t)f2c_alloc_extent_%zu", d + 1U);
+            allocation_store(&context->output, unit, &reference, F2C_OBJECT_LOWER, d,
+                             target_binding, lower.data, depth + 2);
+            allocation_store(&context->output, unit, &reference, F2C_OBJECT_EXTENT, d,
+                             target_binding, extent.data, depth + 2);
+            free(lower.data);
+            free(extent.data);
+            if (symbol->pointer || reference.state_source == F2C_OBJECT_STATE_DESCRIPTOR) {
                 if (d == 0U)
-                    f2c_buffer_printf(&context->output, "%s_stride_1 = 1;\n", target_name);
-                else
-                    f2c_buffer_printf(&context->output,
-                                      "%s_stride_%zu = f2c_descriptor_stride_extent(%s_stride_%zu, "
-                                      "(size_t)%s_extent_%zu);\n",
-                                      target_name, d + 1U, target_name, d, target_name, d);
+                    allocation_store(&context->output, unit, &reference, F2C_OBJECT_STRIDE, d,
+                                     target_binding, "1", depth + 2);
+                else {
+                    char *prior = f2c_storage_bound_property(unit, &reference, F2C_OBJECT_STRIDE,
+                                                             d - 1U, target_binding, 0);
+                    Buffer stride = {0};
+                    if (prior != NULL)
+                        f2c_buffer_printf(&stride,
+                                          "f2c_descriptor_stride_extent((ptrdiff_t)(%s), "
+                                          "f2c_alloc_extent_%zu)",
+                                          prior, d);
+                    allocation_store(&context->output, unit, &reference, F2C_OBJECT_STRIDE, d,
+                                     target_binding, stride.data, depth + 2);
+                    free(prior);
+                    free(stride.data);
+                }
             }
         }
         indent(&context->output, depth + 1);
@@ -411,6 +427,9 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
         free(target_name);
+        free(target_binding);
+        target_name = NULL;
+        target_binding = NULL;
     }
     f2c_allocation_model_emit_cleanup(context, unit, &model, depth);
     if (model.guarded) {
@@ -428,12 +447,20 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
         f2c_buffer_append(&context->output, "}\n");
     }
     allocation_controls_free(&controls);
-    return 1;
+    return !context->output.failed;
+failed:
+    free(target_name);
+    free(target_binding);
+    f2c_allocation_model_clear(unit, &model);
+    allocation_controls_free(&controls);
+    return 0;
 }
 
 int f2c_emit_deallocate_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                   int depth) {
     AllocationControls controls;
+    char *target_name = NULL;
+    char *target_binding = NULL;
     size_t i;
     if (statement->arguments == NULL && statement->item_count != 0U)
         return 0;
@@ -446,7 +473,6 @@ int f2c_emit_deallocate_statement(Context *context, Unit *unit, const F2cStateme
     for (i = 0U; i < statement->item_count; ++i) {
         const F2cExpr *target = statement->arguments[i];
         Symbol *symbol;
-        char *target_name;
         Buffer target_prelude = {0};
         size_t d;
         if (is_allocation_option(target))
@@ -454,10 +480,16 @@ int f2c_emit_deallocate_statement(Context *context, Unit *unit, const F2cStateme
         symbol = target != NULL ? target->symbol : NULL;
         if (symbol == NULL || (!symbol->allocatable && !symbol->pointer))
             continue;
-        target_name = allocation_target_storage(unit, target, &target_prelude);
-        if (target_name == NULL) {
+        const F2cStorageReference reference = f2c_ir_storage_reference(target);
+        target_binding = allocation_target_storage(unit, target, &target_prelude);
+        target_name =
+            f2c_storage_bound_property(unit, &reference, F2C_OBJECT_DATA, 0U, target_binding, 1);
+        if (target_binding == NULL || target_name == NULL) {
+            free(target_name);
+            free(target_binding);
             free(target_prelude.data);
-            continue;
+            allocation_controls_free(&controls);
+            return 0;
         }
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "{\n");
@@ -467,20 +499,31 @@ int f2c_emit_deallocate_statement(Context *context, Unit *unit, const F2cStateme
         }
         free(target_prelude.data);
         indent(&context->output, depth + 1);
-        if (symbol->pointer)
+        if (symbol->pointer) {
+            char *deallocatable = f2c_storage_bound_property(
+                unit, &reference, F2C_OBJECT_DEALLOCATABLE, 0U, target_binding, 0);
             f2c_buffer_printf(&context->output,
                               "const bool f2c_dealloc_ok = %s != NULL && "
-                              "%s_deallocatable;\n",
-                              target_name, target_name);
-        else
+                              "%s;\n",
+                              target_name, deallocatable != NULL ? deallocatable : "false");
+            if (deallocatable == NULL)
+                context->output.failed = 1;
+            free(deallocatable);
+        } else
             f2c_buffer_printf(&context->output, "const bool f2c_dealloc_ok = %s != NULL;\n",
                               target_name);
         indent(&context->output, depth + 1);
         if (symbol->type == TYPE_DERIVED && symbol->derived_type != NULL) {
             Buffer count = {0};
-            for (d = 0U; d < symbol->rank; ++d)
-                f2c_buffer_printf(&count, "%s(size_t)(%s_extent_%zu)", d == 0U ? "" : " * ",
-                                  target_name, d + 1U);
+            for (d = 0U; d < symbol->rank; ++d) {
+                char *extent = f2c_storage_bound_property(unit, &reference, F2C_OBJECT_EXTENT, d,
+                                                          target_binding, 0);
+                if (extent == NULL)
+                    context->output.failed = 1;
+                else
+                    f2c_buffer_printf(&count, "%s(size_t)(%s)", d == 0U ? "" : " * ", extent);
+                free(extent);
+            }
             f2c_buffer_printf(&context->output,
                               "if (f2c_dealloc_ok) f2c_destroy_array_%s(%s, (size_t)(%s), "
                               "%zuU);\n",
@@ -491,39 +534,33 @@ int f2c_emit_deallocate_statement(Context *context, Unit *unit, const F2cStateme
         }
         f2c_buffer_printf(&context->output, "if (f2c_dealloc_ok) { free(%s); %s = NULL; }\n",
                           target_name, target_name);
-        if (symbol->pointer) {
-            indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output, "if (f2c_dealloc_ok) %s_deallocatable = false;\n",
-                              target_name);
-        }
-        emit_operation_failure(&context->output, "f2c_dealloc_ok", &controls,
-                               "object is not deallocatable", depth + 1);
+        indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output, "if (f2c_dealloc_ok) {\n");
+        if (symbol->pointer || reference.state_source == F2C_OBJECT_STATE_DESCRIPTOR)
+            allocation_store(&context->output, unit, &reference, F2C_OBJECT_DEALLOCATABLE, 0U,
+                             target_binding, "false", depth + 2);
         if (symbol->deferred_character) {
-            indent(&context->output, depth + 1);
-            if (target->kind == F2C_EXPR_COMPONENT)
-                f2c_buffer_printf(&context->output,
-                                  "if (f2c_dealloc_ok) %s_character_length = 0U;\n", target_name);
-            else
-                f2c_buffer_printf(&context->output, "if (f2c_dealloc_ok) f2c_char_len_%s = 0U;\n",
-                                  target_name);
+            allocation_store(&context->output, unit, &reference, F2C_OBJECT_CHARACTER_LENGTH, 0U,
+                             target_binding, "0U", depth + 2);
         }
         for (d = 0U; d < symbol->rank; ++d) {
-            indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "if (f2c_dealloc_ok) { %s_lower_%zu = 1; %s_extent_%zu = 0;",
-                              target_name, d + 1U, target_name, d + 1U);
-            if (symbol->pointer || (target->kind == F2C_EXPR_NAME && symbol->argument &&
-                                    f2c_symbol_uses_descriptor(symbol)))
-                f2c_buffer_printf(&context->output, " %s_stride_%zu = %s;", target_name, d + 1U,
-                                  symbol->pointer ? "0"
-                                  : d == 0U       ? "1"
-                                                  : "0");
-            f2c_buffer_append(&context->output, " }\n");
+            allocation_store(&context->output, unit, &reference, F2C_OBJECT_LOWER, d,
+                             target_binding, "1", depth + 2);
+            allocation_store(&context->output, unit, &reference, F2C_OBJECT_EXTENT, d,
+                             target_binding, "0", depth + 2);
+            if (symbol->pointer || reference.state_source == F2C_OBJECT_STATE_DESCRIPTOR)
+                allocation_store(&context->output, unit, &reference, F2C_OBJECT_STRIDE, d,
+                                 target_binding, symbol->pointer || d != 0U ? "0" : "1", depth + 2);
         }
+        indent(&context->output, depth + 1);
+        f2c_buffer_append(&context->output, "}\n");
+        emit_operation_failure(&context->output, "f2c_dealloc_ok", &controls,
+                               "object is not deallocatable", depth + 1);
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
         free(target_name);
+        free(target_binding);
     }
     allocation_controls_free(&controls);
-    return 1;
+    return !context->output.failed;
 }

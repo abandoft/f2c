@@ -41,6 +41,10 @@ static void test_allocation_lowering(void) {
                                  "    character(len=*), intent(out) :: message\n"
                                  "    allocate(values(-2:2), stat=status, errmsg=message)\n"
                                  "  end subroutine resize\n"
+                                 "  subroutine release(values)\n"
+                                 "    integer, pointer, intent(inout) :: values(:)\n"
+                                 "    deallocate(values)\n"
+                                 "  end subroutine release\n"
                                  "end module pointer_storage\n"
                                  "program pointer_owner\n"
                                  "  use pointer_storage\n"
@@ -65,8 +69,10 @@ static void test_allocation_lowering(void) {
                     "successful pointer allocation records a deallocatable target");
     expect_contains(result.code, "values_stride_1 = 1;",
                     "pointer allocation initializes a contiguous descriptor stride");
-    expect_contains(result.code, "f2c_descriptor_values->deallocatable = values_deallocatable;",
-                    "pointer dummy descriptors return target ownership state to the caller");
+    expect_contains(result.code, "f2c_descriptor_values->deallocatable = true;",
+                    "pointer dummy allocation immediately updates target ownership state");
+    expect_contains(result.code, "f2c_descriptor_values->deallocatable = false;",
+                    "pointer dummy deallocation immediately clears target ownership state");
     expect_contains(result.code, "alias_deallocatable = values_deallocatable;",
                     "whole-target pointer aliases inherit deallocation capability");
     expect_contains(result.code, "f2c_allocation_object->values_deallocatable",
