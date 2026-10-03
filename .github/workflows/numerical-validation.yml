@@ -98,6 +98,8 @@ jobs:
         run: sh test/qualified_descriptor_differential.sh build/numerical/f2c
       - name: Differential-test scoped storage access
         run: sh test/scoped_storage_differential.sh build/numerical/f2c
+      - name: Differential-test live association and allocation state
+        run: sh test/live_object_state_differential.sh build/numerical/f2c
       - name: Differential-test random intrinsics
         run: sh test/random_intrinsic_differential.sh build/numerical/f2c
       - name: Differential-test time intrinsics
