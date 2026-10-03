@@ -14,6 +14,9 @@ static int32_t *result_contract_target;
 static void *retained_results[32];
 static size_t retained_result_count;
 static int check_retention;
+static int allocation_budget = -1;
+static size_t owned_scalar_calls;
+static size_t owned_character_calls;
 
 static int is_live_allocation(const void *storage) {
     for (size_t index = 0U; index < allocation_count; ++index)
@@ -38,14 +41,25 @@ static void remember_result(void *storage) {
 }
 
 static void *tracked_malloc(size_t size) {
-    if (fail_allocations)
+    if (fail_allocations || allocation_budget == 0)
         return NULL;
+    if (allocation_budget > 0)
+        --allocation_budget;
     void *storage = malloc(size);
     if (storage != NULL) {
         if (allocation_count == sizeof(allocations) / sizeof(allocations[0]))
             abort();
         allocations[allocation_count++] = storage;
     }
+    return storage;
+}
+
+static void *tracked_calloc(size_t count, size_t size) {
+    if (size != 0U && count > SIZE_MAX / size)
+        return NULL;
+    void *storage = tracked_malloc(count * size);
+    if (storage != NULL)
+        memset(storage, 0, count * size);
     return storage;
 }
 
@@ -78,10 +92,12 @@ static void *tracked_realloc(void *storage, size_t size) {
 }
 
 #define malloc tracked_malloc
+#define calloc tracked_calloc
 #define free tracked_free
 #define realloc tracked_realloc
 #include F2C_RESULT_SOURCE
 #undef malloc
+#undef calloc
 #undef free
 #undef realloc
 
@@ -93,6 +109,7 @@ f2c_descriptor borrowed_scalar(void) {
 }
 
 f2c_descriptor owned_scalar(void) {
+    ++owned_scalar_calls;
     check_previous_results();
     int32_t *value = (int32_t *)tracked_malloc(sizeof(*value));
     if (value == NULL)
@@ -106,16 +123,17 @@ f2c_descriptor owned_scalar(void) {
 }
 
 f2c_descriptor borrowed_array(void) {
-    return (f2c_descriptor){.data = &result_contract_target[4],
+    return (f2c_descriptor){.data = mode == 5 ? NULL : &result_contract_target[4],
                             .deallocatable = true,
                             .element_size = sizeof(*result_contract_target),
                             .rank = 1U,
                             .lower = {-5},
-                            .extent = {3},
+                            .extent = {mode >= 5 ? 0 : 3},
                             .stride = {-2}};
 }
 
 f2c_descriptor owned_character(void) {
+    ++owned_character_calls;
     check_previous_results();
     char *value = (char *)tracked_malloc(3U);
     if (value == NULL)
@@ -164,6 +182,12 @@ int main(int argc, char **argv) {
             check_retention = 1;
             fail_reallocations = 1;
             fetch_owned_constructor(constructor_values);
+        } else if (strcmp(argv[1], "mold_association") == 0) {
+            mode = 5;
+            allocate_from_mold(array);
+        } else if (strcmp(argv[1], "value_association") == 0) {
+            mode = 5;
+            fetch_empty_array(&scalar);
         } else
             return 2;
         return 1;
@@ -200,6 +224,41 @@ int main(int argc, char **argv) {
     for (size_t index = 0U; index < 3U; ++index)
         if (memcmp(constructor_characters + index * 5U, "a\0b  ", 5U) != 0)
             return 11;
+    check_retention = 0;
+    const size_t scalar_calls_before = owned_scalar_calls;
+    const size_t character_calls_before = owned_character_calls;
+    allocate_from_results(array, characters, sizeof(characters));
+    if (owned_scalar_calls != scalar_calls_before + 1U ||
+        owned_character_calls != character_calls_before + 1U || allocation_count != 1U ||
+        array[0] != 146 || array[1] != 146 || array[2] != 146 ||
+        memcmp(characters, "a\0b  ", 5U) != 0)
+        return 13;
+    /* MOLD needs only one target allocation. A value snapshot would consume
+     * the budget and fail even though the source metadata is valid. */
+    allocation_budget = 1;
+    allocate_from_mold(array);
+    if (allocation_budget != 0 || allocation_count != 1U || array[0] != 3 || array[1] != 1 ||
+        result_contract_target[2] != 31)
+        return 14;
+    /* The function result succeeds; only the destination allocation fails.
+     * STAT must report it and result storage must still be released. */
+    allocation_budget = 1;
+    scalar = 0;
+    allocate_result_failure(&scalar);
+    if (scalar == 0 || allocation_count != 1U || allocation_budget != 0)
+        return 15;
+    allocation_budget = -1;
+    mode = 6;
+    scalar = -1;
+    fetch_empty_array(&scalar);
+    if (scalar != 0 || allocation_count != 1U)
+        return 16;
+    allocation_budget = 1;
+    allocate_from_mold(array);
+    if (array[0] != 0 || array[1] != 1 || allocation_count != 1U || allocation_budget != 0)
+        return 17;
+    allocation_budget = -1;
+    mode = 0;
     tracked_free(result_contract_target);
     if (allocation_count != 0U)
         return 7;
