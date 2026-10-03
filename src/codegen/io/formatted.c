@@ -307,7 +307,7 @@ void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *i
                 unaligned_address =
                     f2c_emit_unaligned_linear_address(unit, symbol, "f2c_format_index");
             else
-                f2c_buffer_printf(&value, "%s[f2c_format_index]", f2c_symbol_c_name(unit, symbol));
+                f2c_io_append_symbol_element(&value, unit, symbol, "f2c_format_index");
             if (unaligned_address != NULL) {
                 const char *suffix = f2c_unaligned_access_suffix(symbol);
                 f2c_io_indent(&context->output, depth + 1);

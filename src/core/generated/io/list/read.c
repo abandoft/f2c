@@ -31,6 +31,9 @@ static void emit_character_list_io(Buffer *output) {
 }
 
 void f2c_emit_list_read_support(Buffer *output) {
+    f2c_buffer_append(output, "static inline F2C_UNUSED int f2c_list_read_status(int status) { "
+                              "return status > 0 ? F2C_IO_STATUS_OK : status == EOF ? EOF : "
+                              "F2C_IO_STATUS_RECORD; }\n");
     f2c_buffer_append(
         output,
         "static inline F2C_UNUSED int f2c_parse_integer_token(const char *token, int64_t "

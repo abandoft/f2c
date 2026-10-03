@@ -152,6 +152,7 @@ set(
     src/codegen/expression/statement_function.c
     src/codegen/expression/transfer.c
     src/codegen/io.c
+    src/codegen/io/access.c
     src/codegen/io/control/common.c
     src/codegen/io/control/inquire.c
     src/codegen/io/control/iolength.c

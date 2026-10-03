@@ -76,7 +76,5 @@ void f2c_emit_namelist_transaction_support(Context *context) {
         "(entry->destroy != NULL) entry->destroy(entry->stage, entry->count, entry->rank); "
         "free(entry->stage); "
         "} free(transaction->allocations); free(transaction->mappings); memset(transaction, 0, "
-        "sizeof(*transaction)); }\n"
-        "static inline F2C_UNUSED int f2c_namelist_read_status(int status) { return status > 0 "
-        "? F2C_IO_STATUS_OK : status == EOF ? EOF : F2C_IO_STATUS_RECORD; }\n");
+        "sizeof(*transaction)); }\n");
 }

@@ -40,7 +40,7 @@ void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
         f2c_io_indent(&context->output, depth);
         if (input) {
             f2c_buffer_printf(&context->output,
-                              "%s = f2c_namelist_read_status("
+                              "%s = f2c_list_read_status("
                               "f2c_read_character(%s, %s, (size_t)(%s)));\n",
                               status, io_file, value, length);
         } else {
@@ -56,20 +56,25 @@ void f2c_io_emit_namelist_value(Context *context, Unit *unit, const char *file,
                               "{ bool f2c_namelist_logical = false; int f2c_namelist_read = ");
             f2c_buffer_printf(&context->output,
                               "f2c_read_bool(%s, &f2c_namelist_logical); %s = "
-                              "f2c_namelist_read_status(f2c_namelist_read); if ("
+                              "f2c_list_read_status(f2c_namelist_read); if ("
                               "f2c_namelist_read > 0) %s = f2c_namelist_logical ? 1 : 0; }\n",
                               io_file, status, value);
         } else {
             f2c_buffer_printf(&context->output, "f2c_write_bool(%s, (%s) != 0);\n", file, value);
         }
     } else {
-        f2c_io_indent(&context->output, depth);
-        if (input)
-            f2c_buffer_printf(&context->output,
-                              "%s = f2c_namelist_read_status(F2C_READ(%s, &%s));\n", status,
-                              io_file, value);
-        else
-            f2c_buffer_printf(&context->output, "F2C_WRITE(%s, (%s));\n", file, value);
+        if (input && symbol->volatile_entity) {
+            f2c_io_emit_qualified_input(context, unit, io_file, value, f2c_symbol_c_type(symbol),
+                                        status, depth);
+        } else {
+            f2c_io_indent(&context->output, depth);
+            if (input)
+                f2c_buffer_printf(&context->output,
+                                  "%s = f2c_list_read_status(F2C_READ(%s, &%s));\n", status,
+                                  io_file, value);
+            else
+                f2c_buffer_printf(&context->output, "F2C_WRITE(%s, (%s));\n", file, value);
+        }
     }
     if (input && structured_input) {
         f2c_io_indent(&context->output, depth);
