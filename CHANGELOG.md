@@ -1,10 +1,11 @@
 ## 1.47.0
 
 - Corrected live state reads, updates, and host forwarding for pointer and allocatable dummy arguments, avoiding stale addresses, lengths, and array bounds or overwriting updated state on return.
-- Unified dynamic-argument handling for supported scalar, character, and array-result functions, preserving association and allocation changes in the caller.
+- Unified dynamic-argument handling for supported scalar, character, and array-result functions, preserving association and allocation changes in the caller and evaluating length arguments once.
 - Corrected `INTENT(IN)` pointer definability: target data can be modified, while pointer associations and pointer-component associations in read-only objects remain protected.
 - Corrected `LEN(result)` inside character functions, retaining the entry-time result length when argument lengths change.
 - Fixed reallocation length checks for scalar broadcast assignment to allocatable character arrays, avoiding incorrect assumptions about existing storage sizes.
+- Improved scalar assignment to deferred-length allocatable character components, including automatic allocation, length updates, overlapping sources, and zero-length values, with single evaluation of parent-object indices.
 - Improved NAMELIST input and output for covered dynamic dummy arguments, retaining the first conversion error and leaving parsed values uncommitted on transaction failure.
 - Strengthened descriptor addressing checks for dimensions, empty arrays, indices, and overflow, and removed signed overflow from extreme array subscript distance calculations.
 
