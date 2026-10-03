@@ -3,6 +3,7 @@
 
 #include "frontend/token.h"
 #include "ir/intrinsic.h"
+#include "ir/result.h"
 #include "semantic/model.h"
 
 typedef enum F2cExprKind {
@@ -43,6 +44,8 @@ struct F2cExpr {
     size_t rank;
     int definable;
     F2cValueCategory value_category;
+    F2cFunctionResultKind result_kind;
+    F2cFunctionResultUse result_use;
     /* Attributes of the designated object, not of a computed value. */
     unsigned int storage_qualifiers;
     F2cShape shape;
