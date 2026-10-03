@@ -84,20 +84,23 @@ static int run_case(const Dgetf2Case *test, double *input, double *work, double 
     initialize(input, test->n);
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
         const int generated_outer = f2c_benchmark_generated_is_outer(round);
+        double *workspace = f2c_benchmark_use_second_workspace(round) ? reference : work;
+        int32_t *workspace_pivots =
+            f2c_benchmark_use_second_workspace(round) ? reference_pivots : pivots;
         double generated_first;
         double generated_second;
         double fortran_first;
         double fortran_second;
         if (generated_outer) {
-            generated_first = measure(dgetf2, test, input, work, pivots);
-            fortran_first = measure(dgetf2_, test, input, reference, reference_pivots);
-            fortran_second = measure(dgetf2_, test, input, reference, reference_pivots);
-            generated_second = measure(dgetf2, test, input, work, pivots);
+            generated_first = measure(dgetf2, test, input, workspace, workspace_pivots);
+            fortran_first = measure(dgetf2_, test, input, workspace, workspace_pivots);
+            fortran_second = measure(dgetf2_, test, input, workspace, workspace_pivots);
+            generated_second = measure(dgetf2, test, input, workspace, workspace_pivots);
         } else {
-            fortran_first = measure(dgetf2_, test, input, reference, reference_pivots);
-            generated_first = measure(dgetf2, test, input, work, pivots);
-            generated_second = measure(dgetf2, test, input, work, pivots);
-            fortran_second = measure(dgetf2_, test, input, reference, reference_pivots);
+            fortran_first = measure(dgetf2_, test, input, workspace, workspace_pivots);
+            generated_first = measure(dgetf2, test, input, workspace, workspace_pivots);
+            generated_second = measure(dgetf2, test, input, workspace, workspace_pivots);
+            fortran_second = measure(dgetf2_, test, input, workspace, workspace_pivots);
         }
         samples[round] = f2c_benchmark_paired_sample(round, generated_first, fortran_first,
                                                      fortran_second, generated_second);
