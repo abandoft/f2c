@@ -217,7 +217,7 @@ int f2c_descriptor_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView
                                  : f2c_descriptor_readonly_storage(expression);
     const char *result_descriptor = f2c_lowering_result_descriptor(unit, expression);
     if (f2c_expression_has_pointer_result(expression) &&
-        expression->result_use == F2C_FUNCTION_RESULT_REFERENCE && result_descriptor != NULL)
+        expression->result_use != F2C_FUNCTION_RESULT_VALUE && result_descriptor != NULL)
         result = pointer_result_view(expression, result_descriptor, view);
     else if (f2c_lowering_is_array_temporary(unit, expression))
         result = lowered_array_view(unit, expression, view);

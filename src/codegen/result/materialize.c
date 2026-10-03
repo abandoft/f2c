@@ -49,11 +49,17 @@ static void append_shape_validation(Buffer *prelude, const F2cExpr *expression,
                           dimension + 1U);
     f2c_buffer_append(prelude, "});\n");
     f2c_array_indent(prelude, depth);
-    if (expression->result_use != F2C_FUNCTION_RESULT_REFERENCE)
-        f2c_buffer_printf(prelude, "if (%s_count != 0U && %s.data == NULL) abort();\n", storage,
-                          descriptor);
-    else
-        f2c_buffer_printf(prelude, "(void)%s_count;\n", storage);
+    f2c_buffer_printf(prelude, "(void)%s_count;\n", storage);
+    if (expression->result_use != F2C_FUNCTION_RESULT_REFERENCE) {
+        f2c_array_indent(prelude, depth);
+        if (f2c_expression_has_pointer_result(expression))
+            /* A zero extent does not make a disassociated pointer a valid value
+             * or allocation model. Associated empty targets still have an address. */
+            f2c_buffer_printf(prelude, "if (%s.data == NULL) abort();\n", descriptor);
+        else
+            f2c_buffer_printf(prelude, "if (%s_count != 0U && %s.data == NULL) abort();\n", storage,
+                              descriptor);
+    }
     f2c_array_indent(prelude, depth);
     f2c_buffer_printf(prelude,
                       "const bool %s_contiguous = f2c_descriptor_is_contiguous(%zuU, "
@@ -201,7 +207,8 @@ int f2c_result_materialize(Unit *unit, F2cExpr *expression, size_t identifier, c
     }
     f2c_array_indent(prelude, depth);
     f2c_buffer_printf(prelude, "%s *%s = NULL;\n", f2c_expression_c_type(expression), storage.data);
-    const int reference = expression->result_use == F2C_FUNCTION_RESULT_REFERENCE;
+    const int reference = f2c_expression_has_pointer_result(expression) &&
+                          expression->result_use != F2C_FUNCTION_RESULT_VALUE;
     if (f2c_result_kind_owns_storage(expression->result_kind) || reference) {
         f2c_array_indent(prelude, depth);
         f2c_buffer_printf(prelude, "%s = (%s *)%s.data;\n", storage.data,
