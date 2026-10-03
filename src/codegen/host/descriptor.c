@@ -25,12 +25,17 @@ static int emit_descriptor_initialization(Buffer *output, Unit *caller, const Sy
     size_t dimension;
     if (style == F2C_HOST_DESCRIPTOR_STATEMENT)
         emit_indent(output, depth);
-    f2c_buffer_printf(output,
-                      "%sf2c_host%s_descriptor_%zu = %s{.data = %s, "
-                      ".deallocatable = ",
-                      style == F2C_HOST_DESCRIPTOR_STATEMENT ? "f2c_descriptor " : "",
-                      style == F2C_HOST_DESCRIPTOR_STATEMENT ? "_call" : "", identifier,
-                      style == F2C_HOST_DESCRIPTOR_STATEMENT ? "" : "(f2c_descriptor)", name);
+    f2c_buffer_printf(
+        output,
+        "%sf2c_host%s_descriptor_%zu = %s{.%s = %s, "
+        ".storage_qualifiers = %uU, "
+        ".deallocatable = ",
+        style == F2C_HOST_DESCRIPTOR_STATEMENT ? "f2c_descriptor " : "",
+        style == F2C_HOST_DESCRIPTOR_STATEMENT ? "_call" : "", identifier,
+        style == F2C_HOST_DESCRIPTOR_STATEMENT ? "" : "(f2c_descriptor)",
+        f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(actual),
+                                      actual->intent == F2C_INTENT_IN && !actual->pointer),
+        name, f2c_symbol_storage_qualifiers(actual));
     if (actual->pointer)
         f2c_buffer_printf(output, "%s_deallocatable", name);
     else
@@ -95,7 +100,13 @@ static int emit_descriptor_forward_sync(Buffer *output, Unit *caller, const Symb
 
     if (!descriptor_nonnull)
         F2C_HOST_SYNC("%s != NULL ? (void)0 : abort()", descriptor);
-    F2C_HOST_SYNC("(%s)->data = %s", descriptor, name);
+    F2C_HOST_SYNC(
+        "(%s)->%s = %s", descriptor,
+        f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(actual),
+                                      actual->intent == F2C_INTENT_IN && !actual->pointer),
+        name);
+    F2C_HOST_SYNC("(%s)->storage_qualifiers = %uU", descriptor,
+                  f2c_symbol_storage_qualifiers(actual));
     if (actual->pointer)
         F2C_HOST_SYNC("(%s)->deallocatable = %s_deallocatable", descriptor, name);
     else
@@ -147,8 +158,14 @@ static int emit_descriptor_writeback(Buffer *output, Unit *caller, const Symbol 
     F2C_HOST_WRITEBACK("f2c_descriptor_bridge_valid(%s%s, %zuU, sizeof(%s)) ? "
                        "(void)0 : abort()",
                        descriptor_is_pointer ? "" : "&", descriptor, actual->rank, c_type);
-    F2C_HOST_WRITEBACK("%s = (%s *)%s%s%sdata", name, c_type, member_prefix, descriptor,
-                       member_operator);
+    F2C_HOST_WRITEBACK(
+        "%s = (%s%s *)%s%s%s%s", name,
+        actual->intent == F2C_INTENT_IN && !actual->pointer ? "const "
+        : actual->volatile_entity                           ? "volatile "
+                                                            : "",
+        c_type, member_prefix, descriptor, member_operator,
+        f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(actual),
+                                      actual->intent == F2C_INTENT_IN && !actual->pointer));
     if (actual->pointer)
         F2C_HOST_WRITEBACK("%s_deallocatable = %s%s%sdeallocatable", name, member_prefix,
                            descriptor, member_operator);
