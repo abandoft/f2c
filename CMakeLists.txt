@@ -343,6 +343,7 @@ set(
     src/semantic/data_flow/temporaries.c
     src/semantic/data_flow/variables.c
     src/semantic/access.c
+    src/semantic/contiguity.c
     src/semantic/designator.c
     src/semantic/host.c
     src/semantic/implicit.c
@@ -396,6 +397,7 @@ set(
     src/semantic/derived_storage.c
     src/semantic/default_initialization.h
     src/semantic/validation/procedure/association.c
+    src/semantic/validation/procedure/storage.c
     src/semantic/validation/procedure/binding.c
     src/semantic/validation/procedure/alternate.c
     src/semantic/validation/procedure/select.c
@@ -614,6 +616,11 @@ if(F2C_BUILD_TESTING)
     target_include_directories(f2c_access_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_access_tests)
     add_test(NAME access_qualifiers COMMAND f2c_access_tests)
+
+    add_executable(f2c_contiguity_tests test/test_contiguity.c)
+    target_include_directories(f2c_contiguity_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_contiguity_tests)
+    add_test(NAME contiguous_storage_association COMMAND f2c_contiguity_tests)
 
     add_executable(f2c_unit_header_tests test/test_unit_header.c)
     target_include_directories(f2c_unit_header_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

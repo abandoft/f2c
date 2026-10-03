@@ -12,14 +12,7 @@ static const F2cExpr *actual_value(const F2cExpr *actual) {
 }
 
 int f2c_call_actual_guaranteed_contiguous(const F2cExpr *actual) {
-    const Symbol *symbol;
-    actual = actual_value(actual);
-    if (actual == NULL || actual->kind != F2C_EXPR_NAME || actual->symbol == NULL)
-        return 0;
-    symbol = actual->symbol;
-    if (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol)))
-        return symbol->contiguous;
-    return 1;
+    return f2c_expression_is_simply_contiguous(actual_value(actual));
 }
 
 int f2c_call_actual_requires_materialization(Unit *unit, const Symbol *callee,
@@ -49,6 +42,8 @@ int f2c_call_cache_actual_view(Buffer *setup, Unit *unit, const F2cExpr *actual,
     if (setup == NULL || actual == NULL || view == NULL || view->rank != actual->rank ||
         view->data == NULL || !f2c_lowering_copy_code(unit, actual, view->data) ||
         !f2c_lowering_set_array_temporary(unit, actual, 1) ||
+        !f2c_lowering_set_storage_access(unit, actual, view->storage_qualifiers,
+                                         view->readonly_storage) ||
         (actual->type == TYPE_CHARACTER &&
          (view->character_length == NULL ||
           !f2c_lowering_copy_character_length(unit, actual, view->character_length))))

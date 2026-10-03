@@ -487,6 +487,7 @@ void f2c_validation_procedure_actual(Context *context, Unit *caller, const Unit 
         }
         return;
     }
+    f2c_validation_actual_storage(context, definition, dummy, value);
     if (dummy->type != TYPE_UNKNOWN && value->type != TYPE_UNKNOWN && dummy->type != value->type) {
         f2c_diagnostic_at(
             context, line, column, 1,
