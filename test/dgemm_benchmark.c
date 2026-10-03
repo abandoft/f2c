@@ -86,31 +86,32 @@ static int run_case(const DgemmCase *test, double *a, double *b, double *c, doub
     }
     for (round = 0U; round < sizeof(samples) / sizeof(samples[0]); ++round) {
         const int generated_outer = f2c_benchmark_generated_is_outer(round);
+        double *workspace = f2c_benchmark_use_second_workspace(round) ? reference : c;
         double generated_first;
         double generated_second;
         double fortran_first;
         double fortran_second;
         if (generated_outer) {
-            initialize(c, test->n, 43);
-            generated_first = measure(dgemm_generated, test, a, b, c);
-            initialize(reference, test->n, 43);
-            fortran_first = measure(dgemm_fortran, test, a, b, reference);
-            initialize(reference, test->n, 43);
-            fortran_second = measure(dgemm_fortran, test, a, b, reference);
-            initialize(c, test->n, 43);
-            generated_second = measure(dgemm_generated, test, a, b, c);
+            initialize(workspace, test->n, 43);
+            generated_first = measure(dgemm_generated, test, a, b, workspace);
+            initialize(workspace, test->n, 43);
+            fortran_first = measure(dgemm_fortran, test, a, b, workspace);
+            initialize(workspace, test->n, 43);
+            fortran_second = measure(dgemm_fortran, test, a, b, workspace);
+            initialize(workspace, test->n, 43);
+            generated_second = measure(dgemm_generated, test, a, b, workspace);
         } else {
-            initialize(reference, test->n, 43);
-            fortran_first = measure(dgemm_fortran, test, a, b, reference);
-            initialize(c, test->n, 43);
-            generated_first = measure(dgemm_generated, test, a, b, c);
-            initialize(c, test->n, 43);
-            generated_second = measure(dgemm_generated, test, a, b, c);
-            initialize(reference, test->n, 43);
-            fortran_second = measure(dgemm_fortran, test, a, b, reference);
+            initialize(workspace, test->n, 43);
+            fortran_first = measure(dgemm_fortran, test, a, b, workspace);
+            initialize(workspace, test->n, 43);
+            generated_first = measure(dgemm_generated, test, a, b, workspace);
+            initialize(workspace, test->n, 43);
+            generated_second = measure(dgemm_generated, test, a, b, workspace);
+            initialize(workspace, test->n, 43);
+            fortran_second = measure(dgemm_fortran, test, a, b, workspace);
         }
-        samples[round] = f2c_benchmark_paired_sample(
-            round, generated_first, fortran_first, fortran_second, generated_second);
+        samples[round] = f2c_benchmark_paired_sample(round, generated_first, fortran_first,
+                                                     fortran_second, generated_second);
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
     printf("DGEMM n=%d trans=%c%c: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", test->n,
