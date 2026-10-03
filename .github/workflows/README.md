@@ -19,3 +19,9 @@ The first five workflows are the stable correctness and portability checks inten
 protection. Performance is isolated because timing on shared runners is operationally different
 from deterministic correctness. Every workflow uses least-privilege permissions, explicit job
 timeouts, concurrency control, and writes generated data only below `build/`.
+
+Performance samples use the same workspace addresses for generated C and native Fortran within
+each ABBA/BAAB pair. The two allocations are rotated independently of execution order and receive
+equal coverage; inputs are restored before timing, while correctness checks retain independent
+outputs. The full gate requires all 71 cases with 24 paired samples and the unchanged 5% limit.
+The manual `diagnostics` and `loop-policies` scopes are investigative reports, not parity gates.
