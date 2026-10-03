@@ -74,10 +74,13 @@ static char *component_storage(Unit *unit, const F2cExpr *expression, int *suppo
         free(base);
         base = f2c_buffer_take(&cast);
     }
-    if (expression->symbol->pointer && expression->symbol->rank == 0U)
+    const int indirect_scalar = (expression->symbol->pointer || expression->symbol->allocatable) &&
+                                expression->symbol->rank == 0U &&
+                                expression->type != TYPE_CHARACTER;
+    if (indirect_scalar)
         f2c_buffer_append(&result, "(*(");
     f2c_expression_append_component(&result, base, parent->derived_type, expression->symbol);
-    if (expression->symbol->pointer && expression->symbol->rank == 0U)
+    if (indirect_scalar)
         f2c_buffer_append(&result, "))");
     free(base);
     return f2c_buffer_take(&result);
