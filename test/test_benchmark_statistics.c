@@ -7,16 +7,29 @@ static int close_enough(double left, double right) { return fabs(left - right) <
 int main(void) {
     F2cBenchmarkSample generated_outer = f2c_benchmark_symmetric_sample(0U, 1.0, 2.0, 3.0, 4.0);
     F2cBenchmarkSample fortran_outer = f2c_benchmark_symmetric_sample(1U, 1.0, 2.0, 6.0, 4.0);
-    F2cBenchmarkSample paired_generated =
-        f2c_benchmark_paired_sample(0U, 1.0, 2.0, 3.0, 4.0);
-    F2cBenchmarkSample paired_fortran =
-        f2c_benchmark_paired_sample(1U, 2.0, 1.0, 4.0, 6.0);
+    F2cBenchmarkSample paired_generated = f2c_benchmark_paired_sample(0U, 1.0, 2.0, 3.0, 4.0);
+    F2cBenchmarkSample paired_fortran = f2c_benchmark_paired_sample(1U, 2.0, 1.0, 4.0, 6.0);
     F2cBenchmarkSample median_samples[] = {{2.0, 4.0, 0.5}, {6.0, 4.0, 1.5}};
     F2cBenchmarkSample median =
         f2c_benchmark_median(median_samples, sizeof(median_samples) / sizeof(median_samples[0]));
 
     if (F2C_BENCHMARK_SAMPLE_COUNT != 24)
         return EXIT_FAILURE;
+    {
+        size_t counts[2][2] = {{0U, 0U}, {0U, 0U}};
+        size_t round;
+        for (round = 0U; round < F2C_BENCHMARK_SAMPLE_COUNT; ++round) {
+            const size_t workspace = f2c_benchmark_use_second_workspace(round) ? 1U : 0U;
+            const size_t order = f2c_benchmark_generated_is_outer(round) ? 1U : 0U;
+            ++counts[workspace][order];
+            if (workspace != (round % 4U >= 2U ? 1U : 0U))
+                return EXIT_FAILURE;
+        }
+        for (size_t workspace = 0U; workspace < 2U; ++workspace)
+            for (size_t order = 0U; order < 2U; ++order)
+                if (counts[workspace][order] != F2C_BENCHMARK_SAMPLE_COUNT / 4U)
+                    return EXIT_FAILURE;
+    }
     if (!close_enough(generated_outer.generated_seconds, 5.0) ||
         !close_enough(generated_outer.fortran_seconds, 5.0))
         return EXIT_FAILURE;
