@@ -2,6 +2,7 @@
 #include "codegen/array/private.h"
 
 #include "codegen/lowering/private.h"
+#include "codegen/storage/private.h"
 #include "codegen/value/private.h"
 
 #include <stdio.h>
@@ -26,14 +27,16 @@ int f2c_array_emit_derived_scalar_broadcast(Context *context, Unit *unit, Symbol
                                             int depth) {
     const size_t output_start = context != NULL ? context->output.length : 0U;
     const char *type_name;
-    const char *target_name;
+    char *target_name;
     if (context == NULL || unit == NULL || target == NULL || right == NULL ||
         element_count == NULL || target->type != TYPE_DERIVED || target->derived_type == NULL ||
         target->rank == 0U || right->type != TYPE_DERIVED || right->derived_type == NULL ||
         right->rank != 0U || target->derived_type != right->derived_type)
         return 0;
     type_name = target->derived_type->c_name;
-    target_name = f2c_symbol_c_name(unit, target);
+    target_name = f2c_storage_symbol_data(unit, target);
+    if (target_name == NULL)
+        return 0;
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
     f2c_array_indent(&context->output, depth + 1);
@@ -47,6 +50,7 @@ int f2c_array_emit_derived_scalar_broadcast(Context *context, Unit *unit, Symbol
             context->output.length = output_start;
             context->output.data[output_start] = '\0';
         }
+        free(target_name);
         return 0;
     }
     f2c_array_indent(&context->output, depth + 1);
@@ -62,6 +66,7 @@ int f2c_array_emit_derived_scalar_broadcast(Context *context, Unit *unit, Symbol
     f2c_buffer_printf(&context->output, "f2c_destroy_%s(&f2c_whole_source);\n", type_name);
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
+    free(target_name);
     return 1;
 }
 
@@ -173,9 +178,12 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
     }
     f2c_buffer_append(&context->output, "});\n");
     if (target->pointer) {
+        char *data = f2c_storage_symbol_data(unit, target);
+        if (data == NULL)
+            goto unsupported;
         f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_printf(&context->output, "if (%s == NULL) abort();\n",
-                          f2c_symbol_c_name(unit, target));
+        f2c_buffer_printf(&context->output, "if (%s == NULL) abort();\n", data);
+        free(data);
     }
     if (target->type == TYPE_CHARACTER) {
         f2c_array_indent(&context->output, emitted_depth);
@@ -259,7 +267,10 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
     }
     f2c_array_indent(&context->output, emitted_depth);
     if (target->allocatable) {
-        const char *target_name = f2c_symbol_c_name(unit, target);
+        const F2cStorageReference reference = f2c_ir_symbol_storage_reference(target);
+        char *target_name = f2c_storage_write_property(unit, &reference, F2C_OBJECT_DATA, 0U);
+        if (target_name == NULL)
+            goto unsupported;
         if (target->type == TYPE_DERIVED) {
             f2c_buffer_printf(&context->output,
                               "if (%s != NULL) f2c_destroy_array_%s(%s, (size_t)(%s), %zuU);\n",
@@ -271,29 +282,36 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output, "%s = f2c_element_values;\n", target_name);
         if (target->type == TYPE_CHARACTER && target->deferred_character) {
-            f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_printf(&context->output, "f2c_char_len_%s = f2c_element_length;\n",
-                              target_name);
+            if (!f2c_storage_emit_store(&context->output, unit, &reference,
+                                        F2C_OBJECT_CHARACTER_LENGTH, 0U, NULL, "f2c_element_length",
+                                        emitted_depth))
+                context->output.failed = 1;
         }
         for (dimension = 0U; dimension < target->rank; ++dimension) {
-            f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_printf(&context->output,
-                              "%s_lower_%zu = 1; %s_extent_%zu = "
-                              "(int32_t)f2c_element_extent_%zu;\n",
-                              target_name, dimension + 1U, target_name, dimension + 1U, dimension);
+            Buffer extent = {0};
+            f2c_buffer_printf(&extent, "(int32_t)f2c_element_extent_%zu", dimension);
+            if (!f2c_storage_emit_contiguous_dimension(&context->output, unit, &reference,
+                                                       dimension, NULL, "1", extent.data,
+                                                       emitted_depth))
+                context->output.failed = 1;
+            free(extent.data);
         }
+        free(target_name);
     } else if (target->type == TYPE_CHARACTER)
         f2c_array_copy_to_symbol(&context->output, unit, target, "f2c_element_values",
                                  "f2c_element_bytes", 0);
     else if (target->type == TYPE_DERIVED) {
+        char *target_name = f2c_storage_symbol_data(unit, target);
+        if (target_name == NULL)
+            goto unsupported;
         f2c_buffer_printf(&context->output, "f2c_destroy_array_%s(%s, f2c_element_count, %zuU);\n",
-                          target->derived_type->c_name, f2c_symbol_c_name(unit, target),
-                          target->rank);
+                          target->derived_type->c_name, target_name, target->rank);
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output,
                           "if (f2c_element_count != 0U) memmove(%s, f2c_element_values, "
                           "f2c_element_count * sizeof(*f2c_element_values));\n",
-                          f2c_symbol_c_name(unit, target));
+                          target_name);
+        free(target_name);
     } else
         f2c_array_copy_to_symbol(&context->output, unit, target, "f2c_element_values",
                                  "f2c_element_count", 0);

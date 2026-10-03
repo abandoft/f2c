@@ -2,6 +2,7 @@
 
 #include "codegen/array/private.h"
 #include "codegen/names.h"
+#include "codegen/storage/private.h"
 
 #include <stdlib.h>
 
@@ -55,7 +56,12 @@ void f2c_array_copy_to_symbol(Buffer *output, Unit *unit, Symbol *target, const 
         free(address);
         return;
     }
-    f2c_array_copy_snapshot(output, unit, f2c_symbol_c_name(unit, target), source, count,
-                            f2c_symbol_c_type(target), f2c_symbol_storage_qualifiers(target),
-                            F2C_STORAGE_UNQUALIFIED, depth);
+    char *data = f2c_storage_symbol_data(unit, target);
+    if (data == NULL) {
+        output->failed = 1;
+        return;
+    }
+    f2c_array_copy_snapshot(output, unit, data, source, count, f2c_symbol_c_type(target),
+                            f2c_symbol_storage_qualifiers(target), F2C_STORAGE_UNQUALIFIED, depth);
+    free(data);
 }
