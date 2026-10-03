@@ -1,3 +1,4 @@
+#include "codegen/storage/private.h"
 #include "internal/f2c.h"
 
 #include <stdlib.h>
@@ -92,21 +93,35 @@ static void emit_count(Context *context, const Symbol *target, int depth) {
 
 static void emit_reallocation_test(Context *context, Unit *unit, const Symbol *target,
                                    int deferred_character, int depth) {
-    const char *name = f2c_symbol_c_name(unit, target);
+    char *name = f2c_storage_symbol_data(unit, target);
     size_t dimension;
     indent(&context->output, depth);
     f2c_buffer_printf(&context->output, "bool f2c_assign_reallocate = %s == NULL", name);
-    for (dimension = 0U; dimension < target->rank; ++dimension)
-        f2c_buffer_printf(&context->output, " || (size_t)%s_extent_%zu != f2c_assign_extent_%zu",
-                          name, dimension + 1U, dimension + 1U);
-    if (deferred_character)
-        f2c_buffer_printf(&context->output, " || f2c_char_len_%s != f2c_assign_character_length",
-                          name);
+    for (dimension = 0U; dimension < target->rank; ++dimension) {
+        char *extent = f2c_symbol_dimension_extent(unit, target, dimension);
+        if (extent == NULL)
+            context->output.failed = 1;
+        else
+            f2c_buffer_printf(&context->output, " || (size_t)(%s) != f2c_assign_extent_%zu", extent,
+                              dimension + 1U);
+        free(extent);
+    }
+    if (deferred_character) {
+        char *length = f2c_symbol_character_length(unit, target);
+        if (length == NULL)
+            context->output.failed = 1;
+        else
+            f2c_buffer_printf(&context->output, " || (%s) != f2c_assign_character_length", length);
+        free(length);
+    }
     f2c_buffer_append(&context->output, ";\n");
+    if (name == NULL)
+        context->output.failed = 1;
+    free(name);
 }
 
 static void emit_character_copy(Context *context, Unit *unit, const Symbol *target, int depth) {
-    const char *name = f2c_symbol_c_name(unit, target);
+    char *name = f2c_storage_symbol_data(unit, target);
     indent(&context->output, depth);
     f2c_buffer_append(&context->output,
                       "if (f2c_assign_character_length != 0U && f2c_assign_count > "
@@ -142,10 +157,13 @@ static void emit_character_copy(Context *context, Unit *unit, const Symbol *targ
                       "f2c_assign_character_length - f2c_assign_copy_length);\n");
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
+    if (name == NULL)
+        context->output.failed = 1;
+    free(name);
 }
 
 static void emit_intrinsic_copy(Context *context, Unit *unit, const Symbol *target, int depth) {
-    const char *name = f2c_symbol_c_name(unit, target);
+    char *name = f2c_storage_symbol_data(unit, target);
     indent(&context->output, depth);
     f2c_buffer_printf(&context->output, "if (f2c_assign_count > SIZE_MAX / sizeof(%s)) abort();\n",
                       f2c_symbol_c_type(target));
@@ -165,33 +183,44 @@ static void emit_intrinsic_copy(Context *context, Unit *unit, const Symbol *targ
                       "f2c_assign_destination[f2c_assign_index] = (%s)"
                       "f2c_assign_source[f2c_assign_index];\n",
                       f2c_symbol_c_type(target));
+    if (name == NULL)
+        context->output.failed = 1;
+    free(name);
 }
 
 static void emit_descriptor_commit(Context *context, Unit *unit, const Symbol *target,
                                    int deferred_character, int depth) {
-    const char *name = f2c_symbol_c_name(unit, target);
+    const F2cStorageReference reference = f2c_ir_symbol_storage_reference(target);
+    char *name = f2c_storage_symbol_data(unit, target);
     size_t dimension;
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "if (f2c_assign_reallocate) {\n");
     indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output, "free(%s);\n", name);
-    indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output, "%s = f2c_assign_destination;\n", name);
+    if (!f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_DATA, 0U, NULL,
+                                "f2c_assign_destination", depth + 1))
+        context->output.failed = 1;
     if (deferred_character) {
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "f2c_char_len_%s = f2c_assign_character_length;\n",
-                          name);
+        if (!f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_CHARACTER_LENGTH,
+                                    0U, NULL, "f2c_assign_character_length", depth + 1))
+            context->output.failed = 1;
     }
     for (dimension = 0U; dimension < target->rank; ++dimension) {
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "%s_lower_%zu = f2c_assign_lower_%zu;\n", name,
-                          dimension + 1U, dimension + 1U);
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "%s_extent_%zu = (int32_t)f2c_assign_extent_%zu;\n",
-                          name, dimension + 1U, dimension + 1U);
+        Buffer lower = {0};
+        Buffer extent = {0};
+        f2c_buffer_printf(&lower, "f2c_assign_lower_%zu", dimension + 1U);
+        f2c_buffer_printf(&extent, "(int32_t)f2c_assign_extent_%zu", dimension + 1U);
+        if (!f2c_storage_emit_contiguous_dimension(&context->output, unit, &reference, dimension,
+                                                   NULL, lower.data, extent.data, depth + 1))
+            context->output.failed = 1;
+        free(lower.data);
+        free(extent.data);
     }
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
+    if (name == NULL)
+        context->output.failed = 1;
+    free(name);
 }
 
 int f2c_emit_allocatable_array_assignment(Context *context, Unit *unit, const F2cExpr *left,
@@ -219,8 +248,12 @@ int f2c_emit_allocatable_array_assignment(Context *context, Unit *unit, const F2
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
     indent(&context->output, depth + 1);
+    char *source_data = f2c_storage_symbol_data(unit, source);
+    if (source_data == NULL)
+        goto failed;
     f2c_buffer_printf(&context->output, "const %s *f2c_assign_source = %s;\n",
-                      f2c_symbol_c_type(source), f2c_symbol_c_name(unit, source));
+                      f2c_symbol_c_type(source), source_data);
+    free(source_data);
     indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "if (f2c_assign_source == NULL) abort();\n");
     if (character) {
@@ -250,7 +283,12 @@ int f2c_emit_allocatable_array_assignment(Context *context, Unit *unit, const F2
     emit_count(context, target, depth + 1);
     if (derived) {
         char *old_count = f2c_symbol_element_count(unit, target);
-        const char *name = f2c_symbol_c_name(unit, target);
+        const F2cStorageReference reference = f2c_ir_symbol_storage_reference(target);
+        char *name = f2c_storage_write_property(unit, &reference, F2C_OBJECT_DATA, 0U);
+        if (name == NULL) {
+            free(old_count);
+            goto failed;
+        }
         indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output,
                           "if (f2c_assign_count > SIZE_MAX / sizeof(%s)) abort();\n",
@@ -277,16 +315,21 @@ int f2c_emit_allocatable_array_assignment(Context *context, Unit *unit, const F2
         indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output, "%s = f2c_assign_destination;\n", name);
         for (dimension = 0U; dimension < target->rank; ++dimension) {
-            indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "%s_lower_%zu = f2c_assign_lower_%zu; "
-                              "%s_extent_%zu = (int32_t)f2c_assign_extent_%zu;\n",
-                              name, dimension + 1U, dimension + 1U, name, dimension + 1U,
-                              dimension + 1U);
+            Buffer lower = {0};
+            Buffer extent = {0};
+            f2c_buffer_printf(&lower, "f2c_assign_lower_%zu", dimension + 1U);
+            f2c_buffer_printf(&extent, "(int32_t)f2c_assign_extent_%zu", dimension + 1U);
+            if (!f2c_storage_emit_contiguous_dimension(&context->output, unit, &reference,
+                                                       dimension, NULL, lower.data, extent.data,
+                                                       depth + 1))
+                context->output.failed = 1;
+            free(lower.data);
+            free(extent.data);
         }
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
         free(old_count);
+        free(name);
         free(source_length);
         return 1;
     }
@@ -317,8 +360,8 @@ int f2c_emit_move_alloc_statement(Context *context, Unit *unit, const F2cStateme
     const F2cExpr *status_expression = move_alloc_actual(statement, 2U);
     Symbol *from = from_expression != NULL ? from_expression->symbol : NULL;
     Symbol *to = to_expression != NULL ? to_expression->symbol : NULL;
-    const char *from_name;
-    const char *to_name;
+    char *from_name;
+    char *to_name;
     char *status = NULL;
     size_t dimension;
     size_t output_start;
@@ -332,8 +375,16 @@ int f2c_emit_move_alloc_statement(Context *context, Unit *unit, const F2cStateme
     if (status_expression != NULL && status == NULL)
         return 0;
     output_start = context->output.length;
-    from_name = f2c_symbol_c_name(unit, from);
-    to_name = f2c_symbol_c_name(unit, to);
+    const F2cStorageReference from_reference = f2c_ir_storage_reference(from_expression);
+    const F2cStorageReference to_reference = f2c_ir_storage_reference(to_expression);
+    from_name = f2c_storage_write_property(unit, &from_reference, F2C_OBJECT_DATA, 0U);
+    to_name = f2c_storage_write_property(unit, &to_reference, F2C_OBJECT_DATA, 0U);
+    if (from_name == NULL || to_name == NULL) {
+        free(status);
+        free(from_name);
+        free(to_name);
+        return 0;
+    }
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "{\n");
     if (to->type == TYPE_DERIVED && to->derived_type != NULL) {
@@ -351,23 +402,24 @@ int f2c_emit_move_alloc_statement(Context *context, Unit *unit, const F2cStateme
     indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output, "%s = NULL;\n", from_name);
     if (from->deferred_character) {
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "f2c_char_len_%s = f2c_char_len_%s;\n", to_name,
-                          from_name);
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "f2c_char_len_%s = 0U;\n", from_name);
+        char *length = f2c_symbol_character_length(unit, from);
+        if (!f2c_storage_emit_store(&context->output, unit, &to_reference,
+                                    F2C_OBJECT_CHARACTER_LENGTH, 0U, NULL, length, depth + 1) ||
+            !f2c_storage_emit_store(&context->output, unit, &from_reference,
+                                    F2C_OBJECT_CHARACTER_LENGTH, 0U, NULL, "0U", depth + 1))
+            context->output.failed = 1;
+        free(length);
     }
     for (dimension = 0U; dimension < from->rank; ++dimension) {
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "%s_lower_%zu = %s_lower_%zu;\n", to_name,
-                          dimension + 1U, from_name, dimension + 1U);
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "%s_extent_%zu = %s_extent_%zu;\n", to_name,
-                          dimension + 1U, from_name, dimension + 1U);
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "%s_lower_%zu = 1;\n", from_name, dimension + 1U);
-        indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "%s_extent_%zu = 0;\n", from_name, dimension + 1U);
+        char *lower = f2c_symbol_dimension_lower(unit, from, dimension);
+        char *extent = f2c_symbol_dimension_extent(unit, from, dimension);
+        if (!f2c_storage_emit_contiguous_dimension(&context->output, unit, &to_reference, dimension,
+                                                   NULL, lower, extent, depth + 1) ||
+            !f2c_storage_emit_contiguous_dimension(&context->output, unit, &from_reference,
+                                                   dimension, NULL, "1", "0", depth + 1))
+            context->output.failed = 1;
+        free(lower);
+        free(extent);
     }
     if (status != NULL) {
         indent(&context->output, depth + 1);
@@ -376,6 +428,8 @@ int f2c_emit_move_alloc_statement(Context *context, Unit *unit, const F2cStateme
     indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     free(status);
+    free(from_name);
+    free(to_name);
     if (!context->output.failed)
         return 1;
     if (context->output.data != NULL && output_start <= context->output.length) {
