@@ -305,8 +305,8 @@ void f2c_transform_emit_array_cleanup(Context *context, const TransformArray *ar
         return;
     if (array->type == TYPE_DERIVED && array->derived_type != NULL && array->count != NULL) {
         f2c_transform_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "f2c_destroy_array_%s(%s, %s, %zuU);\n",
-                          array->derived_type->c_name, array->pointer, array->count, array->rank);
+        f2c_buffer_printf(&context->output, "f2c_discard_array_%s(%s, %s);\n",
+                          array->derived_type->c_name, array->pointer, array->count);
     }
     f2c_transform_indent(&context->output, depth);
     f2c_buffer_printf(&context->output, "free(%s);\n", array->pointer);
