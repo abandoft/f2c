@@ -39,6 +39,8 @@ set(
     reduction_intrinsics
     volatile_reductions
     qualified_descriptors
+    scoped_storage_access
+    scoped_unaligned_storage
     qualified_contiguous
     parenthesized_intrinsic_values
     parenthesized_values
