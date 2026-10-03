@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "benchmark_statistics.h"
+#include "performance/samples.h"
 
 typedef void (*daxpy_function)(int32_t *, double *, double *, int32_t *, double *, int32_t *);
 
@@ -91,6 +91,13 @@ static int run_case(const DaxpyCase *test, double *x, double *c_y, double *fortr
         }
         samples[round] = f2c_benchmark_symmetric_sample(round, outer_first, inner_first,
                                                         inner_second, outer_second);
+    }
+    {
+        char description[64];
+        (void)snprintf(description, sizeof(description), "n=%d;inc=%d", test->n, test->stride);
+        if (!f2c_benchmark_write_samples(stdout, "DAXPY", description, samples,
+                                         sizeof(samples) / sizeof(samples[0])))
+            return 0;
     }
     result = f2c_benchmark_median(samples, sizeof(samples) / sizeof(samples[0]));
     printf("DAXPY n=%d inc=%d: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", test->n,
