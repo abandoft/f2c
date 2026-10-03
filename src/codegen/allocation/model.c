@@ -158,9 +158,14 @@ static int prepare_numeric_scalar(Context *context, Unit *unit, const F2cExpr *e
         return 0;
     }
     f2c_array_indent(&context->output, depth);
-    f2c_buffer_printf(&context->output, "const %s %s = (%s)(%s);\n",
-                      f2c_expression_c_type(expression), name.data,
-                      f2c_expression_c_type(expression), code);
+    if (expression->type == TYPE_COMPLEX || expression->type == TYPE_DOUBLE_COMPLEX)
+        /* Compatible complex values use assignment, including MSVC's struct ABI. */
+        f2c_buffer_printf(&context->output, "const %s %s = %s;\n",
+                          f2c_expression_c_type(expression), name.data, code);
+    else
+        f2c_buffer_printf(&context->output, "const %s %s = (%s)(%s);\n",
+                          f2c_expression_c_type(expression), name.data,
+                          f2c_expression_c_type(expression), code);
     model->scalar_name = f2c_buffer_take(&name);
     free(code);
     return model->scalar_name != NULL;
@@ -348,9 +353,13 @@ int f2c_allocation_model_emit_source(Context *context, const Symbol *target,
         f2c_buffer_append(&context->output, "for (size_t f2c_alloc_index = 0U; f2c_alloc_index < "
                                             "f2c_alloc_count; ++f2c_alloc_index)\n");
         f2c_array_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "f2c_alloc_storage[f2c_alloc_index] = (%s)%s%s;\n",
-                          f2c_symbol_c_type(target), source,
-                          model->expression->rank == 0U ? "" : "[f2c_alloc_index]");
+        if (target->type == TYPE_COMPLEX || target->type == TYPE_DOUBLE_COMPLEX)
+            f2c_buffer_printf(&context->output, "f2c_alloc_storage[f2c_alloc_index] = %s%s;\n",
+                              source, model->expression->rank == 0U ? "" : "[f2c_alloc_index]");
+        else
+            f2c_buffer_printf(&context->output, "f2c_alloc_storage[f2c_alloc_index] = (%s)%s%s;\n",
+                              f2c_symbol_c_type(target), source,
+                              model->expression->rank == 0U ? "" : "[f2c_alloc_index]");
     }
     return 1;
 }
