@@ -205,12 +205,20 @@ typedef struct F2cVariableFlow {
 
 typedef enum F2cOwnedTemporaryKind {
     F2C_OWNED_TEMPORARY_NONE,
-    F2C_OWNED_TEMPORARY_ARRAY_FUNCTION_RESULT,
+    F2C_OWNED_TEMPORARY_FUNCTION_RESULT,
     F2C_OWNED_TEMPORARY_TRANSFORMATIONAL_RESULT,
     F2C_OWNED_TEMPORARY_ARRAY_CONSTRUCTOR,
     F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE,
     F2C_OWNED_TEMPORARY_TRANSFER_SOURCE
 } F2cOwnedTemporaryKind;
+
+typedef enum F2cTemporaryReleaseKind {
+    F2C_TEMPORARY_RELEASE_STORAGE,
+    F2C_TEMPORARY_FINALIZE_VALUE,
+    F2C_TEMPORARY_DISCARD_SNAPSHOT,
+    F2C_TEMPORARY_BORROWED_REFERENCE,
+    F2C_TEMPORARY_STACK_VALUE
+} F2cTemporaryReleaseKind;
 
 typedef struct F2cOwnedTemporary {
     F2cOwnedTemporaryKind kind;
@@ -220,7 +228,7 @@ typedef struct F2cOwnedTemporary {
     size_t owner_statement;
     F2cSourceSpan span;
     F2cDerivedType *derived_type;
-    int requires_finalization;
+    F2cTemporaryReleaseKind release_kind;
 } F2cOwnedTemporary;
 
 typedef struct F2cTemporaryFlow {

@@ -15,17 +15,32 @@ typedef struct ExpressionTemporaryAssigner {
     int failed;
 } ExpressionTemporaryAssigner;
 
+F2cTemporaryReleaseKind f2c_expression_temporary_release_kind(const F2cExpr *expression) {
+    if (f2c_expression_has_pointer_result(expression) &&
+        expression->result_use == F2C_FUNCTION_RESULT_REFERENCE)
+        return F2C_TEMPORARY_BORROWED_REFERENCE;
+    if (f2c_expression_has_pointer_result(expression) && expression->rank == 0U &&
+        expression->type != TYPE_CHARACTER && expression->type != TYPE_DERIVED)
+        return F2C_TEMPORARY_STACK_VALUE;
+    if (expression != NULL && expression->type == TYPE_DERIVED && expression->derived_type != NULL)
+        return f2c_expression_has_pointer_result(expression) ? F2C_TEMPORARY_DISCARD_SNAPSHOT
+                                                             : F2C_TEMPORARY_FINALIZE_VALUE;
+    return F2C_TEMPORARY_RELEASE_STORAGE;
+}
+
 static F2cOwnedTemporaryKind owned_temporary_kind(const F2cExpr *expression) {
-    if (expression == NULL || expression->rank == 0U)
+    if (expression == NULL)
+        return F2C_OWNED_TEMPORARY_NONE;
+    if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_NONE &&
+        f2c_expression_has_descriptor_result(expression))
+        return F2C_OWNED_TEMPORARY_FUNCTION_RESULT;
+    if (expression->rank == 0U)
         return F2C_OWNED_TEMPORARY_NONE;
     if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
         return F2C_OWNED_TEMPORARY_ARRAY_CONSTRUCTOR;
     if (expression->kind == F2C_EXPR_CALL &&
         f2c_intrinsic_is_transformational(expression->intrinsic))
         return F2C_OWNED_TEMPORARY_TRANSFORMATIONAL_RESULT;
-    if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_NONE &&
-        f2c_expression_has_descriptor_result(expression))
-        return F2C_OWNED_TEMPORARY_ARRAY_FUNCTION_RESULT;
     if (expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY ||
         expression->kind == F2C_EXPR_PARENTHESIZED)
         return F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE;
@@ -96,7 +111,7 @@ static int append_statement_owned_temporary(ExpressionTemporaryAssigner *assigne
                             assigner->statement,
                             expression->span,
                             expression->derived_type,
-                            expression->type == TYPE_DERIVED && expression->derived_type != NULL};
+                            f2c_expression_temporary_release_kind(expression)};
     assigner->unit->owned_temporary_count = index + 1U;
     expression->owned_temporary_index = index;
     expression->owned_temporary_kind = kind;
