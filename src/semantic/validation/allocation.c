@@ -141,6 +141,8 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
     size_t source_count = 0U;
     size_t mold_count = 0U;
     size_t i;
+    if (f2c_expression_has_pointer_result(mold))
+        mold->result_use = F2C_FUNCTION_RESULT_METADATA;
     if (source != NULL && mold != NULL) {
         f2c_diagnostic_at(context, statement->line, 1U, 1,
                           "ALLOCATE cannot specify both SOURCE= and MOLD=");

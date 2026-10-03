@@ -452,8 +452,6 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
         f2c_validation_intrinsic_assignment(context, statement);
         f2c_validation_constructor_assignment(context, unit, statement);
     }
-    if (statement->kind == F2C_STMT_ALLOCATE || statement->kind == F2C_STMT_DEALLOCATE)
-        f2c_validation_allocation(context, unit, statement);
     if (statement->kind != F2C_STMT_READ && statement->kind != F2C_STMT_WRITE &&
         statement->kind != F2C_STMT_PRINT && statement->io_item_count == 0U) {
         for (i = 0U; i < statement->item_count; ++i)
@@ -469,6 +467,9 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
                                             statement->arguments != NULL ? statement->arguments[i]
                                                                          : NULL);
     }
+    /* Model ownership and rank depend on fully bound function characteristics. */
+    if (statement->kind == F2C_STMT_ALLOCATE || statement->kind == F2C_STMT_DEALLOCATE)
+        f2c_validation_allocation(context, unit, statement);
     if (statement->kind == F2C_STMT_MOVE_ALLOC) {
         f2c_validation_move_alloc(context, unit, statement);
     } else if (statement->kind == F2C_STMT_CALL && statement->expression == NULL) {
