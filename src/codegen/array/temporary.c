@@ -37,7 +37,7 @@ static int has_unlowered_call(const Unit *unit, const F2cExpr *expression) {
 }
 
 static int array_inquiry_call(const F2cExpr *expression) {
-    return expression != NULL && expression->kind == F2C_EXPR_CALL &&
+    return expression != NULL && expression->rank != 0U && expression->kind == F2C_EXPR_CALL &&
            (expression->intrinsic == F2C_INTRINSIC_SHAPE ||
             expression->intrinsic == F2C_INTRINSIC_LBOUND ||
             expression->intrinsic == F2C_INTRINSIC_UBOUND);
@@ -437,10 +437,6 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
         return 1;
     if (f2c_expression_direct_relation_reduction(expression))
         return 1;
-    if (expression->kind == F2C_EXPR_SUBSTRING && has_unlowered_call(unit, expression) &&
-        !f2c_array_hoist_scalar_subexpressions(unit, expression, identifier, role, temporary,
-                                               prelude, depth, 1))
-        return 0;
     if (expression->kind != F2C_EXPR_ARRAY_CONSTRUCTOR) {
         for (child = 0U; child < expression->child_count; ++child) {
             if (transfer_mold_argument(expression, child))
@@ -462,6 +458,12 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
             }
         }
     }
+    /* An owning index result must become a scalar value before substring
+     * address arithmetic hoists it. Hoisting the raw call casts a descriptor. */
+    if (expression->kind == F2C_EXPR_SUBSTRING && has_unlowered_call(unit, expression) &&
+        !f2c_array_hoist_scalar_subexpressions(unit, expression, identifier, role, temporary,
+                                               prelude, depth, 1))
+        return 0;
     if (!f2c_call_materialize_expression(unit, expression, identifier, role, temporary, prelude,
                                          depth))
         return 0;
