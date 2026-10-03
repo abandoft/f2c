@@ -17,6 +17,8 @@ static int check_retention;
 static int allocation_budget = -1;
 static size_t owned_scalar_calls;
 static size_t owned_character_calls;
+static size_t owned_control_calls;
+static char control_message[40];
 
 static int is_live_allocation(const void *storage) {
     for (size_t index = 0U; index < allocation_count; ++index)
@@ -108,6 +110,13 @@ f2c_descriptor borrowed_scalar(void) {
                             .rank = mode == 1 ? 1U : 0U};
 }
 
+f2c_descriptor borrowed_message(void) {
+    return (f2c_descriptor){.data = mode == 7 ? NULL : control_message,
+                            .element_size = sizeof(char),
+                            .character_length = sizeof(control_message),
+                            .rank = 0U};
+}
+
 f2c_descriptor owned_scalar(void) {
     ++owned_scalar_calls;
     check_previous_results();
@@ -120,6 +129,18 @@ f2c_descriptor owned_scalar(void) {
                             .deallocatable = true,
                             .element_size = mode == 2 ? 1U : sizeof(*value),
                             .rank = 0U};
+}
+
+f2c_descriptor owned_control(const int32_t *n) {
+    ++owned_control_calls;
+    check_previous_results();
+    int32_t *value = (int32_t *)tracked_malloc(sizeof(*value));
+    if (value == NULL)
+        abort();
+    *value = *n;
+    remember_result(value);
+    return (f2c_descriptor){
+        .data = value, .deallocatable = true, .element_size = sizeof(*value), .rank = 0U};
 }
 
 f2c_descriptor borrowed_array(void) {
@@ -188,6 +209,9 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[1], "value_association") == 0) {
             mode = 5;
             fetch_empty_array(&scalar);
+        } else if (strcmp(argv[1], "control_association") == 0) {
+            mode = 7;
+            allocate_pointer_controls(&scalar);
         } else
             return 2;
         return 1;
@@ -259,6 +283,55 @@ int main(int argc, char **argv) {
         return 17;
     allocation_budget = -1;
     mode = 0;
+    check_retention = 1;
+    retained_result_count = 0U;
+    const size_t control_calls_before = owned_control_calls;
+    int32_t controls[6] = {0};
+    allocate_control_results(controls);
+    const int32_t expected_controls[6] = {0, 3, 2, 27, 3, 1};
+    if (memcmp(controls, expected_controls, sizeof(controls)) != 0 ||
+        owned_control_calls != control_calls_before + 6U || retained_result_count != 6U ||
+        allocation_count != 1U)
+        return 18;
+    retained_result_count = 0U;
+    allocate_length_results(controls);
+    if (controls[0] != 0 || controls[1] != 4 || controls[2] != 4 ||
+        owned_control_calls != control_calls_before + 8U || retained_result_count != 2U ||
+        allocation_count != 1U)
+        return 19;
+    retained_result_count = 0U;
+    allocate_many_controls(&scalar);
+    if (scalar != 17 * 7 || retained_result_count != 17U || allocation_count != 1U)
+        return 20;
+    retained_result_count = 0U;
+    allocation_budget = 1;
+    scalar = 0;
+    allocate_control_failure(&scalar);
+    if (scalar <= 0 || retained_result_count != 1U || allocation_count != 1U ||
+        allocation_budget != 0)
+        return 21;
+    allocation_budget = -1;
+    retained_result_count = 0U;
+    scalar = 0;
+    allocate_control_guard(&scalar);
+    if (scalar <= 0 || retained_result_count != 1U || allocation_count != 1U)
+        return 22;
+    check_retention = 0;
+    result_contract_target[0] = 17;
+    memset(control_message, '?', sizeof(control_message));
+    allocation_budget = 1;
+    allocate_pointer_controls(&scalar);
+    static const char expected_control_message[] = "object is not deallocatable";
+    if (scalar != 17 || result_contract_target[0] <= 0 || allocation_count != 1U ||
+        allocation_budget != 0 ||
+        memcmp(control_message, expected_control_message, sizeof(expected_control_message) - 1U) !=
+            0)
+        return 23;
+    for (size_t index = sizeof(expected_control_message) - 1U; index < sizeof(control_message);
+         ++index)
+        if (control_message[index] != ' ')
+            return 24;
+    allocation_budget = -1;
     tracked_free(result_contract_target);
     if (allocation_count != 0U)
         return 7;

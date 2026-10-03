@@ -53,6 +53,109 @@ subroutine allocate_result_failure(status)
   allocate(target, source=owned_scalar(), stat=status)
 end subroutine
 
+subroutine allocate_control_results(output)
+  integer, intent(out) :: output(6)
+  integer, allocatable :: first(:), second(:)
+  integer :: statuses(3)
+  character(len=40) :: messages(3)
+  interface
+    function owned_control(n) result(value)
+      integer, intent(in) :: n
+      integer, allocatable :: value
+    end function
+  end interface
+  statuses = -99
+  messages = 'untouched'
+  allocate(first(owned_control(2):owned_control(4)), second(owned_control(3)), &
+           source=9, stat=statuses(owned_control(2)), &
+           errmsg=messages(owned_control(2))(owned_control(2):20))
+  output = [statuses(2), size(first), lbound(first,1), sum(first), size(second), &
+            merge(1,0,all(messages == 'untouched'))]
+  deallocate(first, second)
+end subroutine
+
+subroutine allocate_length_results(output)
+  integer, intent(out) :: output(3)
+  integer :: statuses(3)
+  character(len=:), allocatable :: first, second
+  interface
+    function owned_control(n) result(value)
+      integer, intent(in) :: n
+      integer, allocatable :: value
+    end function
+  end interface
+  statuses = -99
+  allocate(character(len=owned_control(4)) :: first, second, &
+           stat=statuses(owned_control(2)))
+  output = [statuses(2), len(first), len(second)]
+  deallocate(first, second)
+end subroutine
+
+subroutine allocate_control_failure(status)
+  integer, intent(out) :: status
+  integer, allocatable :: target(:)
+  interface
+    function owned_control(n) result(value)
+      integer, intent(in) :: n
+      integer, allocatable :: value
+    end function
+  end interface
+  allocate(target(owned_control(3)), stat=status)
+end subroutine
+
+subroutine allocate_control_guard(status)
+  integer, intent(out) :: status
+  integer :: statuses(3)
+  integer, allocatable :: target, missing
+  interface
+    function owned_control(n) result(value)
+      integer, intent(in) :: n
+      integer, allocatable :: value
+    end function
+  end interface
+  statuses = -99
+  allocate(target, source=missing, stat=statuses(owned_control(2)))
+  status = statuses(2)
+end subroutine
+
+subroutine allocate_many_controls(output)
+  integer, intent(out) :: output
+  integer, allocatable :: a(:), b(:), c(:), d(:), e(:), f(:), g(:), h(:), i(:)
+  integer, allocatable :: j(:), k(:), l(:), m(:), n(:), o(:), p(:), q(:)
+  interface
+    function owned_control(n) result(value)
+      integer, intent(in) :: n
+      integer, allocatable :: value
+    end function
+  end interface
+  allocate(a(owned_control(1)), b(owned_control(1)), c(owned_control(1)), &
+           d(owned_control(1)), e(owned_control(1)), f(owned_control(1)), &
+           g(owned_control(1)), h(owned_control(1)), i(owned_control(1)), &
+           j(owned_control(1)), k(owned_control(1)), l(owned_control(1)), &
+           m(owned_control(1)), n(owned_control(1)), o(owned_control(1)), &
+           p(owned_control(1)), q(owned_control(1)), source=7)
+  output = sum(a)+sum(b)+sum(c)+sum(d)+sum(e)+sum(f)+sum(g)+sum(h)+sum(i) &
+           +sum(j)+sum(k)+sum(l)+sum(m)+sum(n)+sum(o)+sum(p)+sum(q)
+  deallocate(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q)
+end subroutine
+
+subroutine allocate_pointer_controls(output)
+  integer, intent(out) :: output
+  integer, allocatable :: value
+  interface
+    function borrowed_scalar() result(target)
+      integer, pointer :: target
+    end function
+    function borrowed_message() result(target)
+      character(len=40), pointer :: target
+    end function
+  end interface
+  allocate(value, source=borrowed_scalar(), stat=borrowed_scalar(), errmsg=borrowed_message())
+  output = value
+  deallocate(value, stat=borrowed_scalar(), errmsg=borrowed_message())
+  deallocate(value, stat=borrowed_scalar(), errmsg=borrowed_message())
+end subroutine
+
 subroutine fetch_empty_array(output)
   integer,intent(out) :: output
   interface
