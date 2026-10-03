@@ -16,6 +16,22 @@ char *f2c_call_emit_actual_address(Unit *unit, const F2cExpr *actual, const char
         return NULL;
     if (actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
+    const char *descriptor = f2c_lowering_result_descriptor(unit, actual);
+    if (descriptor != NULL && actual->rank == 0U) {
+        if (actual->result_use == F2C_FUNCTION_RESULT_REFERENCE)
+            f2c_buffer_printf(&result, "(%s *)%s.data", f2c_expression_c_type(actual), descriptor);
+        else if (f2c_expression_temporary_release_kind(actual) == F2C_TEMPORARY_STACK_VALUE)
+            f2c_buffer_printf(&result, "&(%s)", code);
+        else {
+            const char *storage = f2c_lowering_owned_storage(unit, actual);
+            if (storage == NULL) {
+                *supported = 0;
+                return NULL;
+            }
+            f2c_buffer_append(&result, storage);
+        }
+        return f2c_buffer_take(&result);
+    }
     symbol = actual->symbol;
     if (actual->kind == F2C_EXPR_COMPONENT && symbol != NULL && symbol->external)
         return f2c_strdup(code);
