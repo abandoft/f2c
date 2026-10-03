@@ -6,6 +6,7 @@
 
 void f2c_validate_unit_expressions(Context *context, Unit *unit);
 void f2c_analyze_expression_access(F2cExpr *expression);
+unsigned int f2c_symbol_storage_qualifiers(const Symbol *symbol);
 void f2c_analyze_unit_access(Unit *unit);
 void f2c_analyze_loop_hints(Unit *unit);
 void f2c_validate_project_storage(Context *context);
@@ -26,6 +27,7 @@ int f2c_expression_is_whole_assumed_size(const F2cExpr *expression);
 int f2c_expression_has_target_attribute(const F2cExpr *expression);
 void f2c_validate_designator_components(Context *context, const F2cExpr *expression);
 int f2c_expression_has_vector_subscript(const F2cExpr *expression);
+int f2c_expression_is_simply_contiguous(const F2cExpr *expression);
 int f2c_unit_has_descriptor_result(const Unit *unit);
 int f2c_procedure_has_descriptor_result(const Symbol *procedure);
 int f2c_expression_has_allocatable_result(const F2cExpr *expression);

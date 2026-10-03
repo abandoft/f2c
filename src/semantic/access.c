@@ -1,6 +1,6 @@
 #include "semantic/semantic.h"
 
-static unsigned int symbol_qualifiers(const Symbol *symbol) {
+unsigned int f2c_symbol_storage_qualifiers(const Symbol *symbol) {
     unsigned int qualifiers = F2C_STORAGE_UNQUALIFIED;
     if (symbol != NULL) {
         if (symbol->volatile_entity)
@@ -20,10 +20,10 @@ void f2c_analyze_expression_access(F2cExpr *expression) {
     case F2C_EXPR_ARRAY_REFERENCE:
         if (expression->value_category != F2C_VALUE_PROCEDURE ||
             (expression->symbol != NULL && expression->symbol->procedure_pointer))
-            expression->storage_qualifiers = symbol_qualifiers(expression->symbol);
+            expression->storage_qualifiers = f2c_symbol_storage_qualifiers(expression->symbol);
         break;
     case F2C_EXPR_COMPONENT:
-        expression->storage_qualifiers = symbol_qualifiers(expression->symbol);
+        expression->storage_qualifiers = f2c_symbol_storage_qualifiers(expression->symbol);
         if (expression->child_count != 0U && expression->children[0] != NULL)
             expression->storage_qualifiers |= expression->children[0]->storage_qualifiers;
         break;
