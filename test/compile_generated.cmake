@@ -54,6 +54,7 @@ if(NOT translate_status EQUAL 0)
 endif()
 
 include("${SOURCE_DIR}/test/generated/fixture_manifest.cmake")
+include("${SOURCE_DIR}/test/generated/live_state.cmake")
 foreach(io_fixture IN LISTS F2C_GENERATED_FIXTURES)
     set(io_generated "${BINARY_DIR}/generated_${io_fixture}.c")
     set(io_executable "${BINARY_DIR}/generated_${io_fixture}_test")

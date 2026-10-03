@@ -41,6 +41,9 @@ set(
     qualified_descriptors
     scoped_storage_access
     scoped_unaligned_storage
+    live_object_state
+    live_character_result_state
+    live_namelist_transaction
     qualified_contiguous
     parenthesized_intrinsic_values
     parenthesized_values
