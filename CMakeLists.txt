@@ -323,6 +323,7 @@ set(
     src/semantic/character/literal.c
     src/semantic/control_flow.c
     src/semantic/control_flow.h
+    src/semantic/loop.c
     src/semantic/control_flow/connectivity.c
     src/semantic/control_flow/private.h
     src/semantic/constant.c
