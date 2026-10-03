@@ -9,7 +9,7 @@ static void indent(Buffer *output, int depth) {
 }
 
 static int expression_is_owned(const F2cExpr *expression) {
-    return expression != NULL &&
+    return expression != NULL && !f2c_expression_has_descriptor_result(expression) &&
            (expression->kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR ||
             (expression->kind == F2C_EXPR_CALL && expression->intrinsic != F2C_INTRINSIC_MERGE) ||
             expression->resolved_procedure != NULL);

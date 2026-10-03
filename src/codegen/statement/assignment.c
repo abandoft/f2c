@@ -41,8 +41,9 @@ static int emit_derived_assignment(Context *context, const F2cStatement *stateme
                           statement->right->derived_type->c_name);
         indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
-    } else if ((source->kind == F2C_EXPR_CALL && source->intrinsic != F2C_INTRINSIC_MERGE) ||
-               source->resolved_procedure != NULL) {
+    } else if (!f2c_expression_has_descriptor_result(source) &&
+               ((source->kind == F2C_EXPR_CALL && source->intrinsic != F2C_INTRINSIC_MERGE) ||
+                source->resolved_procedure != NULL)) {
         f2c_buffer_printf(&context->output, "{ %s f2c_assignment_result = %s;\n",
                           statement->right->derived_type->c_name, right);
         indent(&context->output, depth + 1);
