@@ -130,11 +130,13 @@ static void emit_growth(Buffer *output, const char *name, int depth) {
     f2c_array_indent(output, depth + 1);
     f2c_buffer_printf(output, "if (%s_replacement == NULL) abort();\n", name);
     f2c_array_indent(output, depth + 1);
+    /* The first growth happens only when all inline records are occupied.
+     * Express its fixed source size directly, including in unrolled captures. */
     f2c_buffer_printf(output,
                       "if (%s_retained_heap == NULL) "
                       "memcpy(%s_replacement, %s_retained_inline, "
-                      "%s_retained_count * sizeof(*%s_retained));\n",
-                      name, name, name, name, name);
+                      "sizeof(%s_retained_inline));\n",
+                      name, name, name, name);
     f2c_array_indent(output, depth + 1);
     f2c_buffer_printf(output,
                       "%s_retained_heap = %s_replacement; "
