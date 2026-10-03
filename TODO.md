@@ -94,7 +94,7 @@
   尚须统一其余 I/O、派生深拷贝和全部生成辅助路径的访问策略，并完成动态描述符状态模型；
   限定未对齐对象之间的禁止复制关联需要可保留原始字节地址的描述符，不能用临时值冒充。
   局部、模块和组件仍使用分离的物理状态字段及调用桥，尚未形成覆盖所有别名的共享对象状态
-  身份；多个合法状态别名同时参与调用、动态类型与过程指针状态、标量拥有型函数结果、
+  身份；多个合法状态别名同时参与调用、动态类型与过程指针状态、完整函数结果组合与生命周期、
   字符数组完整 I/O、限定派生组件深拷贝及全部 kind/rank/异步状态变化组合尚未完成。
   还需独立内存失败注入和扩展负向矩阵；不得把上述哑实参闭环当作完整状态模型，此项保持未关闭。
 - [ ] 为括号包围的变量表达式保留独立值语义，禁止把 `(variable)` 当作可定义设计子或直接
@@ -290,6 +290,20 @@
 
 ### P0-SEM-01 类型、kind 和 ABI
 
+- [ ] 完成函数结果的所有权、目标身份和完整消费上下文。typed IR 已区分普通标量/数组值、
+  ALLOCATABLE 结果与 POINTER 结果，并独立记录值快照或目标引用；分配来源不再被当作结果所有权。
+  共享结果降低覆盖已验证的标量 INTEGER/REAL/COMPLEX/LOGICAL、延迟长度字符与含动态组件的
+  派生结果，区分值代码、结果描述符和拥有存储，语义临时量目录保存存储释放、值终结、快照丢弃、
+  借用引用和栈值策略。标量数值指针结果以栈快照消费，不额外分配堆存储；数组值快照按真实 stride
+  及访问属性读取。指针关联与已验证的普通/POINTER INTENT(IN) 实参保留目标身份、下界、步长、
+  字符长度及分配来源；POINTER OUT/INOUT、ALLOCATABLE 状态与括号值的非法关联保持硬失败。
+  编译器借用快照独立递归释放动态组件，不对原目标或快照错误调用语言 FINAL；嵌套可分配派生
+  标量组件的对象访问也已修正。独立 C 结果提供者检查分配余额、借用目标存活、嵌入 NUL、非法
+  rank/元素大小/所有权标志以及分配失败；这不是只由转译器生产和消费描述符的自校验。
+  尚须完成标量及数组描述符结果在构造器/隐式 DO、SOURCE/MOLD、全部 I/O 和 inquiry 中的组合，
+  并统一 innermost executable construct 的终结与释放边界、rank-specific FINAL、动态多态及
+  过程指针结果。不能把当前语句消费路径当作完整结果生命周期支持，本项保持未关闭。
+
 - [ ] 建立目标 ABI 数据模型，覆盖所承诺的 INTEGER、REAL、COMPLEX、LOGICAL 和 CHARACTER
   kind，不再把 kind 仅当作附加整数元数据。当前已集中定义 `INTEGER(KIND=1/2/4/8)`、IEEE
   binary32 `REAL(KIND=4)` 和 binary64 `REAL(KIND=8)` 的 radix、digits、precision、range、指数
@@ -308,7 +322,8 @@
   绑定元素长度；向量下标用于 `INTENT(OUT/INOUT)` 会在语义阶段硬失败。函数表达式现会在普通及
   类型绑定函数调用中，为传给非指针 `CONTIGUOUS` 假定形状哑实参的非连续仿射数值和 CHARACTER
   数组段建立连续临时量，并按 `INTENT` 回写；边界表达式只求值一次。显式形状、可分配和指针数组
-  函数结果现统一返回带 type/kind/rank、逐维 extent/stride、字符长度和释放来源的描述符；调用端会
+  函数结果现依据 typed IR 的 type/kind 返回带 element size/rank、逐维 extent/stride、字符长度和
+  分配来源的描述符；调用端会
   验证契约，并对拥有型结果转移存储，对非拥有型指针视图按真实正负 stride 建立连续深复制。结果可
   嵌套在 elemental/归约表达式、普通函数调用和直接 `CALL` 中，派生类型动态组件会正确 clone、
   销毁旧目标并释放临时量；显式接口同时比较结果 shape、字符长度及 `ALLOCATABLE/POINTER` 属性。
@@ -910,7 +925,7 @@ GCC 对前者使用目标代价模型，后者及其他后端保留原策略，�
   重复关键字表或按源码拼写重绑 typed ID。
   transformational intrinsic 的结果分配、元素复制、动态 extent 提交和派生类型销毁已从总控
   emitter 拆入 `codegen/transform/result.c`；数组函数结果的 ABI 判定和调用端物化分别位于
-  `semantic/result.c` 与 `codegen/array/function.c`，表达式临时量规划和普通变量存活性分析分别
+  `semantic/result.c` 与 `codegen/result/materialize.c`，表达式临时量规划和普通变量存活性分析分别
   位于 `semantic/temporary.c` 与 `semantic/data_flow/variables.c`；拥有型数组值数据流和结构化
   清理动作分别位于 `semantic/data_flow/temporaries.c` 与 `codegen/array/ownership.c`，主变换和
   过程调用文件继续满足规模门禁。
