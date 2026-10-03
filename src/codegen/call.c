@@ -466,12 +466,16 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
         else
             f2c_buffer_append(&deallocatable, "false");
         emit_indent(&call->prelude, depth);
-        f2c_buffer_printf(&call->prelude,
-                          "f2c_descriptor f2c_call_descriptor_%zu = {.data = %s, "
-                          ".deallocatable = %s, .element_size = sizeof(%s), .rank = %zuU, "
-                          ".character_length = (size_t)(%s)};\n",
-                          i, view.data, deallocatable.data != NULL ? deallocatable.data : "false",
-                          c_type, view.rank, character_length != NULL ? character_length : "0U");
+        f2c_buffer_printf(
+            &call->prelude,
+            "f2c_descriptor f2c_call_descriptor_%zu = {.%s = %s, "
+            ".storage_qualifiers = %uU, "
+            ".deallocatable = %s, .element_size = sizeof(%s), .rank = %zuU, "
+            ".character_length = (size_t)(%s)};\n",
+            i, f2c_descriptor_address_member(view.storage_qualifiers, view.readonly_storage),
+            view.data, view.storage_qualifiers,
+            deallocatable.data != NULL ? deallocatable.data : "false", c_type, view.rank,
+            character_length != NULL ? character_length : "0U");
         free(deallocatable.data);
         for (dimension = 0U; dimension < view.rank; ++dimension) {
             emit_indent(&call->prelude, depth);
@@ -499,8 +503,10 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
             goto descriptor_failed;
         if (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i]) {
             emit_indent(&call->postlude, depth);
-            f2c_buffer_printf(&call->postlude, "%s = (%s *)f2c_call_descriptor_%zu.data;\n", name,
-                              c_type, i);
+            f2c_buffer_printf(
+                &call->postlude, "%s = (%s%s *)f2c_call_descriptor_%zu.%s;\n", name,
+                actual->volatile_entity ? "volatile " : "", c_type, i,
+                f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(actual), 0));
             if (actual->pointer) {
                 emit_indent(&call->postlude, depth);
                 f2c_buffer_printf(&call->postlude,

@@ -22,9 +22,13 @@ static char *emit_lowered_descriptor_actual(Unit *unit, const F2cExpr *actual) {
     if (actual->type == TYPE_CHARACTER)
         character_length = f2c_character_length_expression(unit, actual);
     f2c_buffer_printf(&result,
-                      "(&(f2c_descriptor){.data = %s, .deallocatable = false, "
+                      "(&(f2c_descriptor){.%s = %s, .storage_qualifiers = %uU, "
+                      ".deallocatable = false, "
                       ".element_size = sizeof(%s), .rank = %zuU, .lower = {",
-                      lowered_code, f2c_expression_c_type(actual), actual->rank);
+                      f2c_descriptor_address_member(f2c_lowering_storage_qualifiers(unit, actual),
+                                                    f2c_lowering_readonly_storage(unit, actual)),
+                      lowered_code, f2c_lowering_storage_qualifiers(unit, actual),
+                      f2c_expression_c_type(actual), actual->rank);
     for (dimension = 0U; dimension < actual->rank; ++dimension)
         f2c_buffer_printf(&result, "%sINT64_C(1)", dimension == 0U ? "" : ", ");
     f2c_buffer_append(&result, "}, .extent = {");
@@ -63,9 +67,10 @@ static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supp
     if (actual->type == TYPE_CHARACTER)
         character_length = f2c_character_length_expression(unit, actual);
     f2c_buffer_printf(&result,
-                      "(&(f2c_descriptor){.data = f2c_implicit_mutable_actual(%s), "
+                      "(&(f2c_descriptor){.%s = %s, .storage_qualifiers = %uU, "
                       ".element_size = sizeof(%s), .rank = %zuU, .lower = {",
-                      view.data, f2c_symbol_c_type(symbol), view.rank);
+                      f2c_descriptor_address_member(view.storage_qualifiers, view.readonly_storage),
+                      view.data, view.storage_qualifiers, f2c_symbol_c_type(symbol), view.rank);
     for (dimension = 0U; dimension < view.rank; ++dimension)
         f2c_buffer_printf(&result, "%s(int64_t)(%s)", dimension == 0U ? "" : ", ",
                           view.lower[dimension]);

@@ -1,3 +1,4 @@
+#include "codegen/descriptor/private.h"
 #include "codegen/names.h"
 #include "codegen/unit/private.h"
 
@@ -28,12 +29,20 @@ static void emit_declarations(Context *context, Unit *unit) {
             f2c_buffer_printf(output, "if (f2c_descriptor_%s == NULL) abort();\n", name);
         }
         f2c_unit_indent(output, 1);
-        f2c_buffer_printf(output,
-                          "%s%s *%s = f2c_descriptor_%s != NULL ? (%s%s *)"
-                          "f2c_descriptor_%s->data : NULL;\n",
-                          symbol->volatile_entity ? "volatile " : "", f2c_symbol_c_type(symbol),
-                          name, name, symbol->volatile_entity ? "volatile " : "",
-                          f2c_symbol_c_type(symbol), name);
+        f2c_buffer_printf(
+            output,
+            "%s%s *%s = f2c_descriptor_%s != NULL ? (%s%s *)"
+            "f2c_descriptor_%s->%s : NULL;\n",
+            symbol->intent == F2C_INTENT_IN && !symbol->pointer ? "const "
+            : symbol->volatile_entity                           ? "volatile "
+                                                                : "",
+            f2c_symbol_c_type(symbol), name, name,
+            symbol->intent == F2C_INTENT_IN && !symbol->pointer ? "const "
+            : symbol->volatile_entity                           ? "volatile "
+                                                                : "",
+            f2c_symbol_c_type(symbol), name,
+            f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(symbol),
+                                          symbol->intent == F2C_INTENT_IN && !symbol->pointer));
         if (symbol->pointer) {
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output,
@@ -533,7 +542,12 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
                                      ? f2c_symbol_character_length(unit, function_result)
                                      : NULL;
         f2c_unit_indent(output, depth);
-        f2c_buffer_printf(output, "f2c_result_descriptor.data = %s;\n", name);
+        f2c_buffer_printf(
+            output, "f2c_result_descriptor.%s = %s;\n",
+            f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(function_result), 0), name);
+        f2c_unit_indent(output, depth);
+        f2c_buffer_printf(output, "f2c_result_descriptor.storage_qualifiers = %uU;\n",
+                          f2c_symbol_storage_qualifiers(function_result));
         f2c_unit_indent(output, depth);
         if (function_result->pointer)
             f2c_buffer_printf(output, "f2c_result_descriptor.deallocatable = %s_deallocatable;\n",
@@ -589,7 +603,14 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
             f2c_unit_indent(output, depth);
             f2c_buffer_printf(output, "if (f2c_descriptor_%s != NULL) {\n", name);
             f2c_unit_indent(output, depth + 1);
-            f2c_buffer_printf(output, "f2c_descriptor_%s->data = %s;\n", name, name);
+            f2c_buffer_printf(
+                output, "f2c_descriptor_%s->%s = %s;\n", name,
+                f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(symbol),
+                                              symbol->intent == F2C_INTENT_IN && !symbol->pointer),
+                name);
+            f2c_unit_indent(output, depth + 1);
+            f2c_buffer_printf(output, "f2c_descriptor_%s->storage_qualifiers = %uU;\n", name,
+                              f2c_symbol_storage_qualifiers(symbol));
             if (symbol->pointer) {
                 f2c_unit_indent(output, depth + 1);
                 f2c_buffer_printf(output,
