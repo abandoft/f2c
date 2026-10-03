@@ -58,7 +58,7 @@ jobs:
             function_result scalar_result result_identity result_snapshot result_kinds \
             constructor_result constructor_finalization \
             allocation_result allocation_result_values allocation_result_finalization \
-            allocation_controls allocation_control_values allocation_control_bounds \
+            allocation_controls allocation_control_values allocation_control_bounds allocation_native_bounds \
             allocation_control_finalization allocation_control_errors allocation_control_unaligned \
             allocation_control_pointers allocation_control_names \
             parenthesized_intrinsic_values parenthesized_values parenthesized_character_values; do
