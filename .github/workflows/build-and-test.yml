@@ -85,3 +85,13 @@ jobs:
           path: build/native/Testing/Temporary/
           if-no-files-found: ignore
           retention-days: 7
+      - name: Upload native capability reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-capabilities-${{ matrix.os }}-${{ matrix.build_type }}-${{ matrix.linkage }}
+          path: |
+            build/allocation-model-differential/native-status.tsv
+            build/allocation-model-differential/*-native-compile.log
+          if-no-files-found: ignore
+          retention-days: 14
