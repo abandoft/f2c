@@ -1,7 +1,9 @@
 #include "codegen/array/copy.h"
 #include "codegen/array/private.h"
 
+#include "codegen/descriptor/private.h"
 #include "codegen/lowering/private.h"
+#include "codegen/storage/private.h"
 #include "codegen/value/private.h"
 
 #include <stdio.h>
@@ -591,14 +593,22 @@ int f2c_array_emit_numeric_constructor(Context *context, Unit *unit, Symbol *lef
 }
 
 static int emit_allocatable_numeric_constructor(Context *context, Unit *unit, Symbol *target,
-                                                const F2cExpr *constructor, const char *name,
-                                                int depth) {
+                                                const F2cExpr *constructor,
+                                                const F2cStorageReference *reference,
+                                                const char *binding, int depth) {
     const size_t output_start = context->output.length;
     ConstructorEmitter emitter;
     if (constructor == NULL || constructor->kind != F2C_EXPR_ARRAY_CONSTRUCTOR || target == NULL ||
-        name == NULL || !target->allocatable || target->rank != 1U ||
+        binding == NULL || !target->allocatable || target->rank != 1U ||
         target->type == TYPE_CHARACTER)
         return 0;
+    char *name = f2c_storage_bound_property(unit, reference, F2C_OBJECT_DATA, 0U, binding, 1);
+    char *extent = f2c_storage_bound_property(unit, reference, F2C_OBJECT_EXTENT, 0U, binding, 0);
+    if (name == NULL || extent == NULL) {
+        free(name);
+        free(extent);
+        return 0;
+    }
     memset(&emitter, 0, sizeof(emitter));
     emitter.context = context;
     emitter.unit = unit;
@@ -625,8 +635,8 @@ static int emit_allocatable_numeric_constructor(Context *context, Unit *unit, Sy
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
                       "const bool f2c_constructor_reallocate = %s == NULL || "
-                      "(size_t)%s_extent_1 != f2c_constructor_index;\n",
-                      name, name);
+                      "(size_t)(%s) != f2c_constructor_index;\n",
+                      name, extent);
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "if (f2c_constructor_reallocate) {\n");
     f2c_array_indent(&context->output, depth + 2);
@@ -642,8 +652,8 @@ static int emit_allocatable_numeric_constructor(Context *context, Unit *unit, Sy
     if (target->type == TYPE_DERIVED && target->derived_type != NULL) {
         f2c_buffer_printf(&context->output,
                           "if (%s != NULL) f2c_destroy_array_%s(%s, "
-                          "(size_t)%s_extent_1, 1U);\n",
-                          name, target->derived_type->c_name, name, name);
+                          "(size_t)(%s), 1U);\n",
+                          name, target->derived_type->c_name, name, extent);
         f2c_array_indent(&context->output, depth + 2);
     }
     f2c_buffer_printf(&context->output, "free(%s);\n", name);
@@ -651,10 +661,9 @@ static int emit_allocatable_numeric_constructor(Context *context, Unit *unit, Sy
     f2c_buffer_printf(&context->output, "%s = f2c_constructor_values;\n", name);
     f2c_array_indent(&context->output, depth + 2);
     f2c_buffer_append(&context->output, "f2c_constructor_values = NULL;\n");
-    f2c_array_indent(&context->output, depth + 2);
-    f2c_buffer_printf(&context->output, "%s_lower_1 = 1;\n", name);
-    f2c_array_indent(&context->output, depth + 2);
-    f2c_buffer_printf(&context->output, "%s_extent_1 = (int32_t)f2c_constructor_index;\n", name);
+    if (!f2c_storage_emit_contiguous_dimension(&context->output, unit, reference, 0U, binding, "1",
+                                               "(int32_t)f2c_constructor_index", depth + 2))
+        goto failed;
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "} else if (f2c_constructor_index != 0U) {\n");
     f2c_array_indent(&context->output, depth + 2);
@@ -675,6 +684,8 @@ static int emit_allocatable_numeric_constructor(Context *context, Unit *unit, Sy
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     release_constructor_emitter(&emitter);
+    free(name);
+    free(extent);
     return 1;
 
 failed:
@@ -683,6 +694,8 @@ failed:
         context->output.data[output_start] = '\0';
     }
     release_constructor_emitter(&emitter);
+    free(name);
+    free(extent);
     return 0;
 }
 
@@ -690,7 +703,8 @@ int f2c_array_emit_allocatable_numeric_constructor(Context *context, Unit *unit,
                                                    const F2cExpr *constructor, int depth) {
     if (context == NULL || unit == NULL || target == NULL)
         return 0;
-    return emit_allocatable_numeric_constructor(context, unit, target, constructor,
+    const F2cStorageReference reference = f2c_ir_symbol_storage_reference(target);
+    return emit_allocatable_numeric_constructor(context, unit, target, constructor, &reference,
                                                 f2c_symbol_c_name(unit, target), depth);
 }
 
@@ -706,13 +720,15 @@ int f2c_array_emit_allocatable_component_constructor(Context *context, Unit *uni
         component->type == TYPE_CHARACTER || constructor == NULL ||
         constructor->kind != F2C_EXPR_ARRAY_CONSTRUCTOR)
         return 0;
-    designator = f2c_emit_expression_ast(unit, target, &supported);
+    designator = f2c_descriptor_storage_designator(unit, target);
+    supported = designator != NULL;
     if (!supported || designator == NULL) {
         free(designator);
         return 0;
     }
-    result = emit_allocatable_numeric_constructor(context, unit, component, constructor, designator,
-                                                  depth);
+    const F2cStorageReference reference = f2c_ir_storage_reference(target);
+    result = emit_allocatable_numeric_constructor(context, unit, component, constructor, &reference,
+                                                  designator, depth);
     free(designator);
     return result;
 }
@@ -720,17 +736,26 @@ int f2c_array_emit_allocatable_component_constructor(Context *context, Unit *uni
 int f2c_array_emit_allocatable_character_constructor(Context *context, Unit *unit, Symbol *target,
                                                      const F2cExpr *constructor, int depth) {
     const size_t output_start = context->output.length;
-    const char *name;
+    char *name;
+    char *extent;
     char *fixed_length = NULL;
     ConstructorEmitter emitter;
     if (constructor == NULL || constructor->kind != F2C_EXPR_ARRAY_CONSTRUCTOR || target == NULL ||
         !target->allocatable || target->rank != 1U || target->type != TYPE_CHARACTER)
         return 0;
-    name = f2c_symbol_c_name(unit, target);
+    const F2cStorageReference reference = f2c_ir_symbol_storage_reference(target);
     if (!target->deferred_character) {
         fixed_length = f2c_symbol_character_length(unit, target);
         if (fixed_length == NULL)
             return 0;
+    }
+    name = f2c_storage_write_property(unit, &reference, F2C_OBJECT_DATA, 0U);
+    extent = f2c_symbol_dimension_extent(unit, target, 0U);
+    if (name == NULL || extent == NULL) {
+        free(name);
+        free(extent);
+        free(fixed_length);
+        return 0;
     }
     memset(&emitter, 0, sizeof(emitter));
     emitter.context = context;
@@ -779,11 +804,15 @@ int f2c_array_emit_allocatable_character_constructor(Context *context, Unit *uni
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
                       "const bool f2c_constructor_reallocate = %s == NULL || "
-                      "(size_t)%s_extent_1 != f2c_constructor_index",
-                      name, name);
-    if (target->deferred_character)
-        f2c_buffer_printf(&context->output,
-                          " || f2c_char_len_%s != f2c_constructor_character_length", name);
+                      "(size_t)(%s) != f2c_constructor_index",
+                      name, extent);
+    if (target->deferred_character) {
+        char *length = f2c_symbol_character_length(unit, target);
+        if (length == NULL)
+            goto failed;
+        f2c_buffer_printf(&context->output, " || (%s) != f2c_constructor_character_length", length);
+        free(length);
+    }
     f2c_buffer_append(&context->output, ";\n");
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "if (f2c_constructor_reallocate) {\n");
@@ -801,14 +830,13 @@ int f2c_array_emit_allocatable_character_constructor(Context *context, Unit *uni
     f2c_buffer_printf(&context->output, "%s = f2c_constructor_values;\n", name);
     f2c_array_indent(&context->output, depth + 2);
     f2c_buffer_append(&context->output, "f2c_constructor_values = NULL;\n");
-    f2c_array_indent(&context->output, depth + 2);
-    f2c_buffer_printf(&context->output, "%s_lower_1 = 1;\n", name);
-    f2c_array_indent(&context->output, depth + 2);
-    f2c_buffer_printf(&context->output, "%s_extent_1 = (int32_t)f2c_constructor_index;\n", name);
+    if (!f2c_storage_emit_contiguous_dimension(&context->output, unit, &reference, 0U, NULL, "1",
+                                               "(int32_t)f2c_constructor_index", depth + 2))
+        goto failed;
     if (target->deferred_character) {
-        f2c_array_indent(&context->output, depth + 2);
-        f2c_buffer_printf(&context->output, "f2c_char_len_%s = f2c_constructor_character_length;\n",
-                          name);
+        if (!f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_CHARACTER_LENGTH,
+                                    0U, NULL, "f2c_constructor_character_length", depth + 2))
+            goto failed;
     }
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "} else if (f2c_constructor_bytes != 0U) {\n");
@@ -822,6 +850,8 @@ int f2c_array_emit_allocatable_character_constructor(Context *context, Unit *uni
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
     free(fixed_length);
+    free(name);
+    free(extent);
     release_constructor_emitter(&emitter);
     return 1;
 
@@ -831,6 +861,8 @@ failed:
         context->output.data[output_start] = '\0';
     }
     free(fixed_length);
+    free(name);
+    free(extent);
     release_constructor_emitter(&emitter);
     return 0;
 }
