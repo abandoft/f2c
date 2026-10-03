@@ -14,6 +14,8 @@ typedef struct F2cExpressionLowering {
     char *code;
     char *extent;
     char *character_length;
+    char *result_descriptor;
+    char *owned_storage;
     int array_temporary;
     int argument_materialized;
     unsigned int storage_qualifiers;
@@ -41,9 +43,13 @@ static void lowering_strings_free(F2cExpressionLowering *lowering) {
     free(lowering->code);
     free(lowering->extent);
     free(lowering->character_length);
+    free(lowering->result_descriptor);
+    free(lowering->owned_storage);
     lowering->code = NULL;
     lowering->extent = NULL;
     lowering->character_length = NULL;
+    lowering->result_descriptor = NULL;
+    lowering->owned_storage = NULL;
 }
 
 static F2cExpressionLowering *find_slot(F2cExpressionLoweringStore *store,
@@ -187,6 +193,16 @@ const char *f2c_lowering_character_length(const Unit *unit, const F2cExpr *expre
     return lowering != NULL ? lowering->character_length : NULL;
 }
 
+const char *f2c_lowering_result_descriptor(const Unit *unit, const F2cExpr *expression) {
+    const F2cExpressionLowering *lowering = unit_lowering_const(unit, expression);
+    return lowering != NULL ? lowering->result_descriptor : NULL;
+}
+
+const char *f2c_lowering_owned_storage(const Unit *unit, const F2cExpr *expression) {
+    const F2cExpressionLowering *lowering = unit_lowering_const(unit, expression);
+    return lowering != NULL ? lowering->owned_storage : NULL;
+}
+
 int f2c_lowering_is_array_temporary(const Unit *unit, const F2cExpr *expression) {
     const F2cExpressionLowering *lowering = unit_lowering_const(unit, expression);
     return lowering != NULL && lowering->array_temporary;
@@ -233,8 +249,12 @@ static int take_string(Unit *unit, const F2cExpr *expression, char *value, size_
         target = &lowering->code;
     else if (member == 1U)
         target = &lowering->extent;
-    else
+    else if (member == 2U)
         target = &lowering->character_length;
+    else if (member == 3U)
+        target = &lowering->result_descriptor;
+    else
+        target = &lowering->owned_storage;
     free(*target);
     *target = value;
     return 1;
@@ -271,6 +291,15 @@ int f2c_lowering_copy_character_length(Unit *unit, const F2cExpr *expression, co
     return copy_string(unit, expression, length, 2U);
 }
 
+int f2c_lowering_copy_result_descriptor(Unit *unit, const F2cExpr *expression,
+                                        const char *descriptor) {
+    return copy_string(unit, expression, descriptor, 3U);
+}
+
+int f2c_lowering_copy_owned_storage(Unit *unit, const F2cExpr *expression, const char *storage) {
+    return copy_string(unit, expression, storage, 4U);
+}
+
 int f2c_lowering_set_array_temporary(Unit *unit, const F2cExpr *expression, int value) {
     F2cExpressionLowering *lowering = unit_lowering(unit, expression, value != 0);
     if (lowering == NULL)
@@ -293,6 +322,8 @@ int f2c_lowering_clone(Unit *unit, const F2cExpr *target, const F2cExpr *source)
     char *code = NULL;
     char *extent = NULL;
     char *character_length = NULL;
+    char *result_descriptor = NULL;
+    char *owned_storage = NULL;
     int array_temporary;
     int argument_materialized;
     unsigned int storage_qualifiers;
@@ -314,10 +345,16 @@ int f2c_lowering_clone(Unit *unit, const F2cExpr *target, const F2cExpr *source)
         (source_lowering->extent != NULL &&
          (extent = f2c_strdup(source_lowering->extent)) == NULL) ||
         (source_lowering->character_length != NULL &&
-         (character_length = f2c_strdup(source_lowering->character_length)) == NULL)) {
+         (character_length = f2c_strdup(source_lowering->character_length)) == NULL) ||
+        (source_lowering->result_descriptor != NULL &&
+         (result_descriptor = f2c_strdup(source_lowering->result_descriptor)) == NULL) ||
+        (source_lowering->owned_storage != NULL &&
+         (owned_storage = f2c_strdup(source_lowering->owned_storage)) == NULL)) {
         free(code);
         free(extent);
         free(character_length);
+        free(result_descriptor);
+        free(owned_storage);
         return 0;
     }
     target_lowering = unit_lowering(unit, target, 1);
@@ -325,11 +362,15 @@ int f2c_lowering_clone(Unit *unit, const F2cExpr *target, const F2cExpr *source)
         free(code);
         free(extent);
         free(character_length);
+        free(result_descriptor);
+        free(owned_storage);
         return 0;
     }
     target_lowering->code = code;
     target_lowering->extent = extent;
     target_lowering->character_length = character_length;
+    target_lowering->result_descriptor = result_descriptor;
+    target_lowering->owned_storage = owned_storage;
     target_lowering->array_temporary = array_temporary;
     target_lowering->argument_materialized = argument_materialized;
     target_lowering->storage_qualifiers = storage_qualifiers;

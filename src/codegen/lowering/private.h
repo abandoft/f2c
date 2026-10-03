@@ -6,6 +6,8 @@
 const char *f2c_lowering_code(const Unit *unit, const F2cExpr *expression);
 const char *f2c_lowering_extent(const Unit *unit, const F2cExpr *expression);
 const char *f2c_lowering_character_length(const Unit *unit, const F2cExpr *expression);
+const char *f2c_lowering_result_descriptor(const Unit *unit, const F2cExpr *expression);
+const char *f2c_lowering_owned_storage(const Unit *unit, const F2cExpr *expression);
 int f2c_lowering_is_array_temporary(const Unit *unit, const F2cExpr *expression);
 int f2c_lowering_argument_materialized(const Unit *unit, const F2cExpr *expression);
 unsigned int f2c_lowering_storage_qualifiers(const Unit *unit, const F2cExpr *expression);
@@ -17,6 +19,9 @@ int f2c_lowering_take_character_length(Unit *unit, const F2cExpr *expression, ch
 int f2c_lowering_copy_code(Unit *unit, const F2cExpr *expression, const char *code);
 int f2c_lowering_copy_extent(Unit *unit, const F2cExpr *expression, const char *extent);
 int f2c_lowering_copy_character_length(Unit *unit, const F2cExpr *expression, const char *length);
+int f2c_lowering_copy_result_descriptor(Unit *unit, const F2cExpr *expression,
+                                        const char *descriptor);
+int f2c_lowering_copy_owned_storage(Unit *unit, const F2cExpr *expression, const char *storage);
 int f2c_lowering_set_array_temporary(Unit *unit, const F2cExpr *expression, int value);
 int f2c_lowering_set_argument_materialized(Unit *unit, const F2cExpr *expression, int value);
 int f2c_lowering_set_storage_access(Unit *unit, const F2cExpr *expression, unsigned int qualifiers,
