@@ -63,8 +63,17 @@ int f2c_call_materialize_expression(Unit *unit, F2cExpr *expression, size_t iden
     f2c_buffer_printf(&name, "f2c_call_%s_%zu_%zu", role, identifier, (*temporary)++);
     if (name.data == NULL)
         goto done;
-    if (f2c_call_has_object_state_parameters(expression) &&
-        !f2c_expression_has_descriptor_result(expression)) {
+    const int state_call = f2c_call_has_object_state_parameters(expression) &&
+                           !f2c_expression_has_descriptor_result(expression);
+    for (argument = 0U; argument < f2c_call_parameter_count(expression); ++argument) {
+        F2cExpr *actual = (F2cExpr *)f2c_call_parameter_actual(expression, argument);
+        if (actual != NULL && !f2c_array_hoist_scalar_subexpressions(
+                                  unit, actual, identifier, role, temporary, &setup,
+                                  depth + (state_call ? 0 : 1), actual->definable))
+            goto done;
+    }
+    if (state_call) {
+        f2c_buffer_append(prelude, setup.data != NULL ? setup.data : "");
         f2c_array_indent(prelude, depth);
         f2c_buffer_printf(prelude, "%s%s %s;\n", f2c_expression_c_type(expression),
                           expression->type == TYPE_CHARACTER ? " *" : "", name.data);
@@ -94,13 +103,6 @@ int f2c_call_materialize_expression(Unit *unit, F2cExpr *expression, size_t iden
         }
         success = f2c_lowering_take_code(unit, expression, f2c_buffer_take(&name));
         goto done;
-    }
-    for (argument = 0U; argument < f2c_call_parameter_count(expression); ++argument) {
-        F2cExpr *actual = (F2cExpr *)f2c_call_parameter_actual(expression, argument);
-        if (actual != NULL &&
-            !f2c_array_hoist_scalar_subexpressions(unit, actual, identifier, role, temporary,
-                                                   &setup, depth + 1, actual->definable))
-            goto done;
     }
     for (argument = 0U; argument < f2c_call_parameter_count(expression); ++argument) {
         F2cExpr *actual = (F2cExpr *)f2c_call_parameter_actual(expression, argument);

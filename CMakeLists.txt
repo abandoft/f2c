@@ -117,6 +117,8 @@ set(
     src/codegen/call/private.h
     src/codegen/call/specification.c
     src/codegen/character.c
+    src/codegen/character/deferred.c
+    src/codegen/character/private.h
     src/codegen/character/length.c
     src/codegen/codegen.h
     src/codegen/data.c

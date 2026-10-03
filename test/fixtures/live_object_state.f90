@@ -1,10 +1,32 @@
 module live_object_state_model
   implicit none
+  integer :: length_evaluations = 0
   type :: object
     integer, pointer :: values(:) => null()
     character(:), allocatable :: text
   end type object
 contains
+  integer function next_result_length() result(length)
+    length_evaluations = length_evaluations + 1
+    length = 2
+  end function next_result_length
+
+  function state_character_value(values, length) result(text)
+    integer, pointer, intent(inout) :: values(:)
+    integer, intent(in) :: length
+    character(length) :: text
+    values(1) = 47
+    text = 'ok'
+  end function state_character_value
+
+  function state_derived_value(values) result(copy)
+    integer, pointer, intent(inout) :: values(:)
+    type(object) :: copy
+    values(1) = 49
+    copy%text = 'owned'
+    copy%values => values
+  end function state_derived_value
+
   subroutine retarget(values, target)
     integer, pointer, volatile, intent(inout) :: values(:)
     integer, target, intent(inout) :: target(:)
@@ -166,6 +188,7 @@ program live_object_state
   character(2) :: returned_text
   integer, allocatable :: returned_array(:)
   type(object), volatile :: instance
+  type(object) :: returned_object
   integer :: total, length
 
   values => original
@@ -190,6 +213,8 @@ program live_object_state
   returned_array = fill_array_value(allocated_values)
   if (.not. allocated(allocated_values) .or. allocated_values(0) /= 5) stop 33
   if (size(returned_array) /= 3 .or. sum(returned_array) /= 45) stop 34
+  total = sum(fill_array_value(allocated_values))
+  if (total /= 45 .or. allocated_values(0) /= 5) stop 43
   deallocate(allocated_values, returned_array)
 
   text => old_text
@@ -204,6 +229,21 @@ program live_object_state
   deallocate(instance%text)
 
   values => original
+  returned_text = state_character_value(values, next_result_length())
+  if (length_evaluations /= 1 .or. original(1) /= 47 .or. returned_text /= 'ok') stop 42
+  returned_object = state_derived_value(values)
+  if (original(1) /= 49 .or. returned_object%text /= 'owned') stop 44
+  if (.not. associated(returned_object%values, values)) stop 45
+  returned_object%text = returned_object%text // '!'
+  if (len(returned_object%text) /= 6 .or. returned_object%text /= 'owned!') stop 46
+  instance%text = 'qualified'
+  returned_object%text = instance%text
+  if (len(returned_object%text) /= 9 .or. returned_object%text /= 'qualified') stop 47
+  returned_object%text = ''
+  if (.not. allocated(returned_object%text) .or. len(returned_object%text) /= 0) stop 48
+  deallocate(instance%text)
+  deallocate(returned_object%text)
+  nullify(returned_object%values)
   call check_input(values, original)
   if (original(1) /= 37) stop 32
   nullify(values, instance%values, text)

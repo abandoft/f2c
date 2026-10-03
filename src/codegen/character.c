@@ -1,6 +1,7 @@
 #include "internal/f2c.h"
 
 #include "codegen/call/private.h"
+#include "codegen/character/private.h"
 #include "codegen/lowering/private.h"
 #include "codegen/storage/private.h"
 
@@ -572,54 +573,9 @@ int f2c_emit_character_assignment(Context *context, Unit *unit, Symbol *left_sym
         !left->definable || right == NULL || right->type != TYPE_CHARACTER || left_code == NULL)
         return 0;
     if (left_symbol->deferred_character && left_symbol->allocatable && left_symbol->rank == 0U &&
-        left->kind == F2C_EXPR_NAME) {
-        const F2cStorageReference reference = f2c_ir_storage_reference(left);
-        char *name = f2c_storage_write_property(unit, &reference, F2C_OBJECT_DATA, 0U);
-        if (name == NULL)
-            return 0;
-        source_length = f2c_character_length_expression(unit, right);
-        source_pointer = f2c_character_source_pointer(unit, right, right_code);
-        if (source_length == NULL || source_pointer == NULL) {
-            free(name);
-            free(source_length);
-            free(source_pointer);
-            return 0;
-        }
-        emit_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "{\n");
-        emit_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "const size_t f2c_deferred_length = (size_t)(%s);\n",
-                          source_length);
-        emit_indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output, "if (f2c_deferred_length == SIZE_MAX) abort();\n");
-        emit_indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output,
-                          "char *f2c_deferred_value = (char *)malloc(f2c_deferred_length + "
-                          "1U);\n");
-        emit_indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output, "if (f2c_deferred_value == NULL) abort();\n");
-        emit_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "const char *f2c_deferred_source = (%s);\n",
-                          source_pointer);
-        emit_indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output,
-                          "if (f2c_deferred_length != 0U) memmove(f2c_deferred_value, "
-                          "f2c_deferred_source, f2c_deferred_length);\n");
-        emit_indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output, "f2c_deferred_value[f2c_deferred_length] = '\\0';\n");
-        emit_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "free(%s);\n", name);
-        emit_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "%s = f2c_deferred_value;\n", name);
-        const int stored =
-            f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_CHARACTER_LENGTH,
-                                   0U, NULL, "f2c_deferred_length", depth + 1);
-        emit_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "}\n");
-        free(source_length);
-        free(source_pointer);
-        free(name);
-        return stored;
+        (left->kind == F2C_EXPR_NAME || left->kind == F2C_EXPR_COMPONENT)) {
+        return f2c_emit_deferred_character_assignment(context, unit, left, right, right_code,
+                                                      depth);
     }
     target_length = left->kind == F2C_EXPR_SUBSTRING || left->kind == F2C_EXPR_ARRAY_REFERENCE ||
                             left->kind == F2C_EXPR_COMPONENT
