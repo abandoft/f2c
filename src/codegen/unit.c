@@ -1,5 +1,6 @@
 #include "codegen/descriptor/private.h"
 #include "codegen/names.h"
+#include "codegen/storage/private.h"
 #include "codegen/unit/private.h"
 
 #include <ctype.h>
@@ -27,6 +28,19 @@ static void emit_declarations(Context *context, Unit *unit) {
         if (!symbol->optional) {
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output, "if (f2c_descriptor_%s == NULL) abort();\n", name);
+        }
+        if (symbol->pointer || symbol->allocatable) {
+            if (symbol->type == TYPE_CHARACTER && !symbol->deferred_character &&
+                symbol->character_length != NULL && strcmp(symbol->character_length, "*") == 0) {
+                f2c_unit_indent(output, 1);
+                f2c_buffer_printf(output,
+                                  "const size_t f2c_len_%s = f2c_descriptor_state_character_length("
+                                  "f2c_descriptor_%s, %uU);\n",
+                                  name, name, f2c_symbol_storage_qualifiers(symbol));
+                f2c_unit_indent(output, 1);
+                f2c_buffer_printf(output, "(void)f2c_len_%s;\n", name);
+            }
+            continue;
         }
         f2c_unit_indent(output, 1);
         f2c_buffer_printf(
@@ -373,25 +387,12 @@ static void emit_declarations(Context *context, Unit *unit) {
         Symbol *symbol = &unit->symbols[i];
         const char *name;
         char *count;
-        size_t dimension;
         if (!symbol->argument || symbol->intent != F2C_INTENT_OUT)
             continue;
         name = f2c_symbol_c_name(unit, symbol);
-        if (symbol->pointer) {
-            f2c_unit_indent(output, 1);
-            f2c_buffer_printf(output, "%s = NULL;\n", name);
-            f2c_unit_indent(output, 1);
-            f2c_buffer_printf(output, "%s_deallocatable = false;\n", name);
-            if (symbol->deferred_character) {
-                f2c_unit_indent(output, 1);
-                f2c_buffer_printf(output, "f2c_char_len_%s = 0U;\n", name);
-            }
-            for (dimension = 0U; dimension < symbol->rank; ++dimension) {
-                f2c_unit_indent(output, 1);
-                f2c_buffer_printf(output,
-                                  "%s_lower_%zu = 1; %s_extent_%zu = 0; %s_stride_%zu = 0;\n", name,
-                                  dimension + 1U, name, dimension + 1U, name, dimension + 1U);
-            }
+        if (symbol->pointer || symbol->allocatable) {
+            if (!f2c_storage_emit_dummy_entry(output, unit, symbol, 1))
+                output->failed = 1;
             continue;
         }
         if (symbol->type != TYPE_DERIVED || symbol->derived_type == NULL)
@@ -589,64 +590,13 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
     }
     for (i = 0U; i < unit->symbol_count; ++i) {
         Symbol *symbol = &unit->symbols[i];
-        size_t dimension;
         if (symbol->host_associated && !symbol->host_capture)
             continue;
         if (symbol == function_result || symbol->external || symbol->intrinsic != NULL)
             continue;
         if ((symbol->allocatable || symbol->pointer) && symbol->argument) {
-            const char *name = f2c_symbol_c_name(unit, symbol);
-            f2c_unit_indent(output, depth);
-            f2c_buffer_printf(output, "if (f2c_descriptor_%s != NULL) {\n", name);
-            f2c_unit_indent(output, depth + 1);
-            f2c_buffer_printf(
-                output, "f2c_descriptor_%s->%s = %s;\n", name,
-                f2c_descriptor_address_member(f2c_symbol_storage_qualifiers(symbol),
-                                              symbol->intent == F2C_INTENT_IN && !symbol->pointer),
-                name);
-            f2c_unit_indent(output, depth + 1);
-            f2c_buffer_printf(output, "f2c_descriptor_%s->storage_qualifiers = %uU;\n", name,
-                              f2c_symbol_storage_qualifiers(symbol));
-            if (symbol->pointer) {
-                f2c_unit_indent(output, depth + 1);
-                f2c_buffer_printf(output,
-                                  "f2c_descriptor_%s->deallocatable = "
-                                  "%s_deallocatable;\n",
-                                  name, name);
-            }
-            f2c_unit_indent(output, depth + 1);
-            f2c_buffer_printf(output, "f2c_descriptor_%s->element_size = sizeof(%s);\n", name,
-                              f2c_symbol_c_type(symbol));
-            f2c_unit_indent(output, depth + 1);
-            f2c_buffer_printf(output, "f2c_descriptor_%s->rank = %zuU;\n", name, symbol->rank);
-            if (symbol->deferred_character) {
-                f2c_unit_indent(output, depth + 1);
-                f2c_buffer_printf(
-                    output, "f2c_descriptor_%s->character_length = f2c_char_len_%s;\n", name, name);
-            }
-            for (dimension = 0U; dimension < symbol->rank; ++dimension) {
-                f2c_unit_indent(output, depth + 1);
-                f2c_buffer_printf(output, "f2c_descriptor_%s->lower[%zu] = %s_lower_%zu;\n", name,
-                                  dimension, name, dimension + 1U);
-                f2c_unit_indent(output, depth + 1);
-                f2c_buffer_printf(output, "f2c_descriptor_%s->extent[%zu] = %s_extent_%zu;\n", name,
-                                  dimension, name, dimension + 1U);
-                f2c_unit_indent(output, depth + 1);
-                if (symbol->pointer)
-                    f2c_buffer_printf(output, "f2c_descriptor_%s->stride[%zu] = %s_stride_%zu;\n",
-                                      name, dimension, name, dimension + 1U);
-                else if (dimension == 0U)
-                    f2c_buffer_printf(output, "f2c_descriptor_%s->stride[0] = 1;\n", name);
-                else
-                    f2c_buffer_printf(
-                        output,
-                        "f2c_descriptor_%s->stride[%zu] = f2c_descriptor_stride_extent("
-                        "f2c_descriptor_%s->stride[%zu], "
-                        "(size_t)f2c_descriptor_%s->extent[%zu]);\n",
-                        name, dimension, name, dimension - 1U, name, dimension - 1U);
-            }
-            f2c_unit_indent(output, depth);
-            f2c_buffer_append(output, "}\n");
+            /* Association/allocation changes are committed at their typed
+             * mutation sites. Never copy an entry snapshot over live state. */
             continue;
         }
         if (f2c_symbol_is_automatic_array(unit, symbol)) {
@@ -715,6 +665,13 @@ static void emit_unused_suppression(Buffer *output, Unit *unit) {
     }
     for (i = 0U; i < unit->argument_count; ++i) {
         Symbol *symbol = f2c_find_symbol(unit, unit->arguments[i]);
+        if (symbol != NULL && (symbol->pointer || symbol->allocatable) &&
+            f2c_symbol_uses_descriptor(symbol)) {
+            f2c_unit_indent(output, 1);
+            f2c_buffer_printf(output, "(void)f2c_descriptor_%s;\n",
+                              f2c_symbol_c_name(unit, symbol));
+            continue;
+        }
         f2c_unit_indent(output, 1);
         f2c_buffer_printf(output, "(void)%s;\n",
                           symbol != NULL ? f2c_symbol_c_name(unit, symbol) : unit->arguments[i]);
