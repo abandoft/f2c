@@ -19,6 +19,11 @@ on:
           - extended
           - diagnostics
           - loop-policies
+      baseline_sha:
+        description: Optional immutable 40-character baseline SHA for diagnostics only
+        required: false
+        default: ""
+        type: string
   schedule:
     - cron: "17 2 * * 3"
 
@@ -26,7 +31,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: performance-${{ github.ref }}
+  group: >-
+    performance-${{ github.ref }}-${{ inputs.scope == 'diagnostics' && 'diagnostics' ||
+    inputs.scope == 'loop-policies' && 'loop-policies' || 'parity' }}
   cancel-in-progress: true
 
 jobs:
@@ -52,9 +59,39 @@ jobs:
           -DF2C_BUILD_TESTING=OFF
           -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
           && cmake --build build/performance --parallel
+      - name: Build the requested diagnostic baseline
+        if: >-
+          github.event_name == 'workflow_dispatch' && inputs.scope == 'diagnostics' &&
+          inputs.baseline_sha != ''
+        env:
+          F2C_BASELINE_SHA: ${{ inputs.baseline_sha }}
+        run: |
+          case "$F2C_BASELINE_SHA" in
+            *[!0-9a-fA-F]*|'') echo "baseline_sha must be an immutable commit SHA" >&2; exit 2 ;;
+          esac
+          test "${#F2C_BASELINE_SHA}" -eq 40
+          git fetch --depth=1 origin "$F2C_BASELINE_SHA"
+          git worktree add --detach build/diagnostics/baseline-source "$F2C_BASELINE_SHA"
+          cmake -S build/diagnostics/baseline-source -B build/diagnostics/baseline-build \
+            -DCMAKE_BUILD_TYPE=Release -DF2C_BUILD_TESTING=OFF \
+            -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
+          cmake --build build/diagnostics/baseline-build --parallel
+          sh test/performance/codegen_report.sh \
+            build/diagnostics/baseline-build/f2c performance-codegen-baseline
       - name: Generate performance code-generation diagnostics
         if: github.event_name == 'workflow_dispatch' && inputs.scope == 'diagnostics'
-        run: sh test/performance/codegen_report.sh build/performance/f2c
+        run: |
+          sh test/performance/codegen_report.sh build/performance/f2c
+          git rev-parse HEAD > build/diagnostics/performance-codegen/candidate-sha.txt
+      - name: Record diagnostic baseline provenance
+        if: >-
+          github.event_name == 'workflow_dispatch' && inputs.scope == 'diagnostics' &&
+          inputs.baseline_sha != ''
+        env:
+          F2C_BASELINE_SHA: ${{ inputs.baseline_sha }}
+        run: |
+          printf '%s\n' "$F2C_BASELINE_SHA" \
+            > build/diagnostics/performance-codegen-baseline/baseline-sha.txt
       - name: Run the generated C versus Fortran matrix
         if: >-
           github.event_name != 'workflow_dispatch' ||
@@ -93,6 +130,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: f2c-performance-codegen
-          path: build/diagnostics/performance-codegen/
+          path: |
+            build/diagnostics/performance-codegen/
+            build/diagnostics/performance-codegen-baseline/
           if-no-files-found: error
           retention-days: 30
