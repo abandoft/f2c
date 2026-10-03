@@ -18,6 +18,8 @@ set(
     character_array_actuals
     character_length_parameters
     character_result_effects
+    constructor_result
+    constructor_finalization
     type_bound_character_results
     derived_default_initialization
     character_broadcast_reallocation
