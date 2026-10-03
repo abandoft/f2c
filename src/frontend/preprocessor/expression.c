@@ -19,6 +19,7 @@ typedef struct ExpressionParser {
     const char *cursor;
     size_t line;
     size_t column;
+    size_t depth;
     int failed;
 } ExpressionParser;
 
@@ -334,6 +335,20 @@ static void expression_space(ExpressionParser *parser) {
     parser->cursor = skip_space(parser->cursor);
 }
 
+static int expression_descend(ExpressionParser *parser) {
+    if (parser->failed)
+        return 0;
+    if (parser->depth >= parser->preprocessor->context->limits.max_parse_depth) {
+        parser->failed = 1;
+        diagnose_at(parser->preprocessor, F2C_DIAGNOSTIC_RESOURCE_LIMIT, parser->line,
+                    parser->column + (size_t)(parser->cursor - parser->text),
+                    "preprocessor condition expression depth limit exceeded");
+        return 0;
+    }
+    ++parser->depth;
+    return 1;
+}
+
 static int expression_consume(ExpressionParser *parser, const char *token) {
     const size_t length = strlen(token);
     expression_space(parser);
@@ -590,7 +605,10 @@ static IntegerValue parse_primary(ExpressionParser *parser, int evaluate) {
     if (*begin == '(') {
         IntegerValue value;
         ++parser->cursor;
+        if (!expression_descend(parser))
+            return signed_integer(0);
         value = parse_conditional(parser, evaluate);
+        --parser->depth;
         if (!expression_consume(parser, ")"))
             expression_error(parser, "expected ')' in preprocessor condition");
         return value;
@@ -637,21 +655,33 @@ static IntegerValue parse_primary(ExpressionParser *parser, int evaluate) {
     return signed_integer(0);
 }
 
+static IntegerValue parse_unary(ExpressionParser *parser, int evaluate);
+
+static IntegerValue parse_nested_unary(ExpressionParser *parser, int evaluate) {
+    if (!expression_descend(parser))
+        return signed_integer(0);
+    const IntegerValue value = parse_unary(parser, evaluate);
+    --parser->depth;
+    return value;
+}
+
 static IntegerValue parse_unary(ExpressionParser *parser, int evaluate) {
+    if (parser->failed)
+        return signed_integer(0);
     if (expression_consume(parser, "!"))
-        return signed_integer(!integer_true(parse_unary(parser, evaluate)));
+        return signed_integer(!integer_true(parse_nested_unary(parser, evaluate)));
     if (expression_consume(parser, "~")) {
-        IntegerValue value = parse_unary(parser, evaluate);
+        IntegerValue value = parse_nested_unary(parser, evaluate);
         if (!evaluate)
             return value.is_unsigned ? unsigned_integer(0U) : signed_integer(0);
         return value.is_unsigned ? unsigned_integer(~value.unsigned_value)
                                  : signed_integer(signed_from_bits(~(uint64_t)value.signed_value));
     }
     if (expression_consume(parser, "+"))
-        return parse_unary(parser, evaluate);
+        return parse_nested_unary(parser, evaluate);
     if (expression_consume(parser, "-")) {
         const char *operation_at = parser->cursor - 1;
-        IntegerValue value = parse_unary(parser, evaluate);
+        IntegerValue value = parse_nested_unary(parser, evaluate);
         if (!evaluate)
             return value.is_unsigned ? unsigned_integer(0U) : signed_integer(0);
         if (value.is_unsigned)
@@ -920,16 +950,22 @@ static IntegerValue parse_logical_or(ExpressionParser *parser, int evaluate) {
 }
 
 static IntegerValue parse_conditional(ExpressionParser *parser, int evaluate) {
+    if (parser->failed)
+        return signed_integer(0);
     IntegerValue condition = parse_logical_or(parser, evaluate);
     if (expression_consume(parser, "?")) {
+        if (!expression_descend(parser))
+            return signed_integer(0);
         const int selected = integer_true(condition);
         IntegerValue when_true = parse_conditional(parser, evaluate && selected);
         IntegerValue when_false;
         if (!expression_consume(parser, ":")) {
             expression_error(parser, "expected ':' in preprocessor conditional expression");
+            --parser->depth;
             return signed_integer(0);
         }
         when_false = parse_conditional(parser, evaluate && !selected);
+        --parser->depth;
         condition = selected ? when_true : when_false;
         if (when_true.is_unsigned || when_false.is_unsigned)
             condition = unsigned_integer(integer_unsigned(condition));
