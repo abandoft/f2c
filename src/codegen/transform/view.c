@@ -96,12 +96,8 @@ int f2c_transform_array_view(Unit *unit, const F2cExpr *expression, TransformArr
                 f2c_symbol_dimension_extent(unit, expression->symbol, dimension);
     } else if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && expression->rank == 1U) {
         array->pointer = f2c_transform_emit_expression(unit, expression);
-        {
-            Buffer count = {0};
-            f2c_buffer_printf(&count, "%zuU", expression->child_count);
-            array->count = f2c_buffer_take(&count);
-            array->extents[0] = f2c_strdup(array->count != NULL ? array->count : "0U");
-        }
+        array->count = f2c_array_expression_extent(unit, expression, 0U);
+        array->extents[0] = array->count != NULL ? f2c_strdup(array->count) : NULL;
     } else if (expression->type != TYPE_DERIVED || expression->kind == F2C_EXPR_ARRAY_REFERENCE ||
                (expression->kind == F2C_EXPR_CALL && expression->resolved_procedure != NULL &&
                 expression->resolved_procedure->elemental)) {
