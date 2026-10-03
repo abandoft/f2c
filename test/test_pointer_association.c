@@ -80,12 +80,16 @@ static void test_intent_out_initialization(void) {
     F2cResult result = transpile(source, "pointer-intent-out.f90");
     expect(result.error_count == 0U && result.code != NULL,
            "an INTENT(OUT) pointer dummy completes semantic lowering");
-    expect_contains(result.code, "pointer_value = NULL;",
+    expect_contains(result.code, "f2c_descriptor_pointer_value->data = NULL;",
                     "INTENT(OUT) clears the incoming pointer association on procedure entry");
-    expect_contains(result.code,
-                    "pointer_value_lower_1 = 1; pointer_value_extent_1 = 0; "
-                    "pointer_value_stride_1 = 0;",
+    expect_contains(result.code, "f2c_descriptor_pointer_value->lower[0] = 1;",
                     "INTENT(OUT) clears all incoming pointer descriptor metadata");
+    expect_contains(result.code, "f2c_descriptor_pointer_value->extent[0] = 0;",
+                    "INTENT(OUT) clears the incoming extent");
+    expect_contains(result.code, "f2c_descriptor_pointer_value->stride[0] = 0;",
+                    "INTENT(OUT) clears the incoming stride");
+    expect_contains(result.code, "if (f2c_descriptor_pointer_value != NULL)",
+                    "entry state initialization guards an absent optional descriptor");
     f2c_result_free(&result);
 }
 
@@ -127,14 +131,16 @@ static void test_array_pointer_component_lowering(void) {
                     "ASSOCIATED compares component target sections with their dynamic stride");
     expect_contains(result.code, ".deallocatable = (object).values_deallocatable",
                     "component array actuals preserve pointer provenance in call descriptors");
-    expect_contains(result.code, "(object).values = (int32_t *)f2c_call_descriptor_0.data;",
+    expect_contains(result.code, "(object).values = (int32_t *)(&f2c_call_descriptor_0)->data;",
                     "pointer dummy calls return association changes to component storage");
     expect_contains(result.code, "f2c_designator_values[f2c_designator_linear++]",
                     "whole component array assignment uses overlap-safe element storage");
-    expect_contains(result.code,
-                    "(object).matrix_lower_2 = 1; (object).matrix_extent_2 = 0; "
-                    "(object).matrix_stride_2 = 0;",
+    expect_contains(result.code, "(object).matrix_lower_2 = 1;\n",
                     "NULLIFY clears every component descriptor dimension");
+    expect_contains(result.code, "(object).matrix_extent_2 = 0;",
+                    "NULLIFY clears the component descriptor extent");
+    expect_contains(result.code, "(object).matrix_stride_2 = 0;",
+                    "NULLIFY clears the component descriptor stride");
     f2c_result_free(&result);
 }
 
