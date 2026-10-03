@@ -3,10 +3,13 @@
 
 #include "ast/internal.h"
 
+typedef struct F2cResultRetentionScope F2cResultRetentionScope;
+
 typedef struct F2cArrayCleanupAction {
     const F2cExpr *expression;
     size_t temporary;
     int depth;
+    F2cResultRetentionScope *retention;
 } F2cArrayCleanupAction;
 
 typedef struct F2cArrayCleanupList {
@@ -28,6 +31,9 @@ int f2c_array_materialize_constructors(Context *context, Unit *unit, F2cExpr *ex
                                        Buffer *prelude, F2cArrayCleanupList *cleanup, int depth);
 int f2c_array_cleanup_append(Unit *unit, F2cArrayCleanupList *list, const F2cExpr *expression,
                              int depth);
+/* Consumes retention on both success and failure; the list owns it on success. */
+int f2c_array_cleanup_take_retention(F2cArrayCleanupList *list, const F2cExpr *expression,
+                                     F2cResultRetentionScope *retention);
 int f2c_array_owned_temporary_valid(const Unit *unit, const F2cExpr *expression,
                                     F2cOwnedTemporaryKind expected);
 int f2c_array_cleanup_emit(Buffer *output, Unit *unit, const F2cArrayCleanupList *list);
@@ -62,23 +68,26 @@ int f2c_array_emit_numeric_constructor(Context *context, Unit *unit, Symbol *lef
 int f2c_array_emit_numeric_constructor_temporary(Context *context, Unit *unit,
                                                  const F2cExpr *constructor, const char *storage,
                                                  const char *count, const char *capacity,
-                                                 Buffer *output, int depth);
+                                                 Buffer *output, F2cResultRetentionScope *retention,
+                                                 int depth);
 int f2c_array_emit_character_constructor_temporary(Context *context, Unit *unit,
                                                    const F2cExpr *constructor, const char *storage,
                                                    const char *count, const char *capacity,
                                                    const char *character_length,
                                                    const char *character_length_set, Buffer *output,
-                                                   int depth);
+                                                   F2cResultRetentionScope *retention, int depth);
 int f2c_array_emit_derived_constructor_temporary(Context *context, Unit *unit,
                                                  const F2cExpr *constructor, const char *storage,
                                                  const char *count, const char *capacity,
-                                                 Buffer *output, int depth);
+                                                 Buffer *output, F2cResultRetentionScope *retention,
+                                                 int depth);
 int f2c_array_emit_constructor_values(Context *context, Unit *unit, Symbol *target,
                                       const F2cExpr *constructor, const char *storage,
                                       const char *count, const char *capacity,
                                       const char *character_length,
                                       const char *character_length_set, int character, int dynamic,
-                                      int infer_character_length, int depth);
+                                      int infer_character_length,
+                                      F2cResultRetentionScope *retention, int depth);
 int f2c_array_emit_allocatable_numeric_constructor(Context *context, Unit *unit, Symbol *target,
                                                    const F2cExpr *constructor, int depth);
 int f2c_array_emit_allocatable_component_constructor(Context *context, Unit *unit,
@@ -89,9 +98,8 @@ int f2c_array_emit_allocatable_character_constructor(Context *context, Unit *uni
 int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symbol *left_symbol,
                                               const F2cExpr *right, Symbol *right_symbol,
                                               const char *element_count, int depth);
-int f2c_array_emit_fixed_character_constructor_values(Context *context, Unit *unit, Symbol *target,
-                                                      const F2cExpr *constructor,
-                                                      const char *storage, const char *count,
-                                                      const char *character_length, int depth);
+int f2c_array_emit_fixed_character_constructor_values(
+    Context *context, Unit *unit, Symbol *target, const F2cExpr *constructor, const char *storage,
+    const char *count, const char *character_length, F2cResultRetentionScope *retention, int depth);
 
 #endif

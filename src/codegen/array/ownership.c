@@ -1,6 +1,7 @@
 #include "codegen/array/private.h"
 
 #include "codegen/lowering/private.h"
+#include "codegen/result/retention.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -47,8 +48,23 @@ int f2c_array_cleanup_append(Unit *unit, F2cArrayCleanupList *list, const F2cExp
         list->capacity = capacity;
     }
     list->items[list->count++] =
-        (F2cArrayCleanupAction){expression, expression->owned_temporary_index, depth};
+        (F2cArrayCleanupAction){expression, expression->owned_temporary_index, depth, NULL};
     return 1;
+}
+
+int f2c_array_cleanup_take_retention(F2cArrayCleanupList *list, const F2cExpr *expression,
+                                     F2cResultRetentionScope *retention) {
+    if (list != NULL && expression != NULL &&
+        expression->owned_temporary_kind == F2C_OWNED_TEMPORARY_ARRAY_CONSTRUCTOR)
+        for (size_t index = 0U; index < list->count; ++index)
+            if (list->items[index].expression == expression &&
+                list->items[index].retention == NULL && retention != NULL) {
+                list->items[index].retention = retention;
+                return 1;
+            }
+    f2c_result_retention_clear(retention);
+    free(retention);
+    return 0;
 }
 
 static int emit_action(Buffer *output, Unit *unit, const F2cArrayCleanupAction *action) {
@@ -95,6 +111,9 @@ static int emit_action(Buffer *output, Unit *unit, const F2cArrayCleanupAction *
         f2c_array_indent(output, action->depth);
     }
     f2c_buffer_printf(output, "free(%s);\n", lowered_code);
+    if (action->retention != NULL &&
+        !f2c_result_retention_release(action->retention, output, action->depth))
+        return 0;
     return 1;
 }
 
@@ -119,6 +138,10 @@ int f2c_array_cleanup_emit(Buffer *output, Unit *unit, const F2cArrayCleanupList
 void f2c_array_cleanup_clear(F2cArrayCleanupList *list) {
     if (list == NULL)
         return;
+    for (size_t index = 0U; index < list->count; ++index) {
+        f2c_result_retention_clear(list->items[index].retention);
+        free(list->items[index].retention);
+    }
     free(list->items);
     memset(list, 0, sizeof(*list));
 }

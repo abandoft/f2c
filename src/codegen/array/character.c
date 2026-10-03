@@ -1,5 +1,6 @@
 #include "codegen/array/copy.h"
 #include "codegen/array/private.h"
+#include "codegen/result/retention.h"
 #include "codegen/storage/private.h"
 
 #include "codegen/lowering/private.h"
@@ -21,6 +22,7 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
     char *scalar_code = NULL;
     F2cExpr *prepared_right = NULL;
     Buffer prelude = {0};
+    F2cResultRetentionScope retention = {0};
     F2cArrayCleanupList temporaries = {0};
     size_t temporary = 0U;
     int result = 0;
@@ -79,7 +81,7 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
     if (has_constructor) {
         if (!f2c_array_emit_fixed_character_constructor_values(
                 context, unit, left_symbol, right, "f2c_whole_values", "f2c_whole_count",
-                "f2c_whole_length", depth + 1))
+                "f2c_whole_length", &retention, depth + 1))
             goto cleanup;
     } else if (right_symbol != NULL && right_symbol->rank != 0U) {
         char *source = f2c_storage_symbol_data(unit, right_symbol);
@@ -176,6 +178,8 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
     f2c_buffer_append(&context->output, "}\n");
     f2c_array_indent(&context->output, depth + 1);
     f2c_buffer_append(&context->output, "free(f2c_whole_values);\n");
+    if (!f2c_result_retention_release(&retention, &context->output, depth + 1))
+        goto cleanup;
     if (!f2c_array_cleanup_emit(&context->output, unit, &temporaries))
         goto cleanup;
     f2c_array_indent(&context->output, depth);
@@ -192,6 +196,7 @@ cleanup:
     free(right_count);
     free(scalar_code);
     free(prelude.data);
+    f2c_result_retention_clear(&retention);
     f2c_array_cleanup_clear(&temporaries);
     f2c_codegen_expression_free(unit, prepared_right);
     return result;

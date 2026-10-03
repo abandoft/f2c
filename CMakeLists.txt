@@ -103,6 +103,8 @@ set(
     src/codegen/array/copy.h
     src/codegen/array/element.c
     src/codegen/result/materialize.c
+    src/codegen/result/retention.c
+    src/codegen/result/retention.h
     src/codegen/array/inquiry.c
     src/codegen/array/ownership.c
     src/codegen/array/private.h
