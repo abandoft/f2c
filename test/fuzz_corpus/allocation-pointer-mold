@@ -1,0 +1,13 @@
+0module allocation_results
+character(len=3),target :: words(2)
+contains
+function value() result(output)
+character(len=:),pointer :: output(:)
+output=>words(2:1:-1)
+end function
+end module
+program main
+use allocation_results
+character(len=:),allocatable :: output(:)
+allocate(output,mold=value())
+end program
