@@ -135,6 +135,25 @@ static void test_descriptor_scalar_source(void) {
     f2c_result_free(&result);
 }
 
+static void test_complex_source_assignment(void) {
+    static const char source[] =
+        "program complex_model\n"
+        "complex(kind=8),allocatable :: a,b(:),c(:)\n"
+        "interface\nfunction value() result(z)\n"
+        "complex(kind=8),allocatable :: z\nend function\nend interface\n"
+        "allocate(a,b(3),source=value())\nallocate(c,source=b)\nend program\n";
+    F2cResult result = transpile(source, "complex-source-assignment.f90");
+    expect(result.code != NULL && result.error_count == 0U,
+           "compatible complex SOURCE models support scalar and array consumers");
+    expect_contains(result.code, "_scalar = (*f2c_array_allocate_function_",
+                    "complex scalar model snapshots do not cast aggregate complex values");
+    expect(result.code != NULL &&
+               strstr(result.code, "= (f2c_complex_double)f2c_allocate_model_") == NULL &&
+               strstr(result.code, "= (f2c_complex_double)f2c_transform_allocate_model_") == NULL,
+           "complex destination elements use portable same-type assignment");
+    f2c_result_free(&result);
+}
+
 static void test_pointer_mold_metadata(void) {
     static const char source[] =
         "program pointer_mold\n"
@@ -191,6 +210,7 @@ int main(void) {
     test_runtime_shape_guard();
     test_unavailable_source_guard();
     test_descriptor_scalar_source();
+    test_complex_source_assignment();
     test_pointer_mold_metadata();
     test_dependency_constraints();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
