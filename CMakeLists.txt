@@ -193,6 +193,12 @@ set(
     src/codegen/names.h
     src/codegen/ownership.c
     src/codegen/statement.c
+    src/codegen/storage/state.c
+    src/codegen/storage/shape.c
+    src/codegen/storage/lifetime.c
+    src/codegen/storage/transfer.c
+    src/codegen/storage/element.c
+    src/codegen/storage/private.h
     src/codegen/statement/assignment.c
     src/codegen/statement/bit.c
     src/codegen/statement/loop.c
