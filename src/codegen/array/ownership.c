@@ -18,8 +18,7 @@ int f2c_array_owned_temporary_valid(const Unit *unit, const F2cExpr *expression,
            owned->rank == expression->rank &&
            owned->owner_statement == expression->lifetime_statement_index &&
            owned->derived_type == expression->derived_type &&
-           owned->requires_finalization ==
-               (expression->type == TYPE_DERIVED && expression->derived_type != NULL);
+           owned->release_kind == f2c_expression_temporary_release_kind(expression);
 }
 
 int f2c_array_cleanup_append(Unit *unit, F2cArrayCleanupList *list, const F2cExpr *expression,
@@ -29,7 +28,9 @@ int f2c_array_cleanup_append(Unit *unit, F2cArrayCleanupList *list, const F2cExp
     size_t item;
     if (list == NULL ||
         !f2c_array_owned_temporary_valid(unit, expression, expression->owned_temporary_kind) ||
-        f2c_lowering_code(unit, expression) == NULL)
+        f2c_lowering_code(unit, expression) == NULL ||
+        f2c_expression_temporary_release_kind(expression) == F2C_TEMPORARY_BORROWED_REFERENCE ||
+        f2c_expression_temporary_release_kind(expression) == F2C_TEMPORARY_STACK_VALUE)
         return 0;
     for (item = 0U; item < list->count; ++item)
         if (list->items[item].temporary == expression->owned_temporary_index)
@@ -65,14 +66,20 @@ static int emit_action(Buffer *output, Unit *unit, const F2cArrayCleanupAction *
         action->temporary != expression->owned_temporary_index)
         return 0;
     lowered_code = f2c_lowering_code(unit, expression);
+    if (owned->kind == F2C_OWNED_TEMPORARY_FUNCTION_RESULT)
+        lowered_code = f2c_lowering_owned_storage(unit, expression);
     lowered_extent = f2c_lowering_extent(unit, expression);
     if (lowered_code == NULL)
         return 0;
     f2c_array_indent(output, action->depth);
-    if (owned->requires_finalization) {
-        f2c_buffer_printf(output, "f2c_destroy_array_%s(%s, ", owned->derived_type->c_name,
-                          lowered_code);
-        if (lowered_extent != NULL) {
+    if (owned->release_kind == F2C_TEMPORARY_FINALIZE_VALUE ||
+        owned->release_kind == F2C_TEMPORARY_DISCARD_SNAPSHOT) {
+        const int snapshot = owned->release_kind == F2C_TEMPORARY_DISCARD_SNAPSHOT;
+        f2c_buffer_printf(output, "f2c_%s_array_%s(%s, ", snapshot ? "discard" : "destroy",
+                          owned->derived_type->c_name, lowered_code);
+        if (owned->rank == 0U) {
+            f2c_buffer_append(output, "1U");
+        } else if (lowered_extent != NULL) {
             f2c_buffer_printf(output, "(size_t)(%s)", lowered_extent);
         } else {
             f2c_buffer_printf(output, "f2c_inquiry_size(%zuU, (const size_t[]){", owned->rank);
@@ -81,7 +88,10 @@ static int emit_action(Buffer *output, Unit *unit, const F2cArrayCleanupAction *
                                   lowered_code, dimension + 1U);
             f2c_buffer_append(output, "})");
         }
-        f2c_buffer_printf(output, ", %zuU);\n", owned->rank);
+        if (snapshot)
+            f2c_buffer_append(output, ");\n");
+        else
+            f2c_buffer_printf(output, ", %zuU);\n", owned->rank);
         f2c_array_indent(output, action->depth);
     }
     f2c_buffer_printf(output, "free(%s);\n", lowered_code);
