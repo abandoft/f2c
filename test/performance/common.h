@@ -1,7 +1,7 @@
 #ifndef F2C_TEST_PERFORMANCE_COMMON_H
 #define F2C_TEST_PERFORMANCE_COMMON_H
 
-#include "../benchmark_statistics.h"
+#include "samples.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -18,7 +18,10 @@ static inline int f2c_benchmark_close(double generated, double native, double to
 
 static inline int f2c_benchmark_report(const char *kernel, const char *description,
                                        F2cBenchmarkSample *samples, size_t count) {
-    const F2cBenchmarkSample result = f2c_benchmark_median(samples, count);
+    F2cBenchmarkSample result;
+    if (!f2c_benchmark_write_samples(stdout, kernel, description, samples, count))
+        return 0;
+    result = f2c_benchmark_median(samples, count);
     printf("%s %s: generated C %.6fs, Fortran %.6fs, ratio %.3f\n", kernel, description,
            result.generated_seconds, result.fortran_seconds, result.ratio);
     printf("F2C_PERF,%s,%s,%.9f,%.9f,%.6f\n", kernel, description, result.generated_seconds,
