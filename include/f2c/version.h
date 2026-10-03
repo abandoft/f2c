@@ -3,8 +3,8 @@
 
 /* The authoritative project version consumed by both C and CMake. */
 #define F2C_VERSION_MAJOR 1
-#define F2C_VERSION_MINOR 47
+#define F2C_VERSION_MINOR 48
 #define F2C_VERSION_PATCH 0
-#define F2C_VERSION_STRING "1.47.0"
+#define F2C_VERSION_STRING "1.48.0"
 
 #endif
