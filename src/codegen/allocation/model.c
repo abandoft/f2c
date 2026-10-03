@@ -27,12 +27,12 @@ static int expression_is_whole_array(const F2cExpr *expression) {
            expression->rank != 0U;
 }
 
-static int prepare_array_expression(Context *context, Unit *unit, const F2cStatement *statement,
-                                    const F2cExpr *expression, int depth,
-                                    F2cAllocationModel *model) {
+static int prepare_model_expression(Context *context, Unit *unit, const F2cExpr *expression,
+                                    int depth, F2cAllocationModel *model) {
     Buffer prelude = {0};
     size_t temporary = 0U;
-    size_t dimension;
+    if (expression->rank == 0U && !f2c_array_contains_unmaterialized_value(unit, expression))
+        return 1;
     model->owned_expression = f2c_array_clone_expression(unit, expression);
     if (model->owned_expression == NULL ||
         !f2c_array_materialize_constructors(context, unit, model->owned_expression,
@@ -45,6 +45,12 @@ static int prepare_array_expression(Context *context, Unit *unit, const F2cState
     if (prelude.data != NULL)
         f2c_buffer_append(&context->output, prelude.data);
     free(prelude.data);
+    return 1;
+}
+
+static int prepare_array_expression(Context *context, Unit *unit, int depth,
+                                    F2cAllocationModel *model) {
+    size_t dimension;
     if (!f2c_array_value_view(unit, model->expression, &model->array))
         return 0;
     if (model->source &&
@@ -85,7 +91,6 @@ static int prepare_array_expression(Context *context, Unit *unit, const F2cState
         if (model->array.element_length == NULL || model->character_length == NULL)
             return 0;
     }
-    (void)statement;
     return 1;
 }
 
@@ -220,8 +225,11 @@ int f2c_allocation_model_prepare(Context *context, Unit *unit, const F2cStatemen
     f2c_buffer_printf(&context->output, "if (%s) {\n", model->availability);
     ++depth;
     model->guarded = 1;
+    if (!prepare_model_expression(context, unit, expression, depth, model))
+        return 0;
+    expression = model->expression;
     if (expression->rank != 0U) {
-        if (!prepare_array_expression(context, unit, statement, expression, depth, model))
+        if (!prepare_array_expression(context, unit, depth, model))
             return 0;
     } else if (source && expression->type == TYPE_CHARACTER) {
         if (!prepare_character_scalar(context, unit, expression, depth, model))
@@ -355,7 +363,7 @@ void f2c_allocation_model_emit_cleanup(Context *context, Unit *unit,
         model->expression->type == TYPE_DERIVED && model->expression->derived_type != NULL &&
         model->scalar_name != NULL) {
         f2c_array_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "f2c_destroy_%s(&%s);\n",
+        f2c_buffer_printf(&context->output, "f2c_discard_array_%s(&%s, 1U);\n",
                           model->expression->derived_type->c_name, model->scalar_name);
     }
     f2c_array_value_emit_cleanup(context, &model->array, depth);
