@@ -1,10 +1,22 @@
 #include "codegen/call/private.h"
 
 #include "codegen/array/private.h"
+#include "codegen/expression/private.h"
 #include "codegen/lowering/private.h"
 #include "ir/call.h"
 
 #include <stdlib.h>
+
+int f2c_call_has_object_state_parameters(const F2cExpr *expression) {
+    const Symbol *callee = expression != NULL ? expression->symbol : NULL;
+    if (callee == NULL)
+        return 0;
+    for (size_t parameter = 0U; parameter < callee->external_parameter_count; ++parameter)
+        if (callee->external_parameter_pointer[parameter] ||
+            callee->external_parameter_allocatable[parameter])
+            return 1;
+    return 0;
+}
 
 int f2c_call_expression_requires_materialization(Unit *unit, const F2cExpr *expression) {
     const Symbol *callee;
@@ -15,6 +27,8 @@ int f2c_call_expression_requires_materialization(Unit *unit, const F2cExpr *expr
         callee->external_elemental ||
         (expression->resolved_procedure != NULL && expression->resolved_procedure->elemental))
         return 0;
+    if (f2c_call_has_object_state_parameters(expression))
+        return 1;
     for (argument = 0U; argument < f2c_call_parameter_count(expression); ++argument)
         if (f2c_call_actual_requires_materialization(
                 unit, callee, f2c_call_parameter_actual(expression, argument), argument))
@@ -49,6 +63,38 @@ int f2c_call_materialize_expression(Unit *unit, F2cExpr *expression, size_t iden
     f2c_buffer_printf(&name, "f2c_call_%s_%zu_%zu", role, identifier, (*temporary)++);
     if (name.data == NULL)
         goto done;
+    if (f2c_call_has_object_state_parameters(expression) &&
+        !f2c_expression_has_descriptor_result(expression)) {
+        f2c_array_indent(prelude, depth);
+        f2c_buffer_printf(prelude, "%s%s %s;\n", f2c_expression_c_type(expression),
+                          expression->type == TYPE_CHARACTER ? " *" : "", name.data);
+        if (expression->type == TYPE_CHARACTER) {
+            if (expression->temporary_index == SIZE_MAX)
+                goto done;
+            character_length = f2c_character_length_expression(unit, expression);
+            f2c_buffer_printf(&length_name, "%s_character_length", name.data);
+            if (character_length == NULL || length_name.data == NULL ||
+                !f2c_lowering_copy_character_length(unit, expression, length_name.data))
+                goto done;
+            f2c_array_indent(prelude, depth);
+            f2c_buffer_printf(prelude, "const size_t %s = (size_t)(%s);\n", length_name.data,
+                              character_length);
+            f2c_array_indent(prelude, depth);
+            f2c_buffer_printf(prelude,
+                              "%s = f2c_character_result_%zu = "
+                              "f2c_character_temporary_resize(f2c_character_result_%zu, %s);\n",
+                              name.data, expression->temporary_index, expression->temporary_index,
+                              length_name.data);
+        }
+        if (!f2c_call_emit_function_value(prelude, unit, expression, name.data, depth))
+            goto done;
+        if (expression->type == TYPE_CHARACTER) {
+            f2c_array_indent(prelude, depth);
+            f2c_buffer_printf(prelude, "%s[%s] = '\\0';\n", name.data, length_name.data);
+        }
+        success = f2c_lowering_take_code(unit, expression, f2c_buffer_take(&name));
+        goto done;
+    }
     for (argument = 0U; argument < f2c_call_parameter_count(expression); ++argument) {
         F2cExpr *actual = (F2cExpr *)f2c_call_parameter_actual(expression, argument);
         if (actual != NULL &&

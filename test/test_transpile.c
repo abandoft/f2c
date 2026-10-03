@@ -1001,13 +1001,16 @@ static void test_allocatable_dummy_descriptor_abi(void) {
                     "void resize(f2c_descriptor *f2c_descriptor_values, "
                     "const int32_t *n)",
                     "ALLOCATABLE dummy signature carries data, rank, bounds, and extents");
-    expect_contains(result.code, "f2c_descriptor_values->data = values;",
-                    "callee writes allocation state back to its caller descriptor");
+    expect_contains(result.code, "f2c_descriptor_values->data = f2c_alloc_storage;",
+                    "callee commits allocation state at the mutation site");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_descriptor_values->data = values;") == NULL,
+           "callee cleanup cannot overwrite state with an entry snapshot");
     expect_contains(result.code, "f2c_descriptor f2c_call_descriptor_0 = {.data = data",
                     "caller materializes the descriptor from its live allocation state");
-    expect_contains(result.code, "data = (float *)f2c_call_descriptor_0.data;",
+    expect_contains(result.code, "data = (float *)(&f2c_call_descriptor_0)->data;",
                     "caller imports reallocation performed by an INTENT(INOUT) dummy");
-    expect_contains(result.code, "(values != NULL)",
+    expect_contains(result.code, "f2c_descriptor_state_data(f2c_descriptor_values, 0U)",
                     "ALLOCATED inquiry lowers against descriptor-backed allocation state");
     f2c_result_free(&result);
 }

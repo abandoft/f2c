@@ -1,4 +1,6 @@
 #include "codegen/array/private.h"
+#include "codegen/call/private.h"
+#include "codegen/storage/private.h"
 
 #include <stdlib.h>
 
@@ -53,18 +55,22 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
     if (left_symbol->allocatable && right != NULL && right->kind == F2C_EXPR_CALL &&
         f2c_expression_has_allocatable_result(right) &&
         (left_symbol->type != TYPE_CHARACTER || left_symbol->deferred_character)) {
-        char *result = f2c_array_emit_expression(unit, right);
-        const char *name = f2c_symbol_c_name(unit, left_symbol);
+        const int state_parameters = f2c_call_has_object_state_parameters(right);
+        char *result = state_parameters ? NULL : f2c_array_emit_expression(unit, right);
+        const F2cStorageReference reference = f2c_ir_storage_reference(left);
+        char *name = f2c_storage_write_property(unit, &reference, F2C_OBJECT_DATA, 0U);
         char *old_count =
             left_symbol->type == TYPE_DERIVED ? f2c_symbol_element_count(unit, left_symbol) : NULL;
         size_t dimension;
-        if (result == NULL || right->rank != left_symbol->rank ||
-            right->type != left_symbol->type || right->type_kind != left_symbol->kind ||
+        if (name == NULL || (!state_parameters && result == NULL) ||
+            right->rank != left_symbol->rank || right->type != left_symbol->type ||
+            right->type_kind != left_symbol->kind ||
             (left_symbol->type == TYPE_DERIVED &&
              (right->derived_type == NULL || right->derived_type != left_symbol->derived_type)) ||
             (left_symbol->type == TYPE_DERIVED && old_count == NULL)) {
             free(result);
             free(old_count);
+            free(name);
             f2c_diagnostic(context, line, 1,
                            "allocatable function-result assignment requires matching type, kind, "
                            "rank, and derived type");
@@ -73,7 +79,18 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "{\n");
         f2c_array_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "f2c_descriptor f2c_function_result = %s;\n", result);
+        if (state_parameters) {
+            f2c_buffer_append(&context->output, "f2c_descriptor f2c_function_result;\n");
+            if (!f2c_call_emit_function_value(&context->output, unit, right, "f2c_function_result",
+                                              depth + 1)) {
+                free(old_count);
+                free(name);
+                return 1;
+            }
+        } else {
+            f2c_buffer_printf(&context->output, "f2c_descriptor f2c_function_result = %s;\n",
+                              result);
+        }
         f2c_array_indent(&context->output, depth + 1);
         f2c_buffer_printf(
             &context->output,
@@ -101,9 +118,10 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
         f2c_buffer_printf(&context->output, "%s = (%s *)f2c_function_result.data;\n", name,
                           f2c_symbol_c_type(left_symbol));
         if (left_symbol->deferred_character) {
-            f2c_array_indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "f2c_char_len_%s = f2c_function_result.character_length;\n", name);
+            if (!f2c_storage_emit_store(&context->output, unit, &reference,
+                                        F2C_OBJECT_CHARACTER_LENGTH, 0U, NULL,
+                                        "f2c_function_result.character_length", depth + 1))
+                context->output.failed = 1;
         }
         for (dimension = 0U; dimension < left_symbol->rank; ++dimension) {
             f2c_array_indent(&context->output, depth + 1);
@@ -113,17 +131,19 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
                               "f2c_function_result.extent[%zu] < 0 || "
                               "f2c_function_result.extent[%zu] > INT32_MAX) abort();\n",
                               dimension, dimension, dimension, dimension);
-            f2c_array_indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output, "%s_lower_%zu = 1;\n", name, dimension + 1U);
-            f2c_array_indent(&context->output, depth + 1);
-            f2c_buffer_printf(&context->output,
-                              "%s_extent_%zu = (int32_t)f2c_function_result.extent[%zu];\n", name,
-                              dimension + 1U, dimension);
+            Buffer extent = {0};
+            f2c_buffer_printf(&extent, "(int32_t)f2c_function_result.extent[%zu]", dimension);
+            if (!f2c_storage_emit_contiguous_dimension(&context->output, unit, &reference,
+                                                       dimension, NULL, "1", extent.data,
+                                                       depth + 1))
+                context->output.failed = 1;
+            free(extent.data);
         }
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
         free(result);
         free(old_count);
+        free(name);
         return 1;
     }
     if (f2c_emit_allocatable_array_assignment(context, unit, left, right, depth))
@@ -143,9 +163,12 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
     if (f2c_array_emit_elemental_assignment(context, unit, left_symbol, right, line, depth))
         return 1;
     if (left_symbol->allocatable || left_symbol->pointer) {
+        char *data = f2c_storage_symbol_data(unit, left_symbol);
+        if (data == NULL)
+            return 0;
         f2c_array_indent(&context->output, depth);
-        f2c_buffer_printf(&context->output, "if (%s == NULL) abort();\n",
-                          f2c_symbol_c_name(unit, left_symbol));
+        f2c_buffer_printf(&context->output, "if (%s == NULL) abort();\n", data);
+        free(data);
     }
     element_count = f2c_symbol_element_count(unit, left_symbol);
     if (element_count == NULL) {
@@ -268,10 +291,26 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
                               element_count, f2c_unaligned_access_suffix(left_symbol), address);
             free(address);
         } else {
+            char *data = f2c_storage_symbol_data(unit, left_symbol);
+            Buffer access = {0};
+            if (data == NULL) {
+                context->output.failed = 1;
+                free(value);
+                goto cleanup;
+            }
+            if (left_symbol->volatile_entity)
+                f2c_buffer_printf(&access, "((volatile %s *)(%s))", f2c_symbol_c_type(left_symbol),
+                                  data);
+            else
+                f2c_buffer_append(&access, data);
             f2c_buffer_printf(&context->output,
                               "f2c_fill_index < %s; ++f2c_fill_index) %s[f2c_fill_index] = "
                               "f2c_whole_scalar; }\n",
-                              element_count, f2c_symbol_c_name(unit, left_symbol));
+                              element_count, access.data);
+            if (access.failed)
+                context->output.failed = 1;
+            free(access.data);
+            free(data);
         }
         free(value);
     }

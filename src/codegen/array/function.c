@@ -1,4 +1,5 @@
 #include "codegen/array/private.h"
+#include "codegen/call/private.h"
 
 #include "codegen/lowering/private.h"
 
@@ -116,7 +117,7 @@ int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_
                                           F2cArrayCleanupList *cleanup, int depth) {
     Buffer storage = {0};
     Buffer descriptor = {0};
-    char *call;
+    char *call = NULL;
     if (!f2c_array_function_result_call(unit, expression))
         return 1;
     if (unit == NULL || role == NULL || temporary == NULL || prelude == NULL || cleanup == NULL ||
@@ -126,9 +127,12 @@ int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_
     if (!f2c_array_owned_temporary_valid(unit, expression,
                                          F2C_OWNED_TEMPORARY_ARRAY_FUNCTION_RESULT))
         return 0;
-    call = f2c_array_emit_expression(unit, expression);
-    if (call == NULL)
-        return 0;
+    const int state_parameters = f2c_call_has_object_state_parameters(expression);
+    if (!state_parameters) {
+        call = f2c_array_emit_expression(unit, expression);
+        if (call == NULL)
+            return 0;
+    }
     f2c_buffer_printf(&storage, "f2c_array_%s_function_%zu_%zu", role, identifier,
                       expression->owned_temporary_index);
     f2c_buffer_printf(&descriptor, "%s_descriptor", storage.data != NULL ? storage.data : "");
@@ -139,7 +143,16 @@ int f2c_array_materialize_function_result(Unit *unit, F2cExpr *expression, size_
         return 0;
     }
     f2c_array_indent(prelude, depth);
-    f2c_buffer_printf(prelude, "f2c_descriptor %s = %s;\n", descriptor.data, call);
+    if (state_parameters) {
+        f2c_buffer_printf(prelude, "f2c_descriptor %s;\n", descriptor.data);
+        if (!f2c_call_emit_function_value(prelude, unit, expression, descriptor.data, depth)) {
+            free(storage.data);
+            free(descriptor.data);
+            return 0;
+        }
+    } else {
+        f2c_buffer_printf(prelude, "f2c_descriptor %s = %s;\n", descriptor.data, call);
+    }
     append_shape_validation(prelude, expression, descriptor.data, storage.data, depth);
     f2c_array_indent(prelude, depth);
     f2c_buffer_printf(prelude, "%s *%s = NULL;\n", f2c_expression_c_type(expression), storage.data);

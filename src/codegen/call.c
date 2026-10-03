@@ -3,8 +3,11 @@
 #include "codegen/array/private.h"
 #include "codegen/call/private.h"
 #include "codegen/descriptor/private.h"
+#include "codegen/expression/private.h"
 #include "codegen/lowering/private.h"
+#include "codegen/storage/private.h"
 #include "codegen/value/private.h"
+#include "ir/call.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -385,6 +388,18 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
               actual == NULL || !actual->pointer ||
               (expression->kind == F2C_EXPR_COMPONENT && expression->child_count != 1U))))
             return 0;
+        const F2cStorageReference storage = f2c_ir_storage_reference(expression);
+        if (storage.state_source == F2C_OBJECT_STATE_DESCRIPTOR &&
+            (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i])) {
+            Buffer reference = {0};
+            f2c_buffer_printf(&reference, "f2c_descriptor_%s", f2c_symbol_c_name(unit, actual));
+            free(call->arguments[i]);
+            call->arguments[i] = f2c_buffer_take(&reference);
+            if (call->arguments[i] == NULL)
+                return 0;
+            call->has_descriptors = 1;
+            continue;
+        }
         has_view = actual != NULL && actual->equivalence_unaligned
                        ? 0
                        : f2c_descriptor_view(unit, expression, &view);
@@ -419,13 +434,17 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
                                    : f2c_character_length_expression(unit, expression);
         if (callee->external_parameter_pointer[i] && actual != NULL && actual->pointer &&
             (expression->kind == F2C_EXPR_NAME ||
-             (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U)))
-            f2c_buffer_printf(&deallocatable, "%s_deallocatable", name);
-        else if (callee->external_parameter_allocatable[i] && actual != NULL &&
-                 actual->allocatable &&
-                 (expression->kind == F2C_EXPR_NAME ||
-                  (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U)))
-            f2c_buffer_printf(&deallocatable, "(%s != NULL)", name);
+             (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U))) {
+            char *state = f2c_storage_read_property(unit, &storage, F2C_OBJECT_DEALLOCATABLE, 0U);
+            if (state == NULL)
+                goto descriptor_failed;
+            f2c_buffer_append(&deallocatable, state);
+            free(state);
+        } else if (callee->external_parameter_allocatable[i] && actual != NULL &&
+                   actual->allocatable &&
+                   (expression->kind == F2C_EXPR_NAME ||
+                    (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U)))
+            f2c_buffer_printf(&deallocatable, "(%s != NULL)", view.data);
         else
             f2c_buffer_append(&deallocatable, "false");
         emit_indent(&call->prelude, depth);
@@ -464,45 +483,17 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
         }
         if (call->arguments[i] == NULL)
             goto descriptor_failed;
-        if (callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i]) {
-            emit_indent(&call->postlude, depth);
-            f2c_buffer_printf(&call->postlude, "%s = (%s *)f2c_call_descriptor_%zu.data;\n", name,
-                              c_type, i);
-            if (actual->pointer) {
-                emit_indent(&call->postlude, depth);
-                f2c_buffer_printf(&call->postlude,
-                                  "%s_deallocatable = "
-                                  "f2c_call_descriptor_%zu.deallocatable;\n",
-                                  name, i);
-            }
-            if (actual->deferred_character) {
-                emit_indent(&call->postlude, depth);
-                if (expression->kind == F2C_EXPR_COMPONENT)
-                    f2c_buffer_printf(
-                        &call->postlude,
-                        "%s_character_length = f2c_call_descriptor_%zu.character_length;\n", name,
-                        i);
-                else
-                    f2c_buffer_printf(
-                        &call->postlude,
-                        "f2c_char_len_%s = f2c_call_descriptor_%zu.character_length;\n", name, i);
-            }
-            for (dimension = 0U; dimension < actual->rank; ++dimension) {
-                emit_indent(&call->postlude, depth);
-                f2c_buffer_printf(&call->postlude,
-                                  "%s_lower_%zu = (int32_t)f2c_call_descriptor_%zu.lower[%zu];\n",
-                                  name, dimension + 1U, i, dimension);
-                emit_indent(&call->postlude, depth);
-                f2c_buffer_printf(&call->postlude,
-                                  "%s_extent_%zu = (int32_t)f2c_call_descriptor_%zu.extent[%zu];\n",
-                                  name, dimension + 1U, i, dimension);
-                if (actual->pointer) {
-                    emit_indent(&call->postlude, depth);
-                    f2c_buffer_printf(&call->postlude,
-                                      "%s_stride_%zu = f2c_call_descriptor_%zu.stride[%zu];\n",
-                                      name, dimension + 1U, i, dimension);
-                }
-            }
+        if ((callee->external_parameter_allocatable[i] || callee->external_parameter_pointer[i]) &&
+            parameter_intent(callee, i) != F2C_INTENT_IN) {
+            Buffer descriptor_pointer = {0};
+            f2c_buffer_printf(&descriptor_pointer, "&f2c_call_descriptor_%zu", i);
+            const int committed = descriptor_pointer.data != NULL &&
+                                  f2c_storage_emit_descriptor_commit(
+                                      &call->postlude, unit, &storage, name,
+                                      descriptor_pointer.data, F2C_STORAGE_STATEMENT, depth);
+            free(f2c_buffer_take(&descriptor_pointer));
+            if (!committed)
+                goto descriptor_failed;
         }
         free(name);
         f2c_descriptor_view_free(&view);
@@ -520,7 +511,9 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
 static int emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
                                     const Symbol *explicit_callee,
                                     F2cExpr *const *argument_expressions, size_t count,
-                                    const F2cStatement *alternate_call, int depth) {
+                                    const F2cStatement *alternate_call,
+                                    const char *result_destination, const F2cExpr *function_result,
+                                    int depth) {
     size_t i;
     LoweredCall call;
     F2cExpr **lowering_arguments = NULL;
@@ -621,10 +614,24 @@ static int emit_call_with_signature(Buffer *output, Unit *unit, const char *name
     emit_indent(output, depth + (has_scope ? 1 : 0));
     if (alternate_call != NULL && alternate_call->label_count != 0U)
         f2c_buffer_append(output, "const int32_t f2c_alternate_return = (int32_t)");
+    const int character_result = function_result != NULL &&
+                                 function_result->type == TYPE_CHARACTER &&
+                                 !f2c_expression_has_descriptor_result(function_result);
+    if (alternate_call == NULL && result_destination != NULL && !character_result)
+        f2c_buffer_printf(output, "%s = ", result_destination);
     f2c_buffer_printf(output, "%s(", name);
+    if (character_result) {
+        char *length = f2c_character_length_expression(unit, function_result);
+        if (length == NULL)
+            goto done;
+        f2c_buffer_printf(output, "%s, (size_t)(%s)", result_destination, length);
+        free(length);
+    }
     for (i = 0U; i < count; ++i)
-        f2c_buffer_printf(output, "%s%s", i == 0U ? "" : ", ", call.arguments[i]);
-    if (!f2c_emit_host_capture_statement_actuals(output, unit, capture_procedure, count != 0U)) {
+        f2c_buffer_printf(output, "%s%s", i == 0U && !character_result ? "" : ", ",
+                          call.arguments[i]);
+    if (!f2c_emit_host_capture_statement_actuals(output, unit, capture_procedure,
+                                                 count != 0U || character_result)) {
         goto done;
     }
     for (i = 0U; i < count; ++i) {
@@ -696,7 +703,7 @@ int f2c_emit_call_with_signature(Buffer *output, Unit *unit, const char *name,
                                  const Symbol *explicit_callee,
                                  F2cExpr *const *argument_expressions, size_t count, int depth) {
     return emit_call_with_signature(output, unit, name, explicit_callee, argument_expressions,
-                                    count, NULL, depth);
+                                    count, NULL, NULL, NULL, depth);
 }
 
 int f2c_emit_alternate_return_call(Buffer *output, Unit *unit, const char *name,
@@ -704,7 +711,36 @@ int f2c_emit_alternate_return_call(Buffer *output, Unit *unit, const char *name,
                                    F2cExpr *const *argument_expressions, size_t count,
                                    const F2cStatement *statement, int depth) {
     return emit_call_with_signature(output, unit, name, explicit_callee, argument_expressions,
-                                    count, statement, depth);
+                                    count, statement, NULL, NULL, depth);
+}
+
+int f2c_call_emit_function_value(Buffer *output, Unit *unit, const F2cExpr *expression,
+                                 const char *destination, int depth) {
+    const Symbol *callee = expression != NULL ? expression->symbol : NULL;
+    if (callee == NULL || destination == NULL)
+        return 0;
+    const size_t count = f2c_call_parameter_count(expression);
+    if (count > SIZE_MAX / sizeof(F2cExpr *))
+        return 0;
+    F2cExpr **arguments = count != 0U ? (F2cExpr **)calloc(count, sizeof(*arguments)) : NULL;
+    if (count != 0U && arguments == NULL)
+        return 0;
+    for (size_t index = 0U; index < count; ++index)
+        arguments[index] = (F2cExpr *)f2c_call_parameter_actual(expression, index);
+    int supported = 1;
+    char *bound_callee = callee->type_bound && expression->child_count != 0U
+                             ? f2c_expression_emit(unit, expression->children[0], &supported)
+                             : NULL;
+    const char *name = callee->type_bound ? bound_callee
+                       : expression->resolved_procedure != NULL
+                           ? expression->resolved_procedure->name
+                           : f2c_symbol_c_name(unit, callee);
+    const int emitted = supported && name != NULL &&
+                        emit_call_with_signature(output, unit, name, callee, arguments, count, NULL,
+                                                 destination, expression, depth);
+    free(bound_callee);
+    free(arguments);
+    return emitted;
 }
 
 int f2c_emit_call(Buffer *output, Unit *unit, const char *name,
