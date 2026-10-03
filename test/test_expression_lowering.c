@@ -41,13 +41,19 @@ static void test_values_and_replacement(void) {
            "the overlay accepts an emitted extent");
     expect(f2c_lowering_copy_character_length(&unit, &expression, "9U"),
            "the overlay accepts an emitted character length");
+    expect(f2c_lowering_copy_result_descriptor(&unit, &expression, "result_descriptor") &&
+               f2c_lowering_copy_owned_storage(&unit, &expression, "owned_storage"),
+           "the overlay keeps result descriptors separate from owned storage");
     expect(f2c_lowering_set_array_temporary(&unit, &expression, 1),
            "the overlay records array temporary state");
     expect(f2c_lowering_set_argument_materialized(&unit, &expression, 1),
            "the overlay records ordered argument materialization");
     expect(strcmp(f2c_lowering_code(&unit, &expression), "first_value") == 0 &&
                strcmp(f2c_lowering_extent(&unit, &expression), "17U") == 0 &&
-               strcmp(f2c_lowering_character_length(&unit, &expression), "9U") == 0,
+               strcmp(f2c_lowering_character_length(&unit, &expression), "9U") == 0 &&
+               strcmp(f2c_lowering_result_descriptor(&unit, &expression), "result_descriptor") ==
+                   0 &&
+               strcmp(f2c_lowering_owned_storage(&unit, &expression), "owned_storage") == 0,
            "all emitted strings can be retrieved");
     expect(f2c_lowering_is_array_temporary(&unit, &expression) &&
                f2c_lowering_argument_materialized(&unit, &expression),
@@ -88,6 +94,8 @@ static void test_clone_and_forget_tree(void) {
 
     expect(f2c_lowering_copy_code(&unit, &source, "source_code") &&
                f2c_lowering_copy_extent(&unit, &source, "source_extent") &&
+               f2c_lowering_copy_result_descriptor(&unit, &source, "descriptor") &&
+               f2c_lowering_copy_owned_storage(&unit, &source, "storage") &&
                f2c_lowering_set_argument_materialized(&unit, &source, 1),
            "source state is available for cloning");
     expect(f2c_lowering_clone(&unit, &target, &source), "code-generation state can be cloned");
@@ -97,6 +105,13 @@ static void test_clone_and_forget_tree(void) {
                strcmp(source_code, target_code) == 0,
            "cloned strings have independent ownership");
     expect(f2c_lowering_argument_materialized(&unit, &target), "cloning preserves emitted flags");
+    expect(f2c_lowering_result_descriptor(&unit, &source) !=
+                   f2c_lowering_result_descriptor(&unit, &target) &&
+               strcmp(f2c_lowering_result_descriptor(&unit, &target), "descriptor") == 0 &&
+               f2c_lowering_owned_storage(&unit, &source) !=
+                   f2c_lowering_owned_storage(&unit, &target) &&
+               strcmp(f2c_lowering_owned_storage(&unit, &target), "storage") == 0,
+           "cloned result storage and descriptor strings have independent ownership");
     expect(f2c_lowering_clone(&unit, &source, &source),
            "self-cloning preserves the existing state");
     expect(strcmp(f2c_lowering_code(&unit, &source), "source_code") == 0,

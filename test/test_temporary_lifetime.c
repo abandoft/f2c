@@ -433,6 +433,64 @@ static void test_call_lowering_failure_is_atomic(void) {
     f2c_lowering_clear(&context);
 }
 
+static void test_scalar_result_ownership(void) {
+    Context context = {0};
+    Unit unit = {0};
+    Symbol procedure = {0};
+    F2cExpr expression = {0};
+    F2cStatement statement = {0};
+    F2cArrayCleanupList cleanup = {0};
+    Buffer output = {0};
+    expression.kind = F2C_EXPR_CALL;
+    expression.type = TYPE_INTEGER;
+    expression.type_kind = 4;
+    expression.symbol = &procedure;
+    procedure.external_result_allocatable = 1;
+    f2c_bind_expression_result(&expression);
+    expect(expression.result_kind == F2C_FUNCTION_RESULT_ALLOCATABLE &&
+               f2c_expression_has_descriptor_result(&expression) &&
+               f2c_result_kind_owns_storage(expression.result_kind),
+           "rank-zero allocatable results retain their typed storage ownership");
+    statement.kind = F2C_STMT_ASSIGNMENT;
+    statement.right = &expression;
+    unit.context = &context;
+    unit.phase = F2C_UNIT_TYPED_IR;
+    unit.statements = &statement;
+    unit.statement_count = 1U;
+    expect(f2c_plan_expression_lifetimes(&context, &unit) && unit.owned_temporary_count == 1U &&
+               expression.owned_temporary_kind == F2C_OWNED_TEMPORARY_FUNCTION_RESULT,
+           "rank-zero result storage participates in the semantic temporary catalog");
+    expect(f2c_lowering_copy_code(&unit, &expression, "(*result_storage)") &&
+               f2c_lowering_copy_owned_storage(&unit, &expression, "result_storage") &&
+               f2c_lowering_copy_result_descriptor(&unit, &expression, "result_descriptor") &&
+               f2c_array_cleanup_append(&unit, &cleanup, &expression, 0) &&
+               f2c_array_cleanup_emit(&output, &unit, &cleanup),
+           "scalar result cleanup is backed by its semantic ownership proof");
+    expect(output.data != NULL && strcmp(output.data, "free(result_storage);\n") == 0,
+           "cleanup releases storage rather than the dereferenced scalar value");
+    F2cExpr *clone = f2c_array_clone_expression(&unit, &expression);
+    expect(clone != NULL && clone->result_kind == expression.result_kind &&
+               strcmp(f2c_lowering_owned_storage(&unit, clone), "result_storage") == 0 &&
+               strcmp(f2c_lowering_result_descriptor(&unit, clone), "result_descriptor") == 0,
+           "lowering clones retain descriptor and ownership views separately from typed IR");
+    f2c_codegen_expression_free(&unit, clone);
+    f2c_array_cleanup_clear(&cleanup);
+    free(output.data);
+    free(unit.owned_temporaries);
+    free(statement.temporary_plan.owned_temporaries);
+    f2c_lowering_clear(&context);
+    procedure.external_result_allocatable = 0;
+    procedure.external_result_pointer = 1;
+    f2c_bind_expression_result(&expression);
+    expect(expression.result_kind == F2C_FUNCTION_RESULT_POINTER && expression.definable &&
+               expression.value_category == F2C_VALUE_VARIABLE &&
+               !f2c_result_kind_owns_storage(expression.result_kind),
+           "pointer function results designate targets but never own those targets");
+    expression.result_use = F2C_FUNCTION_RESULT_REFERENCE;
+    expect(f2c_expression_temporary_release_kind(&expression) == F2C_TEMPORARY_BORROWED_REFERENCE,
+           "a pointer reference has no owned-storage cleanup action");
+}
+
 int main(void) {
     test_character_temporary_plan();
     test_ordered_call_plan();
@@ -443,6 +501,7 @@ int main(void) {
     test_statement_call_lowering_is_immutable();
     test_reduction_designator_ownership();
     test_call_lowering_failure_is_atomic();
+    test_scalar_result_ownership();
     if (failures != 0)
         fprintf(stderr, "%d temporary-lifetime test(s) failed\n", failures);
     return failures == 0 ? 0 : 1;
