@@ -207,10 +207,12 @@ static int character_operand(Unit *unit, const F2cExpr *expression, CharacterOpe
         operand->count = f2c_strdup("SIZE_MAX");
         operand->stride = f2c_strdup("0");
         free(value);
-    } else if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && expression->child_count == 1U &&
+    } else if (f2c_lowering_code(unit, expression) == NULL &&
+               expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && expression->child_count == 1U &&
                expression->children[0]->rank != 0U) {
         return character_operand(unit, expression->children[0], operand, supported);
-    } else if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
+    } else if (f2c_lowering_code(unit, expression) == NULL &&
+               expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
         return character_constructor_operand(unit, expression, operand, supported);
     } else {
         operand->length = f2c_character_length_expression(unit, expression);
