@@ -1,3 +1,16 @@
+## 1.50.0
+
+- Support function results in allocation bounds and correct scalar array-bound inquiries on dynamic results.
+- Evaluate character allocation lengths once across multiple targets and support valid nondeferred-length type specifications.
+- Correct `STAT` definition order so `SOURCE` can read the status variable's original value.
+- Cache `STAT/ERRMSG` destinations and lengths, avoiding repeated array, derived-component, and substring index evaluation.
+- Support pointer function results as status and error-message variables, writing associated targets without heap snapshots or freeing borrowed objects.
+- Preserve `VOLATILE` control-target access and correct stores to unaligned `EQUIVALENCE` status variables.
+- Report nondeferred character-length mismatches with type specifications or `SOURCE/MOLD` as allocation errors.
+- Retain function results across complete allocation and deallocation actions, correcting premature finalization and cleanup in multiple-target, nested-action, and failure paths.
+- Separate inline result-retention records from owned heap storage, preserving small-case allocation-free bookkeeping and safe growth.
+- Avoid collisions between valid source identifiers and allocation-control or result-cleanup local names.
+
 ## 1.49.0
 
 - Support scalar allocatable function results in `SOURCE` allocation models, sharing one materialized value across multiple targets and releasing result storage after allocation failures.
