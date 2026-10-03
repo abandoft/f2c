@@ -16,6 +16,8 @@ void f2c_validate_designator_components(Context *context, const F2cExpr *express
 }
 
 int f2c_expression_has_target_attribute(const F2cExpr *expression) {
+    if (f2c_expression_has_pointer_result(expression))
+        return 1;
     if (expression == NULL || expression->symbol == NULL ||
         (expression->kind != F2C_EXPR_NAME && expression->kind != F2C_EXPR_ARRAY_REFERENCE &&
          expression->kind != F2C_EXPR_COMPONENT && expression->kind != F2C_EXPR_SUBSTRING))

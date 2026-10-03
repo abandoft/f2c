@@ -21,6 +21,8 @@ static int null_pointer_value(const F2cExpr *expression) {
 }
 
 static int pointer_target_designator(const F2cExpr *expression) {
+    if (f2c_expression_has_pointer_result(expression))
+        return 1;
     return expression != NULL &&
            (expression->kind == F2C_EXPR_NAME || expression->kind == F2C_EXPR_ARRAY_REFERENCE ||
             expression->kind == F2C_EXPR_COMPONENT || expression->kind == F2C_EXPR_SUBSTRING) &&
@@ -275,6 +277,8 @@ static void validate_pointer_statement(Context *context, Unit *unit, F2cStatemen
                 : NULL;
         Symbol *target = pointer_target_designator(right) ? right->symbol : NULL;
         const int null_target = null_pointer_value(right);
+        if (f2c_expression_has_pointer_result(right))
+            statement->right->result_use = F2C_FUNCTION_RESULT_REFERENCE;
         statement->pointer_bounds = F2C_POINTER_BOUNDS_NONE;
         if (pointer == NULL || (!pointer->pointer && !pointer->procedure_pointer)) {
             f2c_diagnostic_at(context, statement->line,
