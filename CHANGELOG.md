@@ -1,3 +1,12 @@
+## 1.46.0
+
+- Separated physical C storage from scoped qualified access, correcting access across ordinary and `VOLATILE` scopes for local, module, COMMON, host-associated, and automatic objects.
+- Unified subroutine and function argument address generation, correcting supported direct associations of qualified objects with ordinary and read-only dummy arguments while preserving strict compilation of procedure interfaces and descriptor entries.
+- Improved qualified scalar, array-element, and derived-component reads and writes, preserving qualified accesses in index expressions and cached storage aliases.
+- Kept source and destination access attributes independent during snapshot copying, correcting qualified copy-back for array constructors, character copies, and transformational results without transferring object attributes to fresh temporaries.
+- Generated qualified bytewise reads and writes for supported unaligned numeric `EQUIVALENCE` storage, correcting unaligned accesses in whole-array copies and I/O paths.
+- Corrected covered formatted and list-directed numeric array transfers and qualified numeric list/NAMELIST input, committing values only after successful conversion, preserving targets on input failure, and avoiding temporary-name collisions with user variables.
+
 ## 1.45.0
 
 - Preserved access qualifiers and read-only intent across supported assumed-shape, optional, function, and host-associated array arguments.
