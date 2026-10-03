@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-if [ "$#" -ne 1 ]; then
-    echo "usage: $0 /path/to/f2c" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    echo "usage: $0 /path/to/f2c [report-name]" >&2
     exit 2
 fi
 if ! command -v gfortran >/dev/null 2>&1; then
@@ -12,7 +12,14 @@ fi
 
 f2c=$1
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-work=$root/build/diagnostics/performance-codegen
+report_name=${2:-performance-codegen}
+case $report_name in
+    ''|*[!A-Za-z0-9_-]*)
+        echo "report name must contain only letters, digits, underscores, or hyphens" >&2
+        exit 2
+        ;;
+esac
+work=$root/build/diagnostics/$report_name
 lapack_commit=6ec7f2bc4ecf4c4a93496aa2fa519575bc0e39ca
 source_root=https://raw.githubusercontent.com/Reference-LAPACK/lapack/$lapack_commit
 local_source=$root/build/reference-lapack-core/lapack
