@@ -267,7 +267,8 @@ static void test_zero_length_result_is_evaluated(void) {
     const char *source_evaluation =
         result.code != NULL ? strstr(result.code, "const char *f2c_deferred_source = (") : NULL;
     const char *conditional_copy =
-        result.code != NULL ? strstr(result.code, "if (f2c_deferred_length != 0U) memmove") : NULL;
+        result.code != NULL ? strstr(result.code, "if (f2c_deferred_length_0 != 0U) memmove")
+                            : NULL;
     expect(result.code != NULL && result.error_count == 0U,
            "zero-length character function result assignment reaches code generation");
     expect(source_evaluation != NULL && conditional_copy != NULL &&

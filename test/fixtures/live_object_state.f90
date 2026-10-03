@@ -189,6 +189,9 @@ program live_object_state
   integer, allocatable :: returned_array(:)
   type(object), volatile :: instance
   type(object) :: returned_object
+  type(object) :: f2c_deferred_owner, f2c_deferred_owner_0
+  character(:), allocatable :: f2c_deferred_value, f2c_deferred_source, f2c_deferred_length
+  character(:), allocatable :: f2c_deferred_value_0, f2c_deferred_source_0, f2c_deferred_length_0
   integer :: total, length
 
   values => original
@@ -247,5 +250,20 @@ program live_object_state
   call check_input(values, original)
   if (original(1) /= 37) stop 32
   nullify(values, instance%values, text)
+  f2c_deferred_owner%text = 'owner'
+  f2c_deferred_owner_0%text = 'owner0'
+  f2c_deferred_value = 'value'
+  f2c_deferred_source = 'source'
+  f2c_deferred_length = 'length'
+  f2c_deferred_value_0 = 'value0'
+  f2c_deferred_source_0 = 'source0'
+  f2c_deferred_length_0 = 'length0'
+  if (f2c_deferred_owner%text /= 'owner' .or. f2c_deferred_owner_0%text /= 'owner0') stop 50
+  if (f2c_deferred_value /= 'value' .or. f2c_deferred_value_0 /= 'value0') stop 51
+  if (f2c_deferred_source /= 'source' .or. f2c_deferred_source_0 /= 'source0') stop 52
+  if (f2c_deferred_length /= 'length' .or. f2c_deferred_length_0 /= 'length0') stop 53
+  deallocate(f2c_deferred_owner%text, f2c_deferred_owner_0%text)
+  deallocate(f2c_deferred_value, f2c_deferred_source, f2c_deferred_length)
+  deallocate(f2c_deferred_value_0, f2c_deferred_source_0, f2c_deferred_length_0)
   print '(a)', 'live object state contracts passed'
 end program live_object_state
