@@ -108,6 +108,14 @@ static void test_empty_records(void) {
     require(temporary.data == NULL);
 }
 
+static void test_linear_offsets(void) {
+    const f2c_descriptor view = {.rank = 2U, .extent = {2, 3}, .stride = {-2, 7}};
+    const ptrdiff_t expected[] = {0, -2, 7, 5, 14, 12};
+    for (size_t index = 0U; index < sizeof(expected) / sizeof(expected[0]); ++index)
+        require(f2c_descriptor_linear_offset(&view, index) == expected[index]);
+    require(f2c_array_offset(INT64_MIN + 1, INT64_MIN, 2U) == 1U);
+}
+
 int main(int argc, char **argv) {
     if (argc > 1) {
         char byte = 0;
@@ -131,6 +139,31 @@ int main(int argc, char **argv) {
             source.extent[1] = 2;
             source.element_size = sizeof(int32_t);
             f2c_descriptor_prepare_contiguous(&temporary, &source, false, true);
+        } else if (strcmp(argv[1], "--linear-null") == 0) {
+            (void)f2c_descriptor_linear_offset(NULL, 0U);
+        } else if (strcmp(argv[1], "--linear-rank-zero") == 0) {
+            source.rank = 0U;
+            (void)f2c_descriptor_linear_offset(&source, 0U);
+        } else if (strcmp(argv[1], "--linear-rank-high") == 0) {
+            source.rank = 16U;
+            (void)f2c_descriptor_linear_offset(&source, 0U);
+        } else if (strcmp(argv[1], "--linear-negative") == 0) {
+            source.extent[0] = -1;
+            (void)f2c_descriptor_linear_offset(&source, 0U);
+        } else if (strcmp(argv[1], "--linear-empty") == 0) {
+            source.extent[0] = 0;
+            (void)f2c_descriptor_linear_offset(&source, 0U);
+        } else if (strcmp(argv[1], "--linear-range") == 0) {
+            (void)f2c_descriptor_linear_offset(&source, 1U);
+        } else if (strcmp(argv[1], "--linear-overflow") == 0) {
+            source.extent[0] = 3;
+            source.stride[0] = PTRDIFF_MAX;
+            (void)f2c_descriptor_linear_offset(&source, 2U);
+        } else if (strcmp(argv[1], "--state-dimension") == 0) {
+            source.rank = 16U;
+            (void)f2c_descriptor_state_extent(&source, 15U, 1U);
+        } else if (strcmp(argv[1], "--subscript-distance") == 0) {
+            (void)f2c_array_offset(INT64_MAX, INT64_MIN, SIZE_MAX);
         } else {
             return 2;
         }
@@ -139,6 +172,7 @@ int main(int argc, char **argv) {
     test_numeric_records();
     test_character_records();
     test_empty_records();
+    test_linear_offsets();
     puts("descriptor record contracts passed");
     return EXIT_SUCCESS;
 }

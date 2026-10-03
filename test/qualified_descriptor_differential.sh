@@ -52,7 +52,8 @@ for optimization in 0 2; do
         "$root/test/generated/descriptor_contracts.c" -lm -o "$work/records-O$optimization"
     "$work/records-O$optimization"
 done
-for failure in null-read null-write allocation offset count; do
+failures='null-read null-write allocation offset count linear-null linear-rank-zero linear-rank-high linear-negative linear-empty linear-range linear-overflow state-dimension subscript-distance'
+for failure in $failures; do
     status=0
     "$work/records-O2" "--$failure" > "$work/failure-$failure.out" 2>&1 || status=$?
     if [ "$status" -ne 99 ]; then
@@ -65,4 +66,12 @@ done
     -fno-sanitize-recover=all -I"$work" '-DF2C_DESCRIPTOR_SOURCE="qualified.c"' \
     "$root/test/generated/descriptor_contracts.c" -lm -o "$work/records-sanitized"
 "$work/records-sanitized"
+for failure in $failures; do
+    status=0
+    "$work/records-sanitized" "--$failure" > "$work/sanitized-failure-$failure.out" 2>&1 || status=$?
+    if [ "$status" -ne 99 ]; then
+        echo "sanitized descriptor failure contract did not abort: $failure (status $status)" >&2
+        exit 1
+    fi
+done
 echo "qualified descriptor differential and record contracts passed"

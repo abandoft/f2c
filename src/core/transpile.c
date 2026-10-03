@@ -411,10 +411,11 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             "copy_length); if (length > copy_length) memset(target + copy_length, ' ', length - "
             "copy_length); }\n");
         f2c_emit_descriptor_declaration(&context.output);
+        f2c_emit_descriptor_state_support(&context.output);
         f2c_buffer_append(&context.output,
                           "static inline F2C_UNUSED size_t f2c_array_offset(int64_t subscript, "
                           "int64_t lower, size_t extent) { uint64_t offset; if (subscript < lower) "
-                          "abort(); offset = (uint64_t)(subscript - lower); if (offset >= "
+                          "abort(); offset = (uint64_t)subscript - (uint64_t)lower; if (offset >= "
                           "(uint64_t)extent) abort(); return (size_t)offset; }\n");
         f2c_buffer_append(
             &context.output,
@@ -460,11 +461,16 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             "? descriptor->character_length : descriptor->element_size; }\n"
             "static inline F2C_UNUSED ptrdiff_t f2c_descriptor_linear_offset(const "
             "f2c_descriptor *descriptor, size_t index) { size_t dimension; ptrdiff_t offset = "
-            "0; for (dimension = 0U; dimension < descriptor->rank; ++dimension) { size_t extent "
-            "= (size_t)descriptor->extent[dimension]; size_t ordinal = index % extent; index /= "
+            "0; if (descriptor == NULL || descriptor->rank == 0U || descriptor->rank > 15U) "
+            "abort(); for (dimension = 0U; dimension < descriptor->rank; ++dimension) { "
+            "uint64_t raw_extent; size_t extent; size_t ordinal; if "
+            "(descriptor->extent[dimension] <= 0) abort(); raw_extent = "
+            "(uint64_t)descriptor->extent[dimension]; if (raw_extent > (uint64_t)SIZE_MAX) "
+            "abort(); extent = (size_t)raw_extent; ordinal = index % extent; index /= "
             "extent; if (ordinal > (size_t)PTRDIFF_MAX) abort(); offset = "
             "f2c_descriptor_offset_add(offset, f2c_descriptor_stride_multiply("
-            "descriptor->stride[dimension], (ptrdiff_t)ordinal)); } return offset; }\n");
+            "descriptor->stride[dimension], (ptrdiff_t)ordinal)); } if (index != 0U) abort(); "
+            "return offset; }\n");
         f2c_emit_descriptor_contiguous_support(&context.output);
         f2c_buffer_append(
             &context.output,
