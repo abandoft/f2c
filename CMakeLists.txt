@@ -235,6 +235,7 @@ set(
     src/core/generated/character.c
     src/core/generated/conversion.c
     src/core/generated/descriptor.c
+    src/core/generated/storage.c
     src/core/generated/io/control.c
     src/core/generated/io.c
     src/core/generated/io/number/input.c

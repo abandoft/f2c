@@ -6,6 +6,7 @@
 void f2c_emit_bit_intrinsic_support(Buffer *output);
 void f2c_emit_descriptor_declaration(Buffer *output);
 void f2c_emit_descriptor_contiguous_support(Buffer *output);
+void f2c_emit_unaligned_storage_support(Buffer *output, int needs_complex);
 void f2c_emit_character_intrinsic_support(Buffer *output);
 void f2c_emit_qualified_character_support(Buffer *output);
 void f2c_emit_character_snapshot_support(Buffer *output, int needs_qualified);
