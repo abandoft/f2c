@@ -1,0 +1,20 @@
+module controls
+integer,target::status
+character(len=20),target::message
+contains
+function status_variable() result(value)
+integer,pointer::value
+value=>status
+end function
+function message_variable() result(value)
+character(len=20),pointer::value
+value=>message
+end function
+end module
+program allocation_controls
+use controls
+integer,allocatable::a
+status=17
+allocate(a,source=status,stat=status_variable(),errmsg=message_variable())
+deallocate(a,stat=status_variable(),errmsg=message_variable())
+end program
