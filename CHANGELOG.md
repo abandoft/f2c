@@ -7,6 +7,7 @@
 - Reject disassociated pointer function results used as values or allocation models, preventing zero extents from masking invalid association states.
 - Correct cleanup of derived allocation models and array operand snapshots without introducing extra user-defined `FINAL` calls.
 - Correct storage element counts for allocatable derived scalars, restoring strict compilation and finalization cleanup on procedure and `BLOCK` exit.
+- Fix Windows compilation of complex `SOURCE` scalar broadcasting and array copies.
 
 ## 1.48.0
 
