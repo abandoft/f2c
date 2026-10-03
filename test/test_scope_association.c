@@ -347,7 +347,7 @@ int main(void) {
     check_source("module owner\n integer :: shared\n end module\n"
                  "program attributes\n use owner\n volatile :: shared\n shared=1\n"
                  "end program\n",
-                 1, "(*(volatile int32_t *)&f2c_module_owner_shared)");
+                 1, "(*(volatile int32_t *)&(f2c_module_owner_shared))");
     check_source("module owner\n integer :: shared(2)\n end module\n"
                  "program attributes\n use owner\n volatile :: shared\n shared(1)=1\n"
                  "end program\n",

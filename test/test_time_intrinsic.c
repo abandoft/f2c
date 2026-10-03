@@ -136,8 +136,10 @@ int main(void) {
                            "volatile-etime.f90");
         expect(
             result.error_count == 0U && result.code != NULL &&
-                strstr(result.code, "volatile float values[") != NULL &&
-                strstr(result.code, "values[f2c_zero_index_0] = (float){0}") != NULL &&
+                strstr(result.code, "float values[") != NULL &&
+                strstr(result.code, "volatile float values[") == NULL &&
+                strstr(result.code, "((volatile float *)values)[f2c_zero_index_0] = (float){0}") !=
+                    NULL &&
                 strstr(result.code, "memset(values,") == NULL,
             "volatile output arrays retain qualified initialization instead of libc byte stores");
         expect(result.code != NULL && strstr(result.code, "f2c_etime(volatile float *user") != NULL,
@@ -150,7 +152,9 @@ int main(void) {
                            "volatile-index-collision.f90");
         expect(result.error_count == 0U && result.code != NULL &&
                    strstr(result.code, "for (size_t f2c_zero_index_1 = 0U;") != NULL &&
-                   strstr(result.code, "f2c_zero_index[f2c_zero_index_1] = (float){0}") != NULL,
+                   strstr(result.code,
+                          "((volatile float *)f2c_zero_index)[f2c_zero_index_1] = (float){0}") !=
+                       NULL,
                "volatile initialization counters do not shadow source-level array names");
         f2c_result_free(&result);
         for (index = 0U; index < sizeof(declarations) / sizeof(declarations[0]); ++index) {

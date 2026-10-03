@@ -77,8 +77,10 @@ static void test_standalone_attributes(void) {
     F2cResult result = transpile(source);
     expect(result.code != NULL && result.error_count == 0U,
            "standalone VALUE, TARGET, VOLATILE, and ASYNCHRONOUS statements are accepted");
-    expect(result.code != NULL && strstr(result.code, "volatile int32_t *observable") != NULL,
-           "VOLATILE dummy storage is represented by a volatile-qualified C pointer");
+    expect(result.code != NULL && strstr(result.code, "int32_t *observable") != NULL &&
+               strstr(result.code, "volatile int32_t *observable") == NULL &&
+               strstr(result.code, "(*(volatile int32_t *)&((*observable)))") != NULL,
+           "VOLATILE dummy accesses are qualified without permanently qualifying ABI storage");
     expect(result.code != NULL && strstr(result.code, "F2C_RESTRICT stable") == NULL &&
                strstr(result.code, "F2C_RESTRICT observable") == NULL,
            "observable or alias-capable dummies are excluded from restrict-based optimization");
