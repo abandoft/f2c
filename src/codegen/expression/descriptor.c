@@ -57,6 +57,12 @@ static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supp
     actual = actual_value(actual);
     if (actual != NULL && actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
         return f2c_strdup("NULL");
+    const char *descriptor = f2c_lowering_result_descriptor(unit, actual);
+    if (f2c_expression_has_pointer_result(actual) &&
+        actual->result_use == F2C_FUNCTION_RESULT_REFERENCE && descriptor != NULL) {
+        f2c_buffer_printf(&result, "&%s", descriptor);
+        return f2c_buffer_take(&result);
+    }
     if (actual != NULL && f2c_lowering_is_array_temporary(unit, actual))
         return emit_lowered_descriptor_actual(unit, actual);
     if (actual == NULL || actual->symbol == NULL || !f2c_descriptor_view(unit, actual, &view)) {

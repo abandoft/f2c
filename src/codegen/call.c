@@ -378,6 +378,22 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
             continue;
         }
         actual = expression != NULL ? expression->symbol : NULL;
+        const char *result_descriptor = f2c_lowering_result_descriptor(unit, expression);
+        if (f2c_expression_has_pointer_result(expression) &&
+            expression->result_use == F2C_FUNCTION_RESULT_REFERENCE && result_descriptor != NULL &&
+            (!callee->external_parameter_pointer[i] ||
+             callee->external_parameter_intents[i] == F2C_INTENT_IN) &&
+            !callee->external_parameter_allocatable[i] &&
+            !(callee->external_parameter_contiguous[i] && !callee->external_parameter_pointer[i])) {
+            Buffer address = {0};
+            f2c_buffer_printf(&address, "&%s", result_descriptor);
+            free(call->arguments[i]);
+            call->arguments[i] = f2c_buffer_take(&address);
+            if (call->arguments[i] == NULL)
+                return 0;
+            call->has_descriptors = 1;
+            continue;
+        }
         if (expression == NULL || expression->rank != callee->external_parameter_ranks[i] ||
             (callee->external_parameter_allocatable[i] &&
              ((expression->kind != F2C_EXPR_NAME && expression->kind != F2C_EXPR_COMPONENT) ||

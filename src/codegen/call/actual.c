@@ -21,7 +21,8 @@ int f2c_call_actual_requires_materialization(Unit *unit, const Symbol *callee,
     int direct;
     actual = actual_value(actual);
     if (actual == NULL || actual->rank == 0U || actual->kind == F2C_EXPR_ABSENT_ARGUMENT ||
-        f2c_lowering_is_array_temporary(unit, actual))
+        (f2c_lowering_is_array_temporary(unit, actual) &&
+         actual->result_use != F2C_FUNCTION_RESULT_REFERENCE))
         return 0;
     if (callee == NULL || parameter >= callee->external_parameter_count ||
         !callee->external_parameter_descriptor[parameter])
