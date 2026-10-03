@@ -189,6 +189,12 @@ typedef struct F2cCaseRange {
     int has_colon;
 } F2cCaseRange;
 
+typedef enum F2cLoopOptimizationHint {
+    F2C_LOOP_HINT_NONE,
+    F2C_LOOP_HINT_UNROLL,
+    F2C_LOOP_HINT_COLUMN_UPDATE
+} F2cLoopOptimizationHint;
+
 struct F2cStatement {
     F2cStatementKind kind;
     F2cIntrinsicId intrinsic;
@@ -245,7 +251,7 @@ struct F2cStatement {
     int assigned_labels_resolved;
     int block;
     int error_stop;
-    int unroll_hint;
+    F2cLoopOptimizationHint loop_hint;
     int case_default;
     int case_syntax_valid;
     int data_syntax_valid;
