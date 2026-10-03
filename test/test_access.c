@@ -1,6 +1,8 @@
+#include "codegen/array/copy.h"
 #include "codegen/array/private.h"
 #include "codegen/array/view.h"
 #include "codegen/descriptor/private.h"
+#include "codegen/expression/private.h"
 #include "codegen/lowering/private.h"
 #include "internal/f2c.h"
 
@@ -53,6 +55,19 @@ static void expect_descriptor_view(Unit *unit, const char *source, unsigned int 
     f2c_expr_free(expression);
 }
 
+static void expect_scoped_access(Unit *unit, const char *source) {
+    F2cExpr *expression = parse(unit, source);
+    int supported = 1;
+    char *access = f2c_emit_expression_ast(unit, expression, &supported);
+    char *storage = f2c_expression_storage_designator(unit, expression, &supported);
+    expect(supported && access != NULL && storage != NULL && strstr(access, "volatile ") != NULL &&
+               strstr(storage, "volatile ") == NULL,
+           "scoped reads preserve qualification independently of physical argument addresses");
+    free(access);
+    free(storage);
+    f2c_expr_free(expression);
+}
+
 static void initialize_symbol(Symbol *symbol, const char *name, Type type, size_t rank) {
     memset(symbol, 0, sizeof(*symbol));
     symbol->name = (char *)name;
@@ -71,7 +86,7 @@ static void initialize_symbol(Symbol *symbol, const char *name, Type type, size_
 
 int main(void) {
     Context context = {0};
-    Symbol symbols[6];
+    Symbol symbols[7];
     Symbol component;
     F2cDerivedType derived = {0};
     Unit unit = {0};
@@ -83,6 +98,7 @@ int main(void) {
     initialize_symbol(&symbols[3], "record", TYPE_DERIVED, 0U);
     initialize_symbol(&symbols[4], "text", TYPE_CHARACTER, 0U);
     initialize_symbol(&symbols[5], "callback", TYPE_INTEGER, 0U);
+    initialize_symbol(&symbols[6], "position", TYPE_INTEGER, 0U);
     initialize_symbol(&component, "values", TYPE_REAL, 1U);
     symbols[0].volatile_entity = 1;
     symbols[1].asynchronous = 1;
@@ -95,6 +111,7 @@ int main(void) {
     symbols[5].external = 1;
     symbols[5].volatile_entity = 1;
     symbols[5].value_category = F2C_VALUE_PROCEDURE;
+    symbols[6].volatile_entity = 1;
     derived.name = (char *)"record_type";
     derived.c_name = (char *)"record_type";
     derived.components = &component;
@@ -133,6 +150,54 @@ int main(void) {
     expect_descriptor_view(&unit, "pending", F2C_STORAGE_ASYNCHRONOUS, 0);
     expect_descriptor_view(&unit, "record%values(:)",
                            F2C_STORAGE_VOLATILE | F2C_STORAGE_ASYNCHRONOUS, 0);
+    expect_scoped_access(&unit, "observed(2)");
+    expect_scoped_access(&unit, "record%values(2)");
+    expect_scoped_access(&unit, "record");
+    symbols[0].argument = 1;
+    expect_scoped_access(&unit, "observed(2)");
+    symbols[0].argument = 0;
+    symbols[0].pointer = 1;
+    expect_scoped_access(&unit, "observed(2)");
+    symbols[0].pointer = 0;
+    expression = parse(&unit, "observed(position)");
+    {
+        int supported = 1;
+        char *storage = f2c_expression_storage_designator(&unit, expression, &supported);
+        expect(supported && storage != NULL && strstr(storage, "volatile int32_t") != NULL &&
+                   strstr(storage, "volatile float") == NULL,
+               "physical address calculation still performs scoped qualified index reads");
+        free(storage);
+    }
+    f2c_expr_free(expression);
+    symbols[0].equivalence_unaligned = 1;
+    expression = parse(&unit, "observed(2)");
+    {
+        int supported = 1;
+        char *access = f2c_emit_expression_ast(&unit, expression, &supported);
+        expect(supported && access != NULL &&
+                   strstr(access, "f2c_unaligned_load_r4_volatile(") != NULL &&
+                   strstr(access, "(*(volatile") == NULL,
+               "qualified unaligned loads access bytes instead of taking a value's address");
+        free(access);
+    }
+    f2c_expr_free(expression);
+    symbols[0].equivalence_unaligned = 0;
+    {
+        Buffer copy = {0};
+        f2c_array_copy_snapshot(&copy, &unit, "target", "source", "4U", "float",
+                                F2C_STORAGE_VOLATILE, F2C_STORAGE_UNQUALIFIED, 0);
+        expect(copy.data != NULL && strstr(copy.data, "((volatile float *)(target))") != NULL &&
+                   strstr(copy.data, "((const float *)(source))") != NULL &&
+                   strstr(copy.data, "const volatile") == NULL,
+               "a qualified destination does not qualify the owned source snapshot");
+        free(f2c_buffer_take(&copy));
+        f2c_array_copy_snapshot(&copy, &unit, "target", "source", "4U", "float",
+                                F2C_STORAGE_UNQUALIFIED, F2C_STORAGE_VOLATILE, 0);
+        expect(copy.data != NULL && strstr(copy.data, "((float *)(target))") != NULL &&
+                   strstr(copy.data, "((const volatile float *)(source))") != NULL,
+               "a qualified source does not qualify the newly owned destination");
+        free(f2c_buffer_take(&copy));
+    }
     symbols[2].argument = 1;
     symbols[2].intent = F2C_INTENT_IN;
     expect_descriptor_view(&unit, "ordinary", F2C_STORAGE_UNQUALIFIED, 1);
@@ -163,6 +228,13 @@ int main(void) {
         element = f2c_array_element_expression(&unit, expression, 1U, ordinals);
         expect(element != NULL && element->storage_qualifiers == F2C_STORAGE_VOLATILE,
                "alias view elements retain access qualification during scalarization");
+        {
+            int supported = 1;
+            char *access = f2c_emit_expression_ast(&unit, element, &supported);
+            expect(supported && access != NULL && strstr(access, "volatile float") != NULL,
+                   "cached alias elements retain qualified loads after scalarization");
+            free(access);
+        }
         f2c_codegen_expression_free(&unit, element);
     }
     f2c_codegen_expression_free(&unit, expression);
