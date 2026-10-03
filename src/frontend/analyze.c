@@ -293,14 +293,15 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
                            1, "PARAMETER entity '%s' cannot have POINTER or TARGET", symbol->name);
         }
         if (symbol->deferred_character &&
-            (symbol->external || (is_function_result && !symbol->allocatable))) {
+            (symbol->external ||
+             (is_function_result && !symbol->allocatable && !symbol->pointer))) {
             f2c_diagnostic(context,
                            symbol->declaration_line != 0U
                                ? symbol->declaration_line
                                : context->lines.items[unit->begin].number,
                            1,
-                           "deferred-length CHARACTER '%s' currently requires local allocatable "
-                           "storage",
+                           "deferred-length CHARACTER '%s' requires a POINTER or ALLOCATABLE "
+                           "object with an explicit result interface",
                            symbol->name);
         }
         if (symbol->type == TYPE_CHARACTER && symbol->character_length != NULL &&
