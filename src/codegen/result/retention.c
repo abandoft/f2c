@@ -1,6 +1,7 @@
 #include "codegen/result/retention.h"
 
 #include "codegen/lowering/private.h"
+#include "codegen/names.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -18,19 +19,23 @@ static int has_retained_value(const F2cExpr *expression, int root) {
     return 0;
 }
 
-int f2c_result_retention_begin(F2cResultRetentionScope *scope, Unit *unit,
-                               const F2cExpr *expression, const char *name, Buffer *output,
-                               int depth) {
-    if (scope == NULL || unit == NULL || expression == NULL || name == NULL || output == NULL)
+static int begin_scope(F2cResultRetentionScope *scope, Unit *unit, int active, const char *name,
+                       Buffer *output, int depth) {
+    if (scope == NULL || unit == NULL || name == NULL || output == NULL)
         return 0;
     memset(scope, 0, sizeof(*scope));
     scope->unit = unit;
-    if (!has_retained_value(expression, 1))
+    if (!active)
         return 1;
-    scope->name = f2c_strdup(name);
+    static const char *const suffixes[] = {
+        "retained_inline", "retained",    "retained_heap", "retained_count", "retained_capacity",
+        "new_capacity",    "replacement", "index",         "value"};
+    scope->name =
+        f2c_codegen_local_family(unit, name, suffixes, sizeof(suffixes) / sizeof(suffixes[0]));
     if (scope->name == NULL)
         return 0;
     scope->active = 1;
+    name = scope->name;
     f2c_array_indent(output, depth);
     f2c_buffer_printf(
         output, "struct %s_retained_record { void *data; size_t count; size_t temporary; };\n",
@@ -41,11 +46,32 @@ int f2c_result_retention_begin(F2cResultRetentionScope *scope, Unit *unit,
     f2c_buffer_printf(output, "struct %s_retained_record *%s_retained = %s_retained_inline;\n",
                       name, name, name);
     f2c_array_indent(output, depth);
+    f2c_buffer_printf(output, "struct %s_retained_record *%s_retained_heap = NULL;\n", name, name);
+    f2c_array_indent(output, depth);
     f2c_buffer_printf(output, "size_t %s_retained_count = 0U, %s_retained_capacity = 8U;\n", name,
                       name);
     f2c_array_indent(output, depth);
     f2c_buffer_printf(output, "(void)%s_retained; (void)%s_retained_capacity;\n", name, name);
     return 1;
+}
+
+int f2c_result_retention_begin(F2cResultRetentionScope *scope, Unit *unit,
+                               const F2cExpr *expression, const char *name, Buffer *output,
+                               int depth) {
+    return expression != NULL &&
+           begin_scope(scope, unit, has_retained_value(expression, 1), name, output, depth);
+}
+
+int f2c_result_retention_begin_values(F2cResultRetentionScope *scope, Unit *unit,
+                                      F2cExpr *const *expressions, size_t count, const char *name,
+                                      Buffer *output, int depth) {
+    int active = 0;
+    if (count != 0U && expressions == NULL)
+        return 0;
+    for (size_t index = 0U; index < count; ++index)
+        if (has_retained_value(expressions[index], 0))
+            active = 1;
+    return begin_scope(scope, unit, active, name, output, depth);
 }
 
 static int register_temporary(F2cResultRetentionScope *scope, size_t temporary) {
@@ -93,27 +119,28 @@ static void emit_growth(Buffer *output, const char *name, int depth) {
                       "sizeof(*%s_retained)) abort();\n",
                       name, name);
     f2c_array_indent(output, depth + 1);
-    f2c_buffer_printf(output, "const size_t f2c_retained_capacity = %s_retained_capacity * 2U;\n",
+    f2c_buffer_printf(output, "const size_t %s_new_capacity = %s_retained_capacity * 2U;\n", name,
                       name);
     f2c_array_indent(output, depth + 1);
     f2c_buffer_printf(output,
-                      "struct %s_retained_record *f2c_retained_replacement = "
-                      "(struct %s_retained_record *)realloc(%s_retained == %s_retained_inline "
-                      "? NULL : %s_retained, f2c_retained_capacity * sizeof(*%s_retained));\n",
+                      "struct %s_retained_record *%s_replacement = "
+                      "(struct %s_retained_record *)realloc(%s_retained_heap, "
+                      "%s_new_capacity * sizeof(*%s_retained));\n",
                       name, name, name, name, name, name);
     f2c_array_indent(output, depth + 1);
-    f2c_buffer_append(output, "if (f2c_retained_replacement == NULL) abort();\n");
+    f2c_buffer_printf(output, "if (%s_replacement == NULL) abort();\n", name);
     f2c_array_indent(output, depth + 1);
     f2c_buffer_printf(output,
-                      "if (%s_retained == %s_retained_inline) "
-                      "memcpy(f2c_retained_replacement, %s_retained_inline, "
+                      "if (%s_retained_heap == NULL) "
+                      "memcpy(%s_replacement, %s_retained_inline, "
                       "%s_retained_count * sizeof(*%s_retained));\n",
                       name, name, name, name, name);
     f2c_array_indent(output, depth + 1);
     f2c_buffer_printf(output,
-                      "%s_retained = f2c_retained_replacement; "
-                      "%s_retained_capacity = f2c_retained_capacity;\n",
-                      name, name);
+                      "%s_retained_heap = %s_replacement; "
+                      "%s_retained = %s_replacement; "
+                      "%s_retained_capacity = %s_new_capacity;\n",
+                      name, name, name, name, name, name);
     f2c_array_indent(output, depth);
     f2c_buffer_append(output, "}\n");
 }
@@ -129,23 +156,22 @@ static int merge_retention(F2cResultRetentionScope *scope, const F2cResultRetent
             return 0;
     f2c_array_indent(output, depth);
     f2c_buffer_printf(output,
-                      "for (size_t f2c_retained_index = 0U; "
-                      "f2c_retained_index < %s_retained_count; ++f2c_retained_index) {\n",
-                      nested->name);
+                      "for (size_t %s_index = 0U; "
+                      "%s_index < %s_retained_count; ++%s_index) {\n",
+                      scope->name, scope->name, nested->name, scope->name);
     emit_growth(output, scope->name, depth + 1);
     f2c_array_indent(output, depth + 1);
     f2c_buffer_printf(output,
                       "%s_retained[%s_retained_count++] = (struct %s_retained_record){"
-                      "%s_retained[f2c_retained_index].data, "
-                      "%s_retained[f2c_retained_index].count, "
-                      "%s_retained[f2c_retained_index].temporary};\n",
-                      scope->name, scope->name, scope->name, nested->name, nested->name,
-                      nested->name);
+                      "%s_retained[%s_index].data, "
+                      "%s_retained[%s_index].count, "
+                      "%s_retained[%s_index].temporary};\n",
+                      scope->name, scope->name, scope->name, nested->name, scope->name,
+                      nested->name, scope->name, nested->name, scope->name);
     f2c_array_indent(output, depth);
     f2c_buffer_append(output, "}\n");
     f2c_array_indent(output, depth);
-    f2c_buffer_printf(output, "if (%s_retained != %s_retained_inline) free(%s_retained);\n",
-                      nested->name, nested->name, nested->name);
+    f2c_buffer_printf(output, "free(%s_retained_heap);\n", nested->name);
     return 1;
 }
 
@@ -191,11 +217,11 @@ int f2c_result_retention_release(const F2cResultRetentionScope *scope, Buffer *o
     f2c_buffer_printf(output, "while (%s_retained_count != 0U) {\n", scope->name);
     f2c_array_indent(output, depth + 1);
     f2c_buffer_printf(output,
-                      "struct %s_retained_record f2c_retained_value = "
+                      "struct %s_retained_record %s_value = "
                       "%s_retained[--%s_retained_count];\n",
-                      scope->name, scope->name, scope->name);
+                      scope->name, scope->name, scope->name, scope->name);
     f2c_array_indent(output, depth + 1);
-    f2c_buffer_append(output, "switch (f2c_retained_value.temporary) {\n");
+    f2c_buffer_printf(output, "switch (%s_value.temporary) {\n", scope->name);
     for (size_t index = 0U; index < scope->count; ++index) {
         const size_t temporary = scope->temporaries[index];
         if (temporary >= scope->unit->owned_temporary_count)
@@ -210,10 +236,10 @@ int f2c_result_retention_release(const F2cResultRetentionScope *scope, Buffer *o
             const int snapshot = owned->release_kind == F2C_TEMPORARY_DISCARD_SNAPSHOT;
             f2c_array_indent(output, depth + 2);
             f2c_buffer_printf(output,
-                              "f2c_%s_array_%s((%s *)f2c_retained_value.data, "
-                              "f2c_retained_value.count",
+                              "f2c_%s_array_%s((%s *)%s_value.data, "
+                              "%s_value.count",
                               snapshot ? "discard" : "destroy", owned->derived_type->c_name,
-                              owned->derived_type->c_name);
+                              owned->derived_type->c_name, scope->name, scope->name);
             if (!snapshot)
                 f2c_buffer_printf(output, ", %zuU", owned->rank);
             f2c_buffer_append(output, ");\n");
@@ -226,12 +252,11 @@ int f2c_result_retention_release(const F2cResultRetentionScope *scope, Buffer *o
     f2c_array_indent(output, depth + 1);
     f2c_buffer_append(output, "}\n");
     f2c_array_indent(output, depth + 1);
-    f2c_buffer_append(output, "free(f2c_retained_value.data);\n");
+    f2c_buffer_printf(output, "free(%s_value.data);\n", scope->name);
     f2c_array_indent(output, depth);
     f2c_buffer_append(output, "}\n");
     f2c_array_indent(output, depth);
-    f2c_buffer_printf(output, "if (%s_retained != %s_retained_inline) free(%s_retained);\n",
-                      scope->name, scope->name, scope->name);
+    f2c_buffer_printf(output, "free(%s_retained_heap);\n", scope->name);
     return 1;
 }
 

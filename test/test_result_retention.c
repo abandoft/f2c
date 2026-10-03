@@ -62,7 +62,7 @@ static void test_runtime_instances(void) {
            "the release-policy catalog is unique but runtime captures are not deduplicated");
     expect(f2c_result_retention_release(&scope, &release, 0) && release.data != NULL &&
                strstr(release.data, "--values_retained_count") != NULL &&
-               strstr(release.data, "free(f2c_retained_value.data)") != NULL &&
+               strstr(release.data, "free(values_value.data)") != NULL &&
                strstr(release.data, "free((*owned_value))") == NULL,
            "release actual captured storage in reverse evaluation order");
     result.temporary_ownership_analyzed = 0;
@@ -136,9 +136,41 @@ static void test_derived_release_policy(void) {
            "a borrowed derived result value releases only its compiler-owned copy");
 }
 
+static void test_statement_roots(void) {
+    Context context = {0};
+    Unit unit = {0};
+    F2cExpr result = {0};
+    F2cExpr *roots[] = {NULL, &result};
+    F2cResultRetentionScope scope = {0};
+    Buffer output = {0};
+    unit.context = &context;
+    result.kind = F2C_EXPR_CALL;
+    result.type = TYPE_INTEGER;
+    result.result_kind = F2C_FUNCTION_RESULT_ALLOCATABLE;
+    result.owned_temporary_kind = F2C_OWNED_TEMPORARY_FUNCTION_RESULT;
+    expect(f2c_result_retention_begin(&scope, &unit, &result, "constructor", &output, 0) &&
+               !scope.active && output.length == 0U,
+           "constructor retention excludes its independently managed root value");
+    f2c_result_retention_clear(&scope);
+    expect(f2c_result_retention_begin_values(&scope, &unit, roots, 2U, "statement", &output, 0) &&
+               scope.active && output.data != NULL,
+           "an action retains owning root expressions as well as nested values");
+    f2c_result_retention_clear(&scope);
+    free(output.data);
+    output = (Buffer){0};
+    expect(!f2c_result_retention_begin_values(&scope, &unit, NULL, 1U, "invalid", &output, 0),
+           "reject missing statement root storage");
+    expect(f2c_result_retention_begin_values(&scope, &unit, NULL, 0U, "empty", &output, 0) &&
+               !scope.active && output.length == 0U,
+           "empty actions need no runtime retention frame");
+    f2c_result_retention_clear(&scope);
+    free(output.data);
+}
+
 int main(void) {
     test_runtime_instances();
     test_borrowed_scalar();
     test_derived_release_policy();
+    test_statement_roots();
     return failures == 0 ? 0 : 1;
 }
