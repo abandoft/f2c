@@ -97,7 +97,7 @@ set(
     src/codegen/array/static_shape.h
     src/codegen/array/call.c
     src/codegen/array/character.c
-    src/codegen/array/component.c
+    src/codegen/array/designator.c
     src/codegen/array/constructor.c
     src/codegen/array/copy.c
     src/codegen/array/copy.h

@@ -282,11 +282,12 @@ static void test_component_numeric_conversion(void) {
     expect(result.code != NULL && result.error_count == 0U,
            "component numeric assignment uses typed portable conversions");
     expect(result.code != NULL &&
-               strstr(result.code, "f2c_component_scalar = (f2c_complex_double)") == NULL &&
-               strstr(result.code, "f2c_component_linear++] = (f2c_complex_double)") == NULL,
+               strstr(result.code, "f2c_designator_scalar = (f2c_complex_double)") == NULL &&
+               strstr(result.code, "f2c_designator_linear++] = (f2c_complex_double)") == NULL,
            "component complex assignment never casts a struct-valued complex representation");
     expect(result.code != NULL && strstr(result.code, "f2c_c_to_z(") != NULL &&
-               strstr(result.code, "const int64_t f2c_component_scalar = ((int64_t)creal(") != NULL,
+               strstr(result.code, "const int64_t f2c_designator_scalar = ((int64_t)creal(") !=
+                   NULL,
            "component conversion retains complex kind promotion and wide integer destinations");
     f2c_result_free(&result);
 }

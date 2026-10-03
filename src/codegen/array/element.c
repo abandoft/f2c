@@ -169,6 +169,7 @@ static F2cExpr *whole_array_element(Unit *unit, const F2cExpr *expression, size_
     element->derived_type = expression->derived_type;
     element->definable = expression->definable;
     element->type_kind = expression->type_kind;
+    element->storage_qualifiers = expression->storage_qualifiers;
     for (dimension = 0U; dimension < rank; ++dimension) {
         F2cExpr *index = ordinal_subscript(unit, expression, dimension, ordinals[dimension]);
         if (index == NULL || !f2c_expr_push(element, index)) {
@@ -316,8 +317,10 @@ static F2cExpr *lowered_array_temporary_element(Unit *unit, const F2cExpr *expre
         f2c_buffer_append(&code, "])");
     element =
         lowered_expression(unit, f2c_buffer_take(&code), expression->type, expression->type_kind);
-    if (element != NULL)
+    if (element != NULL) {
         element->derived_type = expression->derived_type;
+        element->storage_qualifiers = f2c_lowering_storage_qualifiers(unit, expression);
+    }
     if (element != NULL && expression->type == TYPE_CHARACTER && character_length != NULL &&
         !f2c_lowering_copy_character_length(unit, element, character_length)) {
         f2c_codegen_expression_free(unit, element);

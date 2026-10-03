@@ -927,8 +927,13 @@ static void test_lapack_f90_semantics(void) {
                     "a declared array shadows an intrinsic with the same name");
     expect_contains(result.code, "f2c_substring_offset((size_t)(12)",
                     "character substring assignment uses checked typed-AST bounds");
-    expect_contains(result.code, "int32_t f2c_row, f2c_column",
-                    "rank-two array section assignment lowers to column-major loops");
+    {
+        const char *outer = result.code != NULL
+                                ? strstr(result.code, "for (size_t f2c_designator_ordinal_1")
+                                : NULL;
+        expect(outer != NULL && strstr(outer, "for (size_t f2c_designator_ordinal_0") != NULL,
+               "rank-two array section assignment lowers to column-major loops");
+    }
     expect_contains(result.code, "void import_all_constants",
                     "USE LA_CONSTANTS without ONLY imports the complete compiler module");
     expect_contains(result.code, "void rename_constant",
@@ -2091,19 +2096,21 @@ static void test_dynamic_array_sections(void) {
     F2cOptions options = {"sections.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "dynamic array-section assignments translate");
-    expect_contains(result.code, "for (size_t f2c_section_0 = 0U;",
+    expect_contains(result.code, "for (size_t f2c_designator_ordinal_0 = 0U;",
                     "array sections lower to explicit shape-driven loops");
-    expect_contains(result.code, "f2c_section_0 * (2)",
+    expect_contains(result.code, "(int64_t)(f2c_designator_ordinal_0) * (2)",
                     "array-section lowering preserves non-unit strides");
-    expect_contains(result.code, "+ (int64_t)f2c_section_0 * (1)",
+    expect_contains(result.code, "+ (int64_t)(f2c_designator_ordinal_0) * (1)",
                     "conformable RHS sections advance with the LHS element ordinal");
-    expect_contains(result.code, "malloc(f2c_section_count * sizeof(*f2c_section_values))",
+    expect_contains(result.code,
+                    "calloc(f2c_designator_count == 0U ? 1U : "
+                    "f2c_designator_count, sizeof(*f2c_designator_values))",
                     "overlap-safe array sections use a portable heap buffer instead of a VLA");
-    expect_contains(result.code, "f2c_section_values[f2c_section_linear++]",
+    expect_contains(result.code, "f2c_designator_values[f2c_designator_linear++]",
                     "array-section right-hand sides are materialized before overlapping writes");
-    expect_contains(result.code, "if (f2c_value_extent_0 != f2c_section_extent_0) abort();",
+    expect_contains(result.code, "!= f2c_designator_extent_0) abort();",
                     "dynamic array-section assignments validate shape before materialization");
-    expect_contains(result.code, "free(f2c_section_values)",
+    expect_contains(result.code, "free(f2c_designator_values)",
                     "array-section temporary storage has an explicit lifetime");
     expect(result.code == NULL || strstr(result.code, "work[(((int32_t)(2)) - (1))] =") == NULL,
            "array-section scalar broadcast never writes only the first element");
@@ -2112,11 +2119,11 @@ static void test_dynamic_array_sections(void) {
         F2cResult rank3 = f2c_transpile(rank3_source, sizeof(rank3_source) - 1U, &options);
         expect(rank3.error_count == 0U,
                "rank-three negative-stride section assignment translates successfully");
-        expect_contains(rank3.code, "const size_t f2c_extent_2",
+        expect_contains(rank3.code, "const size_t f2c_designator_extent_2",
                         "rank-three section lowering emits all shape dimensions");
         expect_contains(rank3.code, "= (-(1));",
                         "rank-three section lowering preserves negative strides");
-        expect_contains(rank3.code, "(int64_t)(f2c_section_2)",
+        expect_contains(rank3.code, "(int64_t)(f2c_designator_ordinal_2)",
                         "rank-three section ordinals do not narrow to 32 bits");
         f2c_result_free(&rank3);
     }

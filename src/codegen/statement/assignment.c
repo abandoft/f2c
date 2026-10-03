@@ -226,12 +226,8 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
         return f2c_emit_call_with_procedure(&context->output, unit, statement->resolved_procedure,
                                             operands, 2U, depth);
     }
-    if (f2c_emit_array_section_assignment(context, unit, statement->left, statement->right,
-                                          depth) ||
-        f2c_emit_rank2_section_assignment(context, unit, statement->left, statement->right,
-                                          depth) ||
-        f2c_array_emit_component_assignment(context, unit, statement->left, statement->right, line,
-                                            depth) ||
+    if (f2c_array_emit_designator_assignment(context, unit, statement->left, statement->right, line,
+                                             depth) ||
         f2c_emit_whole_array_assignment(context, unit, statement->left, statement->right, line,
                                         depth))
         return 1;

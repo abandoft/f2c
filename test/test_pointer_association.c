@@ -129,7 +129,7 @@ static void test_array_pointer_component_lowering(void) {
                     "component array actuals preserve pointer provenance in call descriptors");
     expect_contains(result.code, "(object).values = (int32_t *)f2c_call_descriptor_0.data;",
                     "pointer dummy calls return association changes to component storage");
-    expect_contains(result.code, "f2c_component_values[f2c_component_linear++]",
+    expect_contains(result.code, "f2c_designator_values[f2c_designator_linear++]",
                     "whole component array assignment uses overlap-safe element storage");
     expect_contains(result.code,
                     "(object).matrix_lower_2 = 1; (object).matrix_extent_2 = 0; "

@@ -50,8 +50,8 @@ int f2c_array_emit_elemental_assignment(Context *context, Unit *unit, Symbol *ta
                                         const F2cExpr *right, size_t line, int depth);
 int f2c_array_emit_transfer_source_assignment(Context *context, Unit *unit, Symbol *target,
                                               const F2cExpr *right, size_t line, int depth);
-int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cExpr *target,
-                                        const F2cExpr *right, size_t line, int depth);
+int f2c_array_emit_designator_assignment(Context *context, Unit *unit, const F2cExpr *target,
+                                         const F2cExpr *right, size_t line, int depth);
 int f2c_array_emit_derived_scalar_broadcast(Context *context, Unit *unit, Symbol *target,
                                             const F2cExpr *right, const char *element_count,
                                             int depth);

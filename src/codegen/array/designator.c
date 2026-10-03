@@ -1,3 +1,4 @@
+#include "codegen/array/copy.h"
 #include "codegen/array/private.h"
 
 #include "codegen/descriptor/private.h"
@@ -18,15 +19,22 @@ static int numeric_type(Type type) {
            type == TYPE_COMPLEX || type == TYPE_DOUBLE_COMPLEX;
 }
 
+static int strided_whole_object(const F2cExpr *expression) {
+    const Symbol *symbol = expression != NULL ? expression->symbol : NULL;
+    return expression != NULL && expression->kind == F2C_EXPR_NAME && symbol != NULL &&
+           expression->rank != 0U &&
+           (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol)));
+}
+
 static void append_loops(Buffer *output, size_t rank, int *depth) {
     size_t loop;
     for (loop = rank; loop != 0U; --loop) {
         const size_t dimension = loop - 1U;
         f2c_array_indent(output, *depth);
         f2c_buffer_printf(output,
-                          "for (size_t f2c_component_ordinal_%zu = 0U; "
-                          "f2c_component_ordinal_%zu < f2c_component_extent_%zu; "
-                          "++f2c_component_ordinal_%zu) {\n",
+                          "for (size_t f2c_designator_ordinal_%zu = 0U; "
+                          "f2c_designator_ordinal_%zu < f2c_designator_extent_%zu; "
+                          "++f2c_designator_ordinal_%zu) {\n",
                           dimension, dimension, dimension, dimension);
         ++*depth;
     }
@@ -56,21 +64,21 @@ static int emit_shape(Buffer *output, Unit *unit, const F2cExpr *target, const F
             (right->rank != 0U && right_extents[dimension] == NULL))
             return 0;
         f2c_array_indent(output, depth);
-        f2c_buffer_printf(output, "const size_t f2c_component_extent_%zu = (size_t)(%s);\n",
+        f2c_buffer_printf(output, "const size_t f2c_designator_extent_%zu = (size_t)(%s);\n",
                           dimension, target_extents[dimension]);
         if (right->rank != 0U) {
             f2c_array_indent(output, depth);
-            f2c_buffer_printf(output, "if ((size_t)(%s) != f2c_component_extent_%zu) abort();\n",
+            f2c_buffer_printf(output, "if ((size_t)(%s) != f2c_designator_extent_%zu) abort();\n",
                               right_extents[dimension], dimension);
         }
     }
     f2c_array_indent(output, depth);
     f2c_buffer_printf(output,
-                      "const size_t f2c_component_count = f2c_inquiry_size(%zuU, "
+                      "const size_t f2c_designator_count = f2c_inquiry_size(%zuU, "
                       "(const size_t[]){",
                       target->rank);
     for (dimension = 0U; dimension < target->rank; ++dimension)
-        f2c_buffer_printf(output, "%sf2c_component_extent_%zu", dimension == 0U ? "" : ", ",
+        f2c_buffer_printf(output, "%sf2c_designator_extent_%zu", dimension == 0U ? "" : ", ",
                           dimension);
     f2c_buffer_append(output, "});\n");
     return 1;
@@ -84,37 +92,37 @@ static int emit_temporary_declaration(Context *context, Unit *unit, const F2cExp
         *character_length = f2c_character_length_expression(unit, target);
         if (*character_length == NULL)
             return 0;
-        f2c_buffer_printf(&context->output, "const size_t f2c_component_length = (size_t)(%s);\n",
+        f2c_buffer_printf(&context->output, "const size_t f2c_designator_length = (size_t)(%s);\n",
                           *character_length);
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "(void)f2c_size_multiply_checked("
-                                            "f2c_component_count, f2c_component_length);\n");
+                                            "f2c_designator_count, f2c_designator_length);\n");
         f2c_array_indent(&context->output, depth);
-        f2c_buffer_append(&context->output, "const size_t f2c_component_bytes = "
-                                            "f2c_component_count * f2c_component_length;\n");
+        f2c_buffer_append(&context->output, "const size_t f2c_designator_bytes = "
+                                            "f2c_designator_count * f2c_designator_length;\n");
         f2c_array_indent(&context->output, depth);
         f2c_buffer_append(&context->output,
-                          "char *f2c_component_values = (char *)malloc("
-                          "f2c_component_count == 0U || f2c_component_length == 0U "
-                          "? 1U : f2c_component_bytes);\n");
+                          "char *f2c_designator_values = (char *)malloc("
+                          "f2c_designator_count == 0U || f2c_designator_length == 0U "
+                          "? 1U : f2c_designator_bytes);\n");
     } else {
         f2c_buffer_printf(&context->output,
-                          "if (f2c_component_count > SIZE_MAX / sizeof(%s)) abort();\n",
+                          "if (f2c_designator_count > SIZE_MAX / sizeof(%s)) abort();\n",
                           f2c_symbol_c_type(symbol));
         f2c_array_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
-                          "%s *f2c_component_values = (%s *)calloc("
-                          "f2c_component_count == 0U ? 1U : f2c_component_count, "
-                          "sizeof(*f2c_component_values));\n",
+                          "%s *f2c_designator_values = (%s *)calloc("
+                          "f2c_designator_count == 0U ? 1U : f2c_designator_count, "
+                          "sizeof(*f2c_designator_values));\n",
                           f2c_symbol_c_type(symbol), f2c_symbol_c_type(symbol));
     }
     f2c_array_indent(&context->output, depth);
-    f2c_buffer_append(&context->output, "if (f2c_component_values == NULL) abort();\n");
+    f2c_buffer_append(&context->output, "if (f2c_designator_values == NULL) abort();\n");
     return 1;
 }
 
-int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cExpr *target,
-                                        const F2cExpr *right, size_t line, int depth) {
+int f2c_array_emit_designator_assignment(Context *context, Unit *unit, const F2cExpr *target,
+                                         const F2cExpr *right, size_t line, int depth) {
     const Symbol *symbol = target != NULL ? target->symbol : NULL;
     const size_t output_start = context != NULL ? context->output.length : 0U;
     char *target_extents[F2C_MAX_RANK] = {0};
@@ -136,37 +144,52 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
     size_t dimension;
     int emitted_depth;
     int result = 0;
+    const int whole_strided =
+        target != NULL && target->kind == F2C_EXPR_NAME && symbol != NULL && !symbol->allocatable &&
+        (strided_whole_object(target) || strided_whole_object(right) ||
+         (right != NULL && right->rank != 0U &&
+          (right->kind == F2C_EXPR_ARRAY_REFERENCE || right->kind == F2C_EXPR_COMPONENT ||
+           right->kind == F2C_EXPR_SUBSTRING)));
     if (context == NULL || unit == NULL || target == NULL || right == NULL || symbol == NULL ||
-        (target->kind != F2C_EXPR_COMPONENT && target->kind != F2C_EXPR_SUBSTRING) ||
-        target->child_count == 0U || target->rank == 0U)
+        (target->kind != F2C_EXPR_COMPONENT && target->kind != F2C_EXPR_SUBSTRING &&
+         target->kind != F2C_EXPR_ARRAY_REFERENCE && !whole_strided) ||
+        (!whole_strided && target->child_count == 0U) || target->rank == 0U)
         return 0;
-    if (symbol->allocatable && target->child_count == 1U &&
+    if (symbol->allocatable && target->kind == F2C_EXPR_COMPONENT && target->child_count == 1U &&
         right->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
         return 0;
     if (right->rank != 0U && right->rank != target->rank) {
-        f2c_diagnostic(context, line, 1, "component array assignment requires conformable ranks");
+        f2c_diagnostic(context, line, 1, "array designator assignment requires conformable ranks");
         return 1;
     }
-    if ((!numeric_type(symbol->type) || !numeric_type(right->type)) &&
+    if (!(numeric_type(symbol->type) && numeric_type(right->type)) &&
+        !(symbol->type == TYPE_LOGICAL && right->type == TYPE_LOGICAL) &&
         (symbol->type != right->type || symbol->kind != right->type_kind ||
          (symbol->type == TYPE_DERIVED && symbol->derived_type != right->derived_type))) {
         f2c_diagnostic(context, line, 1,
-                       "component array assignment requires compatible type and kind");
+                       "array designator assignment requires compatible type and kind");
         return 1;
     }
     prepared_target = f2c_array_clone_expression(unit, target);
     prepared_right = f2c_array_clone_expression(unit, right);
     if (prepared_target == NULL || prepared_right == NULL ||
+        !f2c_array_hoist_scalar_subexpressions(unit, prepared_target, line, "designator_target",
+                                               &temporary, &prelude, depth + 1, 1) ||
+        !f2c_array_hoist_scalar_subexpressions(
+            unit, prepared_right, line, "designator_source", &temporary, &prelude, depth + 1,
+            prepared_right->rank != 0U || prepared_right->type == TYPE_CHARACTER ||
+                prepared_right->type == TYPE_DERIVED) ||
         !f2c_array_materialize_constructors(context, unit, prepared_target, line,
-                                            "component_target", &temporary, &prelude, &cleanup,
+                                            "designator_target", &temporary, &prelude, &cleanup,
                                             depth + 1) ||
-        !f2c_array_materialize_constructors(context, unit, prepared_right, line, "component",
-                                            &temporary, &prelude, &cleanup, depth + 1))
+        !f2c_array_materialize_constructors(context, unit, prepared_right, line,
+                                            "designator_source", &temporary, &prelude, &cleanup,
+                                            depth + 1))
         goto unsupported;
     target = prepared_target;
     for (dimension = 0U; dimension < target->rank; ++dimension) {
         (void)snprintf(ordinal_names[dimension], sizeof(ordinal_names[dimension]),
-                       "f2c_component_ordinal_%zu", dimension);
+                       "f2c_designator_ordinal_%zu", dimension);
         ordinals[dimension] = ordinal_names[dimension];
     }
     right_element = f2c_array_element_expression(unit, prepared_right, target->rank, ordinals);
@@ -208,90 +231,90 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
         if (symbol->type == TYPE_CHARACTER) {
             f2c_array_indent(&context->output, emitted_depth);
             f2c_buffer_append(&context->output,
-                              "char *f2c_component_scalar = (char *)malloc("
-                              "f2c_component_length == 0U ? 1U : f2c_component_length);\n");
+                              "char *f2c_designator_scalar = (char *)malloc("
+                              "f2c_designator_length == 0U ? 1U : f2c_designator_length);\n");
             f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_append(&context->output, "if (f2c_component_scalar == NULL) abort();\n");
-            if (!f2c_emit_character_storage_assignment(context, unit, "f2c_component_scalar",
-                                                       "f2c_component_length", right_element,
+            f2c_buffer_append(&context->output, "if (f2c_designator_scalar == NULL) abort();\n");
+            if (!f2c_emit_character_storage_assignment(context, unit, "f2c_designator_scalar",
+                                                       "f2c_designator_length", right_element,
                                                        right_code, emitted_depth))
                 goto emission_failed;
         } else if (symbol->type == TYPE_DERIVED) {
             f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_printf(&context->output, "%s f2c_component_scalar = {0};\n",
+            f2c_buffer_printf(&context->output, "%s f2c_designator_scalar = {0};\n",
                               symbol->derived_type->c_name);
             if (!f2c_emit_derived_clone_expression(&context->output, unit, right_element,
-                                                   "f2c_component_scalar", "component_scalar", line,
-                                                   emitted_depth))
+                                                   "f2c_designator_scalar", "designator_scalar",
+                                                   line, emitted_depth))
                 goto emission_failed;
         } else {
             f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_printf(&context->output, "const %s f2c_component_scalar = %s;\n",
+            f2c_buffer_printf(&context->output, "const %s f2c_designator_scalar = %s;\n",
                               f2c_symbol_c_type(symbol), right_code);
         }
     }
     f2c_array_indent(&context->output, emitted_depth);
-    f2c_buffer_append(&context->output, "size_t f2c_component_linear = 0U;\n");
+    f2c_buffer_append(&context->output, "size_t f2c_designator_linear = 0U;\n");
     append_loops(&context->output, target->rank, &emitted_depth);
     if (symbol->type == TYPE_CHARACTER) {
         if (prepared_right->rank == 0U) {
             f2c_array_indent(&context->output, emitted_depth);
-            f2c_buffer_append(&context->output, "if (f2c_component_length != 0U) memmove("
-                                                "f2c_component_values + f2c_component_linear * "
-                                                "f2c_component_length, f2c_component_scalar, "
-                                                "f2c_component_length);\n");
+            f2c_buffer_append(&context->output, "if (f2c_designator_length != 0U) memmove("
+                                                "f2c_designator_values + f2c_designator_linear * "
+                                                "f2c_designator_length, f2c_designator_scalar, "
+                                                "f2c_designator_length);\n");
         } else if (!f2c_emit_character_storage_assignment(
                        context, unit,
-                       "f2c_component_values + f2c_component_linear * f2c_component_length",
-                       "f2c_component_length", right_element, right_code, emitted_depth)) {
+                       "f2c_designator_values + f2c_designator_linear * f2c_designator_length",
+                       "f2c_designator_length", right_element, right_code, emitted_depth)) {
             goto emission_failed;
         }
         f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_append(&context->output, "++f2c_component_linear;\n");
+        f2c_buffer_append(&context->output, "++f2c_designator_linear;\n");
     } else if (symbol->type == TYPE_DERIVED) {
         if (prepared_right->rank == 0U) {
             f2c_array_indent(&context->output, emitted_depth);
             f2c_buffer_printf(&context->output,
-                              "f2c_clone_%s(&f2c_component_values[f2c_component_linear], "
-                              "&f2c_component_scalar);\n",
+                              "f2c_clone_%s(&f2c_designator_values[f2c_designator_linear], "
+                              "&f2c_designator_scalar);\n",
                               symbol->derived_type->c_name);
-        } else if (!f2c_emit_derived_clone_expression(&context->output, unit, right_element,
-                                                      "f2c_component_values[f2c_component_linear]",
-                                                      "component", line, emitted_depth)) {
+        } else if (!f2c_emit_derived_clone_expression(
+                       &context->output, unit, right_element,
+                       "f2c_designator_values[f2c_designator_linear]", "designator_source", line,
+                       emitted_depth)) {
             goto emission_failed;
         }
         f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_append(&context->output, "++f2c_component_linear;\n");
+        f2c_buffer_append(&context->output, "++f2c_designator_linear;\n");
     } else {
         f2c_array_indent(&context->output, emitted_depth);
         if (prepared_right->rank == 0U)
-            f2c_buffer_append(&context->output, "f2c_component_values[f2c_component_linear++] = "
-                                                "f2c_component_scalar;\n");
+            f2c_buffer_append(&context->output, "f2c_designator_values[f2c_designator_linear++] = "
+                                                "f2c_designator_scalar;\n");
         else
             f2c_buffer_printf(&context->output,
-                              "f2c_component_values[f2c_component_linear++] = %s;\n", right_code);
+                              "f2c_designator_values[f2c_designator_linear++] = %s;\n", right_code);
     }
     close_loops(&context->output, target->rank, &emitted_depth);
-    if (prepared_right->rank == 0U) {
+    if (prepared_right->rank == 0U &&
+        (symbol->type == TYPE_CHARACTER || symbol->type == TYPE_DERIVED)) {
         f2c_array_indent(&context->output, emitted_depth);
         if (symbol->type == TYPE_CHARACTER)
-            f2c_buffer_append(&context->output, "free(f2c_component_scalar);\n");
+            f2c_buffer_append(&context->output, "free(f2c_designator_scalar);\n");
         else if (symbol->type == TYPE_DERIVED)
-            f2c_buffer_printf(&context->output, "f2c_destroy_%s(&f2c_component_scalar);\n",
+            f2c_buffer_printf(&context->output, "f2c_destroy_%s(&f2c_designator_scalar);\n",
                               symbol->derived_type->c_name);
     }
     f2c_array_indent(&context->output, emitted_depth);
-    f2c_buffer_append(&context->output, "f2c_component_linear = 0U;\n");
+    f2c_buffer_append(&context->output, "f2c_designator_linear = 0U;\n");
     append_loops(&context->output, target->rank, &emitted_depth);
     if (symbol->type == TYPE_CHARACTER) {
+        f2c_array_copy_snapshot(
+            &context->output, unit, left_pointer,
+            "(f2c_designator_values + f2c_designator_linear * f2c_designator_length)",
+            "f2c_designator_length", left_element->storage_qualifiers, emitted_depth);
         f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_printf(&context->output,
-                          "if (f2c_component_length != 0U) memmove(%s, "
-                          "f2c_component_values + f2c_component_linear * "
-                          "f2c_component_length, f2c_component_length);\n",
-                          left_pointer);
-        f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_append(&context->output, "++f2c_component_linear;\n");
+        f2c_buffer_append(&context->output, "++f2c_designator_linear;\n");
     } else if (symbol->type == TYPE_DERIVED) {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output, "f2c_destroy_%s(&(%s));\n",
@@ -299,23 +322,23 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output,
                           "f2c_clone_%s(&(%s), "
-                          "&f2c_component_values[f2c_component_linear++]);\n",
+                          "&f2c_designator_values[f2c_designator_linear++]);\n",
                           symbol->derived_type->c_name, left_code);
     } else {
         f2c_array_indent(&context->output, emitted_depth);
-        f2c_buffer_printf(&context->output, "%s = f2c_component_values[f2c_component_linear++];\n",
-                          left_code);
+        f2c_buffer_printf(&context->output,
+                          "%s = f2c_designator_values[f2c_designator_linear++];\n", left_code);
     }
     close_loops(&context->output, target->rank, &emitted_depth);
     if (symbol->type == TYPE_DERIVED) {
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_printf(&context->output,
-                          "f2c_destroy_array_%s(f2c_component_values, "
-                          "f2c_component_count, %zuU);\n",
+                          "f2c_destroy_array_%s(f2c_designator_values, "
+                          "f2c_designator_count, %zuU);\n",
                           symbol->derived_type->c_name, target->rank);
     }
     f2c_array_indent(&context->output, emitted_depth);
-    f2c_buffer_append(&context->output, "free(f2c_component_values);\n");
+    f2c_buffer_append(&context->output, "free(f2c_designator_values);\n");
     (void)f2c_array_cleanup_emit(&context->output, unit, &cleanup);
     f2c_array_indent(&context->output, depth);
     f2c_buffer_append(&context->output, "}\n");
@@ -324,7 +347,7 @@ int f2c_array_emit_component_assignment(Context *context, Unit *unit, const F2cE
 
 unsupported:
     f2c_diagnostic(context, line, 1,
-                   "component array assignment cannot derive an element or runtime extent");
+                   "array designator assignment cannot derive an element or runtime extent");
     result = 1;
     goto cleanup_all;
 
@@ -333,7 +356,7 @@ emission_failed:
         context->output.length = output_start;
         context->output.data[output_start] = '\0';
     }
-    f2c_diagnostic(context, line, 1, "component array assignment could not be emitted safely");
+    f2c_diagnostic(context, line, 1, "array designator assignment could not be emitted safely");
     result = 1;
 
 cleanup_all:
