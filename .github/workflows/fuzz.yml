@@ -45,6 +45,27 @@ jobs:
       - name: Add versioned seed corpus
         # Keep evolved hash-named inputs, but always refresh repository-owned seeds.
         run: cp test/fuzz_corpus/* build/fuzz-corpus/
+      - name: Compact corpus without losing coverage features
+        # Replay every cached input; retain a feature-equivalent seed set rather
+        # than accumulating redundant coverage metadata across weekly campaigns.
+        run: |
+          mkdir -p build/fuzz-corpus-compact
+          build/fuzz/f2c_libfuzzer -merge=1 \
+            -artifact_prefix=build/fuzz-artifacts/ \
+            -timeout=10 -rss_limit_mb=2048 \
+            build/fuzz-corpus-compact build/fuzz-corpus > build/fuzz-merge.log 2>&1 || {
+              cat build/fuzz-merge.log
+              exit 1
+            }
+          cat build/fuzz-merge.log
+          # libFuzzer's merge driver can recover after a crashing subprocess.
+          # Treat that recovery as a failing gate, never as a clean replay.
+          if grep -Eq 'ERROR:|caused a failure at the previous merge step' build/fuzz-merge.log; then
+            exit 1
+          fi
+          cmake -E remove_directory build/fuzz-corpus
+          cmake -E rename build/fuzz-corpus-compact build/fuzz-corpus
+          cp test/fuzz_corpus/* build/fuzz-corpus/
       - name: Run coverage-guided campaign
         run: |
           build/fuzz/f2c_libfuzzer build/fuzz-corpus \
@@ -78,5 +99,6 @@ jobs:
           path: |
             build/fuzz-corpus/
             build/fuzz-artifacts/
+            build/fuzz-merge.log
           if-no-files-found: warn
           retention-days: 30
