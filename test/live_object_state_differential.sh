@@ -15,6 +15,7 @@ cmake -E make_directory "$work"
 "$1" "$root/test/fixtures/live_external_state.f90" -o "$work/generated_live_external_state.c"
 "$1" "$root/test/fixtures/live_character_result_state.f90" -o "$work/character-result.c"
 "$1" "$root/test/fixtures/live_namelist_transaction.f90" -o "$work/namelist-transaction.c"
+"$1" "$root/test/fixtures/live_component_assignment.f90" -o "$work/component-assignment.c"
 for optimization in 0 2 3; do
     "$cc" -std=c17 "-O$optimization" -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
         -Wstrict-prototypes -Wmissing-prototypes -Werror "$work/generated.c" -lm \
@@ -41,8 +42,15 @@ for optimization in 0 2 3; do
         -Wstrict-prototypes -Wmissing-prototypes -Werror "$work/namelist-transaction.c" -lm \
         -o "$work/namelist-transaction-O$optimization"
     "$work/namelist-transaction-O$optimization"
+    # GNU Fortran 16.1 evaluates this original allocatable-component owner
+    # subscript five times. Preserve the source and its independent once-only
+    # contract rather than treating that compiler output as a passing oracle.
+    "$cc" -std=c17 "-O$optimization" -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+        -Wstrict-prototypes -Wmissing-prototypes -Werror "$work/component-assignment.c" -lm \
+        -o "$work/component-assignment-O$optimization"
+    "$work/component-assignment-O$optimization"
 done
-for source in generated.c character-result.c namelist-transaction.c external; do
+for source in generated.c character-result.c namelist-transaction.c component-assignment.c external; do
     input=$work/$source
     if [ "$source" = external ]; then
         input=$root/test/generated/live_state_contracts.c
