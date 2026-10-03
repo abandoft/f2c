@@ -1,5 +1,6 @@
 #include "codegen/array/copy.h"
 #include "codegen/array/private.h"
+#include "codegen/storage/private.h"
 
 #include "codegen/lowering/private.h"
 
@@ -81,6 +82,9 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
                 "f2c_whole_length", depth + 1))
             goto cleanup;
     } else if (right_symbol != NULL && right_symbol->rank != 0U) {
+        char *source = f2c_storage_symbol_data(unit, right_symbol);
+        if (source == NULL)
+            goto cleanup;
         f2c_array_indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output, "const size_t f2c_whole_source_count = (size_t)(%s);\n",
                           right_count);
@@ -103,7 +107,8 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
                           "memmove(f2c_whole_values + f2c_whole_index * f2c_whole_length, "
                           "%s + f2c_whole_index * f2c_whole_source_length, "
                           "f2c_whole_copy_length);\n",
-                          f2c_symbol_c_name(unit, right_symbol));
+                          source);
+        free(source);
         f2c_array_indent(&context->output, depth + 2);
         f2c_buffer_append(&context->output,
                           "if (f2c_whole_length > f2c_whole_copy_length) "
@@ -135,18 +140,31 @@ int f2c_array_emit_whole_character_assignment(Context *context, Unit *unit, Symb
     if (scalar_length_reallocation) {
         /* The scalar and full broadcast have been snapshotted before freeing
          * potentially overlapping source storage; equal lengths keep aliases. */
-        const char *name = f2c_symbol_c_name(unit, left_symbol);
+        const F2cStorageReference reference = f2c_ir_symbol_storage_reference(left_symbol);
+        char *name = f2c_storage_write_property(unit, &reference, F2C_OBJECT_DATA, 0U);
+        char *old_length = f2c_symbol_character_length(unit, left_symbol);
+        if (name == NULL || old_length == NULL) {
+            free(name);
+            free(old_length);
+            goto cleanup;
+        }
         f2c_array_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "if (f2c_char_len_%s != f2c_whole_length) {\n", name);
+        f2c_buffer_printf(&context->output, "if ((%s) != f2c_whole_length) {\n", old_length);
+        free(old_length);
         f2c_array_indent(&context->output, depth + 2);
         f2c_buffer_append(&context->output,
                           "if (f2c_whole_values == NULL) { f2c_whole_values = "
                           "(char *)malloc(1U); if (f2c_whole_values == NULL) abort(); }\n");
         f2c_array_indent(&context->output, depth + 2);
         f2c_buffer_printf(&context->output,
-                          "free(%s); %s = f2c_whole_values; f2c_whole_values = NULL;\n"
-                          "f2c_char_len_%s = f2c_whole_length;\n",
-                          name, name, name);
+                          "free(%s); %s = f2c_whole_values; f2c_whole_values = NULL;\n", name,
+                          name);
+        const int stored =
+            f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_CHARACTER_LENGTH,
+                                   0U, NULL, "f2c_whole_length", depth + 2);
+        free(name);
+        if (!stored)
+            goto cleanup;
         f2c_array_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "}\n");
     }

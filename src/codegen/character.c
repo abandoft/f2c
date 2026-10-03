@@ -2,6 +2,7 @@
 
 #include "codegen/call/private.h"
 #include "codegen/lowering/private.h"
+#include "codegen/storage/private.h"
 
 #include <ctype.h>
 #include <stdint.h>
@@ -154,9 +155,10 @@ char *f2c_symbol_character_length(Unit *unit, const Symbol *symbol) {
     Buffer result = {0};
     if (symbol == NULL || symbol->type != TYPE_CHARACTER)
         return NULL;
+    if (f2c_host_function_result_symbol(unit, symbol) && !f2c_unit_has_descriptor_result(unit))
+        return f2c_strdup("f2c_result_len");
     if (symbol->deferred_character) {
-        f2c_buffer_printf(&result, "f2c_char_len_%s", f2c_symbol_c_name(unit, symbol));
-        return f2c_buffer_take(&result);
+        return f2c_storage_symbol_property(unit, symbol, F2C_OBJECT_CHARACTER_LENGTH, 0U);
     }
     if (symbol->automatic_character) {
         f2c_buffer_printf(&result, "f2c_char_len_%s", f2c_symbol_c_name(unit, symbol));
@@ -197,16 +199,8 @@ char *f2c_character_length_expression(Unit *unit, const F2cExpr *expression) {
         return f2c_symbol_character_length(unit, expression->symbol);
     if (expression->kind == F2C_EXPR_COMPONENT && expression->symbol != NULL &&
         expression->symbol->deferred_character && expression->child_count != 0U) {
-        int supported = 0;
-        char *owner = f2c_emit_expression_ast(unit, expression->children[0], &supported);
-        if (supported && owner != NULL) {
-            f2c_buffer_printf(&result, "(size_t)(%s).%s_character_length", owner,
-                              f2c_symbol_c_name(unit, expression->symbol));
-            free(owner);
-            return f2c_buffer_take(&result);
-        }
-        free(owner);
-        return NULL;
+        const F2cStorageReference reference = f2c_ir_storage_reference(expression);
+        return f2c_storage_read_property(unit, &reference, F2C_OBJECT_CHARACTER_LENGTH, 0U);
     }
     if (expression->kind == F2C_EXPR_COMPONENT)
         return f2c_symbol_character_length(unit, expression->symbol);
@@ -371,6 +365,8 @@ char *f2c_character_source_pointer(Unit *unit, const F2cExpr *right, const char 
     if (strncmp(right_code, "(char[", 6U) == 0)
         return f2c_strdup(right_code);
     if (right->kind == F2C_EXPR_NAME && symbol != NULL) {
+        if (symbol->pointer || symbol->allocatable)
+            return f2c_storage_symbol_data(unit, symbol);
         if (symbol->argument || symbol->rank != 0U || symbol->character_length != NULL)
             return f2c_strdup(f2c_symbol_c_name(unit, symbol));
         f2c_buffer_printf(&result, "&%s", f2c_symbol_c_name(unit, symbol));
@@ -577,10 +573,14 @@ int f2c_emit_character_assignment(Context *context, Unit *unit, Symbol *left_sym
         return 0;
     if (left_symbol->deferred_character && left_symbol->allocatable && left_symbol->rank == 0U &&
         left->kind == F2C_EXPR_NAME) {
-        const char *name = f2c_symbol_c_name(unit, left_symbol);
+        const F2cStorageReference reference = f2c_ir_storage_reference(left);
+        char *name = f2c_storage_write_property(unit, &reference, F2C_OBJECT_DATA, 0U);
+        if (name == NULL)
+            return 0;
         source_length = f2c_character_length_expression(unit, right);
         source_pointer = f2c_character_source_pointer(unit, right, right_code);
         if (source_length == NULL || source_pointer == NULL) {
+            free(name);
             free(source_length);
             free(source_pointer);
             return 0;
@@ -611,13 +611,15 @@ int f2c_emit_character_assignment(Context *context, Unit *unit, Symbol *left_sym
         f2c_buffer_printf(&context->output, "free(%s);\n", name);
         emit_indent(&context->output, depth + 1);
         f2c_buffer_printf(&context->output, "%s = f2c_deferred_value;\n", name);
-        emit_indent(&context->output, depth + 1);
-        f2c_buffer_printf(&context->output, "f2c_char_len_%s = f2c_deferred_length;\n", name);
+        const int stored =
+            f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_CHARACTER_LENGTH,
+                                   0U, NULL, "f2c_deferred_length", depth + 1);
         emit_indent(&context->output, depth);
         f2c_buffer_append(&context->output, "}\n");
         free(source_length);
         free(source_pointer);
-        return 1;
+        free(name);
+        return stored;
     }
     target_length = left->kind == F2C_EXPR_SUBSTRING || left->kind == F2C_EXPR_ARRAY_REFERENCE ||
                             left->kind == F2C_EXPR_COMPONENT
