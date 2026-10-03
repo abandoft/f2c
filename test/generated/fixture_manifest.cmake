@@ -39,6 +39,7 @@ set(
     allocation_controls
     allocation_control_values
     allocation_control_bounds
+    allocation_native_bounds
     allocation_control_finalization
     allocation_control_errors
     allocation_control_unaligned
