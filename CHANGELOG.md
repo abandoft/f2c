@@ -10,6 +10,7 @@
 - Fixed array constructor growth beyond eight elements, eliminating out-of-bounds writes.
 - Corrected constructor element counts in nested SUM, RESHAPE, SIZE, and character COUNT expressions so implied DO elements are not omitted.
 - Corrected derived-value cleanup for constructors and contiguous argument bridge copies without introducing extra user-defined FINAL calls.
+- Fixed strict compilation of array comparisons involving dynamic derived components on affected GCC versions.
 
 ## 1.47.0
 
