@@ -23,6 +23,7 @@ int f2c_call_expression_requires_materialization(Unit *unit, const F2cExpr *expr
     size_t argument;
     if (expression == NULL || expression->kind != F2C_EXPR_CALL || expression->rank != 0U ||
         expression->intrinsic != F2C_INTRINSIC_NONE ||
+        f2c_expression_has_descriptor_result(expression) ||
         f2c_lowering_code(unit, expression) != NULL || (callee = expression->symbol) == NULL ||
         callee->external_elemental ||
         (expression->resolved_procedure != NULL && expression->resolved_procedure->elemental))
