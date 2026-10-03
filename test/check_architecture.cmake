@@ -27,6 +27,15 @@ foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
     endif()
     if(
         PRODUCTION_FILE MATCHES "/src/codegen/"
+        AND CONTENT MATCHES "f2c_emit_(array_section|rank2_section)_assignment"
+    )
+        message(
+            FATAL_ERROR
+            "${RELATIVE_FILE} restores a duplicate legacy array-section assignment path"
+        )
+    endif()
+    if(
+        PRODUCTION_FILE MATCHES "/src/codegen/"
         AND CONTENT MATCHES
             "(temporary_index|contiguous_temporary_index|host_descriptor_temporary_(begin|count)|ordered_temporary_index|ordered_argument_temporary_index|statement_temporary_index|statement_nested_temporary_begin|lifetime_statement_index|temporary_lifetime_analyzed|owned_temporary_index|owned_temporary_kind|temporary_ownership_analyzed)[ \t]*=[^=]"
     )
