@@ -1,6 +1,7 @@
 #include "codegen/expression/private.h"
 
 #include "codegen/descriptor/private.h"
+#include "codegen/storage/private.h"
 
 #include <stdlib.h>
 
@@ -43,7 +44,8 @@ char *f2c_expression_associated_scalar_target(Unit *unit, const F2cExpr *target,
             free(code);
             return f2c_buffer_take(&result);
         }
-        code = f2c_descriptor_storage_designator(unit, target);
+        const F2cStorageReference reference = f2c_ir_storage_reference(target);
+        code = f2c_storage_read_property(unit, &reference, F2C_OBJECT_DATA, 0U);
         if (code == NULL)
             return NULL;
         f2c_buffer_printf(
@@ -55,12 +57,16 @@ char *f2c_expression_associated_scalar_target(Unit *unit, const F2cExpr *target,
     }
     if (target->kind != F2C_EXPR_NAME)
         return NULL;
+    code = f2c_storage_symbol_data(unit, symbol);
+    if (code == NULL)
+        return NULL;
     f2c_buffer_printf(&result, "%s%s",
                       symbol->pointer || symbol->allocatable || symbol->argument ||
                               symbol->type == TYPE_CHARACTER
                           ? ""
                           : "&",
-                      f2c_symbol_c_name(unit, symbol));
+                      code);
+    free(code);
     return f2c_buffer_take(&result);
 }
 
@@ -131,7 +137,8 @@ char *f2c_expression_associated_array_target(Unit *unit, const F2cExpr *pointer,
          (target->kind == F2C_EXPR_COMPONENT && target->child_count > 1U)) &&
         target->child_count != target_symbol->rank + f2c_descriptor_selector_offset(target))
         return NULL;
-    target_storage = f2c_descriptor_storage_designator(unit, target);
+    const F2cStorageReference target_reference = f2c_ir_storage_reference(target);
+    target_storage = f2c_storage_read_property(unit, &target_reference, F2C_OBJECT_DATA, 0U);
     if (target_storage == NULL)
         return NULL;
     for (dimension = 0U; dimension < target_symbol->rank; ++dimension) {
@@ -168,12 +175,8 @@ char *f2c_expression_associated_array_target(Unit *unit, const F2cExpr *pointer,
             goto cleanup;
     }
     for (dimension = 0U; dimension < pointer_symbol->rank; ++dimension) {
-        Buffer pointer_extent_name = {0};
-        Buffer pointer_stride_name = {0};
-        f2c_buffer_printf(&pointer_extent_name, "%s_extent_%zu", pointer_storage, dimension + 1U);
-        f2c_buffer_printf(&pointer_stride_name, "%s_stride_%zu", pointer_storage, dimension + 1U);
-        pointer_extent[dimension] = f2c_buffer_take(&pointer_extent_name);
-        pointer_stride[dimension] = f2c_buffer_take(&pointer_stride_name);
+        pointer_extent[dimension] = f2c_descriptor_dimension_extent(unit, pointer, dimension);
+        pointer_stride[dimension] = f2c_descriptor_expression_stride(unit, pointer, dimension);
         if (pointer_extent[dimension] == NULL || pointer_stride[dimension] == NULL)
             goto cleanup;
     }

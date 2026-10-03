@@ -1,4 +1,5 @@
 #include "codegen/expression/private.h"
+#include "codegen/storage/private.h"
 
 #include "codegen/array/private.h"
 #include "codegen/call/private.h"
@@ -97,7 +98,8 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         (expression->children[0]->kind == F2C_EXPR_NAME ||
          expression->children[0]->kind == F2C_EXPR_COMPONENT) &&
         expression->children[0]->symbol != NULL && expression->children[0]->symbol->allocatable) {
-        char *storage = f2c_descriptor_storage_designator(unit, expression->children[0]);
+        const F2cStorageReference reference = f2c_ir_storage_reference(expression->children[0]);
+        char *storage = f2c_storage_read_property(unit, &reference, F2C_OBJECT_DATA, 0U);
         if (storage == NULL) {
             *supported = 0;
             free(storage);
@@ -116,10 +118,11 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         const F2cExpr *target_expression =
             f2c_intrinsic_argument(expression->children, expression->child_count, "target", 1U);
         const Symbol *pointer = pointer_expression->symbol;
+        const F2cStorageReference reference = f2c_ir_storage_reference(pointer_expression);
         char *pointer_storage =
             pointer != NULL && pointer->procedure_pointer
                 ? f2c_expression_emit(unit, pointer_expression, supported)
-                : f2c_emit_pointer_designator(unit, pointer_expression, supported);
+                : f2c_storage_read_property(unit, &reference, F2C_OBJECT_DATA, 0U);
         if (pointer == NULL || (!pointer->pointer && !pointer->procedure_pointer) || !*supported ||
             pointer_storage == NULL) {
             free(pointer_storage);
