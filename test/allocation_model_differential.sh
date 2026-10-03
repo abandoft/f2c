@@ -9,9 +9,9 @@ fi
 F2C=$1
 CC=${CC:-cc}
 FC=${FC:-gfortran}
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 WORK=$ROOT/build/allocation-model-differential
-SOURCES="allocation_model allocation_model_rich"
+SOURCES="allocation_model allocation_model_rich allocation_result_values"
 
 if ! command -v "$CC" >/dev/null 2>&1; then
     echo "C compiler not found: $CC" >&2
