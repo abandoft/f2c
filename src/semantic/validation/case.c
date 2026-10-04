@@ -102,60 +102,6 @@ static int integer_bounds(Unit *unit, const F2cCaseRange *range, int64_t *lower,
            (range->upper == NULL || f2c_evaluate_integer_constant(unit, range->upper, upper));
 }
 
-static int case_equal(const char *left, const char *right) {
-    if (left == NULL || right == NULL)
-        return 0;
-    while (*left != '\0' && *right != '\0' &&
-           tolower((unsigned char)*left) == tolower((unsigned char)*right)) {
-        ++left;
-        ++right;
-    }
-    return *left == '\0' && *right == '\0';
-}
-
-static int logical_constant(const F2cExpr *expression, int *value) {
-    int left;
-    int right;
-    if (expression == NULL || value == NULL)
-        return 0;
-    if (expression->kind == F2C_EXPR_LOGICAL_LITERAL && expression->text != NULL) {
-        if (case_equal(expression->text, ".true.")) {
-            *value = 1;
-            return 1;
-        }
-        if (!case_equal(expression->text, ".false."))
-            return 0;
-        *value = 0;
-        return 1;
-    }
-    if (expression->kind == F2C_EXPR_NAME && expression->symbol != NULL &&
-        expression->symbol->parameter)
-        return logical_constant(expression->symbol->initializer_expression, value);
-    if (expression->kind == F2C_EXPR_UNARY && case_equal(expression->text, ".not.") &&
-        expression->child_count == 1U) {
-        if (!logical_constant(expression->children[0], value))
-            return 0;
-        *value = !*value;
-        return 1;
-    }
-    if (expression->kind == F2C_EXPR_BINARY && expression->child_count == 2U &&
-        logical_constant(expression->children[0], &left) &&
-        logical_constant(expression->children[1], &right)) {
-        if (case_equal(expression->text, ".and."))
-            *value = left && right;
-        else if (case_equal(expression->text, ".or."))
-            *value = left || right;
-        else if (case_equal(expression->text, ".eqv."))
-            *value = left == right;
-        else if (case_equal(expression->text, ".neqv."))
-            *value = left != right;
-        else
-            return 0;
-        return 1;
-    }
-    return 0;
-}
-
 static int character_literal(const char *text, CharacterConstant *constant) {
     const char *cursor;
     const char *quote;
@@ -286,10 +232,11 @@ static int ranges_overlap(Unit *unit, Type type, const F2cCaseRange *left,
         return left_lower <= right_upper && right_lower <= left_upper;
     }
     if (type == TYPE_LOGICAL && !left->has_colon && !right->has_colon) {
-        int left_value;
-        int right_value;
-        return logical_constant(left->lower, &left_value) &&
-               logical_constant(right->lower, &right_value) && left_value == right_value;
+        int64_t left_value;
+        int64_t right_value;
+        return f2c_evaluate_integer_constant(unit, left->lower, &left_value) &&
+               f2c_evaluate_integer_constant(unit, right->lower, &right_value) &&
+               left_value == right_value;
     }
     return type == TYPE_CHARACTER && character_ranges_overlap(left, right);
 }
