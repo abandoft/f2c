@@ -7,6 +7,10 @@
 - Remove the fixed 64-argument limit from standard and legacy extrema, supporting large scalar and array argument combinations.
 - Support sparse optional argument keywords, with unified diagnostics for missing required arguments, duplicate keywords, and overflowing indices.
 - Generate large extrema as balanced typed function trees, reducing C nesting depth and repeated text construction.
+- Correct zero-length array temporary initialization while preserving allocation state for empty arrays and zero-length character arrays.
+- Preserve narrow integer arithmetic kinds and correct kind inference for mixed integer, real, and complex operations.
+- Preserve kinds in unary and binary logical expressions while retaining default logical kind for relational comparisons.
+- Support numeric and named kind suffixes on logical literals, preserving source locations, constant values, and type parameters.
 
 ## 1.50.0
 
