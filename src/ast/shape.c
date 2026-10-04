@@ -290,8 +290,19 @@ void f2c_ast_set_transform_intrinsic_shape(AstParser *parser, F2cExpr *expressio
             return;
         source_dimension = 0U;
         for (result_dimension = 0U; result_dimension < expression->rank; ++result_dimension) {
-            if (result_dimension + 1U == (size_t)dimension_value)
+            if (result_dimension + 1U == (size_t)dimension_value) {
+                const F2cExpr *copies = f2c_ast_intrinsic_argument(expression, "ncopies", 2U);
+                int64_t copies_value;
+                F2cShapeDimension *target = &expression->shape.dimensions[result_dimension];
+                target->lower_known = 1;
+                target->lower = 1;
+                if (copies != NULL &&
+                    f2c_evaluate_integer_constant(parser->unit, copies, &copies_value)) {
+                    target->extent_known = 1;
+                    target->extent = copies_value > 0 ? (uint64_t)copies_value : 0U;
+                }
                 continue;
+            }
             if (source_dimension < source->rank)
                 expression->shape.dimensions[result_dimension] =
                     source->shape.dimensions[source_dimension++];

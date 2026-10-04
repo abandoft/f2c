@@ -70,8 +70,8 @@ static void test_argument_contracts(void) {
     expect_diagnostic("  integer :: values(2,2), field(4)\n  logical :: mask(4)\n",
                       "unpack(values, mask, field)",
                       "UNPACK argument VECTOR must be a rank-one array");
-    expect_diagnostic("  integer :: values(4)\n", "spread(values, 1, -1)",
-                      "SPREAD NCOPIES must not be negative");
+    expect_diagnostic("  integer :: values(4)\n", "spread(values, 1, [1])",
+                      "SPREAD argument NCOPIES must be a scalar INTEGER");
     expect_diagnostic("  integer :: values(4)\n", "cshift(values, [1, 2])",
                       "CSHIFT argument SHIFT must be an INTEGER scalar or a rank-(ARRAY rank - 1) "
                       "array");

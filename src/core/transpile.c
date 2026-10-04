@@ -40,6 +40,7 @@ typedef struct F2cRequiredFeatures {
     int power;
     int integer_loop;
     int real_loop;
+    int array_shift;
 } F2cRequiredFeatures;
 
 static void collect_expression_feature(F2cExpr *expression, void *state) {
@@ -79,6 +80,9 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
         features->numeric_operation_intrinsic = 1;
     if (f2c_intrinsic_is_real_representation(expression->intrinsic))
         features->real_representation_intrinsic = 1;
+    if (expression->intrinsic == F2C_INTRINSIC_CSHIFT ||
+        expression->intrinsic == F2C_INTRINSIC_EOSHIFT)
+        features->array_shift = 1;
     name = expression->text;
     if (strcmp(name, "transfer") == 0)
         features->transfer = 1;
@@ -351,6 +355,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
             f2c_emit_integer_loop_support(&context.output);
         if (features.real_loop)
             f2c_emit_real_loop_support(&context.output);
+        if (features.array_shift)
+            f2c_emit_array_shift_support(&context.output);
         if (needs_bit_intrinsic)
             f2c_emit_bit_intrinsic_support(&context.output);
         if (needs_character_intrinsic)

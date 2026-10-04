@@ -167,32 +167,39 @@ static int emit_reshape(Context *context, Unit *unit, Symbol *target, const F2cE
                       pad_expression != NULL ? " && f2c_transform_pad_count == 0U" : "");
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
-                      "for (size_t output = 0U; output < f2c_transform_result_count; ++output) { "
-                      "size_t coordinates[%zu] = {0}; size_t stride = 1U; size_t sequence = 0U; "
-                      "size_t multiplier = 1U; ",
+                      "for (size_t f2c_transform_output = 0U; f2c_transform_output < "
+                      "f2c_transform_result_count; ++f2c_transform_output) { "
+                      "size_t f2c_transform_coordinates[%zu] = {0}; size_t f2c_transform_stride = "
+                      "1U; size_t f2c_transform_sequence = 0U; "
+                      "size_t f2c_transform_multiplier = 1U; ",
                       rank);
     for (dimension = 0U; dimension < rank; ++dimension)
-        f2c_buffer_printf(&context->output,
-                          "coordinates[%zu] = (output / stride) %% "
-                          "f2c_transform_result_extent_%zu; stride *= "
-                          "f2c_transform_result_extent_%zu; ",
-                          dimension, dimension + 1U, dimension + 1U);
+        f2c_buffer_printf(
+            &context->output,
+            "f2c_transform_coordinates[%zu] = (f2c_transform_output / f2c_transform_stride) %% "
+            "f2c_transform_result_extent_%zu; f2c_transform_stride *= "
+            "f2c_transform_result_extent_%zu; ",
+            dimension, dimension + 1U, dimension + 1U);
     f2c_buffer_printf(&context->output,
-                      "for (size_t k = 0U; k < %zuU; ++k) { size_t d = "
-                      "f2c_transform_order[k] - 1U; sequence += coordinates[d] * multiplier; "
-                      "multiplier *= ((const size_t[%zu]){",
+                      "for (size_t f2c_transform_k = 0U; f2c_transform_k < %zuU; "
+                      "++f2c_transform_k) { size_t f2c_transform_d = "
+                      "f2c_transform_order[f2c_transform_k] - 1U; f2c_transform_sequence += "
+                      "f2c_transform_coordinates[f2c_transform_d] * f2c_transform_multiplier; "
+                      "f2c_transform_multiplier *= ((const size_t[%zu]){",
                       rank, rank);
     for (dimension = 0U; dimension < rank; ++dimension)
         f2c_buffer_printf(&context->output, "%sf2c_transform_result_extent_%zu",
                           dimension == 0U ? "" : ", ", dimension + 1U);
-    f2c_buffer_append(&context->output, "})[d]; } ");
-    f2c_buffer_append(&context->output, "if (sequence < f2c_transform_source_count) { ");
-    f2c_transform_append_array_store(&context->output, target, "output", &source, "sequence");
+    f2c_buffer_append(&context->output, "})[f2c_transform_d]; } ");
+    f2c_buffer_append(&context->output,
+                      "if (f2c_transform_sequence < f2c_transform_source_count) { ");
+    f2c_transform_append_array_store(&context->output, target, "f2c_transform_output", &source,
+                                     "f2c_transform_sequence");
     f2c_buffer_append(&context->output, "} ");
     if (pad_expression != NULL) {
         f2c_buffer_append(&context->output, "else { ");
-        f2c_transform_append_array_store(&context->output, target, "output", &pad,
-                                         "(sequence - f2c_transform_source_count) % "
+        f2c_transform_append_array_store(&context->output, target, "f2c_transform_output", &pad,
+                                         "(f2c_transform_sequence - f2c_transform_source_count) % "
                                          "f2c_transform_pad_count");
         f2c_buffer_append(&context->output, "} ");
     }
@@ -461,12 +468,14 @@ static int emit_spread(Context *context, Unit *unit, Symbol *target, const F2cEx
         return 1;
     }
     f2c_transform_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output,
-                      "const int32_t f2c_transform_dimension = (int32_t)(%s); "
-                      "const int64_t f2c_transform_copies_value = (int64_t)(%s); "
-                      "if (f2c_transform_dimension < 1 || f2c_transform_dimension > %zu || "
-                      "f2c_transform_copies_value < 0) abort();\n",
-                      dimension_code, copies_code, result_rank);
+    f2c_buffer_printf(
+        &context->output,
+        "const int32_t f2c_transform_dimension = (int32_t)(%s); "
+        "const int64_t f2c_transform_copies_input = (int64_t)(%s); "
+        "const int64_t f2c_transform_copies_value = "
+        "f2c_transform_copies_input > 0 ? f2c_transform_copies_input : 0; "
+        "if (f2c_transform_dimension < 1 || f2c_transform_dimension > %zu) abort();\n",
+        dimension_code, copies_code, result_rank);
     if (source_rank != 0U)
         f2c_transform_emit_source_extents(context, &source, depth + 1);
     for (dimension = 0U; dimension < result_rank; ++dimension) {
@@ -506,28 +515,32 @@ static int emit_spread(Context *context, Unit *unit, Symbol *target, const F2cEx
     f2c_transform_emit_result_allocation(context, unit, target, source_expression, depth + 1);
     f2c_transform_indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output,
-                      "for (size_t output = 0U; output < f2c_transform_result_count; ++output) { ");
+                      "for (size_t f2c_transform_output = 0U; f2c_transform_output < "
+                      "f2c_transform_result_count; ++f2c_transform_output) { ");
     if (source_rank != 0U)
         f2c_buffer_append(&context->output,
-                          "size_t source_index = 0U, source_stride = 1U, result_stride = 1U; ");
+                          "size_t f2c_transform_source_index = 0U, f2c_transform_source_stride = "
+                          "1U, f2c_transform_result_stride = 1U; ");
     for (dimension = 0U; source_rank != 0U && dimension < result_rank; ++dimension) {
         f2c_buffer_printf(&context->output,
-                          "{ size_t coordinate = (output / result_stride) %% "
+                          "{ size_t f2c_transform_coordinate = (f2c_transform_output / "
+                          "f2c_transform_result_stride) %% "
                           "(f2c_transform_result_extent_%zu == 0U ? 1U : "
                           "f2c_transform_result_extent_%zu); "
                           "if (f2c_transform_dimension != %zu) "
-                          "{ source_index += coordinate * source_stride; source_stride *= "
-                          "f2c_transform_result_extent_%zu; } result_stride *= "
+                          "{ f2c_transform_source_index += f2c_transform_coordinate * "
+                          "f2c_transform_source_stride; f2c_transform_source_stride *= "
+                          "f2c_transform_result_extent_%zu; } f2c_transform_result_stride *= "
                           "f2c_transform_result_extent_%zu; } ",
                           dimension + 1U, dimension + 1U, dimension + 1U, dimension + 1U,
                           dimension + 1U);
     }
     if (source_rank == 0U)
-        f2c_transform_append_scalar_store(&context->output, target, "output", source_scalar,
-                                          source_length);
+        f2c_transform_append_scalar_store(&context->output, target, "f2c_transform_output",
+                                          source_scalar, source_length);
     else
-        f2c_transform_append_array_store(&context->output, target, "output", &source,
-                                         "source_index");
+        f2c_transform_append_array_store(&context->output, target, "f2c_transform_output", &source,
+                                         "f2c_transform_source_index");
     f2c_buffer_append(&context->output, "}\n");
     f2c_transform_emit_array_cleanup(context, &source, depth + 1);
     f2c_transform_emit_result_commit(context, unit, target, result_rank, depth + 1);
@@ -631,16 +644,18 @@ static int emit_shift(Context *context, Unit *unit, Symbol *target, const F2cExp
                               shift_array.extents[dimension]);
         f2c_buffer_append(&context->output, "};\n");
         f2c_transform_indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output, "for (size_t d = 0U, k = 0U; d < "
-                                            "sizeof(f2c_transform_shift_extents) / "
-                                            "sizeof(f2c_transform_shift_extents[0]) + 1U; ++d) "
-                                            "if (d + 1U != (size_t)f2c_transform_dimension && "
-                                            "f2c_transform_shift_extents[k++] != "
-                                            "((const size_t[]){");
+        f2c_buffer_append(
+            &context->output,
+            "for (size_t f2c_transform_d = 0U, f2c_transform_k = 0U; f2c_transform_d < "
+            "sizeof(f2c_transform_shift_extents) / "
+            "sizeof(f2c_transform_shift_extents[0]) + 1U; ++f2c_transform_d) "
+            "if (f2c_transform_d + 1U != (size_t)f2c_transform_dimension && "
+            "f2c_transform_shift_extents[f2c_transform_k++] != "
+            "((const size_t[]){");
         for (dimension = 0U; dimension < source.rank; ++dimension)
             f2c_buffer_printf(&context->output, "%sf2c_transform_source_extent_%zu",
                               dimension == 0U ? "" : ", ", dimension + 1U);
-        f2c_buffer_append(&context->output, "})[d]) abort();\n");
+        f2c_buffer_append(&context->output, "})[f2c_transform_d]) abort();\n");
     }
     if (boundary_value_expression != NULL && boundary_value_expression->rank != 0U) {
         f2c_transform_indent(&context->output, depth + 1);
@@ -651,16 +666,18 @@ static int emit_shift(Context *context, Unit *unit, Symbol *target, const F2cExp
                               boundary_array.extents[dimension]);
         f2c_buffer_append(&context->output, "};\n");
         f2c_transform_indent(&context->output, depth + 1);
-        f2c_buffer_append(&context->output, "for (size_t d = 0U, k = 0U; d < "
-                                            "sizeof(f2c_transform_boundary_extents) / "
-                                            "sizeof(f2c_transform_boundary_extents[0]) + 1U; ++d) "
-                                            "if (d + 1U != (size_t)f2c_transform_dimension && "
-                                            "f2c_transform_boundary_extents[k++] != "
-                                            "((const size_t[]){");
+        f2c_buffer_append(
+            &context->output,
+            "for (size_t f2c_transform_d = 0U, f2c_transform_k = 0U; f2c_transform_d < "
+            "sizeof(f2c_transform_boundary_extents) / "
+            "sizeof(f2c_transform_boundary_extents[0]) + 1U; ++f2c_transform_d) "
+            "if (f2c_transform_d + 1U != (size_t)f2c_transform_dimension && "
+            "f2c_transform_boundary_extents[f2c_transform_k++] != "
+            "((const size_t[]){");
         for (dimension = 0U; dimension < source.rank; ++dimension)
             f2c_buffer_printf(&context->output, "%sf2c_transform_source_extent_%zu",
                               dimension == 0U ? "" : ", ", dimension + 1U);
-        f2c_buffer_append(&context->output, "})[d]) abort();\n");
+        f2c_buffer_append(&context->output, "})[f2c_transform_d]) abort();\n");
     }
     for (dimension = 0U; dimension < source.rank; ++dimension) {
         f2c_transform_indent(&context->output, depth + 1);
@@ -673,72 +690,82 @@ static int emit_shift(Context *context, Unit *unit, Symbol *target, const F2cExp
     f2c_transform_emit_result_allocation(context, unit, target,
                                          f2c_transform_argument(call, "array", 0U), depth + 1);
     f2c_transform_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output,
-                      "for (size_t output = 0U; output < f2c_transform_result_count; ++output) { "
-                      "size_t coordinates[%zu] = {0}; size_t stride = 1U; ",
-                      source.rank);
+    f2c_buffer_printf(
+        &context->output,
+        "for (size_t f2c_transform_output = 0U; f2c_transform_output < f2c_transform_result_count; "
+        "++f2c_transform_output) { "
+        "size_t f2c_transform_coordinates[%zu] = {0}; size_t f2c_transform_stride = 1U; ",
+        source.rank);
     if (need_slice)
-        f2c_buffer_append(&context->output, "size_t slice = 0U; size_t slice_stride = 1U; ");
+        f2c_buffer_append(
+            &context->output,
+            "size_t f2c_transform_slice = 0U; size_t f2c_transform_slice_stride = 1U; ");
     for (dimension = 0U; dimension < source.rank; ++dimension) {
-        f2c_buffer_printf(&context->output,
-                          "coordinates[%zu] = (output / stride) %% "
-                          "f2c_transform_source_extent_%zu; stride *= "
-                          "f2c_transform_source_extent_%zu; ",
-                          dimension, dimension + 1U, dimension + 1U);
+        f2c_buffer_printf(
+            &context->output,
+            "f2c_transform_coordinates[%zu] = (f2c_transform_output / f2c_transform_stride) %% "
+            "f2c_transform_source_extent_%zu; f2c_transform_stride *= "
+            "f2c_transform_source_extent_%zu; ",
+            dimension, dimension + 1U, dimension + 1U);
         if (need_slice)
             f2c_buffer_printf(&context->output,
                               "if (f2c_transform_dimension != %zu) "
-                              "{ slice += coordinates[%zu] * slice_stride; slice_stride *= "
+                              "{ f2c_transform_slice += f2c_transform_coordinates[%zu] * "
+                              "f2c_transform_slice_stride; f2c_transform_slice_stride *= "
                               "f2c_transform_source_extent_%zu; } ",
                               dimension + 1U, dimension, dimension + 1U);
     }
     {
-        char *shift_value = slice_value(unit, shift, &shift_array, "slice", "0");
+        char *shift_value = slice_value(unit, shift, &shift_array, "f2c_transform_slice", "0");
         const char *boundary_fallback = target->type == TYPE_CHARACTER ? "\" \"" : "0";
         char *boundary_value =
-            slice_value(unit, boundary, &boundary_array, "slice", boundary_fallback);
+            slice_value(unit, boundary, &boundary_array, "f2c_transform_slice", boundary_fallback);
         char *boundary_length =
             target->type == TYPE_CHARACTER
                 ? (boundary != NULL ? f2c_character_length_expression(
                                           unit, f2c_transform_argument_value(boundary))
                                     : f2c_strdup("1U"))
                 : NULL;
-        f2c_buffer_printf(&context->output,
-                          "int64_t amount = (int64_t)(%s); size_t d = "
-                          "(size_t)(f2c_transform_dimension - 1); int64_t extent = "
-                          "(int64_t)((const size_t[%zu]){",
-                          shift_value != NULL ? shift_value : "0", source.rank);
+        f2c_buffer_printf(
+            &context->output,
+            "int64_t f2c_transform_amount = (int64_t)(%s); size_t f2c_transform_d = "
+            "(size_t)(f2c_transform_dimension - 1); const size_t f2c_transform_extent = "
+            "((const size_t[%zu]){",
+            shift_value != NULL ? shift_value : "0", source.rank);
         for (dimension = 0U; dimension < source.rank; ++dimension)
             f2c_buffer_printf(&context->output, "%sf2c_transform_source_extent_%zu",
                               dimension == 0U ? "" : ", ", dimension + 1U);
-        f2c_buffer_append(&context->output, "})[d]; int64_t f2c_shifted_index = "
-                                            "(int64_t)coordinates[d] + amount; ");
+        f2c_buffer_append(&context->output, "})[f2c_transform_d]; size_t f2c_shifted_index = 0U; ");
+        f2c_buffer_printf(&context->output,
+                          "const int f2c_transform_shift_valid = f2c_array_shift_position("
+                          "f2c_transform_coordinates[f2c_transform_d], f2c_transform_extent, "
+                          "f2c_transform_amount, %d, &f2c_shifted_index); ",
+                          !end_off);
         if (!end_off)
-            f2c_buffer_append(&context->output,
-                              "if (extent != 0) f2c_shifted_index = "
-                              "((f2c_shifted_index % extent) + extent) % extent; ");
-        f2c_buffer_append(&context->output,
-                          "size_t source_index = 0U; size_t source_stride = 1U; ");
+            f2c_buffer_append(&context->output, "if (!f2c_transform_shift_valid) abort(); ");
+        f2c_buffer_append(
+            &context->output,
+            "size_t f2c_transform_source_index = 0U; size_t f2c_transform_source_stride = 1U; ");
         for (dimension = 0U; dimension < source.rank; ++dimension)
             f2c_buffer_printf(&context->output,
-                              "source_index += (d == %zuU ? "
-                              "(size_t)(f2c_shifted_index < 0 ? 0 : f2c_shifted_index) : "
-                              "coordinates[%zu]) * source_stride; source_stride *= "
+                              "f2c_transform_source_index += (f2c_transform_d == %zuU ? "
+                              "f2c_shifted_index : "
+                              "f2c_transform_coordinates[%zu]) * f2c_transform_source_stride; "
+                              "f2c_transform_source_stride *= "
                               "f2c_transform_source_extent_%zu; ",
                               dimension, dimension, dimension + 1U);
         if (end_off) {
-            f2c_buffer_append(&context->output,
-                              "if (f2c_shifted_index < 0 || f2c_shifted_index >= extent) { ");
+            f2c_buffer_append(&context->output, "if (!f2c_transform_shift_valid) { ");
             f2c_transform_append_scalar_store(
-                &context->output, target, "output",
+                &context->output, target, "f2c_transform_output",
                 boundary_value != NULL ? boundary_value : boundary_fallback, boundary_length);
             f2c_buffer_append(&context->output, "} else { ");
-            f2c_transform_append_array_store(&context->output, target, "output", &source,
-                                             "source_index");
+            f2c_transform_append_array_store(&context->output, target, "f2c_transform_output",
+                                             &source, "f2c_transform_source_index");
             f2c_buffer_append(&context->output, "} ");
         } else {
-            f2c_transform_append_array_store(&context->output, target, "output", &source,
-                                             "source_index");
+            f2c_transform_append_array_store(&context->output, target, "f2c_transform_output",
+                                             &source, "f2c_transform_source_index");
         }
         free(shift_value);
         free(boundary_value);

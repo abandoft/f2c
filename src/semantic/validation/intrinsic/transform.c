@@ -256,11 +256,6 @@ static void validate_spread(Context *context, Unit *unit, size_t line, const cha
     if (source != NULL)
         (void)constant_dimension(context, unit, line, statement_text, "SPREAD", dimension,
                                  source->rank + 1U, &value);
-    if (copies != NULL && copies->type == TYPE_INTEGER && copies->rank == 0U &&
-        f2c_evaluate_integer_constant(unit, copies, &value) && value < 0)
-        f2c_diagnostic_at(context, line,
-                          f2c_validation_expression_start_column(statement_text, copies), 1,
-                          "SPREAD NCOPIES must not be negative");
 }
 
 static void validate_shift(Context *context, Unit *unit, size_t line, const char *statement_text,
