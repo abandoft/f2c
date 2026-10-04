@@ -36,6 +36,18 @@ program numeric_model_intrinsics
 
   if (precision(touch_complex()) /= 6 .or. range(touch_complex()) /= 37) error stop 19
   if (kind('f2c') /= 1 .or. kind(.true.) /= 4) error stop 20
+  if (kind(1_1 + 2_1) /= 1 .or. kind(2_2 - 1_2) /= 2) error stop 31
+  if (kind(2_1 * 3_2) /= 2 .or. kind(6_2 / 3_1) /= 2) error stop 32
+  if (kind(1_1 + 2_8) /= 8) error stop 33
+  if (kind(1.0 + 2_8) /= 4 .or. kind(2_8 + 1.0) /= 4) error stop 34
+  if (kind((1.0,0.0) + 2_8) /= 4) error stop 35
+  if (kind(2_8 + (1.0,0.0)) /= 4) error stop 36
+  if (kind(2.0 ** 3_8) /= 4 .or. kind((2.0,0.0) ** 3_8) /= 4) error stop 37
+  if (kind(.not. .true._1) /= 1) error stop 38
+  if (kind(.true._1 .and. .false._1) /= 1) error stop 39
+  if (kind(.true._2 .or. .false._2) /= 2) error stop 40
+  if (kind(.true._8 .eqv. .false._1) /= 8) error stop 41
+  if (kind(1_8 < 2_8) /= 4 .or. kind(1.0_8 == 2.0_8) /= 4) error stop 42
 
   if (selected_int_kind(2) /= 1 .or. selected_int_kind(3) /= 2) error stop 21
   if (selected_int_kind(9) /= 4 .or. selected_int_kind(18) /= 8) error stop 22
