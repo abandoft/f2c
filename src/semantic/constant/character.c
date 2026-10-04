@@ -1,34 +1,12 @@
 #include "internal/f2c.h"
+#include "semantic/constant/private.h"
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct F2cCharacterConstantEvaluation {
-    Unit *unit;
-    Context *context;
-    size_t steps;
-} F2cCharacterConstantEvaluation;
-
-static int evaluate(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *expression,
-                    char **value, size_t *length, size_t depth);
-
-static int consume_step(F2cCharacterConstantEvaluation *evaluation, size_t depth) {
-    const size_t depth_limit = evaluation->context != NULL
-                                   ? evaluation->context->limits.max_parse_depth
-                                   : F2C_DEFAULT_MAX_PARSE_DEPTH;
-    const size_t step_limit = evaluation->context != NULL
-                                  ? evaluation->context->limits.max_constant_steps
-                                  : F2C_DEFAULT_MAX_CONSTANT_STEPS;
-    const size_t used = evaluation->context != NULL ? evaluation->context->constant_evaluation_steps
-                                                    : evaluation->steps;
-    if ((depth_limit != 0U && depth >= depth_limit) || (step_limit != 0U && used >= step_limit))
-        return 0;
-    ++evaluation->steps;
-    if (evaluation->context != NULL)
-        ++evaluation->context->constant_evaluation_steps;
-    return 1;
-}
+static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression, char **value,
+                    size_t *length, size_t depth);
 
 static int allocate_result(size_t length, char **value) {
     if (value == NULL || length == SIZE_MAX)
@@ -40,9 +18,8 @@ static int allocate_result(size_t length, char **value) {
     return 1;
 }
 
-static int evaluate_adjustment(F2cCharacterConstantEvaluation *evaluation,
-                               const F2cExpr *expression, char **value, size_t *length,
-                               size_t depth, int right) {
+static int evaluate_adjustment(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
+                               char **value, size_t *length, size_t depth, int right) {
     const F2cExpr *argument =
         f2c_intrinsic_argument(expression->children, expression->child_count, "string", 0U);
     char *source = NULL;
@@ -73,7 +50,7 @@ static int evaluate_adjustment(F2cCharacterConstantEvaluation *evaluation,
     return 1;
 }
 
-static int evaluate_repeat(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *expression,
+static int evaluate_repeat(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
                            char **value, size_t *length, size_t depth) {
     const F2cExpr *string =
         f2c_intrinsic_argument(expression->children, expression->child_count, "string", 0U);
@@ -103,8 +80,8 @@ static int evaluate_repeat(F2cCharacterConstantEvaluation *evaluation, const F2c
     return 1;
 }
 
-static int evaluate_trim(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *expression,
-                         char **value, size_t *length, size_t depth) {
+static int evaluate_trim(F2cConstantEvaluation *evaluation, const F2cExpr *expression, char **value,
+                         size_t *length, size_t depth) {
     const F2cExpr *argument =
         f2c_intrinsic_argument(expression->children, expression->child_count, "string", 0U);
     char *source = NULL;
@@ -124,7 +101,7 @@ static int evaluate_trim(F2cCharacterConstantEvaluation *evaluation, const F2cEx
     return 1;
 }
 
-static int evaluate_merge(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *expression,
+static int evaluate_merge(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
                           char **value, size_t *length, size_t depth) {
     const F2cExpr *mask =
         f2c_intrinsic_argument(expression->children, expression->child_count, "mask", 2U);
@@ -139,7 +116,7 @@ static int evaluate_merge(F2cCharacterConstantEvaluation *evaluation, const F2cE
     return evaluate(evaluation, selected, value, length, depth + 1U);
 }
 
-static int evaluate_substring(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *expression,
+static int evaluate_substring(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
                               char **value, size_t *length, size_t depth) {
     const F2cExpr *parent = f2c_substring_parent(expression);
     const F2cExpr *range = f2c_substring_range(expression);
@@ -183,9 +160,10 @@ static int evaluate_substring(F2cCharacterConstantEvaluation *evaluation, const 
     return 1;
 }
 
-static int evaluate(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *expression,
-                    char **value, size_t *length, size_t depth) {
-    if (expression == NULL || value == NULL || length == NULL || !consume_step(evaluation, depth))
+static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression, char **value,
+                    size_t *length, size_t depth) {
+    if (expression == NULL || value == NULL || length == NULL ||
+        !f2c_constant_consume_step(evaluation, depth))
         return 0;
     if ((expression->kind == F2C_EXPR_KEYWORD_ARGUMENT ||
          expression->kind == F2C_EXPR_PARENTHESIZED) &&
@@ -228,8 +206,7 @@ static int evaluate(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *e
         return 1;
     }
     if (expression->kind == F2C_EXPR_BINARY && expression->type == TYPE_CHARACTER &&
-        expression->text != NULL && strcmp(expression->text, "//") == 0 &&
-        expression->child_count == 2U) {
+        expression->operator_kind == F2C_OPERATOR_CONCATENATE && expression->child_count == 2U) {
         char *left = NULL;
         char *right = NULL;
         size_t left_length = 0U;
@@ -278,9 +255,14 @@ static int evaluate(F2cCharacterConstantEvaluation *evaluation, const F2cExpr *e
     return 0;
 }
 
+int f2c_constant_evaluate_character(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
+                                    char **value, size_t *length, size_t depth) {
+    return evaluate(evaluation, expression, value, length, depth);
+}
+
 int f2c_evaluate_character_constant(Unit *unit, const F2cExpr *expression, char **value,
                                     size_t *length) {
-    F2cCharacterConstantEvaluation evaluation = {unit, unit != NULL ? unit->context : NULL, 0U};
+    F2cConstantEvaluation evaluation = {unit, unit != NULL ? unit->context : NULL, 0U};
     if (value == NULL || length == NULL)
         return 0;
     *value = NULL;
