@@ -1,3 +1,15 @@
+## 1.52.0
+
+- Improve expression kind inference, mixed numeric conversions, and invalid-operation diagnostics.
+- Correct precedence and associativity in logical, unary arithmetic, and power expressions.
+- Fix precision loss, incorrect truncation, and overflow checks in narrow and wide integer powers.
+- Correct result types and values when raising integer bases to real or complex powers.
+- Preserve the parity of very large integer exponents in real and complex powers.
+- Correct negative integer power evaluation to retain representable very small results.
+- Improve logical, numeric, and character relational constant evaluation and `SELECT CASE` overlap checks.
+- Unify logical equivalence semantics in scalar expressions and array reductions.
+- Correct operand conversions in mixed-kind matrix multiplication.
+
 ## 1.51.0
 
 - Unify signed-zero handling in constant and runtime real `MIN/MAX` evaluation.
