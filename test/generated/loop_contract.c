@@ -59,6 +59,28 @@ static void test_default_integer_unit_strides(void) {
     assert(trips == 3 && values[0] == 3 && values[1] == 2 && values[2] == 1 && final_value == 0);
 }
 
+static void test_positive_unit_domain(void) {
+    static const struct {
+        int32_t last, cap, trips, final_value;
+    } cases[] = {
+        {INT32_MIN, 4, 0, 5}, {-1, 4, 0, 5}, {0, 4, 0, 5}, {4, 4, 0, 5},
+        {5, 4, 1, 6},         {7, 4, 3, 8},  {7, 2, 2, 6}, {INT32_MAX, 4, 4, 8},
+    };
+    for (size_t index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        int32_t values[4] = {0}, trips = -1, final_value = 0;
+        loop32_positive_unit(&cases[index].last, &cases[index].cap, values, &trips, &final_value);
+        assert(trips == cases[index].trips && final_value == cases[index].final_value);
+        for (int32_t trip = 0; trip < trips; ++trip)
+            assert(values[trip] == 5 + trip);
+    }
+    const int32_t maximum = INT32_MAX, empty = INT32_MAX - 1;
+    int32_t trips = -1, final_value = 0;
+    loop32_positive_edge(&maximum, &trips, &final_value);
+    assert(trips == 1 && final_value == INT32_MIN);
+    loop32_positive_edge(&empty, &trips, &final_value);
+    assert(trips == 0 && final_value == INT32_MAX);
+}
+
 static void test_default_integer_constant_strides(void) {
     const int32_t first = INT32_MAX - 10, last = INT32_MAX;
     int32_t values[4] = {0}, trips = -1, final_value = 0;
@@ -225,6 +247,7 @@ int main(int argc, char **argv) {
     test_conversion();
     test_default_integer_range();
     test_default_integer_unit_strides();
+    test_positive_unit_domain();
     test_default_integer_constant_strides();
     test_real_counts();
     CHECK_NARROW(8, int8_t, INT8_MAX, INT8_MIN);
