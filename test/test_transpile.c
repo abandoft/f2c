@@ -420,10 +420,12 @@ static void test_wide_do_trip_count(void) {
     F2cOptions options = {"wide_do.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "wide-trip-count DO translates without errors");
-    expect_contains(result.code, "int64_t f2c_do_index_",
-                    "DO ranges spanning the default-integer domain retain a wide monotone index");
-    expect_contains(result.code, "F2C_LOOP_VALUE_I32(f2c_do_index_",
-                    "the final wide index is converted with the defined source-width policy");
+    expect_contains(result.code, "int64_t f2c_do_count_",
+                    "DO ranges spanning the default-integer domain retain a wide exact count");
+    expect_contains(result.code, " > 0 ? i + f2c_do_step_",
+                    "direct signed induction advances only between active iterations");
+    expect_contains(result.code, " == 0) i = (F2C_LOOP_I32(i, ",
+                    "the defined final update requires normal count exhaustion, not EXIT");
     f2c_result_free(&result);
 
     {
@@ -437,12 +439,12 @@ static void test_wide_do_trip_count(void) {
         F2cOptions stride_options = {"stride_do.f90", F2C_SOURCE_FREE, 0};
         F2cResult stride = f2c_transpile(stride_source, strlen(stride_source), &stride_options);
         expect(stride.error_count == 0U, "wide-stride default-integer DO translates");
-        expect_contains(stride.code, "int64_t f2c_do_index_",
-                        "constant-stride default-integer DO uses a nonwrapping wide index");
-        expect_not_contains(stride.code, "f2c_do_count_",
-                            "monotone cached controls do not need a separate trip counter");
-        expect_contains(stride.code, "<= (int64_t)f2c_do_limit_",
-                        "a constant positive direction has a single canonical exit comparison");
+        expect_contains(stride.code, "int32_t f2c_do_count_",
+                        "a stride of four has a proven default-integer trip-count bound");
+        expect_contains(stride.code, " > 0 ? i + f2c_do_step_",
+                        "constant strides retain nonwrapping active signed induction");
+        expect_contains(stride.code, "F2C_LOOP_UNROLL\n    for (; f2c_do_count_",
+                        "the exact-count header supports canonical optimization hints");
         expect_not_contains(stride.code, "for (; (f2c_do_step_",
                             "constant loop directions do not retain a conditional exit");
         f2c_result_free(&stride);
@@ -477,8 +479,10 @@ static void test_wide_do_trip_count(void) {
         F2cResult relative =
             f2c_transpile(relative_source, strlen(relative_source), &relative_options);
         expect(relative.error_count == 0U, "fixed-relative default-integer DO translates");
-        expect_contains(relative.code, "int64_t f2c_do_index_",
-                        "fixed relative ranges retain a nonwrapping wide index");
+        expect_contains(relative.code, "int32_t f2c_do_count_",
+                        "fixed relative ranges retain their proven narrow exact trip count");
+        expect_contains(relative.code, " > 0 ? i + f2c_do_step_",
+                        "relative controls advance only while a further active value remains");
         f2c_result_free(&relative);
     }
     {
@@ -492,10 +496,14 @@ static void test_wide_do_trip_count(void) {
         F2cOptions dynamic_options = {"dynamic_do.f90", F2C_SOURCE_FREE, 0};
         F2cResult dynamic = f2c_transpile(dynamic_source, strlen(dynamic_source), &dynamic_options);
         expect(dynamic.error_count == 0U, "dynamic-direction default-integer DO translates");
-        expect_contains(dynamic.code, "for (; (f2c_do_step_",
-                        "dynamic directions retain both cached range comparisons");
-        expect_not_contains(dynamic.code, "F2C_LOOP_UNROLL\n    for (; (f2c_do_step_",
-                            "noncanonical exits do not receive rejected GCC unroll annotations");
+        expect_contains(dynamic.code, "int64_t f2c_do_count_",
+                        "dynamic strides retain the full default-integer interval count");
+        expect_contains(dynamic.code, "else if (f2c_do_step_",
+                        "both cached stride directions participate in exact count setup");
+        expect_contains(dynamic.code, "F2C_LOOP_UNROLL\n    for (; f2c_do_count_",
+                        "dynamic directions receive hints on a canonical count exit");
+        expect_not_contains(dynamic.code, "for (; (f2c_do_step_",
+                            "dynamic directions do not create unsupported conditional exits");
         f2c_result_free(&dynamic);
     }
 }
