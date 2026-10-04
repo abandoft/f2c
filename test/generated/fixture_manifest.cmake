@@ -125,6 +125,8 @@ set(
     do_semantics
     data_statement
     lexical_literals
+    operator_kinds
+    operator_power_policy
     select_case
     named_constructs
     where_construct
