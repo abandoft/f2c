@@ -122,6 +122,8 @@ static char *component_initializer(Unit *caller, Unit *scope, const Symbol *comp
             caller->context->output.limit_exceeded = 1;
             return NULL;
         }
+        if (expression != NULL && f2c_expression_is_initialization_constant(expression))
+            return f2c_unit_static_storage_initializer(scope, &value);
         if (expression != NULL && expression->rank != 0U &&
             expression->kind != F2C_EXPR_ARRAY_CONSTRUCTOR)
             return NULL;

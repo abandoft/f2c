@@ -377,12 +377,13 @@ static void validate_structure_constructor(Context *context, size_t line,
         assigned[component] = 1U;
         {
             const Symbol *declared = &expression->derived_type->components[component];
-            if (declared->pointer || declared->allocatable || declared->rank != 0U ||
-                declared->type == TYPE_CHARACTER) {
+            if (declared->pointer || declared->allocatable ||
+                ((declared->rank != 0U || declared->type == TYPE_CHARACTER) &&
+                 !f2c_expression_is_initialization_constant(value))) {
                 f2c_diagnostic_at(
                     context, line, f2c_validation_expression_start_column(statement_text, actual),
                     1,
-                    "constructor component '%s' uses pointer, allocatable, array, or CHARACTER "
+                    "constructor component '%s' requires dynamic component construction "
                     "semantics that are not yet supported",
                     declared->name);
             } else if (value != NULL &&
@@ -397,6 +398,16 @@ static void validate_structure_constructor(Context *context, size_t line,
                                   f2c_validation_expression_start_column(statement_text, value), 1,
                                   "constructor value for component '%s' has an incompatible "
                                   "derived type",
+                                  declared->name);
+            } else if (value != NULL && declared->rank == 0U && value->rank != 0U) {
+                f2c_diagnostic_at(
+                    context, line, f2c_validation_expression_start_column(statement_text, value), 1,
+                    "constructor value for scalar component '%s' must be scalar", declared->name);
+            } else if (value != NULL && declared->rank != 0U && value->rank != 0U &&
+                       declared->rank != value->rank) {
+                f2c_diagnostic_at(context, line,
+                                  f2c_validation_expression_start_column(statement_text, value), 1,
+                                  "constructor value for component '%s' has an incompatible rank",
                                   declared->name);
             }
         }
