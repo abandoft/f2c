@@ -22,8 +22,6 @@ typedef struct F2cRequiredFeatures {
     int complex_values;
     int transfer;
     int namelist;
-    int maxloc;
-    int maxval;
     int reduction;
     int qualified_storage;
     int min;
@@ -76,13 +74,7 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
     name = expression->text;
     if (strcmp(name, "transfer") == 0)
         features->transfer = 1;
-    else if (expression->intrinsic == F2C_INTRINSIC_MAXLOC) {
-        features->maxloc = 1;
-        features->reduction = 1;
-    } else if (expression->intrinsic == F2C_INTRINSIC_MAXVAL) {
-        features->maxval = 1;
-        features->reduction = 1;
-    } else if (f2c_intrinsic_is_reduction(expression->intrinsic)) {
+    else if (f2c_intrinsic_is_reduction(expression->intrinsic)) {
         features->reduction = 1;
     } else if (expression->intrinsic == F2C_INTRINSIC_MIN) {
         features->min = 1;
@@ -271,11 +263,9 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
         const int needs_complex = features.complex_values;
         const int needs_transfer = features.transfer;
         const int needs_namelist = features.namelist;
-        const int needs_maxloc = features.maxloc;
-        const int needs_maxval = features.maxval;
         const int needs_reduction = features.reduction;
-        const int needs_min = features.min;
-        const int needs_max = features.max;
+        const int needs_min = features.min || needs_reduction;
+        const int needs_max = features.max || needs_reduction;
         const int needs_io = features.io;
         const int needs_random = features.random;
         const int needs_time_intrinsic = features.time_intrinsic;
@@ -744,34 +734,6 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                 "bi), 0.0 * (ai * br - ar * bi)); } return f2c_make_z(NAN, NAN); }\n");
         }
         f2c_emit_extremum_support(&context.output, needs_min, needs_max);
-        if (needs_maxloc) {
-            f2c_buffer_append(
-                &context.output,
-                "static inline F2C_UNUSED int32_t f2c_smaxloc(const float *v, int32_t n) { int32_t "
-                "i, p = "
-                "n > 0 ? 1 : 0; for (i = 1; i < n; ++i) if (v[i] > v[p - 1]) p = i + 1; "
-                "return p; }\n"
-                "static inline F2C_UNUSED int32_t f2c_dmaxloc(const double *v, int32_t n) { "
-                "int32_t i, p = "
-                "n > 0 ? 1 : 0; for (i = 1; i < n; ++i) if (v[i] > v[p - 1]) p = i + 1; "
-                "return p; }\n"
-                "#define F2C_MAXLOC(v, n) _Generic(*(v), float: f2c_smaxloc, double: "
-                "f2c_dmaxloc)((v), (n))\n");
-        }
-        if (needs_maxval) {
-            f2c_buffer_append(
-                &context.output,
-                "static inline F2C_UNUSED float f2c_smaxval(const float *v, int32_t n) { int32_t "
-                "i; float "
-                "r = n > 0 ? v[0] : 0.0f; for (i = 1; i < n; ++i) if (v[i] > r) r = v[i]; "
-                "return r; }\n"
-                "static inline F2C_UNUSED double f2c_dmaxval(const double *v, int32_t n) { int32_t "
-                "i; "
-                "double r = n > 0 ? v[0] : 0.0; for (i = 1; i < n; ++i) if (v[i] > r) r = "
-                "v[i]; return r; }\n"
-                "#define F2C_MAXVAL(v, n) _Generic(*(v), float: f2c_smaxval, double: "
-                "f2c_dmaxval)((v), (n))\n");
-        }
         if (needs_reduction)
             f2c_emit_reduction_support(&context.output, needs_complex, features.qualified_storage);
         if (needs_random) {
