@@ -128,6 +128,10 @@ static void validate_intrinsic_arity(Context *context, size_t line, const char *
             context, line, f2c_validation_expression_start_column(statement_text, expression), 1,
             "%s requires exactly %zu argument%s", signature->name, signature->minimum_arguments,
             signature->minimum_arguments == 1U ? "" : "s");
+    } else if (signature->maximum_arguments == SIZE_MAX) {
+        f2c_diagnostic_at(
+            context, line, f2c_validation_expression_start_column(statement_text, expression), 1,
+            "%s requires at least %zu arguments", signature->name, signature->minimum_arguments);
     } else {
         f2c_diagnostic_at(context, line,
                           f2c_validation_expression_start_column(statement_text, expression), 1,

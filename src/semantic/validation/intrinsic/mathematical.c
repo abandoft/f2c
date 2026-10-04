@@ -1,5 +1,6 @@
 #include "semantic/validation/private.h"
 
+#include "semantic/intrinsic/extremum.h"
 #include "semantic/numeric_model.h"
 #include "semantic/validation/intrinsic/arguments.h"
 
@@ -200,8 +201,7 @@ static void validate_specific(Context *context, size_t line, const char *stateme
 
 static void validate_dprod(Context *context, size_t line, const char *statement_text,
                            F2cExpr *expression) {
-    const F2cIntrinsicArgumentSchema *schema =
-        f2c_intrinsic_argument_schema(F2C_INTRINSIC_DPROD);
+    const F2cIntrinsicArgumentSchema *schema = f2c_intrinsic_argument_schema(F2C_INTRINSIC_DPROD);
     const F2cBoundIntrinsicArguments bound =
         f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     size_t argument;
@@ -226,8 +226,7 @@ static void validate_unary(Context *context, Unit *unit, size_t line, const char
 
 static void validate_atan2(Context *context, size_t line, const char *statement_text,
                            F2cExpr *expression) {
-    const F2cIntrinsicArgumentSchema *schema =
-        f2c_intrinsic_argument_schema(F2C_INTRINSIC_ATAN2);
+    const F2cIntrinsicArgumentSchema *schema = f2c_intrinsic_argument_schema(F2C_INTRINSIC_ATAN2);
     const F2cBoundIntrinsicArguments bound =
         f2c_validation_bind_intrinsic_expression(context, line, statement_text, expression);
     size_t argument;
@@ -249,16 +248,6 @@ static void validate_atan2(Context *context, size_t line, const char *statement_
                           f2c_validation_expression_start_column(statement_text, bound.values[1]),
                           1, "ATAN2 arguments Y and X must have the same type and kind");
     validate_specific(context, line, statement_text, expression, bound.values[0], bound.values[1]);
-}
-
-static size_t maximum_argument_index(const F2cExpr *argument) {
-    char *end;
-    unsigned long value;
-    if (argument == NULL || argument->kind != F2C_EXPR_KEYWORD_ARGUMENT || argument->text == NULL ||
-        argument->text[0] != 'a' || argument->text[1] == '\0')
-        return SIZE_MAX;
-    value = strtoul(argument->text + 1, &end, 10);
-    return *end == '\0' && value >= 1UL && value <= 64UL ? (size_t)value - 1U : SIZE_MAX;
 }
 
 static const char *extremum_name(const F2cExpr *expression) {
@@ -301,76 +290,82 @@ static int specific_extremum_contract(const F2cExpr *expression, Type *type, int
 static void validate_extremum(Context *context, size_t line, const char *statement_text,
                               F2cExpr *expression) {
     const char *name = extremum_name(expression);
-    const F2cExpr *values[64] = {0};
+    F2cExtremumBinding bound;
     Type required_type = TYPE_UNKNOWN;
     int required_kind = 0;
-    size_t positional = 0U;
     size_t argument;
-    int saw_keyword = 0;
-    for (argument = 0U; argument < expression->child_count; ++argument) {
-        F2cExpr *actual = expression->children[argument];
-        size_t index;
-        if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT) {
-            saw_keyword = 1;
-            index = maximum_argument_index(actual);
-            if (index == SIZE_MAX) {
-                f2c_diagnostic_at(context, line,
-                                  f2c_validation_expression_start_column(statement_text, actual), 1,
-                                  "%s has no argument named '%s'", name,
-                                  actual->text != NULL ? actual->text : "");
-                continue;
-            }
-        } else {
-            if (saw_keyword)
-                f2c_diagnostic_at(
-                    context, line, f2c_validation_expression_start_column(statement_text, actual),
-                    1, "positional argument in %s cannot follow a keyword argument", name);
-            index = positional++;
+    if (!f2c_extremum_bind(expression, &bound)) {
+        const size_t column =
+            f2c_validation_expression_start_column(statement_text, bound.offending);
+        switch (bound.error) {
+        case F2C_EXTREMUM_BINDING_UNKNOWN_NAME:
+            f2c_diagnostic_at(context, line, column, 1, "%s has no argument named '%s'", name,
+                              bound.offending != NULL && bound.offending->text != NULL
+                                  ? bound.offending->text
+                                  : "");
+            break;
+        case F2C_EXTREMUM_BINDING_DUPLICATE:
+            f2c_diagnostic_at(context, line, column, 1,
+                              "%s argument 'a%zu' is specified more than once", name,
+                              bound.error_index + 1U);
+            break;
+        case F2C_EXTREMUM_BINDING_POSITIONAL_AFTER_KEYWORD:
+            f2c_diagnostic_at(context, line, column, 1,
+                              "positional argument in %s cannot follow a keyword argument", name);
+            break;
+        case F2C_EXTREMUM_BINDING_MISSING:
+            f2c_diagnostic_at(context, line, column, 1, "%s requires argument A%zu", name,
+                              bound.error_index + 1U);
+            break;
+        case F2C_EXTREMUM_BINDING_ALLOCATION:
+            f2c_diagnostic_at(context, line, column, 1, "out of memory binding %s arguments", name);
+            break;
+        case F2C_EXTREMUM_BINDING_INVALID_VALUE:
+        case F2C_EXTREMUM_BINDING_VALID:
+            f2c_diagnostic_at(context, line, column, 1, "%s argument A%zu must have a value", name,
+                              bound.error_index + 1U);
+            break;
         }
-        if (index >= 64U)
-            continue;
-        if (values[index] != NULL) {
-            f2c_diagnostic_at(context, line,
-                              f2c_validation_expression_start_column(statement_text, actual), 1,
-                              "%s argument 'a%zu' is specified more than once", name, index + 1U);
-            continue;
-        }
-        values[index] = f2c_validation_actual_value(actual);
-    }
-    if (values[0] == NULL || values[1] == NULL)
+        f2c_extremum_binding_clear(&bound);
         return;
+    }
     if (specific_extremum_contract(expression, &required_type, &required_kind)) {
-        for (argument = 0U; argument < 64U; ++argument) {
-            if (values[argument] != NULL && (values[argument]->type != required_type ||
-                                             expression_kind(values[argument]) != required_kind))
+        for (argument = 0U; argument < bound.count; ++argument) {
+            const F2cExtremumActual *value = &bound.values[argument];
+            if (value->value->type != required_type ||
+                expression_kind(value->value) != required_kind)
                 f2c_diagnostic_at(
                     context, line,
-                    f2c_validation_expression_start_column(statement_text, values[argument]), 1,
-                    "%s argument A%zu must be %s(kind=%d)", name, argument + 1U,
+                    f2c_validation_expression_start_column(statement_text, value->value), 1,
+                    "%s argument A%zu must be %s(kind=%d)", name, value->index + 1U,
                     f2c_validation_type_name(required_type), required_kind);
         }
+        f2c_extremum_binding_clear(&bound);
         return;
     }
-    if (values[0]->type != TYPE_INTEGER && !is_real(values[0]->type)) {
-        diagnose_type(context, line, statement_text, name, "A1", values[0], "INTEGER or REAL");
+    const F2cExpr *first = bound.values[0].value;
+    if (first->type != TYPE_INTEGER && !is_real(first->type)) {
+        diagnose_type(context, line, statement_text, name, "A1", first, "INTEGER or REAL");
+        f2c_extremum_binding_clear(&bound);
         return;
     }
-    if (!is_supported_numeric(values[0])) {
-        f2c_diagnostic_at(
-            context, line, f2c_validation_expression_start_column(statement_text, values[0]), 1,
-            "%s argument A1 uses unsupported kind %d", name, expression_kind(values[0]));
+    if (!is_supported_numeric(first)) {
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, first), 1,
+                          "%s argument A1 uses unsupported kind %d", name, expression_kind(first));
+        f2c_extremum_binding_clear(&bound);
         return;
     }
-    for (argument = 1U; argument < 64U; ++argument) {
-        if (values[argument] == NULL)
-            continue;
-        if (values[argument]->type != values[0]->type ||
-            expression_kind(values[argument]) != expression_kind(values[0]))
-            f2c_diagnostic_at(
-                context, line,
-                f2c_validation_expression_start_column(statement_text, values[argument]), 1,
-                "%s argument A%zu must have the same type and kind as A1", name, argument + 1U);
+    for (argument = 1U; argument < bound.count; ++argument) {
+        const F2cExtremumActual *value = &bound.values[argument];
+        if (value->value->type != first->type ||
+            expression_kind(value->value) != expression_kind(first))
+            f2c_diagnostic_at(context, line,
+                              f2c_validation_expression_start_column(statement_text, value->value),
+                              1, "%s argument A%zu must have the same type and kind as A1", name,
+                              value->index + 1U);
     }
+    f2c_extremum_binding_clear(&bound);
 }
 
 void f2c_validation_mathematical_intrinsic(Context *context, Unit *unit, size_t line,
