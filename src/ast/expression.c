@@ -158,7 +158,8 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
         clone = f2c_expr_new(F2C_EXPR_INTEGER_LITERAL, TYPE_INTEGER, literal, (size_t)length);
         if (clone == NULL)
             return NULL;
-        clone->type_kind = f2c_default_kind(TYPE_INTEGER);
+        clone->type_kind =
+            expression->type_kind != 0 ? expression->type_kind : f2c_default_kind(TYPE_INTEGER);
         clone->span = expression->span;
         clone->source_offset = expression->source_offset;
         clone->source_length = expression->source_length;
