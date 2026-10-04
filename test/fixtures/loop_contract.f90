@@ -1,3 +1,31 @@
+subroutine loop32_positive_unit(last, cap, values, trips, final_value)
+  use iso_fortran_env, only: int32
+  implicit none
+  integer(int32), intent(in) :: last, cap
+  integer(int32), intent(out) :: values(4), trips, final_value
+  integer(int32) :: iterator
+  trips = 0
+  do iterator = 5, last
+    trips = trips + 1
+    values(trips) = iterator
+    if (trips >= cap) exit
+  end do
+  final_value = iterator
+end subroutine
+
+subroutine loop32_positive_edge(last, trips, final_value)
+  use iso_fortran_env, only: int32
+  implicit none
+  integer(int32), intent(in) :: last
+  integer(int32), intent(out) :: trips, final_value
+  integer(int32) :: iterator
+  trips = 0
+  do iterator = 2147483647, last
+    trips = trips + 1
+  end do
+  final_value = iterator
+end subroutine
+
 subroutine loop8(first, last, stride, cap, values, trips, final_value)
   use iso_fortran_env, only: int8
   implicit none
