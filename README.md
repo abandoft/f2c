@@ -154,6 +154,11 @@ The currently tested implementation includes:
 - intrinsic numeric, logical, CHARACTER, and complex types; explicit and implicit typing; typed
   expressions, array constructors, sections, vector subscripts, reductions, and selected
   transformational intrinsics;
+- tested static storage and whole-array arguments for local, host-associated, and imported
+  `PARAMETER` arrays; shared typed column-major constant evaluation covers nested constructors,
+  implied `DO`, parameter dependencies, supported transforms, and fixed component initialization,
+  preserving declared kinds, lower bounds, and character padding; explicit constructor type-specs,
+  arbitrary constant array expressions, and dynamic derived payloads remain incomplete;
 - explicit, abstract, generic, and procedure-pointer interfaces; positional, keyword, optional,
   and procedure arguments on the supported ABI paths;
 - allocatable and pointer objects, descriptors, automatic reallocation, `SOURCE=`, `MOLD=`,
@@ -181,6 +186,9 @@ The currently tested implementation includes:
   operands; allocation-free direct reductions remain for simple array/scalar comparisons;
 - structured and legacy control flow, formatted and list-directed I/O, internal files, nonadvancing
   I/O, defined I/O, and recursive NAMELIST handling on the documented paths;
+- tested pre-counted legacy REAL kind 4/8 `DO`, single-evaluation controls, qualified storage,
+  and post-loop values; termination no longer depends on an accumulated floating-point value
+  crossing a bound, and invalid steps or unrepresentable counts fail before execution;
 - shared `DECIMAL/ROUND/SIGN/DELIM` scopes, binary32/64-aware exact input rounding, escaped
   list-directed CHARACTER output, and inherited DT child controls and record positions;
 - `RESHAPE`, `PACK`, `UNPACK`, `SPREAD`, `CSHIFT`, `EOSHIFT`, and `FINDLOC` lowering for the tested
@@ -194,7 +202,9 @@ and argument mappings, every formatted-I/O layout rule, complete list-directed n
 input combinations,
 pointer reassociation during NAMELIST input, and multi-compiler ABI
 certification. Unsupported semantics must produce diagnostics rather than plausible but incorrect
-C. The detailed checklist is maintained in [TODO.md](TODO.md).
+C. `FINDLOC` currently still rejects valid searches across numeric categories or kinds; its
+complete comparison contract remains open. The detailed checklist is maintained in
+[TODO.md](TODO.md).
 
 ## Validation
 
