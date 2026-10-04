@@ -213,8 +213,21 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
             goto failed;
         if (widened_index) {
             indent(&context->output, *depth);
-            f2c_buffer_printf(&context->output, "int64_t %s_index_%zu = (int64_t)%s_start_%zu;\n",
-                              prefix, loop_id, prefix, loop_id);
+            f2c_buffer_printf(&context->output, "%s %s_index_%zu = (%s)%s_start_%zu;\n",
+                              canonical_positive_unit ? "uint32_t" : "int64_t", prefix, loop_id,
+                              canonical_positive_unit ? "uint32_t" : "int64_t", prefix, loop_id);
+            if (canonical_positive_unit) {
+                /* A positive literal start and an int32 limit give active indices
+                 * in [start, INT32_MAX]. Normalize an empty interval before the
+                 * unsigned comparison; the final update is at most 2^31, so it
+                 * cannot wrap uint32_t or overflow a signed induction variable. */
+                indent(&context->output, *depth);
+                f2c_buffer_printf(&context->output,
+                                  "const uint32_t %s_bound_%zu = %s_limit_%zu >= %s_start_%zu "
+                                  "? (uint32_t)%s_limit_%zu : (uint32_t)%s_start_%zu - 1U;\n",
+                                  prefix, loop_id, prefix, loop_id, prefix, loop_id, prefix,
+                                  loop_id, prefix, loop_id);
+            }
         } else if (!default_integer) {
             f2c_loop_emit_state(&context->output, prefix, loop_id, NULL, 0, *depth);
         } else {
@@ -288,7 +301,11 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
     }
     indent(&context->output, *depth);
     if (statement->left->type == TYPE_INTEGER) {
-        if (widened_index)
+        if (canonical_positive_unit)
+            f2c_buffer_printf(&context->output,
+                              "for (; %s_index_%zu <= %s_bound_%zu; ++%s_index_%zu) {\n",
+                              prefix, loop_id, prefix, loop_id, prefix, loop_id);
+        else if (widened_index)
             f2c_buffer_printf(&context->output,
                               "for (; %s_index_%zu %s (int64_t)%s_limit_%zu; "
                               "%s%s_index_%zu) {\n",
