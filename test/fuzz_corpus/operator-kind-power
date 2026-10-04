@@ -1,0 +1,8 @@
+program p
+integer(8), parameter :: k = 3_1 ** 39_8
+real(8), parameter :: odd = (-1.0_8) ** 9007199254740993_8
+complex(8) :: value
+logical(1) :: flag
+value = 2_8 ** (0.5_8,0.0_8)
+flag = .false._1 .eqv. .true._1 .or. .true._1
+end
