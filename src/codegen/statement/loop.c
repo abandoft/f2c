@@ -76,6 +76,15 @@ static int is_canonical_positive_unit_do(const F2cStatement *statement) {
            integer_literal_value(statement->step, &step) && step == 1;
 }
 
+static int has_widened_default_integer_index(const F2cStatement *statement) {
+    return statement != NULL && statement->left != NULL && statement->right != NULL &&
+           statement->limit != NULL && statement->step != NULL &&
+           statement->left->type == TYPE_INTEGER &&
+           statement->left->type_kind == f2c_default_kind(TYPE_INTEGER) &&
+           statement->left->storage_qualifiers == 0U &&
+           (statement->left->symbol == NULL || !statement->left->symbol->equivalence_unaligned);
+}
+
 static void emit_condition(Buffer *output, const char *condition) {
     const size_t length = strlen(condition);
     if (length >= 2U && condition[0] == '(' && condition[length - 1U] == ')')
@@ -101,6 +110,7 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
     F2cPreparedStatementExpression finish_expression;
     F2cPreparedStatementExpression step_expression;
     const int canonical_positive_unit = is_canonical_positive_unit_do(statement);
+    const int widened_index = has_widened_default_integer_index(statement);
     const int default_integer = statement->left->type == TYPE_INTEGER &&
                                 statement->left->type_kind == f2c_default_kind(TYPE_INTEGER);
     const char *c_type = f2c_expression_c_type(statement->left);
@@ -159,9 +169,11 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "if (%s_step_%zu == 0) abort();\n", prefix,
                               loop_id);
-            advance = f2c_loop_advance_expression(unit, statement->left, prefix, loop_id);
-            if (advance == NULL)
-                goto failed;
+            if (!widened_index) {
+                advance = f2c_loop_advance_expression(unit, statement->left, prefix, loop_id);
+                if (advance == NULL)
+                    goto failed;
+            }
         }
         indent(&context->output, *depth);
         {
@@ -175,7 +187,7 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
             f2c_buffer_printf(&context->output, "%s;\n", store);
             free(store);
         }
-        if (canonical_positive_unit) {
+        if (widened_index) {
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "int64_t %s_index_%zu = (int64_t)%s_start_%zu;\n",
                               prefix, loop_id, prefix, loop_id);
@@ -240,7 +252,18 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
                               "for (; %s_index_%zu <= (int64_t)%s_limit_%zu; "
                               "++%s_index_%zu) {\n",
                               prefix, loop_id, prefix, loop_id, prefix, loop_id);
-        else if (!default_integer) {
+        else if (widened_index) {
+            /* Cached controls are all int32_t. Every active value and the one
+             * final overshoot fit int64_t, in either direction. Comparing this
+             * monotone index gives the same exact count without a wrapping
+             * source-width induction variable that blocks array vectorization. */
+            f2c_buffer_printf(&context->output,
+                              "for (; (%s_step_%zu > 0 ? %s_index_%zu <= (int64_t)%s_limit_%zu "
+                              ": %s_index_%zu >= (int64_t)%s_limit_%zu); "
+                              "%s_index_%zu += (int64_t)%s_step_%zu) {\n",
+                              prefix, loop_id, prefix, loop_id, prefix, loop_id, prefix, loop_id,
+                              prefix, loop_id, prefix, loop_id, prefix, loop_id);
+        } else if (!default_integer) {
             /* The common header supplies its own indentation. */
             f2c_loop_emit_header(&context->output, prefix, loop_id, advance, NULL, 0);
         } else
@@ -255,7 +278,7 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
                           variable, prefix, loop_id, variable, prefix, loop_id);
     }
     ++*depth;
-    if (canonical_positive_unit) {
+    if (widened_index) {
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output, "%s = (int32_t)%s_index_%zu;\n", variable, prefix,
                           loop_id);
@@ -344,7 +367,7 @@ int f2c_emit_do_end(Context *context, Unit *unit, const F2cStatement *opener, si
         --*depth;
     indent(&context->output, *depth);
     f2c_buffer_append(&context->output, "}\n");
-    if (is_canonical_positive_unit_do(opener)) {
+    if (has_widened_default_integer_index(opener)) {
         char *variable = f2c_emit_statement_expression(context, unit, opener->left, source_line);
         char *prefix = f2c_loop_local_prefix(unit, "f2c_do", loop_id);
         if (prefix == NULL || variable == NULL) {
@@ -354,10 +377,14 @@ int f2c_emit_do_end(Context *context, Unit *unit, const F2cStatement *opener, si
             return 0;
         }
         indent(&context->output, *depth);
-        f2c_buffer_printf(&context->output,
-                          "%s = %s_index_%zu <= (int64_t)INT32_MAX "
-                          "? (int32_t)%s_index_%zu : INT32_MIN;\n",
-                          variable, prefix, loop_id, prefix, loop_id);
+        if (is_canonical_positive_unit_do(opener))
+            f2c_buffer_printf(&context->output,
+                              "%s = %s_index_%zu <= (int64_t)INT32_MAX "
+                              "? (int32_t)%s_index_%zu : INT32_MIN;\n",
+                              variable, prefix, loop_id, prefix, loop_id);
+        else
+            f2c_buffer_printf(&context->output, "%s = F2C_LOOP_VALUE_I32(%s_index_%zu);\n",
+                              variable, prefix, loop_id);
         free(variable);
         free(prefix);
     }

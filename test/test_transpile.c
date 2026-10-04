@@ -420,8 +420,10 @@ static void test_wide_do_trip_count(void) {
     F2cOptions options = {"wide_do.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "wide-trip-count DO translates without errors");
-    expect_contains(result.code, "int64_t f2c_do_count_",
-                    "DO ranges spanning the default-integer domain retain a wide trip counter");
+    expect_contains(result.code, "int64_t f2c_do_index_",
+                    "DO ranges spanning the default-integer domain retain a wide monotone index");
+    expect_contains(result.code, "F2C_LOOP_VALUE_I32(f2c_do_index_",
+                    "the final wide index is converted with the defined source-width policy");
     f2c_result_free(&result);
 
     {
@@ -435,8 +437,10 @@ static void test_wide_do_trip_count(void) {
         F2cOptions stride_options = {"stride_do.f90", F2C_SOURCE_FREE, 0};
         F2cResult stride = f2c_transpile(stride_source, strlen(stride_source), &stride_options);
         expect(stride.error_count == 0U, "wide-stride default-integer DO translates");
-        expect_contains(stride.code, "int32_t f2c_do_count_",
-                        "a constant stride of four has a provably native-width trip count");
+        expect_contains(stride.code, "int64_t f2c_do_index_",
+                        "constant-stride default-integer DO uses a nonwrapping wide index");
+        expect_not_contains(stride.code, "f2c_do_count_",
+                            "monotone cached controls do not need a separate trip counter");
         f2c_result_free(&stride);
     }
     {
@@ -469,8 +473,8 @@ static void test_wide_do_trip_count(void) {
         F2cResult relative =
             f2c_transpile(relative_source, strlen(relative_source), &relative_options);
         expect(relative.error_count == 0U, "fixed-relative default-integer DO translates");
-        expect_contains(relative.code, "int32_t f2c_do_count_",
-                        "a fixed relative range has a proven native-width trip count");
+        expect_contains(relative.code, "int64_t f2c_do_index_",
+                        "fixed relative ranges retain a nonwrapping wide index");
         f2c_result_free(&relative);
     }
 }
