@@ -40,7 +40,7 @@ generate_outputs() {
         allocation_control_finalization allocation_control_errors allocation_control_unaligned \
         allocation_control_pointers allocation_control_names \
         extremum_boundaries extremum_policy extremum_arguments \
-        lexical_literals numeric_model_intrinsics elemental_procedure; do
+        lexical_literals numeric_model_intrinsics elemental_procedure operator_kinds operator_power_policy operator_contract; do
         "$translator" "$ROOT/test/fixtures/$fixture.f90" \
             -o "$output/$fixture.c" --header "$output/$fixture.h"
     done
@@ -69,7 +69,9 @@ allocation_control_names.c allocation_control_names.h
 extremum_boundaries.c extremum_boundaries.h extremum_policy.c extremum_policy.h
 extremum_arguments.c extremum_arguments.h
 lexical_literals.c lexical_literals.h numeric_model_intrinsics.c numeric_model_intrinsics.h
-elemental_procedure.c elemental_procedure.h'
+elemental_procedure.c elemental_procedure.h
+operator_kinds.c operator_kinds.h operator_power_policy.c operator_power_policy.h
+operator_contract.c operator_contract.h'
 for file in $FILES; do
     if ! cmake -E compare_files "$WORK/first/$file" "$WORK/second/$file"; then
         echo "cross-toolchain generated output differs: $file" >&2
