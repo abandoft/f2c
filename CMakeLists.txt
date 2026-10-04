@@ -278,6 +278,7 @@ set(
     src/core/numeric/power.h
     src/core/numeric/loop.h
     src/core/generated/loop.c
+    src/core/generated/real_loop.c
     src/core/generated/model.c
     src/core/generated/numeric.c
     src/core/generated/power.c

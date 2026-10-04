@@ -121,6 +121,20 @@ static int resolve_loop_id(Context *context, const Unit *unit, const F2cStatemen
     return 0;
 }
 
+static int emit_loop_initial_value(Context *context, Unit *unit, const F2cExpr *variable,
+                                   const char *prefix, size_t identifier, int depth) {
+    Buffer value = {0};
+    f2c_buffer_printf(&value, "%s_start_%zu", prefix, identifier);
+    char *store = value.failed ? NULL : f2c_loop_store_expression(unit, variable, value.data);
+    free(value.data);
+    if (store == NULL)
+        return 0;
+    indent(&context->output, depth);
+    f2c_buffer_printf(&context->output, "%s;\n", store);
+    free(store);
+    return !context->output.failed;
+}
+
 static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatement *statement,
                                  size_t source_line, int *depth) {
     char *variable = f2c_emit_statement_expression(context, unit, statement->left, source_line);
@@ -195,18 +209,8 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
                     goto failed;
             }
         }
-        indent(&context->output, *depth);
-        {
-            Buffer value = {0};
-            f2c_buffer_printf(&value, "%s_start_%zu", prefix, loop_id);
-            char *store =
-                value.failed ? NULL : f2c_loop_store_expression(unit, statement->left, value.data);
-            free(value.data);
-            if (store == NULL)
-                goto failed;
-            f2c_buffer_printf(&context->output, "%s;\n", store);
-            free(store);
-        }
+        if (!emit_loop_initial_value(context, unit, statement->left, prefix, loop_id, *depth))
+            goto failed;
         if (widened_index) {
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "int64_t %s_index_%zu = (int64_t)%s_start_%zu;\n",
@@ -265,8 +269,12 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output, "const %s %s_step_%zu = (%s)(%s);\n", c_type, prefix,
                           loop_id, c_type, step_expression.code);
-        indent(&context->output, *depth);
-        f2c_buffer_printf(&context->output, "if (%s_step_%zu == 0) abort();\n", prefix, loop_id);
+        if (!emit_loop_initial_value(context, unit, statement->left, prefix, loop_id, *depth))
+            goto failed;
+        f2c_loop_emit_real_state(&context->output, statement->left, prefix, loop_id, *depth);
+        advance = f2c_loop_advance_expression(unit, statement->left, prefix, loop_id);
+        if (advance == NULL)
+            goto failed;
     }
     if (!f2c_array_cleanup_emit(&context->output, unit, &start_expression.cleanup) ||
         !f2c_array_cleanup_emit(&context->output, unit, &finish_expression.cleanup) ||
@@ -305,14 +313,8 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
         } else
             f2c_buffer_printf(&context->output, "for (; %s_count_%zu > 0; --%s_count_%zu, %s) {\n",
                               prefix, loop_id, prefix, loop_id, advance);
-    } else {
-        f2c_buffer_printf(&context->output,
-                          "for (%s = %s_start_%zu; "
-                          "(%s_step_%zu >= 0 ? %s <= %s_limit_%zu "
-                          ": %s >= %s_limit_%zu); %s += %s_step_%zu) {\n",
-                          variable, prefix, loop_id, prefix, loop_id, variable, prefix, loop_id,
-                          variable, prefix, loop_id, variable, prefix, loop_id);
-    }
+    } else
+        f2c_loop_emit_header(&context->output, prefix, loop_id, advance, NULL, 0);
     ++*depth;
     if (widened_index) {
         indent(&context->output, *depth);

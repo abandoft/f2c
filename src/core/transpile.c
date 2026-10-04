@@ -39,6 +39,7 @@ typedef struct F2cRequiredFeatures {
     int real_representation_intrinsic;
     int power;
     int integer_loop;
+    int real_loop;
 } F2cRequiredFeatures;
 
 static void collect_expression_feature(F2cExpr *expression, void *state) {
@@ -105,6 +106,9 @@ static void collect_statement_features(F2cStatement *statement, F2cRequiredFeatu
     if (statement->kind == F2C_STMT_DO && statement->left != NULL &&
         statement->left->type == TYPE_INTEGER)
         features->integer_loop = 1;
+    if (statement->kind == F2C_STMT_DO && statement->left != NULL &&
+        (statement->left->type == TYPE_REAL || statement->left->type == TYPE_DOUBLE))
+        features->real_loop = 1;
     for (size_t index = 0U; index < statement->io_item_count; ++index)
         if (io_item_has_loop(&statement->io_items[index]))
             features->integer_loop = 1;
@@ -345,6 +349,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                           "#define F2C_UNUSED\n#endif\n");
         if (features.integer_loop)
             f2c_emit_integer_loop_support(&context.output);
+        if (features.real_loop)
+            f2c_emit_real_loop_support(&context.output);
         if (needs_bit_intrinsic)
             f2c_emit_bit_intrinsic_support(&context.output);
         if (needs_character_intrinsic)

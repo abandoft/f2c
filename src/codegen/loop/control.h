@@ -10,6 +10,8 @@ void f2c_loop_emit_parameter(Buffer *output, const char *prefix, size_t identifi
                              int depth);
 void f2c_loop_emit_state(Buffer *output, const char *prefix, size_t identifier, const char *status,
                          int formatted_status, int depth);
+void f2c_loop_emit_real_state(Buffer *output, const F2cExpr *variable, const char *prefix,
+                              size_t identifier, int depth);
 char *f2c_loop_store_expression(Unit *unit, const F2cExpr *variable, const char *value);
 char *f2c_loop_advance_expression(Unit *unit, const F2cExpr *variable, const char *prefix,
                                   size_t identifier);

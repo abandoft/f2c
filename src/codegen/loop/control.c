@@ -68,6 +68,23 @@ void f2c_loop_emit_state(Buffer *output, const char *prefix, size_t identifier, 
         f2c_buffer_printf(output, "if (%s_active_%zu < 0) abort();\n", prefix, identifier);
 }
 
+void f2c_loop_emit_real_state(Buffer *output, const F2cExpr *variable, const char *prefix,
+                              size_t identifier, int depth) {
+    const int kind =
+        variable->type_kind != 0 ? variable->type_kind : f2c_default_kind(variable->type);
+    const char *suffix = kind == 4 ? "R4" : kind == 8 ? "R8" : "EXTENDED";
+    indent(output, depth);
+    f2c_buffer_printf(output, "uint64_t %s_remaining_%zu;\n", prefix, identifier);
+    indent(output, depth);
+    f2c_buffer_printf(output,
+                      "int %s_active_%zu = F2C_REAL_LOOP_%s(%s_start_%zu, %s_limit_%zu, "
+                      "%s_step_%zu, &%s_remaining_%zu);\n",
+                      prefix, identifier, suffix, prefix, identifier, prefix, identifier, prefix,
+                      identifier, prefix, identifier);
+    indent(output, depth);
+    f2c_buffer_printf(output, "if (%s_active_%zu < 0) abort();\n", prefix, identifier);
+}
+
 char *f2c_loop_store_expression(Unit *unit, const F2cExpr *variable, const char *value) {
     Buffer output = {0};
     int supported = 0;
@@ -99,8 +116,15 @@ char *f2c_loop_advance_expression(Unit *unit, const F2cExpr *variable, const cha
     int supported = 0;
     char *read = f2c_emit_expression_ast(unit, variable, &supported);
     char *store = NULL;
-    if (suffix != NULL && read != NULL && supported) {
-        f2c_buffer_printf(&value, "F2C_LOOP_%s(%s, %s_step_%zu)", suffix, read, prefix, identifier);
+    if (read != NULL && supported && variable != NULL) {
+        if (variable->type == TYPE_INTEGER && suffix != NULL)
+            f2c_buffer_printf(&value, "F2C_LOOP_%s(%s, %s_step_%zu)", suffix, read, prefix,
+                              identifier);
+        else if (variable->type == TYPE_REAL || variable->type == TYPE_DOUBLE)
+            f2c_buffer_printf(&value, "(%s)(%s + %s_step_%zu)", f2c_expression_c_type(variable),
+                              read, prefix, identifier);
+        else
+            value.failed = 1;
         if (!value.failed)
             store = f2c_loop_store_expression(unit, variable, value.data);
     }
