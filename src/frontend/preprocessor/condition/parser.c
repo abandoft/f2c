@@ -1,17 +1,7 @@
-#include "frontend/preprocessor/private.h"
+#include "frontend/preprocessor/condition/private.h"
 
-#include <ctype.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <string.h>
-
-typedef struct ExpansionFrame {
-    const char *name;
-    size_t length;
-    const struct ExpansionFrame *parent;
-} ExpansionFrame;
-
-typedef PreprocessorMacroArgument ConditionArgument;
 
 typedef struct ExpressionParser {
     Preprocessor *preprocessor;
@@ -23,308 +13,18 @@ typedef struct ExpressionParser {
     int failed;
 } ExpressionParser;
 
-static int identifier_start(char value) {
-    return isalpha((unsigned char)value) != 0 || value == '_';
-}
-
-static int identifier_continue(char value) {
-    return isalnum((unsigned char)value) != 0 || value == '_';
-}
-
 static const char *skip_space(const char *cursor) {
     while (isspace((unsigned char)*cursor) != 0)
         ++cursor;
     return cursor;
 }
 
-static int word_equal(const char *begin, size_t length, const char *word) {
-    return strlen(word) == length && strncmp(begin, word, length) == 0;
-}
-
-static size_t find_macro(const Preprocessor *preprocessor, const char *name, size_t length) {
-    size_t index;
-    for (index = 0U; index < preprocessor->macro_count; ++index) {
-        const PreprocessorMacro *macro = &preprocessor->macros[index];
-        if (macro->name_length == length && strncmp(macro->name, name, length) == 0)
-            return index;
-    }
-    return SIZE_MAX;
-}
-
-static void diagnose_at(Preprocessor *preprocessor, F2cDiagnosticCode code, size_t line,
-                        size_t column, const char *message) {
-    F2cSourceSpan span = {0};
-    span.begin = (F2cSourcePosition){preprocessor->current_source_name, line, column};
-    span.end = span.begin;
-    ++span.end.column;
-    f2c_diagnostic_span_code(preprocessor->context, code, &span, 1, "%s", message);
-}
-
-static void diagnose_name(Preprocessor *preprocessor, F2cDiagnosticCode code, size_t line,
-                          size_t column, const char *prefix_text, const char *name, size_t length) {
-    F2cSourceSpan span = {0};
-    span.begin = (F2cSourcePosition){preprocessor->current_source_name, line, column};
-    span.end = span.begin;
-    span.end.column += length != 0U ? length : 1U;
-    f2c_diagnostic_span_code(preprocessor->context, code, &span, 1, "%s '%.*s'", prefix_text,
-                             (int)(length > (size_t)INT32_MAX ? (size_t)INT32_MAX : length), name);
-}
-
-static int expansion_contains(const ExpansionFrame *frame, const char *name, size_t length) {
-    for (; frame != NULL; frame = frame->parent) {
-        if (frame->length == length && strncmp(frame->name, name, length) == 0)
-            return 1;
-    }
-    return 0;
-}
-
-static size_t quoted_end(const char *text, size_t length, size_t begin) {
-    const char quote = text[begin];
-    size_t cursor = begin + 1U;
-    while (cursor < length) {
-        if (text[cursor] == '\\' && cursor + 1U < length) {
-            cursor += 2U;
-            continue;
-        }
-        if (text[cursor++] == quote)
-            break;
-    }
-    return cursor;
-}
-
-static int reserve_arguments(ConditionArgument **arguments, size_t *capacity, size_t count) {
-    ConditionArgument *replacement;
-    size_t next_capacity;
-    if (count < *capacity)
-        return 1;
-    next_capacity = *capacity == 0U ? 4U : *capacity * 2U;
-    if (next_capacity < *capacity || next_capacity > SIZE_MAX / sizeof(*replacement))
-        return 0;
-    replacement = (ConditionArgument *)realloc(*arguments, next_capacity * sizeof(*replacement));
-    if (replacement == NULL)
-        return 0;
-    *arguments = replacement;
-    *capacity = next_capacity;
-    return 1;
-}
-
-static int append_argument(Preprocessor *preprocessor, ConditionArgument **arguments, size_t *count,
-                           size_t *capacity, const char *text, size_t begin, size_t end,
-                           size_t line, size_t column, const PreprocessorMacro *macro) {
-    while (begin < end && isspace((unsigned char)text[begin]) != 0)
-        ++begin;
-    while (end > begin && isspace((unsigned char)text[end - 1U]) != 0)
-        --end;
-    if (*count >= preprocessor->context->limits.max_macro_arguments) {
-        diagnose_name(preprocessor, F2C_DIAGNOSTIC_RESOURCE_LIMIT, line, column,
-                      "conditional macro argument limit exceeded for", macro->name,
-                      macro->name_length);
-        return 0;
-    }
-    if (!reserve_arguments(arguments, capacity, *count)) {
-        diagnose_at(preprocessor, F2C_DIAGNOSTIC_OUT_OF_MEMORY, line, column,
-                    "out of memory while parsing conditional macro arguments");
-        return 0;
-    }
-    (*arguments)[*count] = (ConditionArgument){text + begin, end - begin, {NULL, 0U, 0U}};
-    ++*count;
-    return 1;
-}
-
-static int parse_invocation_arguments(Preprocessor *preprocessor, const PreprocessorMacro *macro,
-                                      const char *text, size_t length, size_t opening, size_t line,
-                                      size_t column, ConditionArgument **arguments,
-                                      size_t *argument_count, size_t *after) {
-    size_t capacity = 0U;
-    size_t begin = opening + 1U;
-    size_t index = begin;
-    size_t depth = 1U;
-    int saw_separator = 0;
-    *arguments = NULL;
-    *argument_count = 0U;
-    while (index < length) {
-        if (text[index] == '\'' || text[index] == '"') {
-            index = quoted_end(text, length, index);
-            continue;
-        }
-        if (text[index] == '(') {
-            if (depth >= preprocessor->context->limits.max_parse_depth) {
-                diagnose_name(preprocessor, F2C_DIAGNOSTIC_RESOURCE_LIMIT, line, column + opening,
-                              "conditional macro invocation nesting limit exceeded for",
-                              macro->name, macro->name_length);
-                goto failure;
-            }
-            ++depth;
-            ++index;
-            continue;
-        }
-        if (text[index] == ')') {
-            --depth;
-            if (depth == 0U) {
-                size_t nonspace = begin;
-                while (nonspace < index && isspace((unsigned char)text[nonspace]) != 0)
-                    ++nonspace;
-                if (saw_separator || nonspace != index || macro->parameter_count != 0U ||
-                    macro->variadic) {
-                    if (!append_argument(preprocessor, arguments, argument_count, &capacity, text,
-                                         begin, index, line, column + opening, macro)) {
-                        goto failure;
-                    }
-                }
-                if (macro->variadic ? *argument_count < macro->parameter_count
-                                    : *argument_count != macro->parameter_count) {
-                    diagnose_name(preprocessor, F2C_DIAGNOSTIC_SYNTAX, line, column + opening,
-                                  "conditional macro argument count mismatch for", macro->name,
-                                  macro->name_length);
-                    goto failure;
-                }
-                *after = index + 1U;
-                return 1;
-            }
-            ++index;
-            continue;
-        }
-        if (text[index] == ',' && depth == 1U) {
-            if (!append_argument(preprocessor, arguments, argument_count, &capacity, text, begin,
-                                 index, line, column + opening, macro)) {
-                goto failure;
-            }
-            saw_separator = 1;
-            begin = ++index;
-            continue;
-        }
-        ++index;
-    }
-    diagnose_name(preprocessor, F2C_DIAGNOSTIC_SYNTAX, line, column + opening,
-                  "unterminated conditional macro invocation for", macro->name, macro->name_length);
-
-failure:
-    free(*arguments);
-    *arguments = NULL;
-    *argument_count = 0U;
-    return 0;
-}
-
-static int append_expanded_condition(Preprocessor *preprocessor, const char *text, size_t length,
-                                     size_t line, size_t column, Buffer *output,
-                                     const ExpansionFrame *parent, size_t depth) {
-    size_t index = 0U;
-    int defined_operand = 0;
-    while (index < length) {
-        const char value = text[index];
-        if (value == '\'' || value == '"') {
-            const size_t end = quoted_end(text, length, index);
-            f2c_buffer_append_n(output, text + index, end - index);
-            index = end;
-            continue;
-        }
-        if (identifier_start(value)) {
-            size_t end = index + 1U;
-            size_t macro_index;
-            while (end < length && identifier_continue(text[end]))
-                ++end;
-            if (word_equal(text + index, end - index, "defined")) {
-                defined_operand = 1;
-                f2c_buffer_append_n(output, text + index, end - index);
-                index = end;
-                continue;
-            }
-            if (defined_operand) {
-                defined_operand = 0;
-                f2c_buffer_append_n(output, text + index, end - index);
-                index = end;
-                continue;
-            }
-            macro_index = find_macro(preprocessor, text + index, end - index);
-            if (macro_index != SIZE_MAX) {
-                const PreprocessorMacro *macro = &preprocessor->macros[macro_index];
-                ExpansionFrame frame;
-                ConditionArgument *arguments = NULL;
-                size_t argument_count = 0U;
-                size_t after = end;
-                size_t opening = end;
-                Buffer operated_replacement = {0};
-                const char *replacement_text = macro->value;
-                size_t replacement_length = macro->value_length;
-                if (macro->function_like) {
-                    while (opening < length && isspace((unsigned char)text[opening]) != 0)
-                        ++opening;
-                    if (opening >= length || text[opening] != '(') {
-                        f2c_buffer_append_n(output, text + index, end - index);
-                        index = end;
-                        continue;
-                    }
-                }
-                if (expansion_contains(parent, text + index, end - index)) {
-                    diagnose_name(preprocessor, F2C_DIAGNOSTIC_SYNTAX, line, column + index,
-                                  "cyclic conditional macro expansion for", text + index,
-                                  end - index);
-                    return 0;
-                }
-                if (depth >= preprocessor->context->limits.max_macro_expansion_depth) {
-                    diagnose_at(preprocessor, F2C_DIAGNOSTIC_RESOURCE_LIMIT, line, column + index,
-                                "conditional macro expansion depth limit exceeded");
-                    return 0;
-                }
-                frame.name = macro->name;
-                frame.length = macro->name_length;
-                frame.parent = parent;
-                if (macro->function_like &&
-                    !parse_invocation_arguments(preprocessor, macro, text, length, opening, line,
-                                                column, &arguments, &argument_count, &after))
-                    return 0;
-                if (macro->function_like || f2c_preprocessor_replacement_has_operator(macro)) {
-                    F2cSourcePosition origin = {preprocessor->current_source_name, line,
-                                                column + index};
-                    if (!f2c_preprocessor_build_operator_replacement(preprocessor, macro, arguments,
-                                                                     argument_count, origin,
-                                                                     &operated_replacement)) {
-                        free(arguments);
-                        free(operated_replacement.data);
-                        return 0;
-                    }
-                    replacement_text =
-                        operated_replacement.data != NULL ? operated_replacement.data : "";
-                    replacement_length = operated_replacement.length;
-                }
-                f2c_buffer_append_n(output, " ", 1U);
-                if (!append_expanded_condition(preprocessor, replacement_text, replacement_length,
-                                               line, column + index, output, &frame, depth + 1U)) {
-                    free(arguments);
-                    free(operated_replacement.data);
-                    return 0;
-                }
-                free(arguments);
-                free(operated_replacement.data);
-                f2c_buffer_append_n(output, " ", 1U);
-                end = macro->function_like ? after : end;
-            } else {
-                f2c_buffer_append_n(output, text + index, end - index);
-            }
-            index = end;
-            continue;
-        }
-        f2c_buffer_append_n(output, text + index, 1U);
-        ++index;
-    }
-    if (output->failed || output->limit_exceeded) {
-        diagnose_at(
-            preprocessor,
-            output->limit_exceeded ? F2C_DIAGNOSTIC_RESOURCE_LIMIT : F2C_DIAGNOSTIC_OUT_OF_MEMORY,
-            line, column,
-            output->limit_exceeded ? "expanded preprocessor expression is too large"
-                                   : "out of memory while expanding a preprocessor expression");
-        return 0;
-    }
-    return 1;
-}
-
 static void expression_error_at(ExpressionParser *parser, const char *at, const char *message) {
     if (parser->failed)
         return;
     parser->failed = 1;
-    diagnose_at(parser->preprocessor, F2C_DIAGNOSTIC_SYNTAX, parser->line,
-                parser->column + (size_t)(at - parser->text), message);
+    f2c_preprocessor_condition_diagnose(parser->preprocessor, F2C_DIAGNOSTIC_SYNTAX, parser->line,
+                                        parser->column + (size_t)(at - parser->text), message);
 }
 
 static void expression_error(ExpressionParser *parser, const char *message) {
@@ -340,9 +40,10 @@ static int expression_descend(ExpressionParser *parser) {
         return 0;
     if (parser->depth >= parser->preprocessor->context->limits.max_parse_depth) {
         parser->failed = 1;
-        diagnose_at(parser->preprocessor, F2C_DIAGNOSTIC_RESOURCE_LIMIT, parser->line,
-                    parser->column + (size_t)(parser->cursor - parser->text),
-                    "preprocessor condition expression depth limit exceeded");
+        f2c_preprocessor_condition_diagnose(
+            parser->preprocessor, F2C_DIAGNOSTIC_RESOURCE_LIMIT, parser->line,
+            parser->column + (size_t)(parser->cursor - parser->text),
+            "preprocessor condition expression depth limit exceeded");
         return 0;
     }
     ++parser->depth;
@@ -464,7 +165,7 @@ static IntegerValue parse_integer_literal(ExpressionParser *parser) {
             long_seen = count;
         }
     }
-    if (identifier_continue(*cursor)) {
+    if (condition_identifier_continue(*cursor)) {
         expression_error_at(parser, cursor, "invalid integer suffix in preprocessor condition");
         return signed_integer(0);
     }
@@ -618,12 +319,12 @@ static IntegerValue parse_primary(ExpressionParser *parser, int evaluate) {
             ++begin;
         return parse_character_literal(parser, begin);
     }
-    if (identifier_start(*begin)) {
+    if (condition_identifier_start(*begin)) {
         const char *end = begin + 1;
-        while (identifier_continue(*end))
+        while (condition_identifier_continue(*end))
             ++end;
         parser->cursor = end;
-        if (word_equal(begin, (size_t)(end - begin), "defined")) {
+        if (condition_word_equal(begin, (size_t)(end - begin), "defined")) {
             const char *name;
             size_t length;
             int parenthesized;
@@ -634,18 +335,18 @@ static IntegerValue parse_primary(ExpressionParser *parser, int evaluate) {
                 expression_space(parser);
             }
             name = parser->cursor;
-            if (!identifier_start(*name)) {
+            if (!condition_identifier_start(*name)) {
                 expression_error(parser, "expected a name after defined");
                 return signed_integer(0);
             }
             ++parser->cursor;
-            while (identifier_continue(*parser->cursor))
+            while (condition_identifier_continue(*parser->cursor))
                 ++parser->cursor;
             length = (size_t)(parser->cursor - name);
             if (parenthesized && !expression_consume(parser, ")"))
                 expression_error(parser, "expected ')' after defined operand");
-            return signed_integer(evaluate &&
-                                  find_macro(parser->preprocessor, name, length) != SIZE_MAX);
+            return signed_integer(evaluate && f2c_preprocessor_find_macro(
+                                                  parser->preprocessor, name, length) != SIZE_MAX);
         }
         return signed_integer(0);
     }
@@ -981,8 +682,8 @@ int f2c_preprocessor_evaluate_condition(Preprocessor *preprocessor, const char *
     ExpressionParser parser;
     IntegerValue value;
     expanded.limit = preprocessor->context->limits.max_preprocessed_bytes;
-    if (!append_expanded_condition(preprocessor, text, strlen(text), line, column, &expanded, NULL,
-                                   0U)) {
+    if (!f2c_preprocessor_expand_condition(preprocessor, text, strlen(text), line, column,
+                                           &expanded)) {
         free(expanded.data);
         return 0;
     }
