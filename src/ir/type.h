@@ -15,6 +15,13 @@ typedef enum Type {
     TYPE_DERIVED
 } Type;
 
+/* The kind is part of the operand type, including when legacy DOUBLE tags are
+ * present. Scalar lowering must never infer precision from a Type tag alone. */
+typedef struct F2cScalarType {
+    Type type;
+    int kind;
+} F2cScalarType;
+
 #define F2C_MAX_RANK 15U
 
 typedef enum F2cValueCategory {

@@ -38,6 +38,7 @@ typedef enum F2cStorageQualifier {
 
 struct F2cExpr {
     F2cExprKind kind;
+    F2cOperator operator_kind;
     F2cIntrinsicId intrinsic;
     Type type;
     int type_kind;
