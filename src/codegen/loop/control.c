@@ -5,18 +5,19 @@
 #include <stdlib.h>
 
 char *f2c_loop_local_prefix(Unit *unit, const char *preferred, size_t identifier) {
-    static const char *const roles[] = {"start",  "limit", "step",  "remaining",
-                                        "active", "count", "index", "value"};
-    char members[8][64];
-    const char *suffixes[8];
-    for (size_t index = 0U; index < 8U; ++index) {
+    static const char *const roles[] = {"start", "limit", "step",  "remaining", "active",
+                                        "count", "index", "value", "final",     "safe"};
+    enum { ROLE_COUNT = sizeof(roles) / sizeof(roles[0]) };
+    char members[ROLE_COUNT][64];
+    const char *suffixes[ROLE_COUNT];
+    for (size_t index = 0U; index < ROLE_COUNT; ++index) {
         const int length =
             snprintf(members[index], sizeof(members[index]), "%s_%zu", roles[index], identifier);
         if (length < 0 || (size_t)length >= sizeof(members[index]))
             return NULL;
         suffixes[index] = members[index];
     }
-    return f2c_codegen_local_family(unit, preferred, suffixes, 8U);
+    return f2c_codegen_local_family(unit, preferred, suffixes, ROLE_COUNT);
 }
 
 static void indent(Buffer *output, int depth) {
