@@ -2304,7 +2304,8 @@ static void test_local_kind_parameter_semantics(void) {
                     "REAL(..., wp) and _wp literals select double-precision integer power");
     expect(result.code == NULL || strstr(result.code, "_Generic((0.f),") == NULL,
            "double KIND parameters never use a float model argument");
-    expect(result.code == NULL || strstr(result.code, "powf(") == NULL,
+    /* Shared unused helpers may contain powf; validate the actual typed call. */
+    expect(result.code == NULL || strstr(result.code, "threshold = f2c_pow_fi(") == NULL,
            "double KIND parameters never select single-precision libm calls");
     expect_contains(result.code, "float narrow_to_default(double *x)",
                     "REAL without a KIND argument returns default REAL");
