@@ -95,8 +95,14 @@ int f2c_import_host_symbols(Context *context, Unit *unit) {
             target->c_name = c_name;
         }
         free(alias);
-        if (source->parameter || source->module_entity ||
-            source->association == F2C_ASSOCIATION_USE)
+        if (source->parameter) {
+            /* A local named constant is not a module global. Array constants
+             * need readonly storage in the contained procedure as well. */
+            target->module_entity = source->module_entity;
+            target->saved = source->saved;
+            continue;
+        }
+        if (source->module_entity || source->association == F2C_ASSOCIATION_USE)
             continue;
         if (source->intrinsic != NULL || (source->external && !source->procedure_pointer))
             continue;
