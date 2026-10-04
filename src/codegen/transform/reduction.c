@@ -22,12 +22,9 @@ static char *numeric_identity(const F2cExpr *call, int product, int maximum, int
     if (call->type == TYPE_DOUBLE_COMPLEX)
         return f2c_strdup(product ? "f2c_make_z(1.0, 0.0)" : "f2c_make_z(0.0, 0.0)");
     if (call->type == TYPE_REAL)
-        return f2c_strdup(maximum   ? "-HUGE_VALF"
-                          : minimum ? "HUGE_VALF"
-                          : product ? "1.0f"
-                                    : "0.0f");
+        return f2c_strdup(maximum ? "-FLT_MAX" : minimum ? "FLT_MAX" : product ? "1.0f" : "0.0f");
     if (call->type == TYPE_DOUBLE)
-        return f2c_strdup(maximum ? "-HUGE_VAL" : minimum ? "HUGE_VAL" : product ? "1.0" : "0.0");
+        return f2c_strdup(maximum ? "-DBL_MAX" : minimum ? "DBL_MAX" : product ? "1.0" : "0.0");
     if (call->type == TYPE_INTEGER) {
         if (maximum)
             return f2c_strdup(kind == 1   ? "INT8_MIN"
@@ -143,16 +140,15 @@ static void emit_accumulator_update(Buffer *output, const F2cExpr *call,
                               f2c_expression_c_type(call), source_pointer);
         break;
     case F2C_INTRINSIC_MAXVAL:
-        f2c_buffer_printf(output,
-                          "if (%s[f2c_reduction_index] > f2c_reduction_accumulator) "
-                          "f2c_reduction_accumulator = %s[f2c_reduction_index]; ",
-                          source_pointer, source_pointer);
-        break;
     case F2C_INTRINSIC_MINVAL:
         f2c_buffer_printf(output,
-                          "if (%s[f2c_reduction_index] < f2c_reduction_accumulator) "
-                          "f2c_reduction_accumulator = %s[f2c_reduction_index]; ",
-                          source_pointer, source_pointer);
+                          "%s f2c_reduction_value = %s[f2c_reduction_index]; "
+                          "f2c_reduction_accumulator = f2c_reduction_found ? "
+                          "%s(f2c_reduction_accumulator, f2c_reduction_value) : "
+                          "f2c_reduction_value; f2c_reduction_found = true; ",
+                          f2c_expression_c_type(call), source_pointer,
+                          call->intrinsic == F2C_INTRINSIC_MAXVAL ? "F2C_FORTRAN_MAX"
+                                                                  : "F2C_FORTRAN_MIN");
         break;
     case F2C_INTRINSIC_ALL:
         f2c_buffer_printf(output,
@@ -229,11 +225,14 @@ static int emit_dimensional_reduction(Context *context, Unit *unit, Symbol *targ
         source->rank);
     if (location) {
         f2c_buffer_append(&context->output, "int64_t f2c_reduction_location = INT64_C(0); "
-                                            "size_t f2c_reduction_selected_index = 0U; "
                                             "bool f2c_reduction_found = false; ");
+        f2c_buffer_printf(&context->output, "%s f2c_reduction_best = 0; ",
+                          f2c_expression_c_type(source->expression));
     } else {
         f2c_buffer_printf(&context->output, "%s f2c_reduction_accumulator = %s; ", accumulator_type,
                           identity);
+        if (maximum || minimum)
+            f2c_buffer_append(&context->output, "bool f2c_reduction_found = false; ");
     }
     f2c_buffer_append(&context->output,
                       "size_t f2c_reduction_selected_extent = "
@@ -246,18 +245,17 @@ static int emit_dimensional_reduction(Context *context, Unit *unit, Symbol *targ
                       "f2c_reduction_coordinate * f2c_reduction_selected_stride; ");
     f2c_buffer_printf(&context->output, "if (%s) { ", condition);
     if (location) {
-        const char *comparison = call->intrinsic == F2C_INTRINSIC_MAXLOC ? ">" : "<";
         f2c_buffer_printf(&context->output,
-                          "if (!f2c_reduction_found || %s[f2c_reduction_index] %s "
-                          "%s[f2c_reduction_selected_index] || "
-                          "(f2c_transform_back && %s[f2c_reduction_index] == "
-                          "%s[f2c_reduction_selected_index])) { "
-                          "f2c_reduction_selected_index = f2c_reduction_index; "
+                          "%s f2c_reduction_value = %s[f2c_reduction_index]; "
+                          "if (!f2c_reduction_found || %s(f2c_reduction_value, "
+                          "f2c_reduction_best, f2c_transform_back)) { "
+                          "f2c_reduction_best = f2c_reduction_value; "
                           "f2c_reduction_location = "
                           "(int64_t)f2c_reduction_coordinate + INT64_C(1); "
                           "f2c_reduction_found = true; } ",
-                          source->pointer, comparison, source->pointer, source->pointer,
-                          source->pointer);
+                          f2c_expression_c_type(source->expression), source->pointer,
+                          call->intrinsic == F2C_INTRINSIC_MAXLOC ? "F2C_MAXIMUM_SELECT"
+                                                                  : "F2C_MINIMUM_SELECT");
     } else {
         emit_accumulator_update(&context->output, call, source->pointer);
     }
@@ -272,7 +270,6 @@ static int emit_dimensional_reduction(Context *context, Unit *unit, Symbol *targ
 
 static int emit_global_location(Context *context, Unit *unit, Symbol *target, const F2cExpr *call,
                                 const TransformArray *source, const char *condition, int depth) {
-    const char *comparison = call->intrinsic == F2C_INTRINSIC_MAXLOC ? ">" : "<";
     char *store = result_value(call, target, "f2c_reduction_location");
     if (store == NULL)
         return 0;
@@ -283,20 +280,23 @@ static int emit_global_location(Context *context, Unit *unit, Symbol *target, co
     f2c_transform_emit_result_count(context, 1U, depth);
     f2c_transform_emit_result_allocation(context, unit, target, NULL, depth);
     f2c_transform_indent(&context->output, depth);
+    f2c_buffer_printf(&context->output, "%s f2c_reduction_best = 0; ",
+                      f2c_expression_c_type(source->expression));
     f2c_buffer_append(&context->output, "size_t f2c_reduction_selected_index = 0U; "
                                         "bool f2c_reduction_found = false; "
                                         "for (size_t f2c_reduction_index = 0U; "
                                         "f2c_reduction_index < f2c_transform_source_count; "
                                         "++f2c_reduction_index) { ");
     f2c_buffer_printf(&context->output,
-                      "if ((%s) && (!f2c_reduction_found || %s[f2c_reduction_index] %s "
-                      "%s[f2c_reduction_selected_index] || "
-                      "(f2c_transform_back && %s[f2c_reduction_index] == "
-                      "%s[f2c_reduction_selected_index]))) { "
+                      "if (%s) { %s f2c_reduction_value = %s[f2c_reduction_index]; "
+                      "if (!f2c_reduction_found || %s(f2c_reduction_value, "
+                      "f2c_reduction_best, f2c_transform_back)) { "
+                      "f2c_reduction_best = f2c_reduction_value; "
                       "f2c_reduction_selected_index = f2c_reduction_index; "
-                      "f2c_reduction_found = true; } }\n",
-                      condition, source->pointer, comparison, source->pointer, source->pointer,
-                      source->pointer);
+                      "f2c_reduction_found = true; } } }\n",
+                      condition, f2c_expression_c_type(source->expression), source->pointer,
+                      call->intrinsic == F2C_INTRINSIC_MAXLOC ? "F2C_MAXIMUM_SELECT"
+                                                              : "F2C_MINIMUM_SELECT");
     f2c_transform_indent(&context->output, depth);
     f2c_buffer_append(&context->output,
                       "size_t f2c_reduction_coordinate_stride = 1U; "
