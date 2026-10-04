@@ -22,6 +22,38 @@ static int elemental_assignment_type_matches(const Symbol *target, const F2cExpr
            (target->derived_type != NULL && target->derived_type == right->derived_type);
 }
 
+static void emit_element_count(Buffer *output, size_t rank, int depth) {
+    f2c_array_indent(output, depth);
+    if (rank == 1U) {
+        f2c_buffer_append(output, "const size_t f2c_element_count = f2c_element_extent_0;\n");
+        return;
+    }
+    /* Expose the allocation/iteration relationship to bounds analysis without
+     * adding a check to every element. Test for zero dimensions before any
+     * products, so an empty shape cannot fail on an irrelevant intermediate.
+     */
+    f2c_buffer_append(output, "size_t f2c_element_count = 0U;\n");
+    f2c_array_indent(output, depth);
+    f2c_buffer_append(output, "if (");
+    for (size_t dimension = 0U; dimension < rank; ++dimension)
+        f2c_buffer_printf(output, "%sf2c_element_extent_%zu != 0U", dimension == 0U ? "" : " && ",
+                          dimension);
+    f2c_buffer_append(output, ") {\n");
+    f2c_array_indent(output, depth + 1);
+    f2c_buffer_append(output, "f2c_element_count = f2c_element_extent_0;\n");
+    for (size_t dimension = 1U; dimension < rank; ++dimension) {
+        f2c_array_indent(output, depth + 1);
+        f2c_buffer_printf(output,
+                          "(void)f2c_size_multiply_checked(f2c_element_count, "
+                          "f2c_element_extent_%zu);\n",
+                          dimension);
+        f2c_array_indent(output, depth + 1);
+        f2c_buffer_printf(output, "f2c_element_count *= f2c_element_extent_%zu;\n", dimension);
+    }
+    f2c_array_indent(output, depth);
+    f2c_buffer_append(output, "}\n");
+}
+
 int f2c_array_emit_derived_scalar_broadcast(Context *context, Unit *unit, Symbol *target,
                                             const F2cExpr *right, const char *element_count,
                                             int depth) {
@@ -167,16 +199,7 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
                               right_extents[dimension], dimension);
         }
     }
-    f2c_array_indent(&context->output, emitted_depth);
-    f2c_buffer_printf(&context->output,
-                      "const size_t f2c_element_count = f2c_inquiry_size(%zuU, "
-                      "(const size_t[]){",
-                      target->rank);
-    for (dimension = 0U; dimension < target->rank; ++dimension) {
-        f2c_buffer_printf(&context->output, "%sf2c_element_extent_%zu", dimension == 0U ? "" : ", ",
-                          dimension);
-    }
-    f2c_buffer_append(&context->output, "});\n");
+    emit_element_count(&context->output, target->rank, emitted_depth);
     if (target->pointer) {
         char *data = f2c_storage_symbol_data(unit, target);
         if (data == NULL)
@@ -243,6 +266,9 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
     }
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_append(&context->output, "size_t f2c_element_linear = 0U;\n");
+    f2c_array_indent(&context->output, emitted_depth);
+    f2c_buffer_append(&context->output, "if (f2c_element_count != 0U) {\n");
+    ++emitted_depth;
     for (loop = target->rank; loop != 0U; --loop) {
         dimension = loop - 1U;
         f2c_array_indent(&context->output, emitted_depth);
@@ -280,6 +306,9 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
         f2c_array_indent(&context->output, emitted_depth);
         f2c_buffer_append(&context->output, "}\n");
     }
+    --emitted_depth;
+    f2c_array_indent(&context->output, emitted_depth);
+    f2c_buffer_append(&context->output, "}\n");
     f2c_array_indent(&context->output, emitted_depth);
     if (target->allocatable) {
         const F2cStorageReference reference = f2c_ir_symbol_storage_reference(target);
