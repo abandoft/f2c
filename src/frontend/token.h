@@ -1,6 +1,7 @@
 #ifndef F2C_FRONTEND_TOKEN_H
 #define F2C_FRONTEND_TOKEN_H
 
+#include "frontend/operator.h"
 #include "internal/base.h"
 
 typedef struct F2cSourcePosition {
