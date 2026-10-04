@@ -192,32 +192,7 @@ static void validate_control_flow_statement(Context *context, Unit *unit,
                               1, "SELECT CASE currently supports default CHARACTER kind only");
         }
     } else if (statement->kind == F2C_STMT_DO) {
-        int64_t step;
-        if (statement->left != NULL &&
-            (!ordered_numeric_scalar(statement->left) || !statement->left->definable)) {
-            f2c_diagnostic_at(
-                context, statement->line,
-                f2c_validation_expression_start_column(statement->text, statement->left), 1,
-                "counted DO variable must be a definable scalar INTEGER or REAL "
-                "object");
-        }
-        if (statement->right != NULL && statement->limit != NULL && statement->step != NULL &&
-            (!ordered_numeric_scalar(statement->right) ||
-             !ordered_numeric_scalar(statement->limit) ||
-             !ordered_numeric_scalar(statement->step))) {
-            f2c_diagnostic_at(
-                context, statement->line,
-                f2c_validation_expression_start_column(statement->text, statement->right), 1,
-                "counted DO initial value, limit, and step must be scalar INTEGER "
-                "or REAL expressions");
-        }
-        if (statement->step != NULL && statement->step->type == TYPE_INTEGER &&
-            f2c_evaluate_integer_constant(unit, statement->step, &step) && step == 0) {
-            f2c_diagnostic_at(
-                context, statement->line,
-                f2c_validation_expression_start_column(statement->text, statement->step), 1,
-                "counted DO step cannot be zero");
-        }
+        f2c_validation_do(context, unit, statement);
     } else if (statement->kind == F2C_STMT_GOTO && expression != NULL) {
         if (expression->type != TYPE_INTEGER || expression->rank != 0U) {
             f2c_diagnostic_at(context, statement->line,

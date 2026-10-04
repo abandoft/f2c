@@ -449,6 +449,7 @@ set(
     src/semantic/validation/procedure/alternate.c
     src/semantic/validation/procedure/select.c
     src/semantic/validation/statement.c
+    src/semantic/validation/loop.c
     src/semantic/validation/where.c
 )
 

@@ -94,6 +94,9 @@ void f2c_validation_allocation(Context *context, Unit *unit, F2cStatement *state
 void f2c_validation_move_alloc(Context *context, Unit *unit, F2cStatement *statement);
 void f2c_validation_case_statement(Context *context, Unit *unit, F2cStatement *statement);
 void f2c_validation_data_statement(Context *context, Unit *unit, F2cStatement *statement);
+void f2c_validation_do(Context *context, Unit *unit, const F2cStatement *statement);
+void f2c_validation_integer_loop_parameter(Context *context, Unit *unit, int kind,
+                                           const F2cExpr *expression, const char *role);
 void f2c_validation_select_case_constructs(Context *context, Unit *unit);
 void f2c_validation_bind_constructs(Context *context, Unit *unit);
 void f2c_validation_branches(Context *context, Unit *unit);

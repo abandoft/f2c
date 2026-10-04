@@ -148,6 +148,14 @@ static void validate_constructor_semantics_impl(Context *context, Unit *unit, si
             const F2cExpr *initial = expression->children[value_count];
             const F2cExpr *limit = expression->children[value_count + 1U];
             const F2cExpr *step_expression = expression->children[value_count + 2U];
+            if (expression->symbol != NULL) {
+                f2c_validation_integer_loop_parameter(context, unit, expression->symbol->kind,
+                                                      initial, "array-constructor initial");
+                f2c_validation_integer_loop_parameter(context, unit, expression->symbol->kind,
+                                                      limit, "array-constructor limit");
+                f2c_validation_integer_loop_parameter(context, unit, expression->symbol->kind,
+                                                      step_expression, "array-constructor step");
+            }
             if (initial->type != TYPE_INTEGER || initial->rank != 0U ||
                 limit->type != TYPE_INTEGER || limit->rank != 0U ||
                 step_expression->type != TYPE_INTEGER || step_expression->rank != 0U) {
@@ -179,10 +187,6 @@ static uint64_t unsigned_distance(int64_t lower, int64_t upper) {
     if (lower >= 0 || upper < 0)
         return (uint64_t)(upper - lower);
     return (uint64_t)upper + (uint64_t)(-(lower + 1)) + UINT64_C(1);
-}
-
-static uint64_t unsigned_magnitude(int64_t value) {
-    return value >= 0 ? (uint64_t)value : (uint64_t)(-(value + 1)) + UINT64_C(1);
 }
 
 static int checked_extent_add(uint64_t left, uint64_t right, uint64_t *result) {
@@ -263,21 +267,20 @@ static int constructor_constant_extent(Unit *unit, const F2cExpr *expression, ui
         int64_t last;
         int64_t step;
         uint64_t iterations;
+        const int kind = expression->symbol != NULL ? expression->symbol->kind : 0;
         if (value_count == 0U ||
-            !f2c_evaluate_integer_constant(unit, expression->children[value_count], &first) ||
-            !f2c_evaluate_integer_constant(unit, expression->children[value_count + 1U], &last) ||
-            !f2c_evaluate_integer_constant(unit, expression->children[value_count + 2U], &step) ||
+            !f2c_evaluate_integer_loop_parameters(unit, kind, expression->children[value_count],
+                                                  expression->children[value_count + 1U],
+                                                  expression->children[value_count + 2U], &first,
+                                                  &last, &step) ||
             step == 0)
             return 0;
         if ((step > 0 && first > last) || (step < 0 && first < last)) {
             *extent = UINT64_C(0);
             return 1;
         }
-        iterations = unsigned_distance(step > 0 ? first : last, step > 0 ? last : first) /
-                     unsigned_magnitude(step);
-        if (iterations == UINT64_MAX)
+        if (!f2c_integer_iteration_count(first, last, step, &iterations))
             return -1;
-        ++iterations;
         for (i = 0U; i < value_count; ++i) {
             uint64_t child_extent;
             const int known =

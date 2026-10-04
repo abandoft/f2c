@@ -753,6 +753,14 @@ static void validate_io_item_semantics(Context *context, Unit *unit, const F2cSt
                               f2c_validation_expression_start_column(statement->text, item->step),
                               1, "I/O implied-DO step cannot be zero");
         }
+        if (item->iterator != NULL) {
+            f2c_validation_integer_loop_parameter(context, unit, item->iterator->type_kind,
+                                                  item->initial, "I/O implied-DO initial");
+            f2c_validation_integer_loop_parameter(context, unit, item->iterator->type_kind,
+                                                  item->limit, "I/O implied-DO limit");
+            f2c_validation_integer_loop_parameter(context, unit, item->iterator->type_kind,
+                                                  item->step, "I/O implied-DO step");
+        }
         for (i = 0U; i < item->child_count; ++i)
             validate_io_item_semantics(context, unit, statement, &item->children[i], input,
                                        unformatted, namelist);
