@@ -21,15 +21,20 @@ void f2c_emit_power_support(Buffer *output, int needs_complex) {
                 "F2C_DEFINE_INTEGER_POWER(i32, int32_t, INT32_MIN, INT32_MAX)\n"
                 "F2C_DEFINE_INTEGER_POWER(i64, int64_t, INT64_MIN, INT64_MAX)\n"
                 "#undef F2C_DEFINE_INTEGER_POWER\n"
+                "enum { f2c_power_float_digits = FLT_MANT_DIG, f2c_power_double_digits = "
+                "DBL_MANT_DIG, f2c_power_long_double_digits = LDBL_MANT_DIG };\n"
                 "static inline F2C_UNUSED float f2c_pow_fi(float base, int64_t exponent) ");
-    f2c_buffer_append(output, F2C_STRINGIFY(F2C_REAL_INTEGER_POWER_BODY(float, 1.0f)));
+    f2c_buffer_append(output, F2C_STRINGIFY(F2C_REAL_INTEGER_POWER_BODY(float, 1.0f, powf,
+                                                                        f2c_power_float_digits)));
     f2c_buffer_append(
         output, "\nstatic inline F2C_UNUSED double f2c_pow_di(double base, int64_t exponent) ");
-    f2c_buffer_append(output, F2C_STRINGIFY(F2C_REAL_INTEGER_POWER_BODY(double, 1.0)));
+    f2c_buffer_append(output, F2C_STRINGIFY(F2C_REAL_INTEGER_POWER_BODY(double, 1.0, pow,
+                                                                        f2c_power_double_digits)));
     f2c_buffer_append(
         output,
         "\nstatic inline F2C_UNUSED long double f2c_pow_li(long double base, int64_t exponent) ");
-    f2c_buffer_append(output, F2C_STRINGIFY(F2C_REAL_INTEGER_POWER_BODY(long double, 1.0L)));
+    f2c_buffer_append(output, F2C_STRINGIFY(F2C_REAL_INTEGER_POWER_BODY(
+                                  long double, 1.0L, powl, f2c_power_long_double_digits)));
     f2c_buffer_append(output, "\n");
     if (!needs_complex)
         return;
