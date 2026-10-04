@@ -2,6 +2,7 @@
 
 #include "codegen/literal/integer.h"
 #include "codegen/literal/real.h"
+#include "semantic/intrinsic/extremum.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -208,76 +209,72 @@ static char *emit_atan2(Unit *unit, const F2cExpr *expression, int *supported) {
     return f2c_buffer_take(&result);
 }
 
-static size_t extremum_index(const F2cExpr *actual) {
-    char *end;
-    unsigned long value;
-    if (actual == NULL || actual->kind != F2C_EXPR_KEYWORD_ARGUMENT || actual->text == NULL ||
-        actual->text[0] != 'a' || actual->text[1] == '\0')
-        return SIZE_MAX;
-    value = strtoul(actual->text + 1, &end, 10);
-    return *end == '\0' && value >= 1UL && value <= 64UL ? (size_t)value - 1U : SIZE_MAX;
+/* Balanced output has logarithmic C nesting and linear buffer construction.
+ * The processor policy is associative for values; NaN payload identity is not
+ * specified. Source-side effect preparation remains owned by typed planning.
+ */
+static int emit_extremum_tree(Unit *unit, const F2cExtremumActual *values, size_t count,
+                              const char *macro, const char *type, Buffer *output, int *supported) {
+    if (count == 1U) {
+        char *code;
+        if (values[0].value->rank != 0U) {
+            *supported = 0;
+            return 0;
+        }
+        code = f2c_expression_emit(unit, values[0].value, supported);
+        if (code == NULL || !*supported) {
+            free(code);
+            return 0;
+        }
+        f2c_buffer_printf(output, "((%s)(%s))", type, code);
+        free(code);
+        return !output->failed;
+    }
+    const size_t left = count / 2U;
+    f2c_buffer_printf(output, "%s(", macro);
+    if (!emit_extremum_tree(unit, values, left, macro, type, output, supported))
+        return 0;
+    f2c_buffer_append(output, ", ");
+    if (!emit_extremum_tree(unit, values + left, count - left, macro, type, output, supported))
+        return 0;
+    f2c_buffer_append(output, ")");
+    return !output->failed;
 }
 
 static char *emit_extremum(Unit *unit, const F2cExpr *expression, int *supported) {
-    const F2cExpr *values[64] = {0};
-    const char *macro =
-        expression->intrinsic == F2C_INTRINSIC_MAX ? "F2C_FORTRAN_MAX" : "F2C_FORTRAN_MIN";
+    F2cExtremumBinding bound;
+    const char *function;
     const char *comparison_type;
     const char *result_type = f2c_expression_c_type(expression);
-    size_t positional = 0U;
-    size_t count = 0U;
-    size_t index;
     Buffer result = {0};
-    for (index = 0U; index < expression->child_count; ++index) {
-        const F2cExpr *actual = expression->children[index];
-        size_t slot;
-        if (actual != NULL && actual->kind == F2C_EXPR_KEYWORD_ARGUMENT) {
-            slot = extremum_index(actual);
-            actual = actual->child_count == 1U ? actual->children[0] : NULL;
-        } else {
-            slot = positional++;
-        }
-        if (slot >= 64U || actual == NULL || values[slot] != NULL) {
-            *supported = 0;
-            return NULL;
-        }
-        values[slot] = actual;
-        if (slot + 1U > count)
-            count = slot + 1U;
-    }
-    if (count < 2U || values[0] == NULL || values[1] == NULL) {
+    if (!f2c_extremum_bind(expression, &bound)) {
+        f2c_extremum_binding_clear(&bound);
         *supported = 0;
         return NULL;
     }
-    comparison_type = f2c_expression_c_type(values[0]);
-    for (index = 0U; index < count; ++index) {
-        char *code;
-        if (values[index] == NULL || values[index]->rank != 0U) {
-            free(result.data);
-            *supported = 0;
-            return NULL;
-        }
-        code = f2c_expression_emit(unit, values[index], supported);
-        if (!*supported || code == NULL) {
-            free(code);
-            free(result.data);
-            return NULL;
-        }
-        if (index == 0U) {
-            f2c_buffer_printf(&result, "((%s)(%s))", comparison_type, code);
-        } else {
-            char *previous = f2c_buffer_take(&result);
-            f2c_buffer_printf(&result, "%s(%s, ((%s)(%s)))", macro, previous, comparison_type,
-                              code);
-            free(previous);
-        }
-        free(code);
+    const F2cExpr *first = bound.values[0].value;
+    comparison_type = f2c_expression_c_type(first);
+    const int maximum = expression->intrinsic == F2C_INTRINSIC_MAX;
+    const int kind = expression_kind(first);
+    if (first->type == TYPE_INTEGER)
+        function = kind == 1   ? (maximum ? "f2c_fortran_i8max" : "f2c_fortran_i8min")
+                   : kind == 2 ? (maximum ? "f2c_fortran_i16max" : "f2c_fortran_i16min")
+                   : kind == 4 ? (maximum ? "f2c_fortran_i32max" : "f2c_fortran_i32min")
+                               : (maximum ? "f2c_fortran_i64max" : "f2c_fortran_i64min");
+    else
+        function = kind == 4 ? (maximum ? "f2c_fortran_smax" : "f2c_fortran_smin")
+                             : (maximum ? "f2c_fortran_dmax" : "f2c_fortran_dmin");
+    if (!emit_extremum_tree(unit, bound.values, bound.count, function, comparison_type, &result,
+                            supported)) {
+        free(result.data);
+        f2c_extremum_binding_clear(&bound);
+        *supported = 0;
+        return NULL;
     }
-    if (expression->type != values[0]->type ||
-        expression_kind(expression) != expression_kind(values[0])) {
+    if (expression->type != first->type || expression_kind(expression) != expression_kind(first)) {
         char *selected = f2c_buffer_take(&result);
         if (expression->type == TYPE_INTEGER &&
-            (values[0]->type == TYPE_REAL || values[0]->type == TYPE_DOUBLE)) {
+            (first->type == TYPE_REAL || first->type == TYPE_DOUBLE)) {
             f2c_buffer_printf(&result, "((%s)f2c_int_integer((double)(%s), %d))", result_type,
                               selected, expression_kind(expression));
         } else {
@@ -285,6 +282,7 @@ static char *emit_extremum(Unit *unit, const F2cExpr *expression, int *supported
         }
         free(selected);
     }
+    f2c_extremum_binding_clear(&bound);
     return f2c_buffer_take(&result);
 }
 
