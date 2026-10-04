@@ -2,6 +2,7 @@
 
 #include "codegen/descriptor/private.h"
 #include "codegen/lowering/private.h"
+#include "codegen/operator.h"
 #include "codegen/type/initialization.h"
 
 #include <ctype.h>
@@ -140,7 +141,6 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
     const char *lowered_code;
     char *left;
     char *right;
-    Type result_type;
     if (expression == NULL) {
         *supported = 0;
         return NULL;
@@ -182,17 +182,17 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
         left = f2c_expression_emit(unit, expression->children[0], supported);
         if (!*supported || left == NULL)
             return NULL;
-        if ((expression->type == TYPE_COMPLEX || expression->type == TYPE_DOUBLE_COMPLEX) &&
-            strcmp(expression->text, "-") == 0) {
-            f2c_buffer_printf(&result, "%s(%s)",
-                              expression->type == TYPE_COMPLEX ? "f2c_cneg" : "f2c_zneg", left);
-        } else {
-            f2c_buffer_printf(&result, "(%s(%s))",
-                              strcmp(expression->text, ".not.") == 0 ? "!" : expression->text,
-                              left);
+        {
+            const F2cScalarOperand operand = {left,
+                                              f2c_expression_scalar_type(expression->children[0])};
+            const F2cScalarOperand absent = {NULL, {TYPE_UNKNOWN, 0}};
+            char *unary = f2c_emit_scalar_operator(expression->operator_kind, 1, operand, absent,
+                                                   f2c_expression_scalar_type(expression));
+            free(left);
+            if (unary == NULL)
+                *supported = 0;
+            return unary;
         }
-        free(left);
-        return f2c_buffer_take(&result);
     case F2C_EXPR_BINARY:
         left = f2c_expression_emit(unit, expression->children[0], supported);
         right = *supported ? f2c_expression_emit(unit, expression->children[1], supported) : NULL;
@@ -231,10 +231,15 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
                 binary = f2c_emit_character_comparison(unit, expression->children[0], left_value,
                                                        expression->text, expression->children[1],
                                                        right_value);
-            if (binary == NULL)
-                binary = f2c_emit_binary(unit, left_value, expression->children[0]->type,
-                                         expression->text, right_value,
-                                         expression->children[1]->type, &result_type);
+            if (binary == NULL) {
+                const F2cScalarOperand left_operand = {
+                    left_value, f2c_expression_scalar_type(expression->children[0])};
+                const F2cScalarOperand right_operand = {
+                    right_value, f2c_expression_scalar_type(expression->children[1])};
+                binary =
+                    f2c_emit_scalar_operator(expression->operator_kind, 0, left_operand,
+                                             right_operand, f2c_expression_scalar_type(expression));
+            }
             if (ordered && binary != NULL) {
                 f2c_buffer_printf(&sequenced, "(%s = (%s), %s)", temporary.data, ordered_code,
                                   binary);
@@ -264,9 +269,11 @@ char *f2c_expression_emit(Unit *unit, const F2cExpr *expression, int *supported)
             return NULL;
         }
         f2c_buffer_printf(&result, "%s((%s)(%s), (%s)(%s))",
-                          expression->type == TYPE_DOUBLE_COMPLEX ? "f2c_make_z" : "f2c_make_c",
-                          expression->type == TYPE_DOUBLE_COMPLEX ? "double" : "float", left,
-                          expression->type == TYPE_DOUBLE_COMPLEX ? "double" : "float", right);
+                          expression->type_kind == 4   ? "f2c_make_c"
+                          : expression->type_kind == 8 ? "f2c_make_z"
+                                                       : "f2c_make_q",
+                          f2c_c_type_kind(TYPE_REAL, expression->type_kind), left,
+                          f2c_c_type_kind(TYPE_REAL, expression->type_kind), right);
         free(left);
         free(right);
         return f2c_buffer_take(&result);
