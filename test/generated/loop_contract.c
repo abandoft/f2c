@@ -42,6 +42,22 @@ static void test_wide(void) {
     }
 }
 
+static void test_default_integer_constant_strides(void) {
+    const int32_t first = INT32_MAX - 10, last = INT32_MAX;
+    int32_t values[4] = {0}, trips = -1, final_value = 0;
+    loop32_stride5(&first, &last, values, &trips, &final_value);
+    assert(trips == 3 && values[0] == first && values[1] == INT32_MAX - 5 && values[2] == last &&
+           final_value == INT32_MIN + 4);
+    const int32_t negative_first = INT32_MIN + 10, negative_last = INT32_MIN;
+    loop32_stride_minus5(&negative_first, &negative_last, values, &trips, &final_value);
+    assert(trips == 3 && values[0] == negative_first && values[1] == INT32_MIN + 5 &&
+           values[2] == negative_last && final_value == INT32_MAX - 4);
+    loop32_stride5(&last, &first, values, &trips, &final_value);
+    assert(trips == 0 && final_value == last);
+    loop32_stride_minus5(&negative_last, &negative_first, values, &trips, &final_value);
+    assert(trips == 0 && final_value == negative_last);
+}
+
 #define CHECK_NARROW(suffix, type, maximum, minimum)                                               \
     do {                                                                                           \
         const type first = maximum, last = maximum, step = 1;                                      \
@@ -79,11 +95,18 @@ static void test_default_integer_range(void) {
         {INT32_MAX, INT32_MIN, INT32_MIN, 4, 2, {INT32_MAX, -1, 0}, INT32_MAX},
         {5, 1, 1, 4, 0, {0, 0, 0}, 5},
         {1, 5, -1, 4, 0, {0, 0, 0}, 1},
+        {INT32_MAX - 2, INT32_MAX, 1, 4, 3, {INT32_MAX - 2, INT32_MAX - 1, INT32_MAX}, INT32_MIN},
+        {INT32_MIN + 2, INT32_MIN, -1, 4, 3, {INT32_MIN + 2, INT32_MIN + 1, INT32_MIN}, INT32_MAX},
+        {INT32_MAX - 2, INT32_MAX, 1, 3, 3, {INT32_MAX - 2, INT32_MAX - 1, INT32_MAX}, INT32_MAX},
+        {INT32_MIN + 2, INT32_MIN, -1, 3, 3, {INT32_MIN + 2, INT32_MIN + 1, INT32_MIN}, INT32_MIN},
     };
     for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); ++index) {
         int32_t values[4] = {0}, trips = -1, final_value = 0;
         loop32(&cases[index].first, &cases[index].last, &cases[index].step, &cases[index].cap,
                values, &trips, &final_value);
+        if (trips != cases[index].trips || final_value != cases[index].final_value)
+            fprintf(stderr, "default integer case %zu: trips=%d, final=%d; expected %d, %d\n",
+                    index, trips, final_value, cases[index].trips, cases[index].final_value);
         assert(trips == cases[index].trips && final_value == cases[index].final_value);
         for (int32_t trip = 0; trip < trips; ++trip)
             assert(values[trip] == cases[index].values[trip]);
@@ -125,6 +148,7 @@ int main(int argc, char **argv) {
     test_wide();
     test_conversion();
     test_default_integer_range();
+    test_default_integer_constant_strides();
     CHECK_NARROW(8, int8_t, INT8_MAX, INT8_MIN);
     CHECK_NARROW(16, int16_t, INT16_MAX, INT16_MIN);
     CHECK_NARROW(32, int32_t, INT32_MAX, INT32_MIN);
