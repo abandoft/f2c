@@ -320,7 +320,9 @@ set(
     src/frontend/preprocessor.h
     src/frontend/preprocessor/definition.c
     src/frontend/preprocessor/expansion.c
-    src/frontend/preprocessor/condition/parser.c
+    src/frontend/preprocessor/condition/parse.c
+    src/frontend/preprocessor/condition/literal.c
+    src/frontend/preprocessor/condition/operation.c
     src/frontend/preprocessor/condition/expansion.c
     src/frontend/preprocessor/condition/private.h
     src/frontend/preprocessor/include.c
