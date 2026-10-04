@@ -53,7 +53,7 @@ jobs:
             scalar_component_actuals procedure_pointer_component \
             reduction_designators nested_array_reductions volatile_reductions \
             extremum_boundaries extremum_policy extremum_arguments \
-            lexical_literals numeric_model_intrinsics elemental_procedure \
+            lexical_literals numeric_model_intrinsics elemental_procedure operator_kinds operator_power_policy \
             qualified_descriptors qualified_contiguous scoped_storage_access scoped_unaligned_storage \
             live_object_state live_character_result_state live_namelist_transaction \
             live_component_assignment \
