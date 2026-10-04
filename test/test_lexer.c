@@ -347,10 +347,42 @@ static void test_statement_syntax_predicates(void) {
     release_tokenized_line(&abstract_interface);
 }
 
+static void test_logical_literal_kind_tokens(void) {
+    static const char *const spellings[] = {".TRUE._1", ".false._wide", ".true._"};
+    for (size_t i = 0U; i < sizeof(spellings) / sizeof(spellings[0]); ++i) {
+        F2cTokenStream stream;
+        f2c_token_stream_init(&stream, spellings[i], 5U, 2U);
+        f2c_token_stream_next(&stream);
+        expect(stream.token.length == strlen(spellings[i]),
+               "logical kind suffix is part of one full-source token");
+        expect(i == 2U ? stream.token.kind == F2C_TOKEN_INVALID
+                       : f2c_token_logical_literal(&stream.token) == (int)i + 1,
+               "logical spelling and missing suffix are identified exactly");
+        expect(stream.token.span.end.column == 2U + strlen(spellings[i]),
+               "logical suffix remains within its physical source span");
+    }
+    {
+        static const char *const invalid[] = {".true._3", ".false._unknown_kind", ".true._"};
+        for (size_t i = 0U; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+            char source[256];
+            F2cOptions options = {"invalid_logical.f90", F2C_SOURCE_FREE, 0};
+            const int length = snprintf(source, sizeof(source),
+                                        "program invalid_logical\nlogical :: value\n"
+                                        "value = %s\nend program invalid_logical\n",
+                                        invalid[i]);
+            F2cResult result = f2c_transpile(source, (size_t)length, &options);
+            expect(result.code == NULL && result.error_count != 0U,
+                   "logical kind errors suppress generated code at the public API");
+            f2c_result_free(&result);
+        }
+    }
+}
+
 int main(void) {
     test_complete_statement_tokens();
     test_legacy_and_literal_boundaries();
     test_literal_kind_and_boz_validation();
+    test_logical_literal_kind_tokens();
     test_shared_argument_and_expression_lexing();
     test_pretokenized_expression_path();
     test_token_cursor_and_ranges();
