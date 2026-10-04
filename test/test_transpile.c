@@ -853,8 +853,8 @@ static void test_typed_integer_and_nested_call_expressions(void) {
     expect(result.error_count == 0U, "typed nested expressions translate without errors");
     expect_contains(result.code, "> (*nwork)",
                     "adjacent dotted comparison is not consumed as a real literal");
-    expect_contains(result.code, "((int32_t)pow((double)",
-                    "integer exponentiation retains INTEGER result type");
+    expect_contains(result.code, "f2c_pow_i32((*n), (int64_t)(2))",
+                    "integer exponentiation uses exact kind-preserving integer arithmetic");
     expect_contains(result.code, "F2C_ABS((-((*n))))",
                     "integer ABS resolves through the kind-preserving C generic");
     expect_contains(result.code, "double f2c_ordered_argument_",
@@ -2300,8 +2300,8 @@ static void test_local_kind_parameter_semantics(void) {
                     "REAL(wp) declarations inherit the KIND expression precision");
     expect_contains(result.code, "DBL_MIN_EXP",
                     "kind-suffixed model arguments select double-precision limits");
-    expect_contains(result.code, "pow((double)",
-                    "REAL(..., wp) and _wp literals select double-precision power");
+    expect_contains(result.code, "threshold = f2c_pow_di(",
+                    "REAL(..., wp) and _wp literals select double-precision integer power");
     expect(result.code == NULL || strstr(result.code, "_Generic((0.f),") == NULL,
            "double KIND parameters never use a float model argument");
     expect(result.code == NULL || strstr(result.code, "powf(") == NULL,
