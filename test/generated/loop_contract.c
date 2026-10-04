@@ -42,6 +42,22 @@ static void test_wide(void) {
     }
 }
 
+static void test_default_integer_unit_strides(void) {
+    const int32_t first = INT32_MIN + 2, last = INT32_MIN;
+    int32_t cap = 4, values[4] = {0}, trips = -1, final_value = 0;
+    loop32_descending(&first, &last, &cap, values, &trips, &final_value);
+    assert(trips == 3 && values[0] == first && values[1] == INT32_MIN + 1 && values[2] == last &&
+           final_value == INT32_MAX);
+    cap = 3;
+    loop32_descending(&first, &last, &cap, values, &trips, &final_value);
+    assert(trips == 3 && final_value == last);
+    loop32_descending(&last, &first, &cap, values, &trips, &final_value);
+    assert(trips == 0 && final_value == last);
+    const int32_t rounded_first = 3, rounded_last = 1;
+    loop32_rounded_step(&rounded_first, &rounded_last, values, &trips, &final_value);
+    assert(trips == 3 && values[0] == 3 && values[1] == 2 && values[2] == 1 && final_value == 0);
+}
+
 static void test_default_integer_constant_strides(void) {
     const int32_t first = INT32_MAX - 10, last = INT32_MAX;
     int32_t values[4] = {0}, trips = -1, final_value = 0;
@@ -150,6 +166,7 @@ int main(int argc, char **argv) {
     test_wide();
     test_conversion();
     test_default_integer_range();
+    test_default_integer_unit_strides();
     test_default_integer_constant_strides();
     CHECK_NARROW(8, int8_t, INT8_MAX, INT8_MIN);
     CHECK_NARROW(16, int16_t, INT16_MAX, INT16_MIN);
