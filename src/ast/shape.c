@@ -561,7 +561,7 @@ static char *literal_kind_name(const F2cToken *token) {
 }
 
 static int symbol_kind_value(Unit *unit, const Symbol *symbol, int64_t *value) {
-    if (symbol == NULL || !symbol->parameter)
+    if (symbol == NULL || !symbol->parameter || symbol->type != TYPE_INTEGER || symbol->rank != 0U)
         return 0;
     if (symbol->initializer_expression != NULL &&
         f2c_evaluate_integer_constant(unit, symbol->initializer_expression, value))
