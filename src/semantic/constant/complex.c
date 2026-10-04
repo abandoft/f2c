@@ -407,17 +407,17 @@ static int evaluate_power(F2cConstantEvaluation *evaluation, const F2cExpr *expr
         f2c_constant_evaluate_integer(evaluation, exponent, &integer, depth + 1U)) {
         const int negative = integer < 0;
         magnitude = negative ? UINT64_C(0) - (uint64_t)integer : (uint64_t)integer;
+        if (negative) {
+            const F2cComplexConstant one = {1.0, 0.0};
+            if (!complex_divide(one, base, kind, &base))
+                return 0;
+        }
         while (magnitude != 0U) {
             if ((magnitude & UINT64_C(1)) != 0U)
                 result = complex_multiply(result, base, kind);
             magnitude >>= 1U;
             if (magnitude != 0U)
                 base = complex_multiply(base, base, kind);
-        }
-        if (negative) {
-            const F2cComplexConstant one = {1.0, 0.0};
-            if (!complex_divide(one, result, kind, &result))
-                return 0;
         }
         return store_complex(kind, result.real, result.imaginary, value);
     }
@@ -439,8 +439,8 @@ int f2c_constant_evaluate_complex(F2cConstantEvaluation *evaluation, const F2cEx
     F2cComplexConstant right;
     Unit *unit = evaluation->unit;
     const int kind = expression_kind(expression);
-    if (expression == NULL || value == NULL || !is_complex(expression->type) ||
-        !f2c_constant_consume_step(evaluation, depth))
+    if (expression == NULL || value == NULL || expression->resolved_procedure != NULL ||
+        !is_complex(expression->type) || !f2c_constant_consume_step(evaluation, depth))
         return 0;
     if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
         return f2c_constant_evaluate_complex(evaluation, expression->children[0], value,
@@ -472,9 +472,9 @@ int f2c_constant_evaluate_complex(F2cConstantEvaluation *evaluation, const F2cEx
     }
     if (expression->kind == F2C_EXPR_UNARY && expression->child_count == 1U &&
         evaluate_numeric(evaluation, expression->children[0], &left, depth + 1U)) {
-        if (strcmp(expression->text, "+") == 0)
+        if (expression->operator_kind == F2C_OPERATOR_ADD)
             return store_complex(kind, left.real, left.imaginary, value);
-        if (strcmp(expression->text, "-") == 0)
+        if (expression->operator_kind == F2C_OPERATOR_SUBTRACT)
             return store_complex(kind, -left.real, -left.imaginary, value);
         return 0;
     }
@@ -484,21 +484,23 @@ int f2c_constant_evaluate_complex(F2cConstantEvaluation *evaluation, const F2cEx
         return evaluate_mathematical(evaluation, expression, value, depth);
     }
     if (expression->kind != F2C_EXPR_BINARY || expression->child_count != 2U ||
+        expression->resolved_procedure != NULL ||
         !evaluate_numeric(evaluation, expression->children[0], &left, depth + 1U))
         return 0;
-    if (strcmp(expression->text, "**") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_POWER)
         return evaluate_power(evaluation, expression, left, value, depth);
     if (!evaluate_numeric(evaluation, expression->children[1], &right, depth + 1U))
         return 0;
-    if (strcmp(expression->text, "+") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_ADD)
         return store_complex(kind, left.real + right.real, left.imaginary + right.imaginary, value);
-    if (strcmp(expression->text, "-") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_SUBTRACT)
         return store_complex(kind, left.real - right.real, left.imaginary - right.imaginary, value);
-    if (strcmp(expression->text, "*") == 0) {
+    if (expression->operator_kind == F2C_OPERATOR_MULTIPLY) {
         left = complex_multiply(left, right, kind);
         return store_complex(kind, left.real, left.imaginary, value);
     }
-    if (strcmp(expression->text, "/") == 0 && complex_divide(left, right, kind, &left))
+    if (expression->operator_kind == F2C_OPERATOR_DIVIDE &&
+        complex_divide(left, right, kind, &left))
         return store_complex(kind, left.real, left.imaginary, value);
     return 0;
 }
