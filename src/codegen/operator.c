@@ -45,6 +45,17 @@ static char *convert_operand(F2cScalarOperand operand, F2cScalarType target) {
     return f2c_buffer_take(&output);
 }
 
+char *f2c_emit_scalar_conversion(F2cScalarOperand operand, F2cScalarType target) {
+    operand.type = f2c_scalar_type(operand.type.type, operand.type.kind);
+    target = f2c_scalar_type(target.type, target.kind);
+    if (operand.code == NULL || !supported_scalar_type(operand.type) ||
+        !supported_scalar_type(target) ||
+        !((f2c_type_is_numeric(operand.type.type) && f2c_type_is_numeric(target.type)) ||
+          (operand.type.type == TYPE_LOGICAL && target.type == TYPE_LOGICAL)))
+        return NULL;
+    return convert_operand(operand, target);
+}
+
 static void emit_power(Buffer *output, F2cScalarType result, F2cScalarType exponent,
                        const char *left, const char *right) {
     if (exponent.type == TYPE_INTEGER) {
@@ -90,8 +101,8 @@ char *f2c_emit_scalar_operator(F2cOperator operator_kind, int unary, F2cScalarOp
         typing.result.type != expected.type || typing.result.kind != expected.kind ||
         !supported_scalar_type(typing.left) || (!unary && !supported_scalar_type(typing.right)))
         return NULL;
-    converted_left = convert_operand(left, typing.left);
-    converted_right = unary ? NULL : convert_operand(right, typing.right);
+    converted_left = f2c_emit_scalar_conversion(left, typing.left);
+    converted_right = unary ? NULL : f2c_emit_scalar_conversion(right, typing.right);
     if (converted_left == NULL || (!unary && converted_right == NULL)) {
         free(converted_left);
         free(converted_right);
