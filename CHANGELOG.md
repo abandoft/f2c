@@ -1,3 +1,18 @@
+## 1.54.0
+
+- Support static storage and whole-array arguments for local, host-associated, and imported `PARAMETER` arrays.
+- Preserve numeric kinds in static array initialization and correct character length conversion and padding.
+- Unify constant array evaluation for nested constructors, implied `DO`, parameter dependencies, and element access using declared lower bounds.
+- Extend constant evaluation of `RESHAPE`, `TRANSPOSE`, and `SPREAD`, preserving `PAD/ORDER` and column-major layouts.
+- Extend constant `PACK/UNPACK` evaluation with masks, character values, and fixed derived values.
+- Support the covered constant `CSHIFT/EOSHIFT/FINDLOC` combinations and scalar location results.
+- Support constant initialization of fixed array components and correct generated scalar derived-type parameter values.
+- Correct negative `SPREAD` counts to produce zero-sized results.
+- Fix index overflow for extreme shift amounts and share array shift rules between constant and runtime evaluation.
+- Correct pre-counted legacy real `DO`, single-evaluation controls, qualified storage, and post-loop values.
+- Correct declaration scopes for derived-component specifications and preserve constructor iterator kinds.
+- Improve shape, type, dependency-cycle, and resource checks for constant initialization instead of emitting zero data for unevaluated expressions.
+
 ## 1.53.0
 
 - Preserve integer `DO` kinds, correcting conversions in narrow and wide integer loop controls.
