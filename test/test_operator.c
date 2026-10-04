@@ -254,6 +254,14 @@ static void test_constants(void) {
     }
     {
         int64_t value;
+        expect(f2c_numeric_real4_integer_power(10.0f, -20) == 1.0e-20f,
+               "single-precision negative decimal powers avoid repeated reciprocal rounding");
+        expect(f2c_numeric_real4_integer_power(-1.0f, INT64_MAX) == -1.0f &&
+                   f2c_numeric_real4_integer_power(-1.0f, INT64_MIN) == 1.0f,
+               "split floating powers preserve full-width integer parity and minimum exponent");
+        expect(f2c_numeric_real8_integer_power(-1.0, INT64_MAX) == -1.0 &&
+                   f2c_numeric_real8_integer_power(2.0, -1074) == 0x1p-1074,
+               "double powers preserve full-width parity and the smallest subnormal");
         expect(!f2c_numeric_integer_power(2, 63, INT64_MIN, INT64_MAX, &value),
                "wide positive overflow is rejected before any C undefined operation");
         expect(!f2c_numeric_integer_power(2, 7, INT8_MIN, INT8_MAX, &value),
@@ -342,6 +350,39 @@ static void test_conversion_contract(void) {
     }
 }
 
+static uint64_t captured_exponent;
+static unsigned int captured_power_calls;
+static int captured_negative;
+
+static float capture_exact_exponent(float base, float exponent) {
+    (void)base;
+    expect((exponent < 0.0f) == captured_negative,
+           "every floating exponent part retains the original sign");
+    captured_exponent += (uint64_t)fabsf(exponent);
+    ++captured_power_calls;
+    return 1.0f;
+}
+
+static float probe_exponent_parts(float base, int64_t exponent) {
+    F2C_REAL_INTEGER_POWER_BODY(float, 1.0f, capture_exact_exponent, FLT_MANT_DIG)
+}
+
+static void test_exact_exponent_parts(void) {
+    const int64_t exponents[] = {0,         1,         -1,        16777217,
+                                 -16777217, INT64_MAX, INT64_MIN, INT64_C(0x123456789abcdef)};
+    for (size_t index = 0U; index < sizeof(exponents) / sizeof(exponents[0]); ++index) {
+        const int64_t exponent = exponents[index];
+        const uint64_t magnitude =
+            exponent < 0 ? (uint64_t)0 - (uint64_t)exponent : (uint64_t)exponent;
+        captured_exponent = 0U;
+        captured_power_calls = 0U;
+        captured_negative = exponent < 0;
+        (void)probe_exponent_parts(1.0f, exponent);
+        expect(captured_exponent == magnitude && captured_power_calls <= 3U,
+               "libm exponent parts reconstruct all 64 integer bits in at most three calls");
+    }
+}
+
 int main(void) {
     test_spellings();
     test_syntax();
@@ -350,5 +391,6 @@ int main(void) {
     test_constants();
     test_lowering_contract();
     test_conversion_contract();
+    test_exact_exponent_parts();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
