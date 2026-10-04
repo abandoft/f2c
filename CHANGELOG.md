@@ -10,6 +10,7 @@
 - Unify logical equivalence semantics in scalar expressions and array reductions.
 - Correct operand conversions in mixed-kind matrix multiplication.
 - Fix Windows compilation of complex scalar array broadcasts, preserving cross-kind conversions and single evaluation.
+- Improve real integer-power rounding accuracy to avoid numerical errors in matrix balancing and back-transformation.
 
 ## 1.51.0
 
