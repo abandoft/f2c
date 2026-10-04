@@ -27,6 +27,8 @@ program elemental_procedure
   complex, allocatable :: dynamic_complex(:)
   logical, allocatable :: dynamic_logical(:)
   character(len=:), allocatable :: zero_dynamic(:)
+  real :: empty_cube(2,0,3)
+  real, allocatable :: dynamic_cube(:,:,:)
 
   a = [1, 2, 3, 4]
   b = [10, 20, 30, 40]
@@ -107,9 +109,12 @@ program elemental_procedure
   if (any(dynamic_logical)) error stop 27
   dynamic_cells = make_cell(a(1:0))
   if (.not. allocated(dynamic_cells) .or. size(dynamic_cells) /= 0) error stop 28
+  dynamic_cube = empty_cube + 1.0
+  if (.not. allocated(dynamic_cube)) error stop 29
+  if (any(shape(dynamic_cube) /= [2,0,3])) error stop 30
 
   deallocate(dynamic_values, dynamic_words, dynamic_cells, &
-             dynamic_complex, dynamic_logical, zero_dynamic)
+             dynamic_complex, dynamic_logical, zero_dynamic, dynamic_cube)
 
   do i = 1, 4
     write (*, '(I0,1X,I0)') values(i), reversed(i)
