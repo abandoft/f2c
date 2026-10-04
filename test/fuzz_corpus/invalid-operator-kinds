@@ -1,0 +1,6 @@
+program p
+logical :: a
+a = .not. 2_8
+a = (1.0,2.0) < 3.0
+a = .true. == .false.
+end
