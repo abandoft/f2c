@@ -4,6 +4,7 @@
 #include "codegen/array/private.h"
 #include "codegen/call/private.h"
 #include "codegen/descriptor/private.h"
+#include "codegen/literal/integer.h"
 #include "codegen/lowering/private.h"
 #include "ir/call.h"
 
@@ -65,6 +66,12 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         return f2c_call_bound_expression(unit, expression, supported);
     if (expression->symbol != NULL && expression->symbol->statement_function)
         return f2c_expression_statement_function(unit, expression, supported);
+    if (intrinsic_call && expression->intrinsic == F2C_INTRINSIC_FINDLOC &&
+        expression->rank == 0U) {
+        int64_t constant;
+        if (f2c_evaluate_integer_constant(unit, expression, &constant))
+            return f2c_integer_constant_literal(constant, expression->type_kind);
+    }
     if (intrinsic_call && expression->intrinsic == F2C_INTRINSIC_ETIME)
         return f2c_expression_etime(unit, expression, supported);
     if (intrinsic_call && f2c_intrinsic_is_bit(expression->intrinsic) &&
