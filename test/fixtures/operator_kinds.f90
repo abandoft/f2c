@@ -9,6 +9,7 @@ program operator_kinds
   real(kind=4) :: r4
   real(kind=4) :: real_matrix(2,2), real_product(2,2)
   real(kind=8) :: r8
+  integer :: complex_calls
   complex(kind=4) :: c4
   complex(kind=8) :: c8
   complex(kind=4) :: narrow_complex(2,2)
@@ -120,9 +121,26 @@ program operator_kinds
   wide_complex = (1.25_8,2.5_8)
   complex_product = matmul(narrow_complex,wide_complex)
   if (any(abs(complex_product - wide_complex) > 0.0_8)) stop 43
+  narrow_complex = (2.0_8,3.0_8)
+  if (any(narrow_complex /= cmplx(2.0_4,3.0_4))) stop 44
+  wide_complex = (2.0_4,3.0_4)
+  if (any(wide_complex /= cmplx(2.0_8,3.0_8,kind=8))) stop 45
+  wide_complex = 7_8
+  if (any(wide_complex /= cmplx(7.0_8,0.0_8,kind=8))) stop 46
+  narrow_complex = -4.0_8
+  if (any(narrow_complex /= cmplx(-4.0_4,0.0_4))) stop 47
+  complex_calls = 0
+  narrow_complex = broadcast_value()
+  if (complex_calls /= 1) stop 48
+  if (any(narrow_complex /= cmplx(5.0_4,6.0_4))) stop 49
   write(*,'(A)') 'operator kinds passed'
 
 contains
+  function broadcast_value() result(value)
+    complex(kind=8) :: value
+    complex_calls = complex_calls + 1
+    value = (5.0_8,6.0_8)
+  end function
   function base_value() result(value)
     integer(kind=8) :: value
     base_calls = base_calls + 1
