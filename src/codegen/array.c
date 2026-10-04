@@ -1,5 +1,6 @@
 #include "codegen/array/private.h"
 #include "codegen/call/private.h"
+#include "codegen/operator.h"
 #include "codegen/storage/private.h"
 
 #include <stdlib.h>
@@ -273,6 +274,7 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
         free(right_count);
     } else {
         char *value;
+        char *converted;
         if (f2c_array_emit_derived_scalar_broadcast(context, unit, left_symbol, right,
                                                     element_count, depth))
             goto cleanup;
@@ -282,11 +284,21 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
                            "whole-array assignment has an unsupported right-hand expression");
             goto cleanup;
         }
+        converted =
+            f2c_emit_scalar_conversion((F2cScalarOperand){value, f2c_expression_scalar_type(right)},
+                                       f2c_scalar_type(left_symbol->type, left_symbol->kind));
+        free(value);
+        value = converted;
+        if (value == NULL) {
+            f2c_diagnostic(context, line, 1,
+                           "whole-array scalar assignment has an unsupported type conversion");
+            goto cleanup;
+        }
         f2c_array_indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
-                          "{ const %s f2c_whole_scalar = (%s)(%s); "
+                          "{ const %s f2c_whole_scalar = %s; "
                           "size_t f2c_fill_index; for (f2c_fill_index = 0; ",
-                          f2c_symbol_c_type(left_symbol), f2c_symbol_c_type(left_symbol), value);
+                          f2c_symbol_c_type(left_symbol), value);
         if (left_symbol->equivalence_unaligned) {
             char *address = f2c_emit_unaligned_linear_address(unit, left_symbol, "f2c_fill_index");
             f2c_buffer_printf(&context->output,
