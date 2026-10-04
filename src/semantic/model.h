@@ -384,6 +384,10 @@ struct Unit {
     size_t host_capture_begin;
     size_t host_capture_count;
     Unit *signature_host;
+    /* Borrowed enclosing scope for component type/specification expressions.
+     * Component names stay in the staging table; they are not ordinary local
+     * declarations and must not hide the owner's named constants. */
+    Unit *declaration_expression_scope;
     char *interface_generic_name;
     Unit *interfaces;
     size_t interface_count;

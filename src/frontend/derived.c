@@ -590,6 +590,7 @@ void f2c_parse_derived_type_definitions(Context *context, Unit *unit) {
         component_scope.context = context;
         component_scope.name = unit->name;
         component_scope.signature_host = unit;
+        component_scope.declaration_expression_scope = unit;
         component_scope.derived_types = unit->derived_types;
         component_scope.derived_type_count = unit->derived_type_count;
         component_scope.options = unit->options;

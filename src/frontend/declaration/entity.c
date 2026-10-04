@@ -344,6 +344,8 @@ static int assign_string_range(Context *context, const Line *line, size_t begin,
 static int configure_derived_type(Context *context, Unit *unit, const Line *line,
                                   const F2cDeclarationTypeSpec *type_spec, Symbol *symbol) {
     Buffer c_type = {0};
+    Unit *type_scope =
+        unit->declaration_expression_scope != NULL ? unit->declaration_expression_scope : unit;
     if (type_spec->derived_type_name == NULL)
         return 0;
     if (strcmp(type_spec->derived_type_name, "*") == 0) {
@@ -351,7 +353,7 @@ static int configure_derived_type(Context *context, Unit *unit, const Line *line
                                   "unlimited polymorphic CLASS(*) is not yet supported");
         return 0;
     }
-    symbol->derived_type = f2c_find_derived_type(unit, type_spec->derived_type_name);
+    symbol->derived_type = f2c_find_derived_type(type_scope, type_spec->derived_type_name);
     if (symbol->derived_type == NULL) {
         f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line, &line->tokens[0], 1,
                                   "derived type '%s' is not declared in this scope",
@@ -483,9 +485,12 @@ static int apply_entity(Context *context, Unit *unit, const Line *line,
                              "declaration initializer"))
         return 0;
     if (entity->initializer_begin != SIZE_MAX)
-        symbol->kind_type = f2c_kind_type_from_tokens(unit, line, entity->initializer_begin,
-                                                      entity->initializer_end);
-    f2c_shape_from_symbol(unit, &symbol->shape, symbol);
+        symbol->kind_type = f2c_kind_type_from_tokens(
+            unit->declaration_expression_scope != NULL ? unit->declaration_expression_scope : unit,
+            line, entity->initializer_begin, entity->initializer_end);
+    f2c_shape_from_symbol(
+        unit->declaration_expression_scope != NULL ? unit->declaration_expression_scope : unit,
+        &symbol->shape, symbol);
     return 1;
 }
 
@@ -502,7 +507,9 @@ void f2c_parse_entity_declaration(Context *context, Unit *unit, Line *source_lin
     memset(&type_spec, 0, sizeof(type_spec));
     if (source_line == NULL)
         return;
-    if (!f2c_parse_type_spec_tokens(context, unit, source_line, start, &type_spec)) {
+    Unit *type_scope =
+        unit->declaration_expression_scope != NULL ? unit->declaration_expression_scope : unit;
+    if (!f2c_parse_type_spec_tokens(context, type_scope, source_line, start, &type_spec)) {
         f2c_release_type_spec(&type_spec);
         return;
     }
