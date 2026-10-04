@@ -266,6 +266,8 @@ set(
     src/core/generated/io/list/token.c
     src/core/generated/io/list/write.c
     src/core/generated/mathematical.c
+    src/core/generated/extremum.c
+    src/core/numeric/extremum.h
     src/core/generated/model.c
     src/core/generated/numeric.c
     src/core/generated/io/number/model.c
@@ -380,6 +382,8 @@ set(
     src/semantic/implicit/symbols.c
     src/semantic/intrinsic/catalog.c
     src/semantic/intrinsic/identity.c
+    src/semantic/intrinsic/extremum.c
+    src/semantic/intrinsic/extremum.h
     src/semantic/intrinsic/resolution.c
     src/semantic/intrinsic.h
     src/semantic/model.h
@@ -767,6 +771,16 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_reduction_intrinsic_tests test/test_reduction_intrinsic.c)
     f2c_configure_test_target(f2c_reduction_intrinsic_tests)
     add_test(NAME reduction_intrinsic_semantics COMMAND f2c_reduction_intrinsic_tests)
+
+    add_executable(f2c_extremum_policy_tests test/test_extremum_policy.c)
+    target_include_directories(f2c_extremum_policy_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_extremum_policy_tests)
+    add_test(NAME extremum_processor_policy COMMAND f2c_extremum_policy_tests)
+
+    add_executable(f2c_extremum_binding_tests test/test_extremum_binding.c)
+    target_include_directories(f2c_extremum_binding_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_extremum_binding_tests)
+    add_test(NAME extremum_argument_binding COMMAND f2c_extremum_binding_tests)
 
     add_executable(f2c_transform_intrinsic_tests test/test_transform_intrinsic.c)
     target_include_directories(
