@@ -25,6 +25,10 @@ int f2c_constant_evaluate_real(F2cConstantEvaluation *evaluation, const F2cExpr 
                                double *value, size_t depth);
 int f2c_constant_evaluate_complex(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
                                   F2cComplexConstant *value, size_t depth);
+int f2c_constant_evaluate_character(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
+                                    char **value, size_t *length, size_t depth);
+int f2c_constant_evaluate_logical_operator(F2cConstantEvaluation *evaluation,
+                                           const F2cExpr *expression, int64_t *value, size_t depth);
 int f2c_constant_evaluate_numeric_integer(F2cConstantEvaluation *evaluation,
                                           const F2cExpr *expression, int64_t *value, size_t depth);
 int f2c_constant_evaluate_numeric_real(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
