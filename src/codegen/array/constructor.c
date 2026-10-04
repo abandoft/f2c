@@ -2,6 +2,7 @@
 #include "codegen/array/private.h"
 
 #include "codegen/descriptor/private.h"
+#include "codegen/loop/control.h"
 #include "codegen/lowering/private.h"
 #include "codegen/result/retention.h"
 #include "codegen/storage/private.h"
@@ -206,6 +207,9 @@ static F2cExpr *clone_constructor_expression(const ConstructorEmitter *emitter,
         clone->rank = 0U;
         clone->definable = 1;
         clone->value_category = F2C_VALUE_VARIABLE;
+        /* The ac-do-variable is a construct entity with its inherited kind but
+         * no storage attributes of the same-named enclosing object. */
+        clone->storage_qualifiers = 0U;
         clone->symbol = NULL;
         return clone;
     }
@@ -386,85 +390,53 @@ cleanup:
 
 static int emit_constructor_implied_do(ConstructorEmitter *emitter, const F2cExpr *expression,
                                        int depth) {
-    F2cExpr *initial_expression = NULL;
-    F2cExpr *limit_expression = NULL;
-    F2cExpr *step_expression = NULL;
-    char *initial = NULL;
-    char *limit = NULL;
-    char *step = NULL;
-    char iterator_name[64];
+    F2cExpr *controls[3] = {NULL, NULL, NULL};
+    const char *roles[3] = {"start", "limit", "step"};
+    Buffer iterator_name = {0};
     const size_t value_count = expression->child_count >= 3U ? expression->child_count - 3U : 0U;
     const size_t temporary = emitter->next_temporary++;
-    size_t i;
+    const char *c_type = expression->symbol != NULL ? f2c_symbol_c_type(expression->symbol) : NULL;
+    const char *suffix =
+        expression->symbol != NULL ? f2c_integer_loop_suffix(expression->symbol->kind) : NULL;
+    Buffer advance = {0};
+    char *prefix = f2c_loop_local_prefix(emitter->unit, "f2c_constructor", temporary);
     int result = 0;
-    if (value_count == 0U)
-        return 0;
-    initial_expression = clone_constructor_expression(emitter, expression->children[value_count]);
-    limit_expression =
-        clone_constructor_expression(emitter, expression->children[value_count + 1U]);
-    step_expression = clone_constructor_expression(emitter, expression->children[value_count + 2U]);
-    if (initial_expression == NULL || limit_expression == NULL || step_expression == NULL ||
-        !prepare_constructor_expression(emitter, initial_expression, depth) ||
-        !prepare_constructor_expression(emitter, limit_expression, depth) ||
-        !prepare_constructor_expression(emitter, step_expression, depth))
+    if (value_count == 0U || c_type == NULL || suffix == NULL || prefix == NULL)
         goto cleanup;
-    initial = initial_expression != NULL
-                  ? f2c_array_emit_expression(emitter->unit, initial_expression)
-                  : NULL;
-    limit = limit_expression != NULL ? f2c_array_emit_expression(emitter->unit, limit_expression)
-                                     : NULL;
-    step =
-        step_expression != NULL ? f2c_array_emit_expression(emitter->unit, step_expression) : NULL;
-    if (initial == NULL || limit == NULL || step == NULL)
-        goto cleanup;
-    (void)snprintf(iterator_name, sizeof(iterator_name), "f2c_constructor_value_%zu", temporary);
     f2c_array_indent(&emitter->context->output, depth);
     f2c_buffer_append(&emitter->context->output, "{\n");
-    f2c_array_indent(&emitter->context->output, depth + 1);
-    f2c_buffer_printf(&emitter->context->output,
-                      "const int64_t f2c_constructor_first_%zu = (int64_t)(%s);\n", temporary,
-                      initial);
-    f2c_array_indent(&emitter->context->output, depth + 1);
-    f2c_buffer_printf(&emitter->context->output,
-                      "const int64_t f2c_constructor_last_%zu = (int64_t)(%s);\n", temporary,
-                      limit);
-    f2c_array_indent(&emitter->context->output, depth + 1);
-    f2c_buffer_printf(&emitter->context->output,
-                      "const int64_t f2c_constructor_step_%zu = (int64_t)(%s);\n", temporary, step);
-    f2c_array_indent(&emitter->context->output, depth + 1);
-    f2c_buffer_printf(&emitter->context->output, "if (f2c_constructor_step_%zu == 0) abort();\n",
-                      temporary);
-    f2c_array_indent(&emitter->context->output, depth + 1);
-    f2c_buffer_printf(&emitter->context->output,
-                      "const uint64_t f2c_constructor_iterations_%zu = "
-                      "f2c_constructor_step_%zu > 0 ? "
-                      "(f2c_constructor_first_%zu <= f2c_constructor_last_%zu ? "
-                      "(uint64_t)((f2c_constructor_last_%zu - f2c_constructor_first_%zu) / "
-                      "f2c_constructor_step_%zu) + UINT64_C(1) : UINT64_C(0)) : "
-                      "(f2c_constructor_first_%zu >= f2c_constructor_last_%zu ? "
-                      "(uint64_t)((f2c_constructor_first_%zu - f2c_constructor_last_%zu) / "
-                      "(-f2c_constructor_step_%zu)) + UINT64_C(1) : UINT64_C(0));\n",
-                      temporary, temporary, temporary, temporary, temporary, temporary, temporary,
-                      temporary, temporary, temporary, temporary, temporary);
-    f2c_array_indent(&emitter->context->output, depth + 1);
-    f2c_buffer_printf(&emitter->context->output,
-                      "for (uint64_t f2c_constructor_iteration_%zu = UINT64_C(0); "
-                      "f2c_constructor_iteration_%zu < f2c_constructor_iterations_%zu; "
-                      "++f2c_constructor_iteration_%zu) {\n",
-                      temporary, temporary, temporary, temporary);
-    f2c_array_indent(&emitter->context->output, depth + 2);
-    f2c_buffer_printf(&emitter->context->output,
-                      "const int32_t %s = (int32_t)(f2c_constructor_first_%zu + "
-                      "(int64_t)f2c_constructor_iteration_%zu * "
-                      "f2c_constructor_step_%zu);\n",
-                      iterator_name, temporary, temporary, temporary);
-    f2c_array_indent(&emitter->context->output, depth + 2);
-    f2c_buffer_printf(&emitter->context->output, "(void)%s;\n", iterator_name);
-    if (!push_constructor_substitution(emitter, expression->symbol, expression->text,
-                                       iterator_name))
+    for (size_t index = 0U; index < 3U; ++index) {
+        char *code;
+        controls[index] =
+            clone_constructor_expression(emitter, expression->children[value_count + index]);
+        if (controls[index] == NULL ||
+            !prepare_constructor_expression(emitter, controls[index], depth + 1))
+            goto cleanup;
+        code = f2c_array_emit_expression(emitter->unit, controls[index]);
+        if (code == NULL)
+            goto cleanup;
+        f2c_loop_emit_parameter(&emitter->context->output, prefix, temporary, roles[index],
+                                expression->symbol->kind, controls[index], code, depth + 1);
+        free(code);
+    }
+    f2c_loop_emit_state(&emitter->context->output, prefix, temporary, NULL, 0, depth + 1);
+    f2c_buffer_printf(&iterator_name, "%s_value_%zu", prefix, temporary);
+    if (iterator_name.failed)
         goto cleanup;
-    for (i = 0U; i < value_count; ++i) {
-        if (!emit_constructor_value(emitter, expression->children[i], depth + 2)) {
+    f2c_array_indent(&emitter->context->output, depth + 1);
+    f2c_buffer_printf(&emitter->context->output, "%s %s = %s_start_%zu;\n", c_type,
+                      iterator_name.data, prefix, temporary);
+    f2c_buffer_printf(&advance, "%s = F2C_LOOP_%s(%s, %s_step_%zu)", iterator_name.data, suffix,
+                      iterator_name.data, prefix, temporary);
+    if (advance.failed)
+        goto cleanup;
+    f2c_loop_emit_header(&emitter->context->output, prefix, temporary, advance.data, NULL,
+                         depth + 1);
+    if (!push_constructor_substitution(emitter, expression->symbol, expression->text,
+                                       iterator_name.data))
+        goto cleanup;
+    for (size_t index = 0U; index < value_count; ++index) {
+        if (!emit_constructor_value(emitter, expression->children[index], depth + 2)) {
             --emitter->substitution_count;
             goto cleanup;
         }
@@ -474,15 +446,14 @@ static int emit_constructor_implied_do(ConstructorEmitter *emitter, const F2cExp
     f2c_buffer_append(&emitter->context->output, "}\n");
     f2c_array_indent(&emitter->context->output, depth);
     f2c_buffer_append(&emitter->context->output, "}\n");
-    result = 1;
+    result = !emitter->context->output.failed;
 
 cleanup:
-    free(initial);
-    free(limit);
-    free(step);
-    f2c_codegen_expression_free(emitter->unit, initial_expression);
-    f2c_codegen_expression_free(emitter->unit, limit_expression);
-    f2c_codegen_expression_free(emitter->unit, step_expression);
+    free(advance.data);
+    free(iterator_name.data);
+    free(prefix);
+    for (size_t index = 0U; index < 3U; ++index)
+        f2c_codegen_expression_free(emitter->unit, controls[index]);
     return result;
 }
 
