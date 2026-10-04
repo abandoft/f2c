@@ -1,0 +1,7 @@
+program logical_kind_invalid
+  implicit none
+  logical :: value
+  value = .true._3
+  value = .false._unknown_kind
+  value = .true._
+end program logical_kind_invalid

@@ -1,0 +1,9 @@
+program logical_kind_literals
+  implicit none
+  integer, parameter :: narrow = 1
+  logical(kind=1) :: values(0)
+  logical(kind=8), parameter :: wide = .true._8
+  if (kind(.not. .true._narrow) /= 1) stop 1
+  if (kind(.true._1 .eqv. wide) /= 8) stop 2
+  if (any(.not. values)) stop 3
+end program logical_kind_literals
