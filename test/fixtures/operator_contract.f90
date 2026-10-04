@@ -5,6 +5,22 @@ subroutine power_wide(base, exponent, value)
   value = base ** exponent
 end subroutine
 
+subroutine power_real4(base, exponent, value)
+  implicit none
+  real(kind=4), intent(in) :: base
+  integer(kind=8), intent(in) :: exponent
+  real(kind=4), intent(out) :: value
+  value = base ** exponent
+end subroutine
+
+subroutine power_real8(base, exponent, value)
+  implicit none
+  real(kind=8), intent(in) :: base
+  integer(kind=8), intent(in) :: exponent
+  real(kind=8), intent(out) :: value
+  value = base ** exponent
+end subroutine
+
 subroutine power_narrow(base, exponent, value)
   implicit none
   integer(kind=1), intent(in) :: base, exponent
