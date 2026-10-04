@@ -126,6 +126,16 @@ set(
     data_statement
     lexical_literals
     operator_kinds
+    loop_control
+    loop_storage
+    loop_result_bounds
+    loop_names
+    loop_static_constructor
+    loop_static_flat
+    loop_inquire
+    loop_data
+    loop_real_controls
+    loop_legacy
     operator_power_policy
     select_case
     named_constructs

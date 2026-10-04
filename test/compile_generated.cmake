@@ -59,7 +59,8 @@ foreach(io_fixture IN LISTS F2C_GENERATED_FIXTURES)
     set(io_generated "${BINARY_DIR}/generated_${io_fixture}.c")
     set(io_executable "${BINARY_DIR}/generated_${io_fixture}_test")
     set(io_source "${SOURCE_DIR}/test/fixtures/${io_fixture}.f90")
-    if(io_fixture STREQUAL "assigned_format" OR io_fixture STREQUAL "legacy_control")
+    if(io_fixture STREQUAL "assigned_format" OR io_fixture STREQUAL "legacy_control" OR
+       io_fixture STREQUAL "loop_legacy")
         set(io_source "${SOURCE_DIR}/test/fixtures/${io_fixture}.f")
     endif()
     execute_process(
@@ -194,6 +195,8 @@ foreach(io_fixture IN LISTS F2C_GENERATED_FIXTURES)
     endif()
     endif()
 endforeach()
+
+include("${SOURCE_DIR}/test/generated/loop.cmake")
 
 if(F2C_MSVC_FRONTEND)
     execute_process(
