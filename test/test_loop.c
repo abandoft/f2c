@@ -106,6 +106,42 @@ static void test_advancement(void) {
            "wide default-integer final indices preserve the modular storage policy");
 }
 
+static void test_default_integer_induction_proof(void) {
+    static const int32_t endpoints[] = {INT32_MIN, INT32_MIN + 1, -65536,        -1,       0,
+                                        1,         65536,         INT32_MAX - 1, INT32_MAX};
+    static const int32_t strides[] = {INT32_MIN, -INT32_MAX, -5, -2, -1, 1, 2, 5, INT32_MAX};
+    for (size_t first = 0U; first < sizeof(endpoints) / sizeof(endpoints[0]); ++first) {
+        for (size_t last = 0U; last < sizeof(endpoints) / sizeof(endpoints[0]); ++last) {
+            for (size_t stride = 0U; stride < sizeof(strides) / sizeof(strides[0]); ++stride) {
+                uint64_t remaining;
+                const int active = f2c_integer_loop_begin(endpoints[first], endpoints[last],
+                                                          strides[stride], &remaining);
+                const int64_t count = active > 0 ? (int64_t)(remaining + 1U) : 0;
+                const int64_t final = (int64_t)endpoints[first] + count * (int64_t)strides[stride];
+                expect(count >= 0 && (uint64_t)count <= (uint64_t)UINT32_MAX + 1U,
+                       "default-integer intervals have at most 2^32 iterations");
+                expect(final >= (int64_t)INT32_MIN + INT32_MIN &&
+                           final <= (int64_t)INT32_MAX + INT32_MAX,
+                       "the final mathematical value fits the proven widened setup domain");
+                if (active > 0) {
+                    const int64_t last_active = final - (int64_t)strides[stride];
+                    expect(last_active >= INT32_MIN && last_active <= INT32_MAX,
+                           "the last active induction value is always source-width representable");
+                    if (count > 1) {
+                        const int64_t next = (int64_t)endpoints[first] + strides[stride];
+                        expect(next >= INT32_MIN && next <= INT32_MAX,
+                               "nonfinal active updates cannot overflow signed source storage");
+                    }
+                    if (final >= INT32_MIN && final <= INT32_MAX)
+                        expect(f2c_integer_loop_add_i32((int32_t)last_active, strides[stride]) ==
+                                   final,
+                               "the invariant signed fast path agrees with defined-width updates");
+                }
+            }
+        }
+    }
+}
+
 static void test_diagnostics(void) {
     static const struct {
         const char *source;
@@ -147,6 +183,7 @@ int main(void) {
     test_small_intervals();
     test_wide_intervals();
     test_advancement();
+    test_default_integer_induction_proof();
     test_diagnostics();
     if (failures != 0)
         return 1;
