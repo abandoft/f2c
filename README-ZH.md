@@ -134,6 +134,10 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
   作用域内的 `ASYNCHRONOUS/VOLATILE` 属性保持关联存储；
 - 内建数值、逻辑、字符和复数类型，显式/隐式类型，类型化表达式、数组构造器、数组段、向量下标、
   归约及选定的 transformational intrinsic；
+- 已测试的局部、宿主关联及模块导入 `PARAMETER` 数组静态存储与整数组传参；常量数组
+  共用类型化列主序值求值，覆盖嵌套构造器、隐式 `DO`、参数依赖、已支持的变换及固定组件
+  初始化，保留声明 kind、下界和字符填充；显式构造器 type-spec、全部常量数组表达式与
+  动态派生载荷仍未闭环；
 - 显式、抽象、泛型和过程指针接口，以及受支持 ABI 路径上的位置、关键字、可选和过程实参；
 - 可分配/指针对象、描述符、自动重分配、`SOURCE=`、`MOLD=`、`MOVE_ALLOC`、派生组件、内建赋值
   和所有权清理；
@@ -155,6 +159,8 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
   语句拥有的只读暂存；普通数组/标量比较仍使用无临时分配的直接归约路径；
 - 结构化/旧式控制流、格式化和列表导向 I/O、内部文件、非前进 I/O、定义 I/O，以及文档化路径上的
   递归 NAMELIST；
+- 已测试的旧式 REAL kind 4/8 `DO` 预先计数、控制项单次捕获、限定存储访问及循环结束值；
+  不再以累积浮点值是否越界决定终止，非法步长和不可表示的次数在执行前明确失败；
 - 统一的 `DECIMAL/ROUND/SIGN/DELIM` 作用域、感知 binary32/64 的精确输入舍入、列表导向字符
   引号转义输出，以及 DT 子 I/O 控制继承和记录位置同步；
 - 测试覆盖的数值、字符和派生类型组合中的 `RESHAPE`、`PACK`、`UNPACK`、`SPREAD`、
@@ -165,6 +171,7 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
 泛型和子模块，动态多态分配，命名/关联构造的终结边界，全部格式化 I/O 布局规则，列表导向输入的
 完整空值/重复因子/斜杠组合，NAMELIST 输入
 中的指针重关联，以及多编译器 ABI 认证。不支持的语义必须产生诊断，不能生成看似合理但错误的 C。
+目前 `FINDLOC` 仍错误拒绝合法的混合数值类别或 kind 搜索，完整比较契约尚待实现。
 详细清单维护在 [TODO.md](TODO.md)。
 
 ## 验证体系
