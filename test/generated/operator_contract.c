@@ -48,6 +48,37 @@ int main(int argc, char **argv) {
     if (narrow_value != INT8_MIN)
         return EXIT_FAILURE;
     {
+        float real_base = 10.0f;
+        float real_value = 0.0f;
+        double double_base = 2.0;
+        double double_value = 0.0;
+        exponent = -20;
+        power_real4(&real_base, &exponent, &real_value);
+        if (real_value != 1.0e-20f)
+            return EXIT_FAILURE;
+        real_base = 2.0f;
+        exponent = -149;
+        power_real4(&real_base, &exponent, &real_value);
+        if (real_value != 0x1p-149f)
+            return EXIT_FAILURE;
+        exponent = -1074;
+        power_real8(&double_base, &exponent, &double_value);
+        if (double_value != 0x1p-1074)
+            return EXIT_FAILURE;
+        real_base = -1.0f;
+        double_base = -1.0;
+        exponent = INT64_MAX;
+        power_real4(&real_base, &exponent, &real_value);
+        power_real8(&double_base, &exponent, &double_value);
+        if (real_value != -1.0f || double_value != -1.0)
+            return EXIT_FAILURE;
+        exponent = INT64_MIN;
+        power_real4(&real_base, &exponent, &real_value);
+        power_real8(&double_base, &exponent, &double_value);
+        if (real_value != 1.0f || double_value != 1.0)
+            return EXIT_FAILURE;
+    }
+    {
         const int64_t left[] = {2, 0, -7};
         const int64_t right[] = {4, 0, 3};
         int64_t scalar_equal = 0;
