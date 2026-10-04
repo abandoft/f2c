@@ -1,0 +1,10 @@
+program extremum_keywords
+implicit none
+integer :: x, y
+real(kind=8) :: r(3), s(3)
+x = 3
+y = max(a65=x,a1=1,a2=2)
+r = [1.0_8,-0.0_8,0.0_8]
+s = min(a1000=r(3:1:-1),a2=r,a1=0.0_8)
+print *, y, s
+end program extremum_keywords

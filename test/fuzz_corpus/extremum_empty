@@ -1,0 +1,8 @@
+program extremum_empty
+implicit none
+real, volatile :: a(0,2), b(2)
+real(kind=8) :: c(4)
+b = maxval(a,dim=1)
+c = 0.0_8
+print *, b, minval(c,mask=.false.), maxloc(a,back=.true.)
+end program extremum_empty

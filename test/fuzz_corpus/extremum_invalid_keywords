@@ -1,0 +1,6 @@
+program extremum_invalid_keywords
+implicit none
+integer :: x
+x = max(a1=1,a2=2,a65=3,a65=4)
+x = min(a01=1,a2=2,a18446744073709551616=3)
+end program extremum_invalid_keywords
