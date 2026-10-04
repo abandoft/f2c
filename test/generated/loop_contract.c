@@ -99,6 +99,8 @@ static void test_default_integer_range(void) {
         {INT32_MIN + 2, INT32_MIN, -1, 4, 3, {INT32_MIN + 2, INT32_MIN + 1, INT32_MIN}, INT32_MAX},
         {INT32_MAX - 2, INT32_MAX, 1, 3, 3, {INT32_MAX - 2, INT32_MAX - 1, INT32_MAX}, INT32_MAX},
         {INT32_MIN + 2, INT32_MIN, -1, 3, 3, {INT32_MIN + 2, INT32_MIN + 1, INT32_MIN}, INT32_MIN},
+        {INT32_MIN, INT32_MAX, INT32_MAX, 4, 3, {INT32_MIN, -1, INT32_MAX - 1}, -3},
+        {INT32_MAX, INT32_MIN, -INT32_MAX, 4, 3, {INT32_MAX, 0, -INT32_MAX}, 2},
     };
     for (size_t index = 0; index < sizeof(cases) / sizeof(cases[0]); ++index) {
         int32_t values[4] = {0}, trips = -1, final_value = 0;
