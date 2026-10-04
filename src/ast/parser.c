@@ -1,4 +1,5 @@
 #include "ast/internal.h"
+#include "semantic/operator.h"
 
 #include <ctype.h>
 #include <limits.h>
@@ -306,8 +307,8 @@ static F2cExpr *parse_primary(AstParser *parser) {
         const int defined = f2c_ast_is_defined_operator(&token);
         f2c_ast_next_token(parser);
         operand = defined ? parse_primary(parser)
-                          : (f2c_token_equals(&token, ".not.") ? f2c_ast_parse_binary(parser, 4)
-                                                               : f2c_ast_parse_binary(parser, 7));
+                          : (f2c_token_equals(&token, ".not.") ? f2c_ast_parse_binary(parser, 5)
+                                                               : f2c_ast_parse_binary(parser, 8));
         expression =
             f2c_expr_new(F2C_EXPR_UNARY,
                          defined ? TYPE_UNKNOWN
@@ -321,7 +322,7 @@ static F2cExpr *parse_primary(AstParser *parser) {
             f2c_expr_free(expression);
             return NULL;
         }
-        expression->type_kind = defined ? f2c_default_kind(TYPE_UNKNOWN) : operand->type_kind;
+        (void)f2c_expression_refresh_operator_type(expression);
         f2c_ast_copy_expression_shape(expression, &operand->shape);
     } else if (token.kind == F2C_TOKEN_ARRAY_BEGIN) {
         Type element_type = TYPE_UNKNOWN;
@@ -407,7 +408,6 @@ static F2cExpr *parse_binary_impl(AstParser *parser, int minimum_precedence) {
         const int operator_precedence = f2c_ast_precedence(&operator_token);
         F2cExpr *right;
         F2cExpr *binary;
-        Type type;
         if (operator_precedence < minimum_precedence)
             break;
         f2c_ast_next_token(parser);
@@ -417,23 +417,8 @@ static F2cExpr *parse_binary_impl(AstParser *parser, int minimum_precedence) {
             f2c_expr_free(left);
             return NULL;
         }
-        if (f2c_ast_is_defined_operator(&operator_token)) {
-            type = TYPE_UNKNOWN;
-        } else if (f2c_ast_is_comparison(&operator_token)) {
-            type = TYPE_LOGICAL;
-        } else if (f2c_token_equals(&operator_token, ".and.") ||
-                   f2c_token_equals(&operator_token, ".or.") ||
-                   f2c_token_equals(&operator_token, ".eqv.") ||
-                   f2c_token_equals(&operator_token, ".neqv.")) {
-            type = TYPE_LOGICAL;
-        } else if (f2c_token_equals(&operator_token, "//")) {
-            type = TYPE_CHARACTER;
-        } else if (f2c_token_equals(&operator_token, "**")) {
-            type = left->type;
-        } else {
-            type = f2c_common_numeric_type(left->type, right->type);
-        }
-        binary = f2c_expr_new(F2C_EXPR_BINARY, type, operator_token.begin, operator_token.length);
+        binary = f2c_expr_new(F2C_EXPR_BINARY, TYPE_UNKNOWN, operator_token.begin,
+                              operator_token.length);
         if (binary == NULL) {
             f2c_expr_free(left);
             f2c_expr_free(right);
@@ -451,8 +436,7 @@ static F2cExpr *parse_binary_impl(AstParser *parser, int minimum_precedence) {
             f2c_expr_free(binary);
             return NULL;
         }
-        binary->type_kind =
-            f2c_ast_common_expression_kind(type, binary->children[0], binary->children[1]);
+        (void)f2c_expression_refresh_operator_type(binary);
         f2c_ast_set_elemental_shape(binary, binary->children[0], binary->children[1]);
         set_combined_expression_range(binary, binary->children[0], binary->children[1]);
         left = binary;
