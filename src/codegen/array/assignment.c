@@ -226,6 +226,21 @@ static int emit_elemental_assignment(Context *context, Unit *unit, Symbol *targe
     }
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_append(&context->output, "if (f2c_element_values == NULL) abort();\n");
+    /* Zero-size allocated objects keep a non-null allocation marker. There is
+     * no Fortran element to evaluate, but an initialized marker also makes the
+     * no-read contract visible to interprocedural uninitialized-data checks.
+     * Do not clear the nonempty numerical buffer: the loops define its data.
+     */
+    if (target->type == TYPE_CHARACTER) {
+        f2c_array_indent(&context->output, emitted_depth);
+        f2c_buffer_append(&context->output,
+                          "if (f2c_element_bytes == 0U) f2c_element_values[0] = '\\0';\n");
+    } else if (target->type != TYPE_DERIVED) {
+        f2c_array_indent(&context->output, emitted_depth);
+        f2c_buffer_printf(&context->output,
+                          "if (f2c_element_count == 0U) f2c_element_values[0] = (%s){0};\n",
+                          f2c_symbol_c_type(target));
+    }
     f2c_array_indent(&context->output, emitted_depth);
     f2c_buffer_append(&context->output, "size_t f2c_element_linear = 0U;\n");
     for (loop = target->rank; loop != 0U; --loop) {
