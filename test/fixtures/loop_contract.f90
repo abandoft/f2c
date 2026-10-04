@@ -99,3 +99,33 @@ subroutine loop64(first, last, stride, cap, values, trips, final_value)
   end do
   final_value = iterator
 end subroutine
+
+subroutine loop32_stride5(first, last, values, trips, final_value)
+  use iso_fortran_env, only: int32
+  implicit none
+  integer(int32), intent(in) :: first, last
+  integer(int32), intent(out) :: values(4), final_value
+  integer, intent(out) :: trips
+  integer(int32) :: iterator
+  trips = 0
+  do iterator = first, last, 5
+    trips = trips + 1
+    values(trips) = iterator
+  end do
+  final_value = iterator
+end subroutine
+
+subroutine loop32_stride_minus5(first, last, values, trips, final_value)
+  use iso_fortran_env, only: int32
+  implicit none
+  integer(int32), intent(in) :: first, last
+  integer(int32), intent(out) :: values(4), final_value
+  integer, intent(out) :: trips
+  integer(int32) :: iterator
+  trips = 0
+  do iterator = first, last, -5
+    trips = trips + 1
+    values(trips) = iterator
+  end do
+  final_value = iterator
+end subroutine
