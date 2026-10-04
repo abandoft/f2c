@@ -117,8 +117,8 @@ char *f2c_expression_boz_literal(const char *text) {
 
 char *f2c_expression_name(Unit *unit, const F2cExpr *expression, int *supported) {
     Symbol *symbol = expression->symbol;
-    if (symbol != NULL && symbol->parameter && symbol->type == TYPE_CHARACTER &&
-        expression->rank == 0U) {
+    if (symbol != NULL && symbol->parameter && symbol->rank == 0U &&
+        symbol->type == TYPE_CHARACTER && expression->rank == 0U) {
         Buffer literal = {0};
         char *bytes = NULL;
         size_t length = 0U;
@@ -141,7 +141,7 @@ char *f2c_expression_name(Unit *unit, const F2cExpr *expression, int *supported)
         free(bytes);
         return f2c_buffer_take(&literal);
     }
-    if (symbol != NULL && symbol->parameter && symbol->initializer != NULL) {
+    if (symbol != NULL && symbol->parameter && symbol->rank == 0U && symbol->initializer != NULL) {
         char *value = f2c_emit_typed_expression(unit, symbol->initializer_expression);
         Buffer constant = {0};
         if (value == NULL) {
