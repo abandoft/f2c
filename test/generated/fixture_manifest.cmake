@@ -52,6 +52,9 @@ set(
     vector_subscript
     reduction_intrinsics
     volatile_reductions
+    extremum_boundaries
+    extremum_policy
+    extremum_arguments
     qualified_descriptors
     scoped_storage_access
     scoped_unaligned_storage

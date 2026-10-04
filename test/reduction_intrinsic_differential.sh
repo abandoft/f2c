@@ -22,7 +22,7 @@ if ! command -v "$FC" >/dev/null 2>&1; then
 fi
 
 cmake -E remove_directory "$BASE"
-for NAME in reduction_intrinsics volatile_reductions; do
+for NAME in reduction_intrinsics volatile_reductions extremum_boundaries extremum_arguments extremum_policy; do
     WORK=$BASE/$NAME
     SOURCE=$ROOT/test/fixtures/$NAME.f90
     cmake -E make_directory "$WORK"
@@ -34,23 +34,31 @@ for NAME in reduction_intrinsics volatile_reductions; do
     "$CC" -std=c17 -O0 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
         -Wstrict-prototypes -Wmissing-prototypes -Werror "$WORK/generated.c" -lm \
         -o "$WORK/generated-unoptimized"
+    "$CC" -std=c17 -O3 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+        -Wstrict-prototypes -Wmissing-prototypes -Werror "$WORK/generated.c" -lm \
+        -o "$WORK/generated-highly-optimized"
     "$CC" -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
         -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
         -fno-sanitize-recover=all "$WORK/generated.c" -lm -o "$WORK/generated-sanitized"
-    "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -Wno-compare-reals \
-        -Wno-conversion \
-        -J "$WORK" -I "$WORK" "$SOURCE" -o "$WORK/native"
+    if [ "$NAME" != extremum_policy ]; then
+        "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -Wno-compare-reals \
+            -Wno-conversion \
+            -J "$WORK" -I "$WORK" "$SOURCE" -o "$WORK/native"
+    fi
 
     "$WORK/generated" >"$WORK/generated.out"
     "$WORK/generated-unoptimized" >"$WORK/generated-unoptimized.out"
     cmp "$WORK/generated.out" "$WORK/generated-unoptimized.out"
+    "$WORK/generated-highly-optimized" >"$WORK/generated-highly-optimized.out"
+    cmp "$WORK/generated.out" "$WORK/generated-highly-optimized.out"
     "$WORK/generated-sanitized" >"$WORK/generated-sanitized.out"
-    "$WORK/native" >"$WORK/native.out"
-
-    if ! cmp -s "$WORK/generated.out" "$WORK/native.out"; then
-        echo "generated/native reduction intrinsic output mismatch" >&2
-        diff -u "$WORK/native.out" "$WORK/generated.out" >&2 || true
-        exit 1
+    if [ "$NAME" != extremum_policy ]; then
+        "$WORK/native" >"$WORK/native.out"
+        if ! cmp -s "$WORK/generated.out" "$WORK/native.out"; then
+            echo "generated/native reduction intrinsic output mismatch" >&2
+            diff -u "$WORK/native.out" "$WORK/generated.out" >&2 || true
+            exit 1
+        fi
     fi
     if ! cmp -s "$WORK/generated.out" "$WORK/generated-sanitized.out"; then
         echo "optimized/sanitized reduction intrinsic output mismatch" >&2
@@ -58,5 +66,9 @@ for NAME in reduction_intrinsics volatile_reductions; do
         exit 1
     fi
 
-    echo "$NAME differential and sanitizer validation passed"
+    if [ "$NAME" = extremum_policy ]; then
+        echo "$NAME processor-contract, optimization and sanitizer validation passed (no native policy oracle)"
+    else
+        echo "$NAME differential and sanitizer validation passed"
+    fi
 done
