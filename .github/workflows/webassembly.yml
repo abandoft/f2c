@@ -54,6 +54,7 @@ jobs:
             reduction_designators nested_array_reductions volatile_reductions \
             extremum_boundaries extremum_policy extremum_arguments \
             lexical_literals numeric_model_intrinsics elemental_procedure operator_kinds operator_power_policy \
+            loop_storage loop_result_bounds loop_names loop_static_constructor loop_static_flat loop_inquire loop_data loop_real_controls \
             qualified_descriptors qualified_contiguous scoped_storage_access scoped_unaligned_storage \
             live_object_state live_character_result_state live_namelist_transaction \
             live_component_assignment \
@@ -91,6 +92,13 @@ jobs:
             -sFILESYSTEM=0 -sEXIT_RUNTIME=1 \
             test/generated/result_contracts.c -o build/wasm/result-contracts.js
           node build/wasm/result-contracts.js
+          build/host/f2c -o build/wasm/loop-contract.c --header build/wasm/loop-contract.h \
+            test/fixtures/loop_contract.f90
+          emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+            -Wstrict-prototypes -Wmissing-prototypes -Werror -Ibuild/wasm \
+            -sFILESYSTEM=0 -sEXIT_RUNTIME=1 build/wasm/loop-contract.c \
+            test/generated/loop_contract.c -o build/wasm/loop-contracts.js
+          node build/wasm/loop-contracts.js
           emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
             -Wstrict-prototypes -Wmissing-prototypes -Werror -Ibuild/wasm \
             -DF2C_CHARACTER_LENGTH_SOURCE='"generated-character_length_parameters.c"' \
