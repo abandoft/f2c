@@ -15,6 +15,40 @@ subroutine loop8(first, last, stride, cap, values, trips, final_value)
   final_value = iterator
 end subroutine
 
+subroutine loop_real4(first, last, stride, cap, values, trips, final_value)
+  use iso_fortran_env, only: real32
+  implicit none
+  real(real32), intent(in) :: first, last, stride
+  integer, intent(in) :: cap
+  real(real32), intent(out) :: values(16), final_value
+  integer, intent(out) :: trips
+  real(real32) :: iterator
+  trips = 0
+  do iterator = first, last, stride
+    trips = trips + 1
+    values(trips) = iterator
+    if (trips >= cap) exit
+  end do
+  final_value = iterator
+end subroutine
+
+subroutine loop_real8(first, last, stride, cap, values, trips, final_value)
+  use iso_fortran_env, only: real64
+  implicit none
+  real(real64), intent(in) :: first, last, stride
+  integer, intent(in) :: cap
+  real(real64), intent(out) :: values(16), final_value
+  integer, intent(out) :: trips
+  real(real64) :: iterator
+  trips = 0
+  do iterator = first, last, stride
+    trips = trips + 1
+    values(trips) = iterator
+    if (trips >= cap) exit
+  end do
+  final_value = iterator
+end subroutine
+
 subroutine loop8_from64(first, last, stride, cap, values, trips, final_value)
   use iso_fortran_env, only: int8, int64
   implicit none

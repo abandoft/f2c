@@ -1,6 +1,7 @@
 #include "loop-contract.h"
 
 #include <assert.h>
+#include <float.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -74,6 +75,61 @@ static void test_default_integer_constant_strides(void) {
     assert(trips == 0 && final_value == negative_last);
 }
 
+static void test_real_counts(void) {
+    static const struct {
+        double first, last, step;
+        int32_t cap, trips4, trips8;
+    } cases[] = {
+        {0.0, 1.0, 0.1, 16, 11, 11}, {1.0, 0.0, -0.1, 16, 11, 11},
+        {1.0, -1.0, -0.3, 16, 7, 7}, {-0.3, 0.3, 0.2, 16, 4, 3},
+        {5.0, 1.0, 0.1, 16, 0, 0},   {1.0, 5.0, -0.1, 16, 0, 0},
+        {0.0, 1.0, 0.1, 3, 3, 3},    {(double)FLT_MAX, (double)FLT_MAX, 1.0, 16, 1, 1},
+        {0.0, 0x1p63, 1.0, 3, 3, 3},
+    };
+    for (size_t index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        float first4 = (float)cases[index].first, last4 = (float)cases[index].last;
+        float step4 = (float)cases[index].step, values4[16] = {0}, final4 = 0;
+        double values8[16] = {0}, final8 = 0;
+        int32_t trips4 = -1, trips8 = -1;
+        loop_real4(&first4, &last4, &step4, &cases[index].cap, values4, &trips4, &final4);
+        loop_real8(&cases[index].first, &cases[index].last, &cases[index].step, &cases[index].cap,
+                   values8, &trips8, &final8);
+        assert(trips4 == cases[index].trips4 && trips8 == cases[index].trips8);
+        float expected4 = first4;
+        for (int32_t trip = 0; trip < trips4; ++trip) {
+            assert(values4[trip] == expected4);
+            if (trip + 1 < cases[index].cap)
+                expected4 = (float)(expected4 + step4);
+        }
+        double expected8 = cases[index].first;
+        for (int32_t trip = 0; trip < trips8; ++trip) {
+            assert(values8[trip] == expected8);
+            if (trip + 1 < cases[index].cap)
+                expected8 += cases[index].step;
+        }
+        assert(final4 == expected4 && final8 == expected8);
+    }
+}
+
+static int test_real_execution_error(const char *name) {
+    const int32_t cap = 16;
+    int32_t trips;
+    const double first = strstr(name, "-nan") != NULL ? NAN : 0.0;
+    const double last = strstr(name, "-inf") != NULL        ? INFINITY
+                        : strstr(name, "-overflow") != NULL ? 0x1p64
+                                                            : 1.0;
+    const double step = strstr(name, "-zero") != NULL ? -0.0 : 1.0;
+    if (strncmp(name, "real4-do-", 9) == 0) {
+        const float first4 = (float)first, last4 = (float)last, step4 = (float)step;
+        float values[16], final_value;
+        loop_real4(&first4, &last4, &step4, &cap, values, &trips, &final_value);
+    } else {
+        double values[16], final_value;
+        loop_real8(&first, &last, &step, &cap, values, &trips, &final_value);
+    }
+    return 2;
+}
+
 #define CHECK_NARROW(suffix, type, maximum, minimum)                                               \
     do {                                                                                           \
         const type first = maximum, last = maximum, step = 1;                                      \
@@ -132,6 +188,8 @@ static void test_default_integer_range(void) {
 }
 
 static int test_execution_error(const char *name) {
+    if (strncmp(name, "real4-do-", 9) == 0 || strncmp(name, "real8-do-", 9) == 0)
+        return test_real_execution_error(name);
     const int32_t cap = 4;
     int32_t trips;
     if (strcmp(name, "zero") == 0) {
@@ -168,9 +226,10 @@ int main(int argc, char **argv) {
     test_default_integer_range();
     test_default_integer_unit_strides();
     test_default_integer_constant_strides();
+    test_real_counts();
     CHECK_NARROW(8, int8_t, INT8_MAX, INT8_MIN);
     CHECK_NARROW(16, int16_t, INT16_MAX, INT16_MIN);
     CHECK_NARROW(32, int32_t, INT32_MAX, INT32_MIN);
-    puts("independent integer loop ABI and processor contracts passed");
+    puts("independent integer and legacy real loop ABI and processor contracts passed");
     return 0;
 }
