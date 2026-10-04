@@ -10,6 +10,7 @@
 - Correct negative `SPREAD` counts to produce zero-sized results.
 - Fix index overflow for extreme shift amounts and share array shift rules between constant and runtime evaluation.
 - Correct pre-counted legacy real `DO`, single-evaluation controls, qualified storage, and post-loop values.
+- Improve positive integer loop code generation while preserving empty intervals and extreme-boundary semantics.
 - Correct declaration scopes for derived-component specifications and preserve constructor iterator kinds.
 - Improve shape, type, dependency-cycle, and resource checks for constant initialization instead of emitting zero data for unevaluated expressions.
 
