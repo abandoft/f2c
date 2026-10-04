@@ -12,7 +12,7 @@ WORK=$ROOT/build/loop-differential
 cmake -E remove_directory "$WORK"
 cmake -E make_directory "$WORK"
 
-for FIXTURE in loop_control loop_storage loop_result_bounds loop_names loop_inquire loop_data loop_real_controls loop_legacy; do
+for FIXTURE in loop_control loop_storage loop_result_bounds loop_names loop_inquire loop_data loop_real_controls loop_real_count loop_real_storage loop_legacy; do
     EXTENSION=f90
     STANDARD=f2018
     CONVERSION_WARNING=-Wconversion
@@ -20,6 +20,9 @@ for FIXTURE in loop_control loop_storage loop_result_bounds loop_names loop_inqu
     # The mixed-width EQUIVALENCE layout is an explicit processor extension,
     # independently checked as a storage contract, not strict-F2018 conformance.
     if [ "$FIXTURE" = loop_storage ]; then STANDARD=legacy; fi
+    # REAL induction variables were removed from newer Fortran standards.
+    # Keep their pre-count and storage cases in the explicit legacy profile.
+    case "$FIXTURE" in loop_real_count|loop_real_storage) STANDARD=legacy ;; esac
     # Fractional legacy controls intentionally exercise the numeric conversion.
     # Suppress only that expected warning for this dedicated source profile.
     if [ "$FIXTURE" = loop_real_controls ]; then
@@ -62,7 +65,9 @@ done
     "$ROOT/test/generated/loop_contract.c" -lm -o "$WORK/loop-contract-sanitized"
 "$WORK/loop-contract-sanitized"
 ulimit -c 0
-for FAILURE in zero integer-range real-range real-nan real-inf; do
+for FAILURE in zero integer-range real-range real-nan real-inf \
+    real4-do-zero real4-do-nan real4-do-inf real4-do-overflow \
+    real8-do-zero real8-do-nan real8-do-inf real8-do-overflow; do
     STATUS=0
     "$WORK/loop-contract-sanitized" "$FAILURE" > "$WORK/$FAILURE.out" 2> "$WORK/$FAILURE.err" || STATUS=$?
     if [ "$STATUS" -ne 134 ] || grep -Eq 'runtime error:|ERROR: AddressSanitizer|ERROR: UndefinedBehaviorSanitizer' "$WORK/$FAILURE.err"; then
@@ -70,4 +75,4 @@ for FAILURE in zero integer-range real-range real-nan real-inf; do
         exit 1
     fi
 done
-echo "integer loop controls, I/O and independent ABI differential passed"
+echo "integer and legacy real loop controls, I/O and independent ABI differential passed"
