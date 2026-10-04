@@ -217,8 +217,15 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
             if (bounded_induction) {
                 indent(&context->output, *depth);
                 f2c_buffer_printf(&context->output,
-                                  "const bool %s_active_%zu = %s_count_%zu > 0;\n", prefix, loop_id,
-                                  prefix, loop_id);
+                                  "const int64_t %s_final_%zu = (int64_t)%s_start_%zu + "
+                                  "(int64_t)%s_count_%zu * (int64_t)%s_step_%zu;\n",
+                                  prefix, loop_id, prefix, loop_id, prefix, loop_id, prefix,
+                                  loop_id);
+                indent(&context->output, *depth);
+                f2c_buffer_printf(&context->output,
+                                  "const bool %s_safe_%zu = %s_final_%zu >= INT32_MIN && "
+                                  "%s_final_%zu <= INT32_MAX;\n",
+                                  prefix, loop_id, prefix, loop_id, prefix, loop_id);
             }
         }
     } else {
@@ -260,16 +267,18 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
                               "++%s_index_%zu) {\n",
                               prefix, loop_id, prefix, loop_id, prefix, loop_id);
         else if (bounded_induction) {
-            /* Every active value lies between the cached int32_t controls.
-             * Advance in the original signed width only when another active
-             * iteration remains. The potentially out-of-range final update is
-             * separate, so the optimizer can retain affine array induction
-             * without a wrapping value or a conditional loop-exit predicate. */
+            /* The exact count times the stride is bounded by the distance of
+             * int32_t controls plus one int32_t stride, so setup fits int64_t.
+             * Active values lie between the cached endpoints. If the final
+             * value also fits int32_t, every update is a valid signed addition.
+             * Otherwise use the defined storage-width update. This invariant
+             * guard allows loop unswitching without a per-iteration count test. */
             f2c_buffer_printf(&context->output,
                               "for (; %s_count_%zu > 0; --%s_count_%zu, "
-                              "%s = %s_count_%zu > 0 ? %s + %s_step_%zu : %s) {\n",
+                              "%s = %s_safe_%zu ? %s + %s_step_%zu "
+                              ": F2C_LOOP_I32(%s, %s_step_%zu)) {\n",
                               prefix, loop_id, prefix, loop_id, variable, prefix, loop_id, variable,
-                              prefix, loop_id, variable);
+                              prefix, loop_id, variable, prefix, loop_id);
         } else if (!default_integer) {
             /* The common header supplies its own indentation. */
             f2c_loop_emit_header(&context->output, prefix, loop_id, advance, NULL, 0);
@@ -374,7 +383,7 @@ int f2c_emit_do_end(Context *context, Unit *unit, const F2cStatement *opener, si
         --*depth;
     indent(&context->output, *depth);
     f2c_buffer_append(&context->output, "}\n");
-    if (has_direct_default_integer_induction(opener)) {
+    if (is_canonical_positive_unit_do(opener)) {
         char *variable = f2c_emit_statement_expression(context, unit, opener->left, source_line);
         char *prefix = f2c_loop_local_prefix(unit, "f2c_do", loop_id);
         if (prefix == NULL || variable == NULL) {
@@ -384,24 +393,10 @@ int f2c_emit_do_end(Context *context, Unit *unit, const F2cStatement *opener, si
             return 0;
         }
         indent(&context->output, *depth);
-        if (is_canonical_positive_unit_do(opener))
-            f2c_buffer_printf(&context->output,
-                              "%s = %s_index_%zu <= (int64_t)INT32_MAX "
-                              "? (int32_t)%s_index_%zu : INT32_MIN;\n",
-                              variable, prefix, loop_id, prefix, loop_id);
-        else {
-            char *advance = f2c_loop_advance_expression(unit, opener->left, prefix, loop_id);
-            if (advance == NULL) {
-                free(variable);
-                free(prefix);
-                f2c_diagnostic(context, source_line, 1,
-                               "counted DO final advancement could not be lowered");
-                return 0;
-            }
-            f2c_buffer_printf(&context->output, "if (%s_active_%zu && %s_count_%zu == 0) %s;\n",
-                              prefix, loop_id, prefix, loop_id, advance);
-            free(advance);
-        }
+        f2c_buffer_printf(&context->output,
+                          "%s = %s_index_%zu <= (int64_t)INT32_MAX "
+                          "? (int32_t)%s_index_%zu : INT32_MIN;\n",
+                          variable, prefix, loop_id, prefix, loop_id);
         free(variable);
         free(prefix);
     }
