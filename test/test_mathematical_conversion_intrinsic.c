@@ -54,6 +54,20 @@ static void test_mathematical_contracts(void) {
                       "alog requires a REAL(kind=4) first argument");
     expect_diagnostic("  integer :: first, second\n", "max(a1=first, mystery=second)",
                       "MAX has no argument named 'mystery'");
+    expect_diagnostic("", "max(a1=1,a65=2)", "MAX requires argument A2");
+    expect_diagnostic("", "min(a2=1,a65=2)", "MIN requires argument A1");
+    expect_diagnostic("", "max(a1=1,a2=2,a65=3,a65=4)",
+                      "MAX argument 'a65' is specified more than once");
+    expect_diagnostic("", "min(1,a2=2,a1=3)", "MIN argument 'a1' is specified more than once");
+    expect_diagnostic("", "max(a1=1,2)",
+                      "positional argument in MAX cannot follow a keyword argument");
+    expect_diagnostic("", "max(a01=1,a2=2)", "MAX has no argument named 'a01'");
+    expect_diagnostic("", "max(a0=1,a2=2)", "MAX has no argument named 'a0'");
+    expect_diagnostic("", "max(a1=1,a2=2,a18446744073709551616=3)",
+                      "MAX has no argument named 'a18446744073709551616'");
+    expect_diagnostic("", "max(a1=1,a2=2,a65=3_8)",
+                      "MAX argument A65 must have the same type and kind as A1");
+    expect_diagnostic("", "max(1)", "max requires at least 2 arguments");
     expect_diagnostic("  real :: first, second\n", "max0(first, second)",
                       "MAX0 argument A1 must be INTEGER(kind=4)");
     expect_diagnostic("  integer :: first, second\n", "max1(first, second)",
@@ -153,8 +167,8 @@ static void test_typed_lowering(void) {
                strstr(result.code, "f2c_fortran_i64min") != NULL,
            "MAX and MIN retain narrow and wide INTEGER kinds");
     expect(result.code != NULL &&
-               strstr(result.code, "f2c_int_integer((double)(F2C_FORTRAN_MAX(((float)") != NULL &&
-               strstr(result.code, "F2C_FORTRAN_MAX(((int32_t)") != NULL,
+               strstr(result.code, "f2c_int_integer((double)(f2c_fortran_smax(((float)") != NULL &&
+               strstr(result.code, "f2c_fortran_i32max(((int32_t)") != NULL,
            "legacy extrema compare in their source type before exact result conversion");
     f2c_result_free(&result);
 }

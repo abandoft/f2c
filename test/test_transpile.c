@@ -2008,7 +2008,7 @@ static void test_lapack_driver_data_semantics(void) {
     expect_contains(result.code, "f2c_common_srnamc.view_0.field_0",
                     "character COMMON assignment uses shared storage");
     expect_contains(result.code, "F2C_FORTRAN_MIN",
-                    "Fortran MIN uses NaN-propagating numeric semantics");
+                    "Fortran MIN uses the shared real extremum helper family");
     expect(result.code == NULL || strstr(result.code, "/ srnamc /") == NULL,
            "SAVE /COMMON/ does not create a bogus local declaration");
     f2c_result_free(&result);
@@ -2946,7 +2946,7 @@ static void test_intrinsic_signature_diagnostics(void) {
                     "unary intrinsic arity is diagnosed from the signature table");
     expect_contains(result.diagnostics, "mod requires exactly 2 arguments",
                     "binary intrinsic arity is diagnosed from the signature table");
-    expect_contains(result.diagnostics, "max requires between 2 and 64 arguments",
+    expect_contains(result.diagnostics, "max requires at least 2 arguments",
                     "variadic intrinsic arity is diagnosed from the signature table");
     f2c_result_free(&result);
 }
