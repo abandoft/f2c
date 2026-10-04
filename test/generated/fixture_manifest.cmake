@@ -135,6 +135,9 @@ set(
     loop_inquire
     loop_data
     loop_real_controls
+    loop_real_count
+    loop_real_storage
+    parameter_array
     loop_legacy
     operator_power_policy
     select_case
