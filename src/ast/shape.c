@@ -17,16 +17,6 @@ const F2cExpr *f2c_ast_intrinsic_argument_value(const F2cExpr *argument) {
                : argument;
 }
 
-static uint64_t constructor_unsigned_distance(int64_t lower, int64_t upper) {
-    if (lower >= 0 || upper < 0)
-        return (uint64_t)(upper - lower);
-    return (uint64_t)upper + (uint64_t)(-(lower + 1)) + UINT64_C(1);
-}
-
-static uint64_t constructor_unsigned_magnitude(int64_t value) {
-    return value >= 0 ? (uint64_t)value : (uint64_t)(-(value + 1)) + UINT64_C(1);
-}
-
 static int constructor_extent_add(uint64_t left, uint64_t right, uint64_t *result) {
     if (right > UINT64_MAX - left)
         return 0;
@@ -66,22 +56,20 @@ int f2c_ast_constructor_extent(Unit *unit, const F2cExpr *expression, uint64_t *
         int64_t last;
         int64_t step;
         uint64_t iterations;
+        const int kind = expression->symbol != NULL ? expression->symbol->kind : 0;
         if (value_count == 0U ||
-            !f2c_evaluate_integer_constant(unit, expression->children[value_count], &first) ||
-            !f2c_evaluate_integer_constant(unit, expression->children[value_count + 1U], &last) ||
-            !f2c_evaluate_integer_constant(unit, expression->children[value_count + 2U], &step) ||
+            !f2c_evaluate_integer_loop_parameters(unit, kind, expression->children[value_count],
+                                                  expression->children[value_count + 1U],
+                                                  expression->children[value_count + 2U], &first,
+                                                  &last, &step) ||
             step == 0)
             return 0;
         if ((step > 0 && first > last) || (step < 0 && first < last)) {
             *extent = UINT64_C(0);
             return 1;
         }
-        iterations =
-            constructor_unsigned_distance(step > 0 ? first : last, step > 0 ? last : first) /
-            constructor_unsigned_magnitude(step);
-        if (iterations == UINT64_MAX)
+        if (!f2c_integer_iteration_count(first, last, step, &iterations))
             return -1;
-        ++iterations;
         for (child = 0U; child < value_count; ++child) {
             uint64_t child_extent;
             const int known =
