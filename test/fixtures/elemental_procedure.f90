@@ -98,6 +98,12 @@ program elemental_procedure
   dynamic_words = empty_words // ''
   if (.not. allocated(dynamic_words) .or. size(dynamic_words) /= 0) error stop 20
   if (len(dynamic_words) /= 3) error stop 21
+  ! Define and release the deferred-length descriptor before testing automatic
+  ! allocation. Some GNU versions warn about an implicit hidden length field
+  ! on a never-allocated array, despite assignment defining that length.
+  allocate(character(len=1) :: zero_dynamic(1))
+  deallocate(zero_dynamic)
+  if (allocated(zero_dynamic)) error stop 31
   zero_dynamic = zero_words // ''
   if (.not. allocated(zero_dynamic) .or. size(zero_dynamic) /= 2) error stop 22
   if (len(zero_dynamic) /= 0) error stop 23
