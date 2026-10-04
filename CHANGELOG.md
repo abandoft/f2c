@@ -9,6 +9,7 @@
 - Support zero `DATA` repeats and correct counts in nested implied `DO` and cross-kind initialization.
 - Avoid collisions between generated loop helper names and source identifiers, separating control generation, constant counting, and semantic validation by responsibility.
 - Preserve efficient indices in ordinary default-integer loops with safe final updates, improving automatic vectorization of array code.
+- Isolate host memory-fortification macros so generated code does not inherit compiler-specific calls.
 
 ## 1.52.0
 
