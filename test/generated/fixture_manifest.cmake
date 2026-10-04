@@ -139,6 +139,7 @@ set(
     loop_real_storage
     parameter_array
     parameter_transform
+    parameter_components
     parameter_spread_contract
     loop_legacy
     operator_power_policy

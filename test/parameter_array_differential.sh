@@ -12,7 +12,7 @@ WORK=$ROOT/build/parameter-array-differential
 cmake -E remove_directory "$WORK"
 cmake -E make_directory "$WORK"
 
-for FIXTURE in parameter_array parameter_transform; do
+for FIXTURE in parameter_array parameter_transform parameter_components; do
     SOURCE=$ROOT/test/fixtures/$FIXTURE.f90
     CASE=$WORK/$FIXTURE
     cmake -E make_directory "$CASE"
