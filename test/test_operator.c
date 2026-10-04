@@ -309,6 +309,39 @@ static void test_lowering_contract(void) {
     free(code);
 }
 
+static void test_conversion_contract(void) {
+    static const struct {
+        F2cScalarOperand operand;
+        F2cScalarType target;
+        const char *expected;
+    } cases[] = {
+        {{"effect()", {TYPE_COMPLEX, 4}}, {TYPE_COMPLEX, 4}, "effect()"},
+        {{"effect()", {TYPE_COMPLEX, 8}}, {TYPE_DOUBLE_COMPLEX, 8}, "effect()"},
+        {{"effect()", {TYPE_COMPLEX, 4}}, {TYPE_COMPLEX, 8}, "f2c_c_to_z(effect())"},
+        {{"effect()", {TYPE_COMPLEX, 8}}, {TYPE_COMPLEX, 4}, "f2c_z_to_c(effect())"},
+        {{"effect()", {TYPE_COMPLEX, 16}}, {TYPE_COMPLEX, 4}, "f2c_q_to_c(effect())"},
+        {{"effect()", {TYPE_REAL, 8}}, {TYPE_COMPLEX, 4}, "f2c_make_c((float)(effect()), 0.0f)"},
+        {{"effect()", {TYPE_INTEGER, 8}}, {TYPE_COMPLEX, 8}, "f2c_make_z((double)(effect()), 0.0)"},
+    };
+    for (size_t index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        char *code = f2c_emit_scalar_conversion(cases[index].operand, cases[index].target);
+        expect(code != NULL && strcmp(code, cases[index].expected) == 0,
+               "typed scalar conversion retains kind, evaluates once and never casts a complex "
+               "struct");
+        free(code);
+    }
+    {
+        char *code = f2c_emit_scalar_conversion((F2cScalarOperand){"value", {TYPE_CHARACTER, 1}},
+                                                (F2cScalarType){TYPE_INTEGER, 4});
+        expect(code == NULL, "numeric conversion rejects unrelated operand categories");
+        free(code);
+        code = f2c_emit_scalar_conversion((F2cScalarOperand){NULL, {TYPE_INTEGER, 4}},
+                                          (F2cScalarType){TYPE_INTEGER, 4});
+        expect(code == NULL, "typed conversion rejects missing emitted operands");
+        free(code);
+    }
+}
+
 int main(void) {
     test_spellings();
     test_syntax();
@@ -316,5 +349,6 @@ int main(void) {
     test_diagnostics();
     test_constants();
     test_lowering_contract();
+    test_conversion_contract();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
