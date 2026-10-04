@@ -422,10 +422,14 @@ static void test_wide_do_trip_count(void) {
     expect(result.error_count == 0U, "wide-trip-count DO translates without errors");
     expect_contains(result.code, "int64_t f2c_do_count_",
                     "DO ranges spanning the default-integer domain retain a wide exact count");
-    expect_contains(result.code, " > 0 ? i + f2c_do_step_",
-                    "direct signed induction advances only between active iterations");
-    expect_contains(result.code, " == 0) i = (F2C_LOOP_I32(i, ",
-                    "the defined final update requires normal count exhaustion, not EXIT");
+    expect_contains(result.code, "const int64_t f2c_do_final_",
+                    "the exact final mathematical value is computed in a proven wide domain");
+    expect_contains(result.code, " >= INT32_MIN && f2c_do_final_",
+                    "the invariant fast-path guard checks both signed-storage boundaries");
+    expect_contains(result.code, " : F2C_LOOP_I32(i, ",
+                    "unrepresentable final values retain defined storage-width updates");
+    expect_not_contains(result.code, " > 0 ? i + ",
+                        "signed induction is not conditional on the changing trip counter");
     f2c_result_free(&result);
 
     {
@@ -441,8 +445,8 @@ static void test_wide_do_trip_count(void) {
         expect(stride.error_count == 0U, "wide-stride default-integer DO translates");
         expect_contains(stride.code, "int32_t f2c_do_count_",
                         "a stride of four has a proven default-integer trip-count bound");
-        expect_contains(stride.code, " > 0 ? i + f2c_do_step_",
-                        "constant strides retain nonwrapping active signed induction");
+        expect_contains(stride.code, "i = f2c_do_safe_",
+                        "constant strides select signed induction using an invariant proof");
         expect_contains(stride.code, "F2C_LOOP_UNROLL\n    for (; f2c_do_count_",
                         "the exact-count header supports canonical optimization hints");
         expect_not_contains(stride.code, "for (; (f2c_do_step_",
@@ -481,8 +485,8 @@ static void test_wide_do_trip_count(void) {
         expect(relative.error_count == 0U, "fixed-relative default-integer DO translates");
         expect_contains(relative.code, "int32_t f2c_do_count_",
                         "fixed relative ranges retain their proven narrow exact trip count");
-        expect_contains(relative.code, " > 0 ? i + f2c_do_step_",
-                        "relative controls advance only while a further active value remains");
+        expect_contains(relative.code, "i = f2c_do_safe_",
+                        "relative controls select signed induction using their final-value proof");
         f2c_result_free(&relative);
     }
     {
