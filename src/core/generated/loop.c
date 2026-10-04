@@ -11,18 +11,18 @@ void f2c_emit_integer_loop_support(Buffer *output) {
                       "static inline F2C_UNUSED int F2C_LOOP_BEGIN(int64_t first, int64_t last, "
                       "int64_t step, uint64_t *remaining) ");
     f2c_buffer_append(output, F2C_STRINGIFY(F2C_INTEGER_LOOP_BEGIN_BODY));
-    f2c_buffer_append(
-        output, "\nstatic inline F2C_UNUSED int64_t F2C_LOOP_ADD(int64_t value, int64_t step, "
-                "int64_t minimum, int64_t maximum) ");
-    f2c_buffer_append(output, F2C_STRINGIFY(F2C_INTEGER_LOOP_ADD_BODY));
-    f2c_buffer_append(output, "\n#define F2C_DEFINE_LOOP_ADD(s, t, minimum, maximum) "
-                              "static inline F2C_UNUSED t F2C_LOOP_##s(t value, t step) { "
-                              "return (t)F2C_LOOP_ADD(value, step, minimum, maximum); }\n"
-                              "F2C_DEFINE_LOOP_ADD(I8, int8_t, INT8_MIN, INT8_MAX)\n"
-                              "F2C_DEFINE_LOOP_ADD(I16, int16_t, INT16_MIN, INT16_MAX)\n"
-                              "F2C_DEFINE_LOOP_ADD(I32, int32_t, INT32_MIN, INT32_MAX)\n"
-                              "F2C_DEFINE_LOOP_ADD(I64, int64_t, INT64_MIN, INT64_MAX)\n"
+    f2c_buffer_append(output, "\n#define F2C_DEFINE_LOOP_ADD(s, t, u) "
+                              "static inline F2C_UNUSED t F2C_LOOP_##s(t value, t step) ");
+    f2c_buffer_append(output, F2C_STRINGIFY(F2C_INTEGER_LOOP_TYPED_ADD_BODY(t, u)));
+    f2c_buffer_append(output, "\nF2C_DEFINE_LOOP_ADD(I8, int8_t, uint8_t)\n"
+                              "F2C_DEFINE_LOOP_ADD(I16, int16_t, uint16_t)\n"
+                              "F2C_DEFINE_LOOP_ADD(I32, int32_t, uint32_t)\n"
+                              "F2C_DEFINE_LOOP_ADD(I64, int64_t, uint64_t)\n"
                               "#undef F2C_DEFINE_LOOP_ADD\n");
+    f2c_buffer_append(output,
+                      "static inline F2C_UNUSED int32_t F2C_LOOP_VALUE_I32(int64_t value) ");
+    f2c_buffer_append(output, F2C_STRINGIFY(F2C_INTEGER_LOOP_I32_VALUE_BODY));
+    f2c_buffer_append(output, "\n");
     f2c_buffer_append(output,
                       "#define F2C_DEFINE_LOOP_PARAMETER(s, t, minimum, maximum) "
                       "static inline F2C_UNUSED t F2C_LOOP_INTEGER_##s(int64_t value) { "
