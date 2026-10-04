@@ -9,6 +9,7 @@
 - Improve logical, numeric, and character relational constant evaluation and `SELECT CASE` overlap checks.
 - Unify logical equivalence semantics in scalar expressions and array reductions.
 - Correct operand conversions in mixed-kind matrix multiplication.
+- Fix Windows compilation of complex scalar array broadcasts, preserving cross-kind conversions and single evaluation.
 
 ## 1.51.0
 
