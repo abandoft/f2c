@@ -1,3 +1,4 @@
+#include "codegen/operator.h"
 #include "codegen/transform/private.h"
 
 #include <stdlib.h>
@@ -14,12 +15,12 @@ static int matmul_types_compatible(const Symbol *target, const F2cExpr *call,
            target->type == call->type && target->kind == call->type_kind;
 }
 
-static char *matmul_initial_value(Type type) {
-    if (type == TYPE_COMPLEX)
-        return f2c_strdup("f2c_make_c(0.0f, 0.0f)");
-    if (type == TYPE_DOUBLE_COMPLEX)
-        return f2c_strdup("f2c_make_z(0.0, 0.0)");
-    return f2c_strdup(type == TYPE_LOGICAL ? "false" : "0");
+static char *matmul_initial_value(const Symbol *target) {
+    if (target->type == TYPE_COMPLEX || target->type == TYPE_DOUBLE_COMPLEX)
+        return f2c_strdup(target->kind == 4   ? "f2c_make_c(0.0f, 0.0f)"
+                          : target->kind == 8 ? "f2c_make_z(0.0, 0.0)"
+                                              : "f2c_make_q(0.0L, 0.0L)");
+    return f2c_strdup(target->type == TYPE_LOGICAL ? "false" : "0");
 }
 
 static char *matmul_update(Unit *unit, const Symbol *target, const TransformArray *left,
@@ -27,10 +28,10 @@ static char *matmul_update(Unit *unit, const Symbol *target, const TransformArra
                            const char *right_index) {
     Buffer left_value = {0};
     Buffer right_value = {0};
-    Type product_type = TYPE_UNKNOWN;
-    Type result_type = TYPE_UNKNOWN;
+    const F2cScalarType result_type = f2c_scalar_type(target->type, target->kind);
     char *product;
     char *update;
+    (void)unit;
     if (target->type == TYPE_LOGICAL) {
         Buffer logical = {0};
         f2c_buffer_printf(&logical, "(f2c_transform_value || (%s[%s] && %s[%s]))", left->pointer,
@@ -39,19 +40,19 @@ static char *matmul_update(Unit *unit, const Symbol *target, const TransformArra
     }
     f2c_buffer_printf(&left_value, "%s[%s]", left->pointer, left_index);
     f2c_buffer_printf(&right_value, "%s[%s]", right->pointer, right_index);
-    product = f2c_emit_binary(unit, left_value.data, left->type, "*", right_value.data, right->type,
-                              &product_type);
+    product = f2c_emit_scalar_operator(
+        F2C_OPERATOR_MULTIPLY, 0,
+        (F2cScalarOperand){left_value.data, f2c_expression_scalar_type(left->expression)},
+        (F2cScalarOperand){right_value.data, f2c_expression_scalar_type(right->expression)},
+        result_type);
     free(left_value.data);
     free(right_value.data);
     if (product == NULL)
         return NULL;
-    update = f2c_emit_binary(unit, "f2c_transform_value", target->type, "+", product, product_type,
-                             &result_type);
+    update = f2c_emit_scalar_operator(F2C_OPERATOR_ADD, 0,
+                                      (F2cScalarOperand){"f2c_transform_value", result_type},
+                                      (F2cScalarOperand){product, result_type}, result_type);
     free(product);
-    if (result_type != target->type) {
-        free(update);
-        return NULL;
-    }
     return update;
 }
 
@@ -152,7 +153,7 @@ static int emit_matmul_loop(Context *context, Unit *unit, const Symbol *target,
                                   ? "f2c_transform_inner_index + f2c_transform_right_inner * "
                                     "f2c_transform_column"
                                   : "f2c_transform_inner_index";
-    char *initial = matmul_initial_value(target->type);
+    char *initial = matmul_initial_value(target);
     char *update = matmul_update(unit, target, left, right, left_index, right_index);
     if (initial == NULL || update == NULL) {
         free(initial);
