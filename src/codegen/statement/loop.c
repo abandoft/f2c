@@ -85,6 +85,24 @@ static int has_direct_default_integer_induction(const F2cStatement *statement) {
            (statement->left->symbol == NULL || !statement->left->symbol->equivalence_unaligned);
 }
 
+static int widened_unit_direction(const F2cStatement *statement) {
+    long long step;
+    int sign = 1;
+    if (!has_direct_default_integer_induction(statement) || statement->step->type != TYPE_INTEGER)
+        return 0;
+    const F2cExpr *expression = statement->step;
+    while (expression->kind == F2C_EXPR_UNARY && expression->child_count == 1U &&
+           expression->text != NULL) {
+        if (strcmp(expression->text, "-") == 0)
+            sign = -sign;
+        else if (strcmp(expression->text, "+") != 0)
+            return 0;
+        expression = expression->children[0];
+    }
+    return integer_literal_value(expression, &step) && (step == 1 || step == -1) ? sign * (int)step
+                                                                                 : 0;
+}
+
 static void emit_condition(Buffer *output, const char *condition) {
     const size_t length = strlen(condition);
     if (length >= 2U && condition[0] == '(' && condition[length - 1U] == ')')
@@ -110,8 +128,9 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
     F2cPreparedStatementExpression finish_expression;
     F2cPreparedStatementExpression step_expression;
     const int canonical_positive_unit = is_canonical_positive_unit_do(statement);
-    const int bounded_induction =
-        has_direct_default_integer_induction(statement) && !canonical_positive_unit;
+    const int unit_direction = widened_unit_direction(statement);
+    const int widened_index = unit_direction != 0;
+    const int bounded_induction = has_direct_default_integer_induction(statement) && !widened_index;
     const int default_integer = statement->left->type == TYPE_INTEGER &&
                                 statement->left->type_kind == f2c_default_kind(TYPE_INTEGER);
     const char *c_type = f2c_expression_c_type(statement->left);
@@ -170,7 +189,7 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "if (%s_step_%zu == 0) abort();\n", prefix,
                               loop_id);
-            if (!bounded_induction) {
+            if (!bounded_induction && !widened_index) {
                 advance = f2c_loop_advance_expression(unit, statement->left, prefix, loop_id);
                 if (advance == NULL)
                     goto failed;
@@ -188,7 +207,7 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
             f2c_buffer_printf(&context->output, "%s;\n", store);
             free(store);
         }
-        if (canonical_positive_unit) {
+        if (widened_index) {
             indent(&context->output, *depth);
             f2c_buffer_printf(&context->output, "int64_t %s_index_%zu = (int64_t)%s_start_%zu;\n",
                               prefix, loop_id, prefix, loop_id);
@@ -261,11 +280,12 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
     }
     indent(&context->output, *depth);
     if (statement->left->type == TYPE_INTEGER) {
-        if (canonical_positive_unit)
+        if (widened_index)
             f2c_buffer_printf(&context->output,
-                              "for (; %s_index_%zu <= (int64_t)%s_limit_%zu; "
-                              "++%s_index_%zu) {\n",
-                              prefix, loop_id, prefix, loop_id, prefix, loop_id);
+                              "for (; %s_index_%zu %s (int64_t)%s_limit_%zu; "
+                              "%s%s_index_%zu) {\n",
+                              prefix, loop_id, unit_direction > 0 ? "<=" : ">=", prefix, loop_id,
+                              unit_direction > 0 ? "++" : "--", prefix, loop_id);
         else if (bounded_induction) {
             /* The exact count times the stride is bounded by the distance of
              * int32_t controls plus one int32_t stride, so setup fits int64_t.
@@ -294,7 +314,7 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
                           variable, prefix, loop_id, variable, prefix, loop_id);
     }
     ++*depth;
-    if (canonical_positive_unit) {
+    if (widened_index) {
         indent(&context->output, *depth);
         f2c_buffer_printf(&context->output, "%s = (int32_t)%s_index_%zu;\n", variable, prefix,
                           loop_id);
@@ -383,7 +403,7 @@ int f2c_emit_do_end(Context *context, Unit *unit, const F2cStatement *opener, si
         --*depth;
     indent(&context->output, *depth);
     f2c_buffer_append(&context->output, "}\n");
-    if (is_canonical_positive_unit_do(opener)) {
+    if (widened_unit_direction(opener) != 0) {
         char *variable = f2c_emit_statement_expression(context, unit, opener->left, source_line);
         char *prefix = f2c_loop_local_prefix(unit, "f2c_do", loop_id);
         if (prefix == NULL || variable == NULL) {
@@ -393,10 +413,14 @@ int f2c_emit_do_end(Context *context, Unit *unit, const F2cStatement *opener, si
             return 0;
         }
         indent(&context->output, *depth);
-        f2c_buffer_printf(&context->output,
-                          "%s = %s_index_%zu <= (int64_t)INT32_MAX "
-                          "? (int32_t)%s_index_%zu : INT32_MIN;\n",
-                          variable, prefix, loop_id, prefix, loop_id);
+        if (is_canonical_positive_unit_do(opener))
+            f2c_buffer_printf(&context->output,
+                              "%s = %s_index_%zu <= (int64_t)INT32_MAX "
+                              "? (int32_t)%s_index_%zu : INT32_MIN;\n",
+                              variable, prefix, loop_id, prefix, loop_id);
+        else
+            f2c_buffer_printf(&context->output, "%s = F2C_LOOP_VALUE_I32(%s_index_%zu);\n",
+                              variable, prefix, loop_id);
         free(variable);
         free(prefix);
     }
