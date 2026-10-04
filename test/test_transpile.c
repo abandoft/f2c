@@ -397,6 +397,10 @@ static void test_program_and_control_flow(void) {
                     "DO initial value is evaluated exactly once");
     expect_contains(result.code, "const int32_t f2c_do_limit_",
                     "DO limit is evaluated exactly once");
+    expect_contains(result.code, "uint32_t f2c_do_index_",
+                    "positive unit strides preserve a native-width unsigned induction index");
+    expect_contains(result.code, "const uint32_t f2c_do_bound_",
+                    "empty positive intervals are normalized before unsigned comparisons");
     expect_not_contains(result.code, "f2c_do_count_",
                         "canonical unit-stride DO omits a redundant trip counter");
     expect_contains(result.code, ": INT32_MIN;",
