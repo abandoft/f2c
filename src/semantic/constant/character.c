@@ -62,7 +62,7 @@ static int evaluate_repeat(F2cConstantEvaluation *evaluation, const F2cExpr *exp
     size_t result_length;
     size_t copy;
     if (!evaluate(evaluation, string, &source, &source_length, depth + 1U) ||
-        !f2c_evaluate_integer_constant(evaluation->unit, ncopies, &count) || count < 0 ||
+        !f2c_constant_evaluate_integer(evaluation, ncopies, &count, depth + 1U) || count < 0 ||
         (source_length != 0U && (uint64_t)count > (uint64_t)SIZE_MAX / source_length)) {
         free(source);
         return 0;
@@ -108,7 +108,7 @@ static int evaluate_merge(F2cConstantEvaluation *evaluation, const F2cExpr *expr
     const F2cExpr *selected;
     int64_t condition;
     if (mask == NULL || mask->type != TYPE_LOGICAL || mask->rank != 0U ||
-        !f2c_evaluate_integer_constant(evaluation->unit, mask, &condition))
+        !f2c_constant_evaluate_integer(evaluation, mask, &condition, depth + 1U))
         return 0;
     selected =
         f2c_intrinsic_argument(expression->children, expression->child_count,
@@ -132,12 +132,12 @@ static int evaluate_substring(F2cConstantEvaluation *evaluation, const F2cExpr *
         range->child_count != 3U || range->children[2]->kind != F2C_EXPR_INVALID ||
         !evaluate(evaluation, parent, &source, &source_length, depth + 1U) ||
         (uint64_t)source_length > (uint64_t)INT64_MAX ||
-        (lower != NULL && !f2c_evaluate_integer_constant(evaluation->unit, lower, &first))) {
+        (lower != NULL && !f2c_constant_evaluate_integer(evaluation, lower, &first, depth + 1U))) {
         free(source);
         return 0;
     }
     last = (int64_t)source_length;
-    if (upper != NULL && !f2c_evaluate_integer_constant(evaluation->unit, upper, &last)) {
+    if (upper != NULL && !f2c_constant_evaluate_integer(evaluation, upper, &last, depth + 1U)) {
         free(source);
         return 0;
     }
@@ -172,6 +172,17 @@ static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression
     if (expression->kind == F2C_EXPR_STRING_LITERAL) {
         *value = f2c_character_literal_bytes(expression->text, length);
         return *value != NULL;
+    }
+    if (expression->kind == F2C_EXPR_ARRAY_REFERENCE) {
+        const F2cConstantValue *element =
+            f2c_constant_array_element(evaluation, expression, depth + 1U);
+        if (element == NULL || element->type.type != TYPE_CHARACTER ||
+            !allocate_result(element->payload.character.length, value))
+            return 0;
+        *length = element->payload.character.length;
+        if (*length != 0U)
+            memcpy(*value, element->payload.character.bytes, *length);
+        return 1;
     }
     if (expression->kind == F2C_EXPR_SUBSTRING)
         return evaluate_substring(evaluation, expression, value, length, depth);
@@ -235,7 +246,7 @@ static int evaluate(F2cConstantEvaluation *evaluation, const F2cExpr *expression
         const F2cExpr *argument =
             f2c_intrinsic_argument(expression->children, expression->child_count, "i", 0U);
         int64_t code;
-        if (!f2c_evaluate_integer_constant(evaluation->unit, argument, &code) || code < 0 ||
+        if (!f2c_constant_evaluate_integer(evaluation, argument, &code, depth + 1U) || code < 0 ||
             code > 255 || !allocate_result(1U, value))
             return 0;
         (*value)[0] = (char)(unsigned char)code;
@@ -262,10 +273,13 @@ int f2c_constant_evaluate_character(F2cConstantEvaluation *evaluation, const F2c
 
 int f2c_evaluate_character_constant(Unit *unit, const F2cExpr *expression, char **value,
                                     size_t *length) {
-    F2cConstantEvaluation evaluation = {unit, unit != NULL ? unit->context : NULL, 0U};
+    F2cConstantEvaluation evaluation = {.unit = unit,
+                                        .context = unit != NULL ? unit->context : NULL};
     if (value == NULL || length == NULL)
         return 0;
     *value = NULL;
     *length = 0U;
-    return evaluate(&evaluation, expression, value, length, 0U);
+    const int result = evaluate(&evaluation, expression, value, length, 0U);
+    f2c_constant_evaluation_finish(&evaluation);
+    return result;
 }

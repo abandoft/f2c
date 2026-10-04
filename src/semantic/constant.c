@@ -124,7 +124,8 @@ static int consume_steps(F2cConstantEvaluation *evaluation, size_t count) {
 }
 
 int f2c_reserve_constant_steps(Unit *unit, size_t steps) {
-    F2cConstantEvaluation evaluation = {unit, unit != NULL ? unit->context : NULL, 0U};
+    F2cConstantEvaluation evaluation = {.unit = unit,
+                                        .context = unit != NULL ? unit->context : NULL};
     return consume_steps(&evaluation, steps);
 }
 
@@ -338,8 +339,8 @@ static int evaluate_character_intrinsic(F2cConstantEvaluation *evaluation,
             f2c_intrinsic_argument(expression->children, expression->child_count, "string_a", 0U);
         second =
             f2c_intrinsic_argument(expression->children, expression->child_count, "string_b", 1U);
-        if (!f2c_evaluate_character_constant(evaluation->unit, first, &left, &left_length) ||
-            !f2c_evaluate_character_constant(evaluation->unit, second, &right, &right_length))
+        if (!f2c_constant_evaluate_character(evaluation, first, &left, &left_length, depth + 1U) ||
+            !f2c_constant_evaluate_character(evaluation, second, &right, &right_length, depth + 1U))
             goto cleanup;
         comparison = character_constant_compare(left, left_length, right, right_length);
         *value = expression->intrinsic == F2C_INTRINSIC_LGE   ? comparison >= 0
@@ -353,7 +354,7 @@ static int evaluate_character_intrinsic(F2cConstantEvaluation *evaluation,
     if (expression->intrinsic == F2C_INTRINSIC_IACHAR ||
         expression->intrinsic == F2C_INTRINSIC_ICHAR) {
         first = f2c_intrinsic_argument(expression->children, expression->child_count, "c", 0U);
-        if (!f2c_evaluate_character_constant(evaluation->unit, first, &left, &left_length) ||
+        if (!f2c_constant_evaluate_character(evaluation, first, &left, &left_length, depth + 1U) ||
             left_length != 1U) {
             free(left);
             return 0;
@@ -365,7 +366,7 @@ static int evaluate_character_intrinsic(F2cConstantEvaluation *evaluation,
     if (expression->intrinsic == F2C_INTRINSIC_LEN ||
         expression->intrinsic == F2C_INTRINSIC_LEN_TRIM) {
         first = f2c_intrinsic_argument(expression->children, expression->child_count, "string", 0U);
-        if (!f2c_evaluate_character_constant(evaluation->unit, first, &left, &left_length))
+        if (!f2c_constant_evaluate_character(evaluation, first, &left, &left_length, depth + 1U))
             return 0;
         if (expression->intrinsic == F2C_INTRINSIC_LEN_TRIM)
             while (left_length != 0U && left[left_length - 1U] == ' ')
@@ -382,8 +383,8 @@ static int evaluate_character_intrinsic(F2cConstantEvaluation *evaluation,
         expression->children, expression->child_count,
         expression->intrinsic == F2C_INTRINSIC_INDEX ? "substring" : "set", 1U);
     back = f2c_intrinsic_argument(expression->children, expression->child_count, "back", 2U);
-    if (!f2c_evaluate_character_constant(evaluation->unit, first, &left, &left_length) ||
-        !f2c_evaluate_character_constant(evaluation->unit, second, &right, &right_length) ||
+    if (!f2c_constant_evaluate_character(evaluation, first, &left, &left_length, depth + 1U) ||
+        !f2c_constant_evaluate_character(evaluation, second, &right, &right_length, depth + 1U) ||
         (back != NULL && !f2c_constant_evaluate_integer(evaluation, back, &backwards, depth + 1U)))
         goto cleanup;
     if (expression->intrinsic == F2C_INTRINSIC_INDEX) {
@@ -456,6 +457,26 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
     if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
         return f2c_constant_evaluate_integer(evaluation, expression->children[0], value,
                                              depth + 1U);
+    if (expression->kind == F2C_EXPR_ARRAY_REFERENCE) {
+        const F2cConstantValue *element =
+            f2c_constant_array_element(evaluation, expression, depth + 1U);
+        if (element == NULL ||
+            (element->type.type != TYPE_INTEGER && element->type.type != TYPE_LOGICAL))
+            return 0;
+        *value = element->payload.integer;
+        return 1;
+    }
+    if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_FINDLOC &&
+        expression->rank == 0U) {
+        F2cConstantArray array = {0};
+        const int success =
+            f2c_constant_evaluate_transform(evaluation, expression, &array, depth + 1U) &&
+            array.shape.rank == 0U && array.count == 1U;
+        if (success)
+            *value = array.values[0].payload.integer;
+        f2c_constant_array_free(&array);
+        return success;
+    }
     if (expression->kind == F2C_EXPR_INTEGER_LITERAL && expression->text != NULL) {
         char *end = NULL;
         long long parsed;
@@ -593,8 +614,11 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
 }
 
 int f2c_evaluate_integer_constant(Unit *unit, const F2cExpr *expression, int64_t *value) {
-    F2cConstantEvaluation evaluation = {unit, unit != NULL ? unit->context : NULL, 0U};
-    return f2c_constant_evaluate_integer(&evaluation, expression, value, 0U);
+    F2cConstantEvaluation evaluation = {.unit = unit,
+                                        .context = unit != NULL ? unit->context : NULL};
+    const int result = f2c_constant_evaluate_integer(&evaluation, expression, value, 0U);
+    f2c_constant_evaluation_finish(&evaluation);
+    return result;
 }
 
 int f2c_evaluate_integer_syntax(Unit *unit, F2cTokenRange syntax, int64_t *value) {

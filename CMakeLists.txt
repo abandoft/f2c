@@ -244,6 +244,9 @@ set(
     src/codegen/type/initialization.h
     src/codegen/type/namelist.c
     src/codegen/unit.c
+    src/codegen/constant/array.c
+    src/codegen/constant/value.c
+    src/codegen/constant/private.h
     src/codegen/unit/automatic.c
     src/codegen/unit/data.c
     src/codegen/unit/constant.c
@@ -278,8 +281,10 @@ set(
     src/core/numeric/power.h
     src/core/numeric/loop.h
     src/core/numeric/real_loop.h
+    src/core/numeric/shift.h
     src/core/generated/loop.c
     src/core/generated/real_loop.c
+    src/core/generated/shift.c
     src/core/generated/model.c
     src/core/generated/numeric.c
     src/core/generated/power.c
@@ -357,6 +362,8 @@ set(
     src/internal/context.h
     src/internal/f2c.h
     src/ir/expression.h
+    src/ir/constant.c
+    src/ir/constant.h
     src/ir/call.c
     src/ir/call.h
     src/ir/designator.c
@@ -375,6 +382,9 @@ set(
     src/semantic/control_flow/connectivity.c
     src/semantic/control_flow/private.h
     src/semantic/constant.c
+    src/semantic/constant/array.c
+    src/semantic/constant/array.h
+    src/semantic/constant/value.c
     src/semantic/constant/bit.c
     src/semantic/constant/character.c
     src/semantic/constant/complex.c
@@ -386,6 +396,13 @@ set(
     src/semantic/constant/operator.c
     src/semantic/constant/private.h
     src/semantic/constant/real.c
+    src/semantic/constant/storage.c
+    src/semantic/constant/transform/common.c
+    src/semantic/constant/transform/findloc.c
+    src/semantic/constant/transform/pack.c
+    src/semantic/constant/transform/private.h
+    src/semantic/constant/transform/reorder.c
+    src/semantic/constant/transform/shift.c
     src/semantic/data_flow.h
     src/semantic/data_flow/bitset.c
     src/semantic/data_flow/temporaries.c
@@ -748,6 +765,11 @@ if(F2C_BUILD_TESTING)
     target_include_directories(f2c_constant_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_constant_tests)
     add_test(NAME constant COMMAND f2c_constant_tests)
+
+    add_executable(f2c_constant_array_tests test/test_constant_array.c)
+    target_include_directories(f2c_constant_array_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_constant_array_tests)
+    add_test(NAME constant_array COMMAND f2c_constant_array_tests)
 
     add_executable(f2c_numeric_model_tests test/test_numeric_model.c)
     target_include_directories(

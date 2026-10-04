@@ -445,6 +445,15 @@ int f2c_constant_evaluate_complex(F2cConstantEvaluation *evaluation, const F2cEx
     if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
         return f2c_constant_evaluate_complex(evaluation, expression->children[0], value,
                                              depth + 1U);
+    if (expression->kind == F2C_EXPR_ARRAY_REFERENCE) {
+        const F2cConstantValue *element =
+            f2c_constant_array_element(evaluation, expression, depth + 1U);
+        if (element == NULL || !is_complex(element->type.type))
+            return 0;
+        value->real = element->payload.number.real;
+        value->imaginary = element->payload.number.imaginary;
+        return 1;
+    }
     if (expression->kind == F2C_EXPR_COMPLEX_LITERAL && expression->child_count == 2U) {
         double real;
         double imaginary;
@@ -507,17 +516,21 @@ int f2c_constant_evaluate_complex(F2cConstantEvaluation *evaluation, const F2cEx
 
 int f2c_evaluate_complex_constant(Unit *unit, const F2cExpr *expression, double *real,
                                   double *imaginary) {
-    F2cConstantEvaluation evaluation = {unit, unit != NULL ? unit->context : NULL, 0U};
+    F2cConstantEvaluation evaluation = {.unit = unit,
+                                        .context = unit != NULL ? unit->context : NULL};
     F2cComplexConstant value;
     if (real == NULL || imaginary == NULL || expression == NULL)
         return 0;
+    int result;
     if (!is_complex(expression->type)) {
-        if (!evaluate_component(&evaluation, expression, &value.real, 0U))
-            return 0;
+        result = evaluate_component(&evaluation, expression, &value.real, 0U);
         value.imaginary = 0.0;
-    } else if (!f2c_constant_evaluate_complex(&evaluation, expression, &value, 0U)) {
-        return 0;
+    } else {
+        result = f2c_constant_evaluate_complex(&evaluation, expression, &value, 0U);
     }
+    f2c_constant_evaluation_finish(&evaluation);
+    if (!result)
+        return 0;
     *real = value.real;
     *imaginary = value.imaginary;
     return 1;

@@ -211,6 +211,15 @@ int f2c_constant_evaluate_real(F2cConstantEvaluation *evaluation, const F2cExpr 
         return 0;
     if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
         return f2c_constant_evaluate_real(evaluation, expression->children[0], value, depth + 1U);
+    if (expression->kind == F2C_EXPR_ARRAY_REFERENCE) {
+        const F2cConstantValue *element =
+            f2c_constant_array_element(evaluation, expression, depth + 1U);
+        if (element == NULL ||
+            (element->type.type != TYPE_REAL && element->type.type != TYPE_DOUBLE))
+            return 0;
+        *value = element->payload.number.real;
+        return 1;
+    }
     if (expression->kind == F2C_EXPR_REAL_LITERAL)
         return parse_real_literal(expression, value);
     if (expression->kind == F2C_EXPR_INTEGER_LITERAL) {
@@ -296,6 +305,9 @@ int f2c_constant_evaluate_real(F2cConstantEvaluation *evaluation, const F2cExpr 
 }
 
 int f2c_evaluate_real_constant(Unit *unit, const F2cExpr *expression, double *value) {
-    F2cConstantEvaluation evaluation = {unit, unit != NULL ? unit->context : NULL, 0U};
-    return f2c_constant_evaluate_real(&evaluation, expression, value, 0U);
+    F2cConstantEvaluation evaluation = {.unit = unit,
+                                        .context = unit != NULL ? unit->context : NULL};
+    const int result = f2c_constant_evaluate_real(&evaluation, expression, value, 0U);
+    f2c_constant_evaluation_finish(&evaluation);
+    return result;
 }
