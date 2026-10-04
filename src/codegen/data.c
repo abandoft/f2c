@@ -56,13 +56,11 @@ static char *emit_expression(Unit *unit, const F2cExpr *expression) {
 }
 
 static const F2cExpr *next_data_value(DataCursor *cursor) {
-    if (cursor->repetitions_left == 0U) {
+    while (cursor->repetitions_left == 0U) {
         const F2cDataValue *value;
         if (cursor->value_index >= cursor->group->value_count)
             return NULL;
         value = &cursor->group->values[cursor->value_index++];
-        if (value->repeat_count == 0U)
-            return NULL;
         cursor->current = value->expression;
         cursor->repetitions_left = value->repeat_count;
     }
@@ -71,7 +69,12 @@ static const F2cExpr *next_data_value(DataCursor *cursor) {
 }
 
 static int cursor_has_values(const DataCursor *cursor) {
-    return cursor->repetitions_left != 0 || cursor->value_index < cursor->group->value_count;
+    if (cursor->repetitions_left != 0U)
+        return 1;
+    for (size_t index = cursor->value_index; index < cursor->group->value_count; ++index)
+        if (cursor->group->values[index].repeat_count != 0U)
+            return 1;
+    return 0;
 }
 
 static int data_item_requires_runtime_initialization(const F2cIoItem *item) {
@@ -248,6 +251,7 @@ static int emit_data_target(Context *context, Unit *unit, const F2cIoItem *targe
                                       substitutions->count, &last) ||
         !evaluate_substituted_integer(unit, target->step, substitutions->items,
                                       substitutions->count, &step) ||
+        !f2c_integer_loop_parameters_fit(target->iterator->type_kind, first, last, step) ||
         step == 0 || !f2c_integer_iteration_count(first, last, step, &iterations))
         return 0;
     if (!push_substitution(substitutions, target->iterator))

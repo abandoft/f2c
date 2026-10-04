@@ -131,6 +131,12 @@ static int implied_do_iterations(DataValidation *validation, const F2cIoItem *it
                                  "DATA implied-DO step cannot be zero");
         return 0;
     }
+    if (!f2c_integer_loop_parameters_fit(item->iterator->type_kind, *first, last, *step)) {
+        f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC,
+                                 &validation->group->span, 1,
+                                 "DATA implied-DO control exceeds the iteration variable kind");
+        return 0;
+    }
     if (!f2c_integer_iteration_count(*first, last, *step, iterations) ||
         !expansion_within_budget(validation, *iterations))
         return 0;
@@ -138,7 +144,7 @@ static int implied_do_iterations(DataValidation *validation, const F2cIoItem *it
 }
 
 static const F2cExpr *next_value(DataValueCursor *cursor) {
-    if (cursor->remaining == 0U) {
+    while (cursor->remaining == 0U) {
         const F2cDataValue *value;
         if (cursor->index >= cursor->group->value_count)
             return NULL;
@@ -146,14 +152,17 @@ static const F2cExpr *next_value(DataValueCursor *cursor) {
         cursor->current = value->expression;
         cursor->remaining = value->repeat_count;
     }
-    if (cursor->remaining == 0U)
-        return NULL;
     --cursor->remaining;
     return cursor->current;
 }
 
 static int value_cursor_has_values(const DataValueCursor *cursor) {
-    return cursor->remaining != 0U || cursor->index < cursor->group->value_count;
+    if (cursor->remaining != 0U)
+        return 1;
+    for (size_t index = cursor->index; index < cursor->group->value_count; ++index)
+        if (cursor->group->values[index].repeat_count != 0U)
+            return 1;
+    return 0;
 }
 
 static void validate_value_type(DataValidation *validation, const F2cExpr *target,
@@ -578,10 +587,10 @@ static int validate_values(DataValidation *validation) {
             (value->repeat->type != TYPE_INTEGER || value->repeat->rank != 0U ||
              !f2c_expression_is_initialization_constant(value->repeat) ||
              !f2c_evaluate_integer_constant(validation->unit, value->repeat, &repeat) ||
-             repeat <= 0 || (uint64_t)repeat > (uint64_t)SIZE_MAX)) {
+             repeat < 0 || (uint64_t)repeat > (uint64_t)SIZE_MAX)) {
             f2c_diagnostic_span_code(validation->context, F2C_DIAGNOSTIC_SEMANTIC,
                                      &value->repeat->span, 1,
-                                     "DATA repeat must be a positive scalar INTEGER constant");
+                                     "DATA repeat must be a nonnegative scalar INTEGER constant");
             valid = 0;
             continue;
         }

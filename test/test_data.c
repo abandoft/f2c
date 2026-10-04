@@ -152,11 +152,12 @@ static void test_data_diagnostics(void) {
                    "DATA groups require an explicit comma separator");
     expect_failure("invalid_repeat.f90",
                    "program invalid_repeat\n"
+                   "  integer, parameter :: repeat = -1\n"
                    "  integer :: value\n"
-                   "  data value / 0*1 /\n"
+                   "  data value / repeat*1 /\n"
                    "end program invalid_repeat\n",
-                   "DATA repeat must be a positive scalar INTEGER constant",
-                   "DATA rejects zero repetition factors");
+                   "DATA repeat must be a nonnegative scalar INTEGER constant",
+                   "DATA rejects negative repetition factors");
     expect_failure("nonconstant_value.f90",
                    "program nonconstant_value\n"
                    "  integer :: target, source\n"
