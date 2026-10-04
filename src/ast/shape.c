@@ -345,17 +345,28 @@ void f2c_ast_set_expression_shape(F2cExpr *expression, size_t rank, F2cShapeKind
 }
 
 int f2c_ast_common_expression_kind(Type result_type, const F2cExpr *left, const F2cExpr *right) {
-    int kind = f2c_default_kind(result_type);
+    int kind = 0;
     const int numeric_result = f2c_type_is_numeric(result_type);
-    if (left != NULL &&
-        (left->type == result_type || (numeric_result && f2c_type_is_numeric(left->type))) &&
-        left->type_kind > kind)
-        kind = left->type_kind;
-    if (right != NULL &&
-        (right->type == result_type || (numeric_result && f2c_type_is_numeric(right->type))) &&
-        right->type_kind > kind)
-        kind = right->type_kind;
-    return kind;
+    const F2cExpr *operands[] = {left, right};
+    /* The default kind is a fallback, not a minimum. INTEGER operands do not
+     * choose the precision of mixed REAL/COMPLEX arithmetic (F2018 10.1.9.3).
+     * For our supported models, kind order agrees with integer range and real
+     * precision. A mixed LOGICAL operation chooses the wider operand kind.
+     */
+    for (size_t i = 0U; i < sizeof(operands) / sizeof(operands[0]); ++i) {
+        const F2cExpr *operand = operands[i];
+        int operand_kind;
+        if (operand == NULL || !(operand->type == result_type ||
+                                 (numeric_result && f2c_type_is_numeric(operand->type))))
+            continue;
+        if (result_type != TYPE_INTEGER && operand->type == TYPE_INTEGER)
+            continue;
+        operand_kind =
+            operand->type_kind != 0 ? operand->type_kind : f2c_default_kind(operand->type);
+        if (operand_kind > kind)
+            kind = operand_kind;
+    }
+    return kind != 0 ? kind : f2c_default_kind(result_type);
 }
 
 void f2c_ast_copy_expression_shape(F2cExpr *expression, const F2cShape *source) {
@@ -560,6 +571,8 @@ static int symbol_kind_value(Unit *unit, const Symbol *symbol, int64_t *value) {
 }
 
 static int literal_kind_supported(Type literal_type, int kind) {
+    if (literal_type == TYPE_LOGICAL)
+        return kind == 1 || kind == 2 || kind == 4 || kind == 8;
     if (literal_type == TYPE_INTEGER)
         return f2c_numeric_model(TYPE_INTEGER, kind) != NULL;
     if (literal_type == TYPE_REAL || literal_type == TYPE_DOUBLE)
