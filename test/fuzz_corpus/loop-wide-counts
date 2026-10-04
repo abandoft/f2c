@@ -1,0 +1,10 @@
+program loops
+  integer(kind=8) :: i, j, first, last, stride, values(3)
+  first=4294967296_8
+  last=first+2_8
+  stride=1_8
+  do i=first,last,stride
+    if (i == first+1_8) cycle
+  end do
+  values=[(j,j=first,last,stride)]
+end program
