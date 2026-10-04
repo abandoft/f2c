@@ -199,6 +199,8 @@ set(
     src/codegen/literal/real.c
     src/codegen/literal/real.h
     src/codegen/lowering.c
+    src/codegen/loop/control.c
+    src/codegen/loop/control.h
     src/codegen/operator.c
     src/codegen/operator.h
     src/codegen/module.c
