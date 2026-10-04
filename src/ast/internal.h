@@ -41,7 +41,6 @@ void f2c_ast_set_elemental_shape(F2cExpr *expression, const F2cExpr *left, const
 void f2c_ast_set_array_reference_shape(AstParser *parser, F2cExpr *expression, Symbol *symbol);
 Type f2c_ast_common_constructor_type(Type left, Type right);
 int f2c_ast_precedence(const F2cToken *token);
-int f2c_ast_is_comparison(const F2cToken *token);
 int f2c_ast_is_defined_operator(const F2cToken *token);
 int f2c_ast_literal_kind_value(AstParser *parser, const F2cToken *token, Type literal_type);
 Type f2c_ast_kind_type_from_argument(const F2cExpr *argument);
