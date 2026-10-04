@@ -114,6 +114,25 @@ program loop_control
   write(record, '(I12)') (wide, wide = first+2_int64, first, 1_int64)
   if (wide /= first+2_int64 .or. len_trim(record) /= 0) stop 26
 
+  do trips = -2, 7
+    total = 0_int64
+    do ordinary = 5, trips
+      total = total + ordinary
+    end do
+    if (ordinary /= max(5, trips+1)) stop 31
+    if (trips < 5) then
+      if (total /= 0_int64) stop 32
+    else
+      if (total /= int((trips-4)*(trips+5)/2, int64)) stop 33
+    end if
+  end do
+  trips = huge(ordinary)-1
+  total = 0_int64
+  do ordinary = 2147483646, trips
+    total = total + ordinary
+  end do
+  if (ordinary /= 2147483647 .or. total /= 2147483646_int64) stop 34
+
   unit_number = 41
   open(unit=unit_number, status='scratch', form='unformatted', iostat=status)
   if (status /= 0) stop 27
