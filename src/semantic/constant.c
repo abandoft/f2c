@@ -1,5 +1,7 @@
+#include "core/numeric/power.h"
 #include "internal/f2c.h"
 #include "semantic/constant/private.h"
+#include "semantic/numeric_model.h"
 #include "semantic/scope.h"
 
 #include <ctype.h>
@@ -448,7 +450,8 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
     int64_t left;
     int64_t right;
     Unit *unit = evaluation->unit;
-    if (expression == NULL || value == NULL || !f2c_constant_consume_step(evaluation, depth))
+    if (expression == NULL || value == NULL || expression->resolved_procedure != NULL ||
+        !f2c_constant_consume_step(evaluation, depth))
         return 0;
     if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
         return f2c_constant_evaluate_integer(evaluation, expression->children[0], value,
@@ -485,13 +488,16 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
         f2c_expr_free(temporary);
         return result;
     }
+    if ((expression->kind == F2C_EXPR_UNARY || expression->kind == F2C_EXPR_BINARY) &&
+        expression->type == TYPE_LOGICAL)
+        return f2c_constant_evaluate_logical_operator(evaluation, expression, value, depth);
     if (expression->kind == F2C_EXPR_UNARY && expression->child_count == 1U &&
         f2c_constant_evaluate_integer(evaluation, expression->children[0], &left, depth + 1U)) {
-        if (strcmp(expression->text, "+") == 0) {
+        if (expression->operator_kind == F2C_OPERATOR_ADD) {
             *value = left;
             return 1;
         }
-        if (strcmp(expression->text, "-") == 0 && left != INT64_MIN) {
+        if (expression->operator_kind == F2C_OPERATOR_SUBTRACT && left != INT64_MIN) {
             *value = -left;
             return 1;
         }
@@ -566,31 +572,22 @@ int f2c_constant_evaluate_integer(F2cConstantEvaluation *evaluation, const F2cEx
         !f2c_constant_evaluate_integer(evaluation, expression->children[0], &left, depth + 1U) ||
         !f2c_constant_evaluate_integer(evaluation, expression->children[1], &right, depth + 1U))
         return 0;
-    if (strcmp(expression->text, "+") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_ADD)
         return checked_add(left, right, value);
-    if (strcmp(expression->text, "-") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_SUBTRACT)
         return checked_subtract(left, right, value);
-    if (strcmp(expression->text, "*") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_MULTIPLY)
         return checked_multiply(left, right, value);
-    if (strcmp(expression->text, "/") == 0) {
+    if (expression->operator_kind == F2C_OPERATOR_DIVIDE) {
         if (right == 0 || (left == INT64_MIN && right == -1))
             return 0;
         *value = left / right;
         return 1;
     }
-    if (strcmp(expression->text, "**") == 0 && right >= 0) {
-        int64_t base = left;
-        int64_t exponent = right;
-        int64_t result = 1;
-        while (exponent != 0) {
-            if ((exponent & 1) != 0 && !checked_multiply(result, base, &result))
-                return 0;
-            exponent >>= 1;
-            if (exponent != 0 && !checked_multiply(base, base, &base))
-                return 0;
-        }
-        *value = result;
-        return 1;
+    if (expression->operator_kind == F2C_OPERATOR_POWER && expression->type == TYPE_INTEGER) {
+        const F2cNumericModel *model = f2c_numeric_model(TYPE_INTEGER, expression->type_kind);
+        return model != NULL && f2c_numeric_integer_power(left, right, -model->integer_huge - 1,
+                                                          model->integer_huge, value);
     }
     return 0;
 }
