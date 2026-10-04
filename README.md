@@ -130,6 +130,18 @@ older or larger configuration layouts are rejected and all fields belong to the 
 
 ## Support status
 
+For supported REAL kind 4/8 extrema, `MIN/MAX` and `MINVAL/MAXVAL` use one
+processor policy: any selected NaN propagates, including the pinned LAPACK
+installation contract.
+Mixed signed zeros produce positive zero for maximum and negative zero for minimum.
+`MINLOC/MAXLOC` use numerical ties (including signed zeros), selecting the first
+match or the last with `BACK=.TRUE.`; if any selected value is NaN, they choose the
+first or last selected NaN. Constant evaluation follows the generated-code policy. This is a documented
+choice where Fortran does not specify NaN or zero-sign results, not a guarantee of
+bitwise identity with every Fortran processor. Empty or fully masked real value
+reductions return the finite kind-specific boundaries; nonempty selections retain
+genuine infinities.
+
 The currently tested implementation includes:
 
 - normalized free and fixed source forms, continuations, labels, bounded object-macro and

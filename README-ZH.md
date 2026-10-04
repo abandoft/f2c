@@ -118,6 +118,13 @@ F2cResult result = f2c_transpile_project_config(inputs, input_count, &config);
 
 ## 支持状态
 
+已支持的 REAL kind 4/8 极值使用统一的处理器策略：`MIN/MAX` 和 `MINVAL/MAXVAL` 传播被选中
+的 NaN，保持固定 LAPACK 安装测试的原始契约；混合正负零时，最大值取正零、最小值取负零。
+`MINLOC/MAXLOC` 按数值相等判断并列（包括正负零），返回首项或 `BACK=.TRUE.` 时的末项；
+存在被选中的 NaN 时，返回首个或末个 NaN 的位置。常量求值与生成代码一致。这是对 Fortran 未规定的 NaN
+及零符号结果所作的明确选择，不保证与每个原生处理器逐位一致。空实数组或全假掩码的值
+归约返回相应 kind 的有限边界，非空选择则保留真正的无穷大。
+
 当前经过测试的实现包括：
 
 - 统一化的自由/固定源码形式、续行、标签、有界对象宏与条件预处理、回调式 include、行重映射、
