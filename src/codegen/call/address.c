@@ -74,7 +74,7 @@ char *f2c_call_emit_actual_address(Unit *unit, const F2cExpr *actual, const char
     }
     if (actual->kind == F2C_EXPR_NAME && symbol != NULL) {
         if (symbol->parameter) {
-            if (symbol->type == TYPE_CHARACTER)
+            if (symbol->rank != 0U || symbol->type == TYPE_CHARACTER)
                 return f2c_strdup(code);
             return f2c_emit_scalar_temporary_address(f2c_symbol_c_type(symbol), symbol->type, code);
         }
