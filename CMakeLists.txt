@@ -271,6 +271,8 @@ set(
     src/core/generated/extremum.c
     src/core/numeric/extremum.h
     src/core/numeric/power.h
+    src/core/numeric/loop.h
+    src/core/generated/loop.c
     src/core/generated/model.c
     src/core/generated/numeric.c
     src/core/generated/power.c

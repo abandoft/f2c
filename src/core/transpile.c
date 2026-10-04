@@ -38,6 +38,7 @@ typedef struct F2cRequiredFeatures {
     int numeric_operation_intrinsic;
     int real_representation_intrinsic;
     int power;
+    int integer_loop;
 } F2cRequiredFeatures;
 
 static void collect_expression_feature(F2cExpr *expression, void *state) {
@@ -45,6 +46,8 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
     const char *name;
     if (expression == NULL)
         return;
+    if (expression->kind == F2C_EXPR_IMPLIED_DO)
+        features->integer_loop = 1;
     if ((expression->storage_qualifiers & F2C_STORAGE_VOLATILE) != 0U)
         features->qualified_storage = 1;
     if (expression->type == TYPE_COMPLEX || expression->type == TYPE_DOUBLE_COMPLEX)
@@ -87,9 +90,24 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
     }
 }
 
+static int io_item_has_loop(const F2cIoItem *item) {
+    if (item->implied_do)
+        return 1;
+    for (size_t index = 0U; index < item->child_count; ++index)
+        if (io_item_has_loop(&item->children[index]))
+            return 1;
+    return 0;
+}
+
 static void collect_statement_features(F2cStatement *statement, F2cRequiredFeatures *features) {
     if (statement == NULL)
         return;
+    if (statement->kind == F2C_STMT_DO && statement->left != NULL &&
+        statement->left->type == TYPE_INTEGER)
+        features->integer_loop = 1;
+    for (size_t index = 0U; index < statement->io_item_count; ++index)
+        if (io_item_has_loop(&statement->io_items[index]))
+            features->integer_loop = 1;
     if (statement->kind == F2C_STMT_READ || statement->kind == F2C_STMT_WRITE ||
         statement->kind == F2C_STMT_PRINT || statement->kind == F2C_STMT_OPEN ||
         statement->kind == F2C_STMT_REWIND || statement->kind == F2C_STMT_BACKSPACE ||
@@ -325,6 +343,8 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                           "#define F2C_UNUSED __attribute__((unused))\n#else\n"
                           "#define F2C_RESTRICT restrict\n#define F2C_NOINLINE\n"
                           "#define F2C_UNUSED\n#endif\n");
+        if (features.integer_loop)
+            f2c_emit_integer_loop_support(&context.output);
         if (needs_bit_intrinsic)
             f2c_emit_bit_intrinsic_support(&context.output);
         if (needs_character_intrinsic)
