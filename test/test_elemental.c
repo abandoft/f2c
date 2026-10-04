@@ -112,9 +112,44 @@ static void test_elemental_interface_compatibility(void) {
     f2c_result_free(&result);
 }
 
+static void test_empty_allocation_markers(void) {
+    static const char source[] = "program empty_markers\n"
+                                 "  implicit none\n"
+                                 "  integer :: integers(0), integer_value\n"
+                                 "  real(kind=8) :: reals(0), real_value\n"
+                                 "  complex :: complexes(0), complex_value\n"
+                                 "  character(len=0) :: words(2)\n"
+                                 "  character(len=0), allocatable :: character_value(:)\n"
+                                 "  integer_value = maxval(integers + 1)\n"
+                                 "  real_value = minval(reals + 1.0_8)\n"
+                                 "  complex_value = sum(complexes + (1.0,0.0))\n"
+                                 "  character_value = words // ''\n"
+                                 "end program empty_markers\n";
+    F2cOptions options = {"empty_markers.f90", F2C_SOURCE_FREE, 0};
+    F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
+    if (result.error_count != 0U && result.diagnostics != NULL)
+        fprintf(stderr, "%s", result.diagnostics);
+    expect(result.code != NULL && result.error_count == 0U,
+           "empty elemental values have valid allocation markers");
+    expect(result.code != NULL &&
+               strstr(result.code, "if (f2c_element_count == 0U) f2c_element_values[0] = "
+                                   "(int32_t){0};") != NULL &&
+               strstr(result.code, "if (f2c_element_count == 0U) f2c_element_values[0] = "
+                                   "(double){0};") != NULL &&
+               strstr(result.code, "if (f2c_element_count == 0U) f2c_element_values[0] = "
+                                   "(f2c_complex_float){0};") != NULL,
+           "numeric and complex empty markers use typed initialization");
+    expect(result.code != NULL &&
+               strstr(result.code, "if (f2c_element_bytes == 0U) f2c_element_values[0] = '\\0';") !=
+                   NULL,
+           "empty character payload initializes only its allocation marker");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_elemental_declaration_constraints();
     test_elemental_actual_conformance();
     test_elemental_interface_compatibility();
+    test_empty_allocation_markers();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
