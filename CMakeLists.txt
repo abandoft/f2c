@@ -661,6 +661,11 @@ if(F2C_BUILD_TESTING)
     f2c_configure_internal_test_target(f2c_operator_tests)
     add_test(NAME operator_semantics COMMAND f2c_operator_tests)
 
+    add_executable(f2c_loop_tests test/test_loop.c)
+    target_include_directories(f2c_loop_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_loop_tests)
+    add_test(NAME integer_loop_semantics COMMAND f2c_loop_tests)
+
     add_executable(f2c_parenthesized_tests test/test_parenthesized.c)
     target_include_directories(f2c_parenthesized_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_parenthesized_tests)
