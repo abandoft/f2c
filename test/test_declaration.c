@@ -249,6 +249,20 @@ static void test_assumed_size_declaration_context(void) {
     f2c_result_free(&result);
 }
 
+static void test_unmaterialized_array_initializer(void) {
+    static const char source[] = "program constant_array_initializer\n"
+                                 "  integer :: values(2) = reshape([1, 2], [2])\n"
+                                 "  print *, values\n"
+                                 "end program\n";
+    DiagnosticCapture capture = {0};
+    F2cResult result = transpile(source, &capture);
+    expect(result.code == NULL && result.error_count != 0U,
+           "unmaterialized static initializers never silently become zeros");
+    expect(capture.captured && capture.code == F2C_DIAGNOSTIC_UNSUPPORTED && capture.line == 2U,
+           "unmaterialized static initializers retain their declaration location");
+    f2c_result_free(&result);
+}
+
 int main(void) {
     test_duplicate_attribute();
     test_duplicate_shape();
@@ -258,5 +272,6 @@ int main(void) {
     test_selected_kind_type_selectors();
     test_contiguous_attribute();
     test_assumed_size_declaration_context();
+    test_unmaterialized_array_initializer();
     return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
