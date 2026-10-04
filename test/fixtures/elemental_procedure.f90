@@ -20,6 +20,13 @@ program elemental_procedure
   integer, allocatable :: dynamic_values(:)
   character(len=3), allocatable :: dynamic_words(:)
   type(cell), allocatable :: dynamic_cells(:)
+  complex :: empty_complex(0)
+  logical :: empty_logical(0)
+  character(len=3) :: empty_words(0)
+  character(len=0) :: zero_words(2)
+  complex, allocatable :: dynamic_complex(:)
+  logical, allocatable :: dynamic_logical(:)
+  character(len=:), allocatable :: zero_dynamic(:)
 
   a = [1, 2, 3, 4]
   b = [10, 20, 30, 40]
@@ -85,9 +92,24 @@ program elemental_procedure
   if (dynamic_cells(1)%value /= 10 .or. dynamic_cells(2)%value /= 20) error stop 15
 
   dynamic_values = combine(a(1:0), b(1:0), 1)
-  if (.not. allocated(dynamic_values)) error stop 16
+  if (.not. allocated(dynamic_values) .or. size(dynamic_values) /= 0) error stop 16
+  dynamic_words = empty_words // ''
+  if (.not. allocated(dynamic_words) .or. size(dynamic_words) /= 0) error stop 20
+  if (len(dynamic_words) /= 3) error stop 21
+  zero_dynamic = zero_words // ''
+  if (.not. allocated(zero_dynamic) .or. size(zero_dynamic) /= 2) error stop 22
+  if (len(zero_dynamic) /= 0) error stop 23
+  dynamic_complex = empty_complex + (1.0, 0.0)
+  if (.not. allocated(dynamic_complex) .or. size(dynamic_complex) /= 0) error stop 24
+  if (abs(sum(dynamic_complex)) > 0.0) error stop 25
+  dynamic_logical = .not. empty_logical
+  if (.not. allocated(dynamic_logical) .or. size(dynamic_logical) /= 0) error stop 26
+  if (any(dynamic_logical)) error stop 27
+  dynamic_cells = make_cell(a(1:0))
+  if (.not. allocated(dynamic_cells) .or. size(dynamic_cells) /= 0) error stop 28
 
-  deallocate(dynamic_values, dynamic_words, dynamic_cells)
+  deallocate(dynamic_values, dynamic_words, dynamic_cells, &
+             dynamic_complex, dynamic_logical, zero_dynamic)
 
   do i = 1, 4
     write (*, '(I0,1X,I0)') values(i), reversed(i)
