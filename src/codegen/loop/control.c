@@ -6,7 +6,7 @@
 
 char *f2c_loop_local_prefix(Unit *unit, const char *preferred, size_t identifier) {
     static const char *const roles[] = {"start", "limit", "step",  "remaining", "active",
-                                        "count", "index", "value", "final",     "safe"};
+                                        "count", "index", "value", "final",     "safe", "bound"};
     enum { ROLE_COUNT = sizeof(roles) / sizeof(roles[0]) };
     char members[ROLE_COUNT][64];
     const char *suffixes[ROLE_COUNT];
