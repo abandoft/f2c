@@ -20,6 +20,7 @@ void f2c_emit_numeric_operation_support(Buffer *output);
 void f2c_emit_power_support(Buffer *output, int needs_complex);
 void f2c_emit_integer_loop_support(Buffer *output);
 void f2c_emit_real_loop_support(Buffer *output);
+void f2c_emit_array_shift_support(Buffer *output);
 void f2c_emit_extended_complex_support(Buffer *output);
 void f2c_emit_real_representation_support(Buffer *output);
 void f2c_emit_time_intrinsic_support(Buffer *output);
