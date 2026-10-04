@@ -117,11 +117,13 @@ static void test_empty_allocation_markers(void) {
                                  "  implicit none\n"
                                  "  integer :: integers(0), integer_value\n"
                                  "  real(kind=8) :: reals(0), real_value\n"
+                                 "  real :: cube(0,3,2), cube_result(0,3,2)\n"
                                  "  complex :: complexes(0), complex_value\n"
                                  "  character(len=0) :: words(2)\n"
                                  "  character(len=0), allocatable :: character_value(:)\n"
                                  "  integer_value = maxval(integers + 1)\n"
                                  "  real_value = minval(reals + 1.0_8)\n"
+                                 "  cube_result = cube + 1.0\n"
                                  "  complex_value = sum(complexes + (1.0,0.0))\n"
                                  "  character_value = words // ''\n"
                                  "end program empty_markers\n";
@@ -143,6 +145,18 @@ static void test_empty_allocation_markers(void) {
                strstr(result.code, "if (f2c_element_bytes == 0U) f2c_element_values[0] = '\\0';") !=
                    NULL,
            "empty character payload initializes only its allocation marker");
+    expect(result.code != NULL &&
+               strstr(result.code, "const size_t f2c_element_count = f2c_element_extent_0;") !=
+                   NULL,
+           "rank-one allocation size remains directly related to its iteration extent");
+    expect(result.code != NULL &&
+               strstr(result.code, "if (f2c_element_extent_0 != 0U && "
+                                   "f2c_element_extent_1 != 0U && "
+                                   "f2c_element_extent_2 != 0U)") != NULL &&
+               strstr(result.code, "(void)f2c_size_multiply_checked(f2c_element_count, "
+                                   "f2c_element_extent_2);") != NULL &&
+               strstr(result.code, "if (f2c_element_count != 0U) {") != NULL,
+           "empty shapes bypass all nested loops and irrelevant overflow checks");
     f2c_result_free(&result);
 }
 
