@@ -362,12 +362,14 @@ static void test_logical_literal_kind_tokens(void) {
                "logical suffix remains within its physical source span");
     }
     {
-        static const char *const invalid[] = {".true._3", ".false._unknown_kind", ".true._"};
+        static const char *const invalid[] = {".true._3", ".false._unknown_kind", ".true._",
+                                              ".true._bogus"};
         for (size_t i = 0U; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
             char source[256];
             F2cOptions options = {"invalid_logical.f90", F2C_SOURCE_FREE, 0};
             const int length = snprintf(source, sizeof(source),
                                         "program invalid_logical\nlogical :: value\n"
+                                        "logical, parameter :: bogus = .true.\n"
                                         "value = %s\nend program invalid_logical\n",
                                         invalid[i]);
             F2cResult result = f2c_transpile(source, (size_t)length, &options);
