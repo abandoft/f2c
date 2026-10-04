@@ -10,7 +10,7 @@
 - Retain function results across complete allocation and deallocation actions, correcting premature finalization and cleanup in multiple-target, nested-action, and failure paths.
 - Separate inline result-retention records from owned heap storage, preserving small-case allocation-free bookkeeping and safe growth.
 - Avoid collisions between valid source identifiers and allocation-control or result-cleanup local names.
-- Apply parsing depth limits to preprocessor conditions, preventing stack exhaustion from deeply nested parentheses, unary operations, and conditional branches.
+- Parse preprocessor conditions with an explicit, depth-budgeted stack, avoiding thread-stack exhaustion from deeply nested parentheses, unary operations, and conditional branches.
 
 ## 1.49.0
 
