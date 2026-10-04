@@ -8,7 +8,7 @@
 - Correct loop-variable access through qualified objects, pointers, allocatable scalars, and unaligned storage, and improve storage cleanup for loop-bound function results.
 - Support zero `DATA` repeats and correct counts in nested implied `DO` and cross-kind initialization.
 - Avoid collisions between generated loop helper names and source identifiers, separating control generation, constant counting, and semantic validation by responsibility.
-- Generate nonoverflowing wide indices for ordinary default-integer loops, improving automatic vectorization of array code.
+- Preserve efficient indices in ordinary default-integer loops with safe final updates, improving automatic vectorization of array code.
 
 ## 1.52.0
 
