@@ -4,6 +4,8 @@
 #include "internal/f2c.h"
 
 void f2c_unit_indent(Buffer *output, int depth);
+void f2c_unit_emit_declarations(Context *context, Unit *unit);
+int f2c_unit_emit_parameter_array(Context *context, Unit *unit, const Symbol *symbol);
 Symbol *f2c_unit_function_result(Unit *unit);
 const char *f2c_unit_function_return_type(Unit *unit);
 void f2c_unit_emit_named_signature(Buffer *output, Unit *unit, const char *name,
