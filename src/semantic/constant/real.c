@@ -2,6 +2,7 @@
 #include "semantic/constant/private.h"
 #include "semantic/scope.h"
 
+#include "core/numeric/power.h"
 #include "semantic/numeric_model.h"
 
 #include <float.h>
@@ -205,7 +206,8 @@ int f2c_constant_evaluate_real(F2cConstantEvaluation *evaluation, const F2cExpr 
     double left;
     double right;
     Unit *unit = evaluation->unit;
-    if (expression == NULL || value == NULL || !f2c_constant_consume_step(evaluation, depth))
+    if (expression == NULL || value == NULL || expression->resolved_procedure != NULL ||
+        !f2c_constant_consume_step(evaluation, depth))
         return 0;
     if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->child_count == 1U)
         return f2c_constant_evaluate_real(evaluation, expression->children[0], value, depth + 1U);
@@ -236,9 +238,9 @@ int f2c_constant_evaluate_real(F2cConstantEvaluation *evaluation, const F2cExpr 
     }
     if (expression->kind == F2C_EXPR_UNARY && expression->child_count == 1U &&
         evaluate_numeric(evaluation, expression->children[0], &left, depth + 1U)) {
-        if (strcmp(expression->text, "+") == 0)
+        if (expression->operator_kind == F2C_OPERATOR_ADD)
             return store_rounded(expression, left, value);
-        if (strcmp(expression->text, "-") == 0)
+        if (expression->operator_kind == F2C_OPERATOR_SUBTRACT)
             return store_rounded(expression, -left, value);
         return 0;
     }
@@ -260,18 +262,32 @@ int f2c_constant_evaluate_real(F2cConstantEvaluation *evaluation, const F2cExpr 
         return 0;
     }
     if (expression->kind != F2C_EXPR_BINARY || expression->child_count != 2U ||
-        !evaluate_numeric(evaluation, expression->children[0], &left, depth + 1U) ||
-        !evaluate_numeric(evaluation, expression->children[1], &right, depth + 1U))
+        expression->resolved_procedure != NULL ||
+        !evaluate_numeric(evaluation, expression->children[0], &left, depth + 1U))
         return 0;
-    if (strcmp(expression->text, "+") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_POWER &&
+        expression->children[1]->type == TYPE_INTEGER) {
+        int64_t exponent;
+        if (!f2c_constant_evaluate_integer(evaluation, expression->children[1], &exponent,
+                                           depth + 1U))
+            return 0;
+        return store_rounded(expression,
+                             real_kind(expression) == 4
+                                 ? (double)f2c_numeric_real4_integer_power((float)left, exponent)
+                                 : f2c_numeric_real8_integer_power(left, exponent),
+                             value);
+    }
+    if (!evaluate_numeric(evaluation, expression->children[1], &right, depth + 1U))
+        return 0;
+    if (expression->operator_kind == F2C_OPERATOR_ADD)
         return store_rounded(expression, left + right, value);
-    if (strcmp(expression->text, "-") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_SUBTRACT)
         return store_rounded(expression, left - right, value);
-    if (strcmp(expression->text, "*") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_MULTIPLY)
         return store_rounded(expression, left * right, value);
-    if (strcmp(expression->text, "/") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_DIVIDE)
         return store_rounded(expression, left / right, value);
-    if (strcmp(expression->text, "**") == 0)
+    if (expression->operator_kind == F2C_OPERATOR_POWER)
         return store_rounded(expression,
                              real_kind(expression) == 4 ? (double)powf((float)left, (float)right)
                                                         : pow(left, right),
