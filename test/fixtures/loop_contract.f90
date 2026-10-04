@@ -106,13 +106,14 @@ subroutine loop32_stride5(first, last, values, trips, final_value)
   integer(int32), intent(in) :: first, last
   integer(int32), intent(out) :: values(4), final_value
   integer, intent(out) :: trips
-  integer(int32) :: iterator
+  integer(int32) :: iterator, f2c_do_safe_7 = 17, f2c_do_final_7 = 19
   trips = 0
   do iterator = first, last, 5
     trips = trips + 1
     values(trips) = iterator
   end do
   final_value = iterator
+  if (f2c_do_safe_7 /= 17 .or. f2c_do_final_7 /= 19) stop 91
 end subroutine
 
 subroutine loop32_stride_minus5(first, last, values, trips, final_value)
