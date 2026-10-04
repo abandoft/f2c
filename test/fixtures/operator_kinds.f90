@@ -20,6 +20,7 @@ program operator_kinds
   logical(kind=1) :: narrow_flags(3)
   logical(kind=8) :: wide_flags(3)
   integer :: base_calls = 0, exponent_calls = 0
+  real(kind=4), parameter :: decimal_power = 10.0_4 ** (-20_8)
   integer(kind=8), parameter :: exact = 3_8 ** 39_8
   integer(kind=1), parameter :: narrow_value = (-2_1) ** 6_1
   real(kind=8), parameter :: odd_power = (-1.0_8) ** 9007199254740993_8
@@ -133,6 +134,17 @@ program operator_kinds
   narrow_complex = broadcast_value()
   if (complex_calls /= 1) stop 48
   if (any(narrow_complex /= cmplx(5.0_4,6.0_4))) stop 49
+  if (decimal_power /= 1.0e-20_4) stop 50
+  r4 = 10.0_4
+  exponent = -20_8
+  ! Native runtime integer powers can round differently from constant folding.
+  ! The independent C ABI client additionally checks f2c's exact reference value.
+  if (abs(r4 ** exponent - decimal_power) > 16.0_4*epsilon(r4)*decimal_power) stop 51
+  r4 = -1.0_4
+  exponent = huge(0_8)
+  if (r4 ** exponent /= -1.0_4) stop 52
+  r8 = -1.0_8
+  if (r8 ** exponent /= -1.0_8) stop 53
   write(*,'(A)') 'operator kinds passed'
 
 contains
