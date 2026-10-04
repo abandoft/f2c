@@ -370,6 +370,7 @@ set(
     src/semantic/constant/character.c
     src/semantic/constant/complex.c
     src/semantic/constant/conversion.c
+    src/semantic/constant/loop.c
     src/semantic/constant/mathematical.c
     src/semantic/constant/model.c
     src/semantic/constant/numeric.c

@@ -60,6 +60,10 @@ int f2c_evaluate_complex_constant(Unit *unit, const F2cExpr *expression, double 
 int f2c_evaluate_integer_syntax(Unit *unit, F2cTokenRange syntax, int64_t *value);
 int f2c_expression_is_initialization_constant(const F2cExpr *expression);
 int f2c_integer_iteration_count(int64_t first, int64_t last, int64_t step, uint64_t *count);
+int f2c_integer_loop_parameters_fit(int kind, int64_t first, int64_t last, int64_t step);
+int f2c_evaluate_integer_loop_parameters(Unit *unit, int kind, const F2cExpr *initial,
+                                         const F2cExpr *limit, const F2cExpr *increment,
+                                         int64_t *first, int64_t *last, int64_t *step);
 size_t f2c_character_literal_length(const char *text);
 int f2c_character_constant_length(Unit *unit, const F2cExpr *expression, int64_t *length);
 int f2c_character_declaration_length(Unit *unit, const Symbol *symbol, int64_t *length);

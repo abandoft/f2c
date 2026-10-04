@@ -670,27 +670,3 @@ int f2c_expression_is_initialization_constant(const F2cExpr *expression) {
     }
     return 1;
 }
-
-int f2c_integer_iteration_count(int64_t first, int64_t last, int64_t step, uint64_t *count) {
-    uint64_t distance;
-    uint64_t magnitude;
-    uint64_t quotient;
-    if (count == NULL || step == 0)
-        return 0;
-    if ((step > 0 && first > last) || (step < 0 && first < last)) {
-        *count = 0U;
-        return 1;
-    }
-    if (step > 0) {
-        distance = (uint64_t)last - (uint64_t)first;
-        magnitude = (uint64_t)step;
-    } else {
-        distance = (uint64_t)first - (uint64_t)last;
-        magnitude = 0U - (uint64_t)step;
-    }
-    quotient = distance / magnitude;
-    if (quotient == UINT64_MAX)
-        return 0;
-    *count = quotient + 1U;
-    return 1;
-}
