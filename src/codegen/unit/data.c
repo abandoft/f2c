@@ -43,14 +43,16 @@ char *f2c_unit_data_array_initializer(Unit *unit, const Symbol *symbol) {
     return f2c_buffer_take(&initializer);
 }
 
-static char *static_numeric_initializer(Unit *unit, Type target_type, const F2cExpr *expression) {
+static char *static_numeric_initializer(Unit *unit, const Symbol *symbol,
+                                        const F2cExpr *expression) {
+    const Type target_type = symbol->type;
     Buffer initializer = {0};
     int64_t integer_value;
     double real_value;
     double imaginary_value = 0.0;
     char *real_literal;
     char *imaginary_literal;
-    const int real_kind = target_type == TYPE_REAL || target_type == TYPE_COMPLEX ? 4 : 8;
+    const int real_kind = symbol->kind != 0 ? symbol->kind : f2c_default_kind(target_type);
     if (expression == NULL)
         return NULL;
     if (target_type == TYPE_INTEGER || target_type == TYPE_LOGICAL) {
@@ -72,7 +74,7 @@ static char *static_numeric_initializer(Unit *unit, Type target_type, const F2cE
         real_literal = f2c_real_constant_literal(real_value, real_kind);
         if (real_literal == NULL)
             return NULL;
-        f2c_buffer_printf(&initializer, "(%s)(%s)", f2c_c_type(target_type), real_literal);
+        f2c_buffer_printf(&initializer, "(%s)(%s)", f2c_symbol_c_type(symbol), real_literal);
         free(real_literal);
         return f2c_buffer_take(&initializer);
     }
@@ -88,10 +90,10 @@ static char *static_numeric_initializer(Unit *unit, Type target_type, const F2cE
         return NULL;
     }
     f2c_buffer_printf(&initializer, "%s((%s)(%s), (%s)(%s))",
-                      target_type == TYPE_DOUBLE_COMPLEX ? "F2C_COMPLEX_DOUBLE_INITIALIZER"
-                                                         : "F2C_COMPLEX_FLOAT_INITIALIZER",
-                      target_type == TYPE_DOUBLE_COMPLEX ? "double" : "float", real_literal,
-                      target_type == TYPE_DOUBLE_COMPLEX ? "double" : "float", imaginary_literal);
+                      real_kind == 8 ? "F2C_COMPLEX_DOUBLE_INITIALIZER"
+                                     : "F2C_COMPLEX_FLOAT_INITIALIZER",
+                      f2c_c_type_kind(TYPE_REAL, real_kind), real_literal,
+                      f2c_c_type_kind(TYPE_REAL, real_kind), imaginary_literal);
     free(real_literal);
     free(imaginary_literal);
     return f2c_buffer_take(&initializer);
@@ -204,8 +206,8 @@ static char *numeric_data_array_initializer(Unit *unit, const Symbol *symbol) {
         char *value;
         if (symbol->data_element_initializers[element] == NULL)
             continue;
-        value = static_numeric_initializer(unit, symbol->type,
-                                           symbol->data_element_initializers[element]);
+        value =
+            static_numeric_initializer(unit, symbol, symbol->data_element_initializers[element]);
         if (value == NULL) {
             free(f2c_buffer_take(&initializer));
             return NULL;
@@ -230,8 +232,7 @@ static char *numeric_array_constructor_initializer(Unit *unit, const Symbol *sym
         return NULL;
     f2c_buffer_append(&initializer, "{");
     for (element = 0U; element < constructor->child_count; ++element) {
-        char *value =
-            static_numeric_initializer(unit, symbol->type, constructor->children[element]);
+        char *value = static_numeric_initializer(unit, symbol, constructor->children[element]);
         if (value == NULL) {
             free(f2c_buffer_take(&initializer));
             return NULL;
@@ -270,7 +271,7 @@ static char *numeric_scalar_array_initializer(Unit *unit, const Symbol *symbol) 
         return NULL;
     if (count == 0U || numeric_initializer_is_zero(unit, symbol))
         return f2c_strdup("{0}");
-    value = static_numeric_initializer(unit, symbol->type, symbol->initializer_expression);
+    value = static_numeric_initializer(unit, symbol, symbol->initializer_expression);
     if (value == NULL)
         return NULL;
     value_length = strlen(value);
@@ -327,6 +328,6 @@ char *f2c_unit_static_storage_initializer(Unit *unit, const Symbol *symbol) {
                    ? numeric_scalar_array_initializer(unit, symbol)
                    : numeric_array_constructor_initializer(unit, symbol);
     if (symbol->initializer_expression != NULL)
-        return static_numeric_initializer(unit, symbol->type, symbol->initializer_expression);
+        return static_numeric_initializer(unit, symbol, symbol->initializer_expression);
     return NULL;
 }
