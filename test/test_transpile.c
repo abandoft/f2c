@@ -420,16 +420,16 @@ static void test_wide_do_trip_count(void) {
     F2cOptions options = {"wide_do.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, strlen(source), &options);
     expect(result.error_count == 0U, "wide-trip-count DO translates without errors");
-    expect_contains(result.code, "int64_t f2c_do_count_",
-                    "DO ranges spanning the default-integer domain retain a wide exact count");
-    expect_contains(result.code, "const int64_t f2c_do_final_",
-                    "the exact final mathematical value is computed in a proven wide domain");
-    expect_contains(result.code, " >= INT32_MIN && f2c_do_final_",
-                    "the invariant fast-path guard checks both signed-storage boundaries");
-    expect_contains(result.code, " : F2C_LOOP_I32(i, ",
-                    "unrepresentable final values retain defined storage-width updates");
-    expect_not_contains(result.code, " > 0 ? i + ",
-                        "signed induction is not conditional on the changing trip counter");
+    expect_contains(result.code, "int64_t f2c_do_index_",
+                    "unit strides spanning the default-integer domain use a wide monotone index");
+    expect_contains(result.code, "F2C_LOOP_VALUE_I32(f2c_do_index_",
+                    "noncanonical unit-stride final values use the defined storage-width policy");
+    expect_contains(result.code, "(memcpy)(&result, &bits, sizeof(result))",
+                    "loop support preserves the standard C memory-copy interface");
+    expect_not_contains(result.code, "__builtin___memcpy_chk",
+                        "host fortification macros do not leak into generated loop support");
+    expect_not_contains(result.code, "__builtin_object_size",
+                        "generated loop support is independent of host compiler builtins");
     f2c_result_free(&result);
 
     {
@@ -452,6 +452,46 @@ static void test_wide_do_trip_count(void) {
         expect_not_contains(stride.code, "for (; (f2c_do_step_",
                             "constant loop directions do not retain a conditional exit");
         f2c_result_free(&stride);
+    }
+    {
+        static const char negative_source[] = "subroutine negative_do(first,last,observed)\n"
+                                              "  integer :: first,last,observed,i\n"
+                                              "  observed=0\n"
+                                              "  do i=first,last,-1\n"
+                                              "    observed=observed+1\n"
+                                              "  end do\n"
+                                              "end subroutine negative_do\n";
+        F2cOptions negative_options = {"negative_do.f90", F2C_SOURCE_FREE, 0};
+        F2cResult negative =
+            f2c_transpile(negative_source, strlen(negative_source), &negative_options);
+        expect(negative.error_count == 0U, "negative unit-stride default-integer DO translates");
+        expect_contains(negative.code, "int64_t f2c_do_index_",
+                        "negative literal unit strides use a wide monotone index");
+        expect_contains(negative.code, ">= (int64_t)f2c_do_limit_",
+                        "negative unit strides have a fixed decreasing loop direction");
+        expect_contains(negative.code, "--f2c_do_index_",
+                        "negative unit strides decrement the private wide index");
+        expect_not_contains(negative.code, "f2c_do_count_",
+                            "negative unit strides omit a redundant trip counter");
+        f2c_result_free(&negative);
+    }
+    {
+        static const char computed_source[] = "subroutine computed_do(first,last,observed)\n"
+                                              "  integer :: first,last,observed,i\n"
+                                              "  observed=0\n"
+                                              "  do i=first,last,3-2*int(1.99999999)\n"
+                                              "    observed=observed+1\n"
+                                              "  end do\n"
+                                              "end subroutine computed_do\n";
+        F2cOptions computed_options = {"computed_do.f90", F2C_SOURCE_FREE, 0};
+        F2cResult computed =
+            f2c_transpile(computed_source, strlen(computed_source), &computed_options);
+        expect(computed.error_count == 0U, "computed constant loop strides translate");
+        expect_contains(computed.code, "int64_t f2c_do_count_",
+                        "nonliteral strides retain exact-count induction after kind conversion");
+        expect_not_contains(computed.code, "int64_t f2c_do_index_",
+                            "a constant evaluator does not override captured stride semantics");
+        f2c_result_free(&computed);
     }
     {
         static const char positive_source[] = "subroutine positive_do(last, observed)\n"
@@ -483,10 +523,8 @@ static void test_wide_do_trip_count(void) {
         F2cResult relative =
             f2c_transpile(relative_source, strlen(relative_source), &relative_options);
         expect(relative.error_count == 0U, "fixed-relative default-integer DO translates");
-        expect_contains(relative.code, "int32_t f2c_do_count_",
-                        "fixed relative ranges retain their proven narrow exact trip count");
-        expect_contains(relative.code, "i = f2c_do_safe_",
-                        "relative controls select signed induction using their final-value proof");
+        expect_contains(relative.code, "int64_t f2c_do_index_",
+                        "fixed relative unit strides retain simple wide affine induction");
         f2c_result_free(&relative);
     }
     {
@@ -502,6 +540,14 @@ static void test_wide_do_trip_count(void) {
         expect(dynamic.error_count == 0U, "dynamic-direction default-integer DO translates");
         expect_contains(dynamic.code, "int64_t f2c_do_count_",
                         "dynamic strides retain the full default-integer interval count");
+        expect_contains(dynamic.code, "const int64_t f2c_do_final_",
+                        "the exact final mathematical value is computed in a proven wide domain");
+        expect_contains(dynamic.code, " >= INT32_MIN && f2c_do_final_",
+                        "the invariant guard checks both signed-storage boundaries");
+        expect_contains(dynamic.code, " : F2C_LOOP_I32(i, ",
+                        "unrepresentable final values retain defined storage-width updates");
+        expect_not_contains(dynamic.code, " > 0 ? i + ",
+                            "signed induction is not conditional on the changing trip counter");
         expect_contains(dynamic.code, "else if (f2c_do_step_",
                         "both cached stride directions participate in exact count setup");
         expect_contains(dynamic.code, "F2C_LOOP_UNROLL\n    for (; f2c_do_count_",
