@@ -40,10 +40,14 @@ generate_outputs() {
         allocation_control_finalization allocation_control_errors allocation_control_unaligned \
         allocation_control_pointers allocation_control_names \
         extremum_boundaries extremum_policy extremum_arguments \
-        lexical_literals numeric_model_intrinsics elemental_procedure operator_kinds operator_power_policy operator_contract; do
+        lexical_literals numeric_model_intrinsics elemental_procedure operator_kinds operator_power_policy operator_contract \
+        loop_control loop_storage loop_result_bounds loop_names loop_static_constructor loop_contract \
+        loop_inquire loop_data loop_static_flat loop_real_controls; do
         "$translator" "$ROOT/test/fixtures/$fixture.f90" \
             -o "$output/$fixture.c" --header "$output/$fixture.h"
     done
+    "$translator" "$ROOT/test/fixtures/loop_legacy.f" \
+        -o "$output/loop_legacy.c" --header "$output/loop_legacy.h"
     "$translator" --version > "$output/version.txt"
 }
 
@@ -71,7 +75,12 @@ extremum_arguments.c extremum_arguments.h
 lexical_literals.c lexical_literals.h numeric_model_intrinsics.c numeric_model_intrinsics.h
 elemental_procedure.c elemental_procedure.h
 operator_kinds.c operator_kinds.h operator_power_policy.c operator_power_policy.h
-operator_contract.c operator_contract.h'
+operator_contract.c operator_contract.h
+loop_control.c loop_control.h loop_storage.c loop_storage.h
+loop_result_bounds.c loop_result_bounds.h loop_names.c loop_names.h
+loop_static_constructor.c loop_static_constructor.h loop_contract.c loop_contract.h
+loop_legacy.c loop_legacy.h loop_inquire.c loop_inquire.h loop_data.c loop_data.h
+loop_static_flat.c loop_static_flat.h loop_real_controls.c loop_real_controls.h'
 for file in $FILES; do
     if ! cmake -E compare_files "$WORK/first/$file" "$WORK/second/$file"; then
         echo "cross-toolchain generated output differs: $file" >&2
