@@ -199,6 +199,8 @@ set(
     src/codegen/literal/real.c
     src/codegen/literal/real.h
     src/codegen/lowering.c
+    src/codegen/operator.c
+    src/codegen/operator.h
     src/codegen/module.c
     src/codegen/names.c
     src/codegen/names.h
@@ -268,8 +270,11 @@ set(
     src/core/generated/mathematical.c
     src/core/generated/extremum.c
     src/core/numeric/extremum.h
+    src/core/numeric/power.h
     src/core/generated/model.c
     src/core/generated/numeric.c
+    src/core/generated/power.c
+    src/core/generated/complex.c
     src/core/generated/io/number/model.c
     src/core/generated/private.h
     src/core/generated/representation.c
@@ -313,6 +318,8 @@ set(
     src/frontend/module/resolution.h
     src/frontend/module_constants.h
     src/frontend/modules.c
+    src/frontend/operator.c
+    src/frontend/operator.h
     src/frontend/parser.c
     src/frontend/pipeline.c
     src/frontend/pipeline.h
@@ -366,6 +373,7 @@ set(
     src/semantic/constant/mathematical.c
     src/semantic/constant/model.c
     src/semantic/constant/numeric.c
+    src/semantic/constant/operator.c
     src/semantic/constant/private.h
     src/semantic/constant/real.c
     src/semantic/data_flow.h
@@ -392,6 +400,8 @@ set(
     src/semantic/symbol.h
     src/semantic/numeric_model.c
     src/semantic/numeric_model.h
+    src/semantic/operator.c
+    src/semantic/operator.h
     src/semantic/procedure.c
     src/semantic/result.c
     src/semantic/semantic.h
@@ -638,6 +648,11 @@ if(F2C_BUILD_TESTING)
     target_include_directories(f2c_ast_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_ast_tests)
     add_test(NAME ast COMMAND f2c_ast_tests)
+
+    add_executable(f2c_operator_tests test/test_operator.c)
+    target_include_directories(f2c_operator_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_operator_tests)
+    add_test(NAME operator_semantics COMMAND f2c_operator_tests)
 
     add_executable(f2c_parenthesized_tests test/test_parenthesized.c)
     target_include_directories(f2c_parenthesized_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -1063,6 +1078,16 @@ if(F2C_BUILD_TESTING)
                     $<TARGET_FILE:f2c>
             )
             if(F2C_GFORTRAN_EXECUTABLE)
+                add_test(
+                    NAME operator_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/operator_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
                 foreach(io_differential IN ITEMS io_controls file_control format)
                     add_test(
                         NAME ${io_differential}_differential
