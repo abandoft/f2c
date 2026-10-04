@@ -80,6 +80,8 @@ static void test_advancement(void) {
                 expected -= 256;
             expect(f2c_integer_loop_add(value, step, INT8_MIN, INT8_MAX) == expected,
                    "exhaustive narrow advancement has explicit modular storage semantics");
+            expect(f2c_integer_loop_add_i8((int8_t)value, (int8_t)step) == expected,
+                   "branch-free typed advancement matches every narrow arithmetic reference");
         }
     }
     expect(f2c_integer_loop_add(INT64_MAX, 1, INT64_MIN, INT64_MAX) == INT64_MIN,
@@ -91,6 +93,17 @@ static void test_advancement(void) {
     expect(f2c_integer_loop_add(INT32_MAX, 1, INT32_MIN, INT32_MAX) == INT32_MIN &&
                f2c_integer_loop_add(INT16_MIN, -1, INT16_MIN, INT16_MAX) == INT16_MAX,
            "every supported integer storage kind uses the same advancement contract");
+    expect(f2c_integer_loop_add_i64(INT64_MAX, 1) == INT64_MIN &&
+               f2c_integer_loop_add_i64(INT64_MIN, -1) == INT64_MAX &&
+               f2c_integer_loop_add_i64(INT64_MAX, INT64_MIN) == -1 &&
+               f2c_integer_loop_add_i32(INT32_MAX, 1) == INT32_MIN &&
+               f2c_integer_loop_add_i16(INT16_MIN, -1) == INT16_MAX,
+           "branch-free typed updates retain full-width boundary behavior");
+    expect(f2c_integer_loop_value_i32((int64_t)INT32_MAX + INT32_MAX) == -2 &&
+               f2c_integer_loop_value_i32((int64_t)INT32_MIN + INT32_MIN) == 0 &&
+               f2c_integer_loop_value_i32((int64_t)INT32_MAX + 1) == INT32_MIN &&
+               f2c_integer_loop_value_i32((int64_t)INT32_MIN - 1) == INT32_MAX,
+           "wide default-integer final indices preserve the modular storage policy");
 }
 
 static void test_diagnostics(void) {
