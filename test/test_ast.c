@@ -201,6 +201,52 @@ static void test_kind_shape_and_value_category(void) {
     f2c_expr_free(symbols[0].dimensions[0].upper_expression);
 }
 
+static void test_operator_kind_rules(void) {
+    static const struct {
+        const char *source;
+        Type type;
+        int kind;
+    } cases[] = {
+        {"1_1 + 2_1", TYPE_INTEGER, 1},
+        {"2_2 - 1_2", TYPE_INTEGER, 2},
+        {"2_1 * 3_2", TYPE_INTEGER, 2},
+        {"6_2 / 3_1", TYPE_INTEGER, 2},
+        {"1_1 + 2_8", TYPE_INTEGER, 8},
+        {"1.0 + 2_8", TYPE_REAL, 4},
+        {"2_8 + 1.0", TYPE_REAL, 4},
+        {"(1.0,0.0) + 2_8", TYPE_COMPLEX, 4},
+        {"2_8 + (1.0,0.0)", TYPE_COMPLEX, 4},
+        {"2.0 ** 3_8", TYPE_REAL, 4},
+        {"(2.0,0.0) ** 3_8", TYPE_COMPLEX, 4},
+        {".not. .true._1", TYPE_LOGICAL, 1},
+        {".true._1 .and. .false._1", TYPE_LOGICAL, 1},
+        {".true._2 .or. .false._2", TYPE_LOGICAL, 2},
+        {".true._8 .eqv. .false._1", TYPE_LOGICAL, 8},
+        {"1_8 < 2_8", TYPE_LOGICAL, 4},
+        {"1.0_8 == 2.0_8", TYPE_LOGICAL, 4},
+    };
+    Unit unit = {0};
+    for (size_t i = 0U; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        const char *error_at = NULL;
+        F2cExpr *expression = f2c_parse_expression_ast(&unit, cases[i].source, &error_at);
+        expect(expression != NULL && error_at == NULL && expression->type == cases[i].type &&
+                   expression->type_kind == cases[i].kind,
+               cases[i].source);
+        f2c_expr_free(expression);
+    }
+    {
+        static const char *const invalid[] = {".true._3", ".false._unknown_kind", ".true._"};
+        for (size_t i = 0U; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+            const char *error_at = NULL;
+            F2cExpr *expression = f2c_parse_expression_ast(&unit, invalid[i], &error_at);
+            expect(expression != NULL && error_at != NULL &&
+                       expression->parse_error_offset != SIZE_MAX,
+                   "logical kind errors retain the parser's recoverable diagnostic AST");
+            f2c_expr_free(expression);
+        }
+    }
+}
+
 static void test_array_function_result_shape_in_transform(void) {
     Symbol function;
     Unit unit;
@@ -868,6 +914,7 @@ static void test_character_designator_tree(void) {
 int main(void) {
     test_character_designator_tree();
     test_kind_shape_and_value_category();
+    test_operator_kind_rules();
     test_array_function_result_shape_in_transform();
     test_typed_numeric_tree();
     test_defined_operator_tree();
