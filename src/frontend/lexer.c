@@ -288,6 +288,16 @@ void f2c_token_stream_next(F2cTokenStream *lexer) {
         if (*lexer->cursor == '.') {
             ++lexer->cursor;
             lexer->token.kind = F2C_TOKEN_OPERATOR;
+            lexer->token.length = (size_t)(lexer->cursor - begin);
+            if (f2c_token_logical_literal(&lexer->token) != 0 && *lexer->cursor == '_') {
+                const char *suffix = lexer->cursor++;
+                if (!identifier_continue(*lexer->cursor)) {
+                    lexer->token.kind = F2C_TOKEN_INVALID;
+                    set_error(lexer, suffix);
+                }
+                while (identifier_continue(*lexer->cursor))
+                    ++lexer->cursor;
+            }
         } else {
             lexer->token.kind = F2C_TOKEN_INVALID;
             set_error(lexer, begin);
@@ -308,6 +318,18 @@ void f2c_token_stream_next(F2cTokenStream *lexer) {
     }
     lexer->token.length = (size_t)(lexer->cursor - begin);
     lexer->token.span.end.column = lexer->token.column + lexer->token.length;
+}
+
+int f2c_token_logical_literal(const F2cToken *token) {
+    F2cToken value;
+    const char *suffix;
+    if (token == NULL || token->kind != F2C_TOKEN_OPERATOR || token->begin == NULL)
+        return 0;
+    value = *token;
+    suffix = (const char *)memchr(token->begin, '_', token->length);
+    if (suffix != NULL)
+        value.length = (size_t)(suffix - token->begin);
+    return f2c_token_equals(&value, ".true.") ? 1 : f2c_token_equals(&value, ".false.") ? 2 : 0;
 }
 
 int f2c_token_equals(const F2cToken *token, const char *text) {

@@ -113,6 +113,8 @@ void f2c_token_stream_init(F2cTokenStream *stream, const char *source, size_t li
                            size_t base_column);
 void f2c_token_stream_next(F2cTokenStream *stream);
 int f2c_token_equals(const F2cToken *token, const char *text);
+/* 1 for .TRUE., 2 for .FALSE. (including kind suffixes), 0 otherwise. */
+int f2c_token_logical_literal(const F2cToken *token);
 char *f2c_token_text(const F2cToken *token);
 int f2c_line_token_equals(const Line *line, size_t index, const char *text);
 size_t f2c_line_find_token(const Line *line, size_t start, F2cTokenKind kind, const char *text);

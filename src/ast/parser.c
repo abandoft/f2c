@@ -292,10 +292,12 @@ static F2cExpr *parse_primary(AstParser *parser) {
     } else if (token.kind == F2C_TOKEN_IDENTIFIER) {
         f2c_ast_next_token(parser);
         expression = f2c_ast_parse_name(parser, &token);
-    } else if (token.kind == F2C_TOKEN_OPERATOR &&
-               (f2c_token_equals(&token, ".true.") || f2c_token_equals(&token, ".false."))) {
-        expression =
-            f2c_expr_new(F2C_EXPR_LOGICAL_LITERAL, TYPE_LOGICAL, token.begin, token.length);
+    } else if (f2c_token_logical_literal(&token) != 0) {
+        const int literal = f2c_token_logical_literal(&token);
+        expression = f2c_expr_new(F2C_EXPR_LOGICAL_LITERAL, TYPE_LOGICAL,
+                                  literal == 1 ? ".true." : ".false.", literal == 1 ? 6U : 7U);
+        if (expression != NULL)
+            expression->type_kind = f2c_ast_literal_kind_value(parser, &token, TYPE_LOGICAL);
         f2c_ast_next_token(parser);
     } else if (token.kind == F2C_TOKEN_OPERATOR &&
                (f2c_token_equals(&token, "+") || f2c_token_equals(&token, "-") ||
@@ -319,10 +321,7 @@ static F2cExpr *parse_primary(AstParser *parser) {
             f2c_expr_free(expression);
             return NULL;
         }
-        expression->type_kind =
-            defined ? f2c_default_kind(TYPE_UNKNOWN)
-                    : (f2c_token_equals(&token, ".not.") ? f2c_default_kind(TYPE_LOGICAL)
-                                                         : operand->type_kind);
+        expression->type_kind = defined ? f2c_default_kind(TYPE_UNKNOWN) : operand->type_kind;
         f2c_ast_copy_expression_shape(expression, &operand->shape);
     } else if (token.kind == F2C_TOKEN_ARRAY_BEGIN) {
         Type element_type = TYPE_UNKNOWN;
