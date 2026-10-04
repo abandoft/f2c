@@ -85,6 +85,14 @@ static int has_widened_default_integer_index(const F2cStatement *statement) {
            (statement->left->symbol == NULL || !statement->left->symbol->equivalence_unaligned);
 }
 
+static int constant_do_direction(Unit *unit, const F2cStatement *statement) {
+    int64_t step;
+    if (statement->step->type != TYPE_INTEGER ||
+        !f2c_evaluate_integer_constant(unit, statement->step, &step) || step == 0)
+        return 0;
+    return step > 0 ? 1 : -1;
+}
+
 static void emit_condition(Buffer *output, const char *condition) {
     const size_t length = strlen(condition);
     if (length >= 2U && condition[0] == '(' && condition[length - 1U] == ')')
@@ -111,6 +119,7 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
     F2cPreparedStatementExpression step_expression;
     const int canonical_positive_unit = is_canonical_positive_unit_do(statement);
     const int widened_index = has_widened_default_integer_index(statement);
+    const int direction = widened_index ? constant_do_direction(unit, statement) : 0;
     const int default_integer = statement->left->type == TYPE_INTEGER &&
                                 statement->left->type_kind == f2c_default_kind(TYPE_INTEGER);
     const char *c_type = f2c_expression_c_type(statement->left);
@@ -239,7 +248,11 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
         !f2c_array_cleanup_emit(&context->output, unit, &finish_expression.cleanup) ||
         !f2c_array_cleanup_emit(&context->output, unit, &step_expression.cleanup))
         goto failed;
-    if (statement->loop_hint != F2C_LOOP_HINT_NONE) {
+    /* GCC rejects unroll annotations on a conditional loop exit before its
+     * invariant direction has been simplified. Keep hints on canonical exits;
+     * dynamic-direction wide loops retain automatic optimization instead. */
+    if (statement->loop_hint != F2C_LOOP_HINT_NONE &&
+        (!widened_index || canonical_positive_unit || direction != 0)) {
         indent(&context->output, *depth);
         f2c_buffer_append(&context->output, statement->loop_hint == F2C_LOOP_HINT_COLUMN_UPDATE
                                                 ? "F2C_COLUMN_UPDATE_LOOP\n"
@@ -252,6 +265,12 @@ static int emit_counted_do_begin(Context *context, Unit *unit, const F2cStatemen
                               "for (; %s_index_%zu <= (int64_t)%s_limit_%zu; "
                               "++%s_index_%zu) {\n",
                               prefix, loop_id, prefix, loop_id, prefix, loop_id);
+        else if (widened_index && direction != 0)
+            f2c_buffer_printf(&context->output,
+                              "for (; %s_index_%zu %s (int64_t)%s_limit_%zu; "
+                              "%s_index_%zu += (int64_t)%s_step_%zu) {\n",
+                              prefix, loop_id, direction > 0 ? "<=" : ">=", prefix, loop_id, prefix,
+                              loop_id, prefix, loop_id);
         else if (widened_index) {
             /* Cached controls are all int32_t. Every active value and the one
              * final overshoot fit int64_t, in either direction. Comparing this

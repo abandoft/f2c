@@ -441,6 +441,10 @@ static void test_wide_do_trip_count(void) {
                         "constant-stride default-integer DO uses a nonwrapping wide index");
         expect_not_contains(stride.code, "f2c_do_count_",
                             "monotone cached controls do not need a separate trip counter");
+        expect_contains(stride.code, "<= (int64_t)f2c_do_limit_",
+                        "a constant positive direction has a single canonical exit comparison");
+        expect_not_contains(stride.code, "for (; (f2c_do_step_",
+                            "constant loop directions do not retain a conditional exit");
         f2c_result_free(&stride);
     }
     {
@@ -476,6 +480,23 @@ static void test_wide_do_trip_count(void) {
         expect_contains(relative.code, "int64_t f2c_do_index_",
                         "fixed relative ranges retain a nonwrapping wide index");
         f2c_result_free(&relative);
+    }
+    {
+        static const char dynamic_source[] = "subroutine dynamic_do(first,last,step,observed)\n"
+                                             "  integer :: first,last,step,observed,i\n"
+                                             "  observed=0\n"
+                                             "  do i=first,last,step\n"
+                                             "    observed=observed+1\n"
+                                             "  end do\n"
+                                             "end subroutine dynamic_do\n";
+        F2cOptions dynamic_options = {"dynamic_do.f90", F2C_SOURCE_FREE, 0};
+        F2cResult dynamic = f2c_transpile(dynamic_source, strlen(dynamic_source), &dynamic_options);
+        expect(dynamic.error_count == 0U, "dynamic-direction default-integer DO translates");
+        expect_contains(dynamic.code, "for (; (f2c_do_step_",
+                        "dynamic directions retain both cached range comparisons");
+        expect_not_contains(dynamic.code, "F2C_LOOP_UNROLL\n    for (; (f2c_do_step_",
+                            "noncanonical exits do not receive rejected GCC unroll annotations");
+        f2c_result_free(&dynamic);
     }
 }
 
