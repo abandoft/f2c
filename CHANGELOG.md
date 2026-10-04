@@ -1,3 +1,13 @@
+## 1.51.0
+
+- Unify signed-zero handling in constant and runtime real `MIN/MAX` evaluation.
+- Correct selected NaNs being ignored by array extrema, with consistent propagation across ordinary, qualified-access, and `DIM/MASK` paths.
+- Correct `MAXVAL/MINVAL` on empty real arrays and fully false masks, returning finite kind-specific boundaries.
+- Improve NaN location selection and first/last tie rules in `MINLOC/MAXLOC`, preserving numerical ties between signed zeros.
+- Remove the fixed 64-argument limit from standard and legacy extrema, supporting large scalar and array argument combinations.
+- Support sparse optional argument keywords, with unified diagnostics for missing required arguments, duplicate keywords, and overflowing indices.
+- Generate large extrema as balanced typed function trees, reducing C nesting depth and repeated text construction.
+
 ## 1.50.0
 
 - Support function results in allocation bounds and correct scalar array-bound inquiries on dynamic results.
