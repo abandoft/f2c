@@ -37,6 +37,7 @@ typedef struct F2cRequiredFeatures {
     int numeric_model_intrinsic;
     int numeric_operation_intrinsic;
     int real_representation_intrinsic;
+    int power;
 } F2cRequiredFeatures;
 
 static void collect_expression_feature(F2cExpr *expression, void *state) {
@@ -48,6 +49,9 @@ static void collect_expression_feature(F2cExpr *expression, void *state) {
         features->qualified_storage = 1;
     if (expression->type == TYPE_COMPLEX || expression->type == TYPE_DOUBLE_COMPLEX)
         features->complex_values = 1;
+    if (expression->kind == F2C_EXPR_BINARY && expression->operator_kind == F2C_OPERATOR_POWER &&
+        expression->resolved_procedure == NULL)
+        features->power = 1;
     if (expression->kind == F2C_EXPR_PARENTHESIZED && expression->type == TYPE_CHARACTER &&
         expression->rank == 0U)
         features->character_snapshot = 1;
@@ -733,6 +737,10 @@ F2cResult f2c_transpile_project_config(const F2cInput *inputs, size_t input_coun
                 "copysign(isinf(bi) ? 1.0 : 0.0, bi); return f2c_make_z(0.0 * (ar * br + ai * "
                 "bi), 0.0 * (ai * br - ar * bi)); } return f2c_make_z(NAN, NAN); }\n");
         }
+        if (needs_complex)
+            f2c_emit_extended_complex_support(&context.output);
+        if (features.power)
+            f2c_emit_power_support(&context.output, needs_complex);
         f2c_emit_extremum_support(&context.output, needs_min, needs_max);
         if (needs_reduction)
             f2c_emit_reduction_support(&context.output, needs_complex, features.qualified_storage);
