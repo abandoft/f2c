@@ -117,6 +117,25 @@ static int evaluate_complex_source(Unit *unit, const char *source, double *real,
     return result;
 }
 
+static void test_extremum_zero_policy(Unit *unit) {
+    double value;
+    expect(evaluate_real_source(unit, "max(-0.0,0.0)", &value) && value == 0.0 && !signbit(value),
+           "kind-4 constant maximum selects positive zero");
+    expect(evaluate_real_source(unit, "max(0.0_8,-0.0_8)", &value) && value == 0.0 &&
+               !signbit(value),
+           "kind-8 constant maximum selects positive zero in reverse order");
+    expect(evaluate_real_source(unit, "min(0.0,-0.0)", &value) && value == 0.0 && signbit(value),
+           "kind-4 constant minimum selects negative zero");
+    expect(evaluate_real_source(unit, "min(-0.0_8,0.0_8)", &value) && value == 0.0 &&
+               signbit(value),
+           "kind-8 constant minimum selects negative zero in reverse order");
+    expect(evaluate_real_source(unit, "max(-0.0,-0.0)", &value) && value == 0.0 && signbit(value),
+           "an all-negative-zero maximum stays negative");
+    expect(evaluate_real_source(unit, "min(0.0_8,0.0_8)", &value) && value == 0.0 &&
+               !signbit(value),
+           "an all-positive-zero minimum stays positive");
+}
+
 static void test_character_intrinsics(Unit *unit) {
     char *characters = NULL;
     size_t length = 0U;
@@ -194,6 +213,10 @@ static void test_legacy_conversion_and_extrema(Unit *unit) {
            "AMAX0 selects INTEGER arguments before REAL conversion");
     expect(evaluate_real_source(unit, "dmin1(1.5d0,-2.5d0)", &real) && real == -2.5,
            "DMIN1 folds in binary64");
+    expect(evaluate_source(unit, "max(a65=65,a2=2,a1=1)", &integer) && integer == 65,
+           "optional sparse extremum keywords fold in compact dummy order");
+    expect(evaluate_real_source(unit, "min(a99=-3.0_8,a1=1.0_8,a2=2.0_8)", &real) && real == -3.0,
+           "sparse wide-real extrema use the shared binding");
 }
 
 static void test_numeric_model_intrinsics(Unit *unit) {
@@ -478,6 +501,7 @@ int main(void) {
            "cyclic parameter references terminate with failure");
     test_character_intrinsics(&unit);
     test_legacy_conversion_and_extrema(&unit);
+    test_extremum_zero_policy(&unit);
     test_numeric_model_intrinsics(&unit);
     test_real_representation_intrinsics(&unit);
     test_numeric_operation_intrinsics(&unit);

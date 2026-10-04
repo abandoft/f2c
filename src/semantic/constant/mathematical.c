@@ -1,10 +1,11 @@
 #include "semantic/constant/private.h"
 
+#include "core/numeric/extremum.h"
 #include "internal/f2c.h"
+#include "semantic/intrinsic/extremum.h"
 
 #include <math.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 static int expression_kind(const F2cExpr *expression) {
@@ -29,18 +30,14 @@ static int store_real(int kind, double candidate, double *value) {
     return 0;
 }
 
-static const F2cExpr *extremum_argument(const F2cExpr *expression, size_t index) {
-    char name[24];
-    const int length = snprintf(name, sizeof(name), "a%zu", index + 1U);
-    return length > 0 && (size_t)length < sizeof(name) ? argument(expression, name, index) : NULL;
-}
-
 int f2c_constant_evaluate_mathematical_integer(F2cConstantEvaluation *evaluation,
                                                const F2cExpr *expression, int64_t *value,
                                                size_t depth) {
     const F2cExpr *source;
     int64_t current;
     size_t index;
+    F2cExtremumBinding bound;
+    int success = 0;
     if (expression == NULL || expression->rank != 0U || expression->type != TYPE_INTEGER ||
         !f2c_intrinsic_is_mathematical(expression->intrinsic))
         return 0;
@@ -55,44 +52,48 @@ int f2c_constant_evaluate_mathematical_integer(F2cConstantEvaluation *evaluation
     }
     if (expression->intrinsic != F2C_INTRINSIC_MAX && expression->intrinsic != F2C_INTRINSIC_MIN)
         return 0;
+    if (!f2c_extremum_bind(expression, &bound))
+        goto cleanup;
     if (expression->text != NULL &&
         (strcmp(expression->text, "max1") == 0 || strcmp(expression->text, "min1") == 0)) {
         double selected;
         double candidate;
-        source = extremum_argument(expression, 0U);
+        source = bound.values[0].value;
         if (source == NULL ||
-            !f2c_constant_evaluate_real(evaluation, source, &selected, depth + 1U) ||
-            isnan(selected))
-            return 0;
-        for (index = 1U; index < expression->child_count; ++index) {
-            source = extremum_argument(expression, index);
+            !f2c_constant_evaluate_real(evaluation, source, &selected, depth + 1U))
+            goto cleanup;
+        for (index = 1U; index < bound.count; ++index) {
+            source = bound.values[index].value;
             if (source == NULL ||
-                !f2c_constant_evaluate_real(evaluation, source, &candidate, depth + 1U) ||
-                isnan(candidate))
-                return 0;
-            if ((expression->intrinsic == F2C_INTRINSIC_MAX && candidate > selected) ||
-                (expression->intrinsic == F2C_INTRINSIC_MIN && candidate < selected))
-                selected = candidate;
+                !f2c_constant_evaluate_real(evaluation, source, &candidate, depth + 1U))
+                goto cleanup;
+            selected = expression->intrinsic == F2C_INTRINSIC_MAX
+                           ? (double)f2c_real_maximum_f((float)selected, (float)candidate)
+                           : (double)f2c_real_minimum_f((float)selected, (float)candidate);
         }
         selected = trunc(selected);
         if (!isfinite(selected) || selected < (double)INT32_MIN || selected > (double)INT32_MAX)
-            return 0;
+            goto cleanup;
         *value = (int64_t)selected;
-        return 1;
+        success = 1;
+        goto cleanup;
     }
-    source = extremum_argument(expression, 0U);
+    source = bound.values[0].value;
     if (source == NULL || !f2c_constant_evaluate_integer(evaluation, source, value, depth + 1U))
-        return 0;
-    for (index = 1U; index < expression->child_count; ++index) {
-        source = extremum_argument(expression, index);
+        goto cleanup;
+    for (index = 1U; index < bound.count; ++index) {
+        source = bound.values[index].value;
         if (source == NULL ||
             !f2c_constant_evaluate_integer(evaluation, source, &current, depth + 1U))
-            return 0;
+            goto cleanup;
         if ((expression->intrinsic == F2C_INTRINSIC_MAX && current > *value) ||
             (expression->intrinsic == F2C_INTRINSIC_MIN && current < *value))
             *value = current;
     }
-    return 1;
+    success = 1;
+cleanup:
+    f2c_extremum_binding_clear(&bound);
+    return success;
 }
 
 static int evaluate_unary(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
@@ -279,22 +280,33 @@ static int evaluate_dprod(F2cConstantEvaluation *evaluation, const F2cExpr *expr
 
 static int evaluate_real_extremum(F2cConstantEvaluation *evaluation, const F2cExpr *expression,
                                   double *value, size_t depth) {
-    const F2cExpr *source = extremum_argument(expression, 0U);
+    F2cExtremumBinding bound;
+    const F2cExpr *source;
     double current;
     size_t index;
-    if (source == NULL || !f2c_constant_evaluate_real(evaluation, source, value, depth + 1U) ||
-        isnan(*value))
-        return 0;
-    for (index = 1U; index < expression->child_count; ++index) {
-        source = extremum_argument(expression, index);
-        if (source == NULL ||
-            !f2c_constant_evaluate_real(evaluation, source, &current, depth + 1U) || isnan(current))
-            return 0;
-        if ((expression->intrinsic == F2C_INTRINSIC_MAX && current > *value) ||
-            (expression->intrinsic == F2C_INTRINSIC_MIN && current < *value))
-            *value = current;
+    int success = 0;
+    if (!f2c_extremum_bind(expression, &bound))
+        goto cleanup;
+    source = bound.values[0].value;
+    if (source == NULL || !f2c_constant_evaluate_real(evaluation, source, value, depth + 1U))
+        goto cleanup;
+    for (index = 1U; index < bound.count; ++index) {
+        source = bound.values[index].value;
+        if (source == NULL || !f2c_constant_evaluate_real(evaluation, source, &current, depth + 1U))
+            goto cleanup;
+        if (expression_kind(expression) == 4)
+            *value = expression->intrinsic == F2C_INTRINSIC_MAX
+                         ? (double)f2c_real_maximum_f((float)*value, (float)current)
+                         : (double)f2c_real_minimum_f((float)*value, (float)current);
+        else
+            *value = expression->intrinsic == F2C_INTRINSIC_MAX
+                         ? f2c_real_maximum_d(*value, current)
+                         : f2c_real_minimum_d(*value, current);
     }
-    return store_real(expression_kind(expression), *value, value);
+    success = store_real(expression_kind(expression), *value, value);
+cleanup:
+    f2c_extremum_binding_clear(&bound);
+    return success;
 }
 
 int f2c_constant_evaluate_mathematical_real(F2cConstantEvaluation *evaluation,
