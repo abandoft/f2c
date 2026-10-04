@@ -71,6 +71,18 @@ program extremum_boundaries
   calls = 0
   if (maxval(produce_empty()) /= -huge(0.0_8)) stop 37
   if (calls /= 1) stop 38
+  if (maxval(empty4 + 1.0) /= -huge(0.0)) stop 39
+  if (minval(empty8 + 1.0_8) /= huge(0.0_8)) stop 40
+  if (maxval(empty_i1 + 1_1) /= values_i1(1)) stop 41
+  if (minval(empty_i2 + 1_2) /= huge(0_2)) stop 42
+  if (maxval(empty_i4 + 1) /= values_i4(1)) stop 43
+  if (minval(empty_i8 + 1_8) /= huge(0_8)) stop 44
+  values_i1 = [3_1, 5_1]
+  values_i2 = [7_2, 9_2]
+  if (maxval(values_i1 + 2_1) /= 7_1) stop 45
+  if (minval(values_i2 - 2_2) /= 5_2) stop 46
+  if (kind(maxval(values_i1 + 2_1)) /= 1) stop 47
+  if (kind(minval(values_i2 - 2_2)) /= 2) stop 48
   print '(A)', 'extremum boundary differential passed'
 contains
   function produce_empty() result(result)
