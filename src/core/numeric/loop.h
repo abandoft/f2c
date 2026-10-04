@@ -53,12 +53,14 @@ static inline int64_t f2c_integer_loop_add(int64_t value, int64_t step, int64_t 
 /* Exact-width intN_t has a two's-complement representation and no padding
  * (C17 7.20.1.1). Copy the unsigned sum's representation, not an out-of-range
  * unsigned-to-signed conversion. This also leaves a branch-free induction
- * update for optimizers instead of selecting a signed range on every trip. */
+ * update for optimizers instead of selecting a signed range on every trip.
+ * Parenthesize memcpy so host fortification macros cannot leak into the
+ * stringified portable implementation emitted by the transpiler. */
 #define F2C_INTEGER_LOOP_TYPED_ADD_BODY(t, u)                                                      \
     {                                                                                              \
         const u bits = (u)((uint64_t)(u)value + (uint64_t)(u)step);                                \
         t result;                                                                                  \
-        memcpy(&result, &bits, sizeof(result));                                                    \
+        (memcpy)(&result, &bits, sizeof(result));                                                  \
         return result;                                                                             \
     }
 
@@ -82,7 +84,7 @@ static inline int64_t f2c_integer_loop_add_i64(int64_t value, int64_t step) {
     {                                                                                              \
         const uint32_t bits = (uint32_t)value;                                                     \
         int32_t result;                                                                            \
-        memcpy(&result, &bits, sizeof(result));                                                    \
+        (memcpy)(&result, &bits, sizeof(result));                                                  \
         return result;                                                                             \
     }
 
