@@ -22,8 +22,6 @@ char *f2c_emit_numeric_conversion(const char *operand, Type actual, Type target)
 char *f2c_emit_numeric_conversion_as(const char *operand, Type actual, Type target,
                                      const char *target_c_type);
 char *f2c_emit_scalar_temporary_address(const char *c_type, Type type, const char *value);
-char *f2c_emit_binary(Unit *unit, const char *left, Type left_type, const char *operator_text,
-                      const char *right, Type right_type, Type *result_type);
 char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count);
 char *f2c_emit_array_storage_reference(Unit *unit, Symbol *symbol, char **indices, size_t count);
 const char *f2c_unaligned_access_suffix(const Symbol *symbol);
