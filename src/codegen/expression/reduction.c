@@ -19,34 +19,37 @@ static char *reduction_zero_value(const F2cExpr *expression) {
     Buffer result = {0};
     if (expression == NULL)
         return NULL;
-    if (expression->type == TYPE_COMPLEX)
-        return f2c_strdup("f2c_make_c(0.0f, 0.0f)");
-    if (expression->type == TYPE_DOUBLE_COMPLEX)
-        return f2c_strdup("f2c_make_z(0.0, 0.0)");
+    if (expression->type == TYPE_COMPLEX || expression->type == TYPE_DOUBLE_COMPLEX)
+        return f2c_strdup(expression->type_kind == 4   ? "f2c_make_c(0.0f, 0.0f)"
+                          : expression->type_kind == 8 ? "f2c_make_z(0.0, 0.0)"
+                                                       : "f2c_make_q(0.0L, 0.0L)");
     if (expression->type == TYPE_LOGICAL)
         return f2c_strdup("false");
     f2c_buffer_printf(&result, "((%s)0)", f2c_expression_c_type(expression));
     return f2c_buffer_take(&result);
 }
 
-static int relation_code(const char *operator_text) {
-    if (operator_text == NULL)
-        return -1;
-    if (strcmp(operator_text, "==") == 0 || strcmp(operator_text, ".eq.") == 0 ||
-        strcmp(operator_text, ".eqv.") == 0)
+static int relation_code(F2cOperator operator_kind) {
+    switch (operator_kind) {
+    case F2C_OPERATOR_EQUAL:
         return 0;
-    if (strcmp(operator_text, "/=") == 0 || strcmp(operator_text, ".ne.") == 0 ||
-        strcmp(operator_text, ".neqv.") == 0)
+    case F2C_OPERATOR_NOT_EQUAL:
         return 1;
-    if (strcmp(operator_text, "<") == 0 || strcmp(operator_text, ".lt.") == 0)
+    case F2C_OPERATOR_LESS:
         return 2;
-    if (strcmp(operator_text, "<=") == 0 || strcmp(operator_text, ".le.") == 0)
+    case F2C_OPERATOR_LESS_EQUAL:
         return 3;
-    if (strcmp(operator_text, ">") == 0 || strcmp(operator_text, ".gt.") == 0)
+    case F2C_OPERATOR_GREATER:
         return 4;
-    if (strcmp(operator_text, ">=") == 0 || strcmp(operator_text, ".ge.") == 0)
+    case F2C_OPERATOR_GREATER_EQUAL:
         return 5;
-    return -1;
+    case F2C_OPERATOR_EQUIVALENT:
+        return 6;
+    case F2C_OPERATOR_NOT_EQUIVALENT:
+        return 7;
+    default:
+        return -1;
+    }
 }
 
 static int reduction_code(F2cIntrinsicId intrinsic) {
@@ -63,17 +66,19 @@ static const char *kernel_type_suffix(const F2cExpr *expression) {
     const int kind =
         expression->type_kind != 0 ? expression->type_kind : f2c_default_kind(expression->type);
     switch (expression->type) {
-    case TYPE_INTEGER:
     case TYPE_LOGICAL:
+        if (kind == 1)
+            return "l";
+        /* Other logical models have the corresponding integer storage. */
+        return kind == 2 ? "i16" : kind == 4 ? "i32" : kind == 8 ? "i64" : NULL;
+    case TYPE_INTEGER:
         return kind == 1 ? "i8" : kind == 2 ? "i16" : kind == 4 ? "i32" : kind == 8 ? "i64" : NULL;
     case TYPE_REAL:
-        return "f";
     case TYPE_DOUBLE:
-        return "d";
+        return kind == 4 ? "f" : kind == 8 ? "d" : NULL;
     case TYPE_COMPLEX:
-        return "c";
     case TYPE_DOUBLE_COMPLEX:
-        return "z";
+        return kind == 4 ? "c" : kind == 8 ? "z" : NULL;
     default:
         return NULL;
     }
@@ -103,7 +108,7 @@ int f2c_expression_direct_relation_reduction(const F2cExpr *expression) {
     if (mask == NULL || mask->kind != F2C_EXPR_BINARY || mask->rank == 0U ||
         mask->child_count != 2U)
         return 0;
-    relation = relation_code(mask->text);
+    relation = relation_code(mask->operator_kind);
     left = mask->children[0];
     right = mask->children[1];
     return relation >= 0 && direct_relation_operand(left) && direct_relation_operand(right) &&
@@ -276,7 +281,7 @@ char *f2c_expression_relation_reduction(Unit *unit, const F2cExpr *expression, i
     if (array == NULL || array->kind != F2C_EXPR_BINARY || array->child_count != 2U ||
         array->rank == 0U)
         return NULL;
-    relation = relation_code(array->text);
+    relation = relation_code(array->operator_kind);
     if (relation < 0)
         return NULL;
     *matched = 1;

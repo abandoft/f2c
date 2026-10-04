@@ -20,7 +20,9 @@ static void emit_relation_kernels(Buffer *output, int needs_complex, int qualifi
                 "a[(ptrdiff_t)i * ad]; t bv = b[(ptrdiff_t)i * bd]; bool value; switch "
                 "(relation) { case 0: value = av == bv; break; case 1: value = av != bv; break; "
                 "case 2: value = av < bv; break; case 3: value = av <= bv; break; case 4: value "
-                "= av > bv; break; case 5: value = av >= bv; break; default: abort(); } if "
+                "= av > bv; break; case 5: value = av >= bv; break; "
+                "case 6: value = (av != 0) == (bv != 0); break; "
+                "case 7: value = (av != 0) != (bv != 0); break; default: abort(); } if "
                 "(reduction == 0 && value) return 1; if (reduction == 1 && !value) return 0; if "
                 "(reduction == 2 && value) ++count; } if (reduction == 0) return 0; if "
                 "(reduction == 1) return 1; if (reduction == 2) return count; abort(); }\n"
@@ -28,6 +30,7 @@ static void emit_relation_kernels(Buffer *output, int needs_complex, int qualifi
                 "F2C_DEFINE_RELATION_REDUCTION(i16, int16_t)\n"
                 "F2C_DEFINE_RELATION_REDUCTION(i32, int32_t)\n"
                 "F2C_DEFINE_RELATION_REDUCTION(i64, int64_t)\n"
+                "F2C_DEFINE_RELATION_REDUCTION(l, bool)\n"
                 "F2C_DEFINE_RELATION_REDUCTION(f, float)\n"
                 "F2C_DEFINE_RELATION_REDUCTION(d, double)\n"
                 "#undef F2C_DEFINE_RELATION_REDUCTION\n");
@@ -86,12 +89,13 @@ void f2c_emit_relation_reduction_support(Buffer *output, int needs_complex, int 
     if (needs_qualified) {
         emit_relation_kernels(output, needs_complex, 1);
     }
-    f2c_buffer_append(output,
-                      "#define F2C_RELATION_REDUCE(a, ad, an, b, bd, bn, relation, reduction) "
-                      "_Generic(*(a), int8_t: f2c_relation_reduce_i8, int16_t: "
-                      "f2c_relation_reduce_i16, int32_t: f2c_relation_reduce_i32, int64_t: "
-                      "f2c_relation_reduce_i64, float: f2c_relation_reduce_f, double: "
-                      "f2c_relation_reduce_d");
+    f2c_buffer_append(
+        output,
+        "#define F2C_RELATION_REDUCE(a, ad, an, b, bd, bn, relation, reduction) "
+        "_Generic(*(a), bool: f2c_relation_reduce_l, int8_t: f2c_relation_reduce_i8, int16_t: "
+        "f2c_relation_reduce_i16, int32_t: f2c_relation_reduce_i32, int64_t: "
+        "f2c_relation_reduce_i64, float: f2c_relation_reduce_f, double: "
+        "f2c_relation_reduce_d");
     if (needs_complex)
         f2c_buffer_append(output, ", f2c_complex_float: f2c_relation_reduce_c, "
                                   "f2c_complex_double: f2c_relation_reduce_z");
