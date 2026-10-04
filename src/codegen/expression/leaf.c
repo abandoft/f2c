@@ -148,8 +148,8 @@ char *f2c_expression_name(Unit *unit, const F2cExpr *expression, int *supported)
             *supported = 0;
             return NULL;
         }
-        if (symbol->type == TYPE_CHARACTER || symbol->type == TYPE_COMPLEX ||
-            symbol->type == TYPE_DOUBLE_COMPLEX)
+        if (symbol->type == TYPE_DERIVED || symbol->type == TYPE_CHARACTER ||
+            symbol->type == TYPE_COMPLEX || symbol->type == TYPE_DOUBLE_COMPLEX)
             f2c_buffer_printf(&constant, "(%s)", value);
         else
             f2c_buffer_printf(&constant, "((%s)(%s))", f2c_symbol_c_type(symbol), value);
