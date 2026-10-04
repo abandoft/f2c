@@ -67,7 +67,7 @@ for name in dgetrf dgetrf2 dlaswp dpotrf dpotrf2 disnan dlaisnan; do
 done
 stage_source INSTALL dlamch
 
-for name in dgemv dgemm dger dtrsm dgetrf dpotrf; do
+for name in dscal dgemv dgemm dger dtrsm dgetrf dpotrf; do
     "$c_compiler" -std=c17 -O3 -ffp-contract=fast -DF2C_FP_CONTRACT=1 -DNDEBUG \
         -fverbose-asm -fopt-info-vec-all="$work/$name.c.vec" \
         -S "$work/$name.c" -o "$work/$name.c.s"
