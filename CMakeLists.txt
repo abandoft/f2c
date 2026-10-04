@@ -179,6 +179,7 @@ set(
     src/codegen/io/format/state.c
     src/codegen/io/format_control.c
     src/codegen/io/formatted.c
+    src/codegen/io/loop.c
     src/codegen/io/namelist.c
     src/codegen/io/namelist/parser.c
     src/codegen/io/namelist/support.c

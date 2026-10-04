@@ -245,64 +245,14 @@ static int emit_derived_item(Context *context, Unit *unit, const F2cIoItem *item
 static int emit_implied_do(Context *context, Unit *unit, const F2cIoItem *item, int input,
                            const char *stream, const char *unit_number, const char *status,
                            int depth) {
-    const char *iterator_type = f2c_expression_c_type(item->iterator);
-    char *iterator = f2c_io_emit_required_expression(unit, item->iterator);
-    char *initial = f2c_io_emit_required_expression(unit, item->initial);
-    char *limit = f2c_io_emit_required_expression(unit, item->limit);
-    char *step = f2c_io_emit_required_expression(unit, item->step);
-    size_t index;
-    int result = 0;
-    if (iterator == NULL || initial == NULL || limit == NULL || step == NULL)
-        goto cleanup;
-    f2c_io_indent(&context->output, depth);
-    f2c_buffer_append(&context->output, "{\n");
-    f2c_io_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output, "int64_t f2c_io_do_value = (int64_t)(%s)(%s);\n",
-                      iterator_type, initial);
-    f2c_io_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output, "const int64_t f2c_io_do_limit = (int64_t)(%s)(%s);\n",
-                      iterator_type, limit);
-    f2c_io_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output, "const int64_t f2c_io_do_step = (int64_t)(%s)(%s);\n",
-                      iterator_type, step);
-    f2c_io_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output, "if (f2c_io_do_step == 0) %s = F2C_IO_STATUS_OVERFLOW;\n",
-                      status);
-    f2c_io_indent(&context->output, depth + 1);
-    f2c_buffer_printf(&context->output,
-                      "while (%s == F2C_IO_STATUS_OK && "
-                      "(f2c_io_do_step > 0 ? f2c_io_do_value <= f2c_io_do_limit : "
-                      "f2c_io_do_step < 0 && f2c_io_do_value >= f2c_io_do_limit)) {\n",
-                      status);
-    f2c_io_indent(&context->output, depth + 2);
-    f2c_buffer_printf(&context->output, "%s = (%s)f2c_io_do_value;\n", iterator, iterator_type);
-    for (index = 0U; index < item->child_count; ++index)
+    if (!f2c_io_implied_do_begin(context, unit, item, status, 0, depth))
+        return 0;
+    for (size_t index = 0U; index < item->child_count; ++index)
         if (!f2c_io_emit_unformatted_item(context, unit, &item->children[index], input, stream,
                                           unit_number, status, depth + 2))
-            goto cleanup;
-    f2c_io_indent(&context->output, depth + 2);
-    f2c_buffer_append(
-        &context->output,
-        "if (f2c_io_do_step > 0) { const uint64_t f2c_io_do_distance = "
-        "(uint64_t)f2c_io_do_limit - (uint64_t)f2c_io_do_value; if "
-        "((uint64_t)f2c_io_do_step > f2c_io_do_distance) break; } else { const uint64_t "
-        "f2c_io_do_magnitude = UINT64_C(0) - (uint64_t)f2c_io_do_step; const uint64_t "
-        "f2c_io_do_distance = (uint64_t)f2c_io_do_value - (uint64_t)f2c_io_do_limit; if "
-        "(f2c_io_do_magnitude > f2c_io_do_distance) break; }\n");
-    f2c_io_indent(&context->output, depth + 2);
-    f2c_buffer_append(&context->output, "f2c_io_do_value += f2c_io_do_step;\n");
-    f2c_io_indent(&context->output, depth + 1);
-    f2c_buffer_append(&context->output, "}\n");
-    f2c_io_indent(&context->output, depth);
-    f2c_buffer_append(&context->output, "}\n");
-    result = 1;
-
-cleanup:
-    free(iterator);
-    free(initial);
-    free(limit);
-    free(step);
-    return result;
+            return 0;
+    f2c_io_implied_do_end(context, depth);
+    return 1;
 }
 
 int f2c_io_emit_unformatted_item(Context *context, Unit *unit, const F2cIoItem *item, int input,

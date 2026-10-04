@@ -248,28 +248,12 @@ void f2c_io_emit_formatted_item(Context *context, Unit *unit, const F2cIoItem *i
     if (item == NULL)
         return;
     if (item->implied_do) {
-        size_t i;
-        char *variable = f2c_io_emit_required_expression(unit, item->iterator);
-        char *start = f2c_io_emit_required_expression(unit, item->initial);
-        char *finish = f2c_io_emit_required_expression(unit, item->limit);
-        char *step = f2c_io_emit_required_expression(unit, item->step);
-        if (variable != NULL && start != NULL && finish != NULL && step != NULL) {
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_printf(&context->output,
-                              "for (%s = %s; ((%s) >= 0 ? %s <= %s : %s >= %s); %s += %s) "
-                              "{\n",
-                              variable, start, step, variable, finish, variable, finish, variable,
-                              step);
-            for (i = 0U; i < item->child_count; ++i)
-                f2c_io_emit_formatted_item(context, unit, &item->children[i], input, unit_number,
-                                           depth + 1);
-            f2c_io_indent(&context->output, depth);
-            f2c_buffer_append(&context->output, "}\n");
+        if (f2c_io_implied_do_begin(context, unit, item, "f2c_io_format.status", 1, depth)) {
+            for (size_t index = 0U; index < item->child_count; ++index)
+                f2c_io_emit_formatted_item(context, unit, &item->children[index], input,
+                                           unit_number, depth + 2);
+            f2c_io_implied_do_end(context, depth);
         }
-        free(variable);
-        free(start);
-        free(finish);
-        free(step);
         return;
     }
     if (input) {

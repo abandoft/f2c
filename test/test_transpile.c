@@ -2149,7 +2149,10 @@ static void test_list_directed_io(void) {
                     "list-directed READ consumes the complete Fortran record");
     expect_contains(result.code, "f2c_write_character(f2c_io_file, \"values\"",
                     "WRITE preserves length-aware character output items");
-    expect_contains(result.code, "for (i = 1;", "I/O implied-DO maps to a C loop");
+    expect_contains(result.code, "i = (f2c_io_do_start_0)",
+                    "I/O implied-DO defines the iterator before testing its trip count");
+    expect_contains(result.code, "for (; f2c_io_do_active_0 > 0",
+                    "I/O implied-DO maps to a counted C loop");
     f2c_result_free(&result);
 
     {

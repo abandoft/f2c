@@ -202,7 +202,7 @@ static void test_print_codegen(void) {
                     "PRINT statement labels use their bound structured FORMAT program");
     expect_contains(result.code, "runtime_format, (size_t)(16)",
                     "runtime CHARACTER PRINT formats preserve their explicit Fortran length");
-    expect_contains(result.code, "for (iterator = 1;",
+    expect_contains(result.code, "for (; f2c_io_do_active_0 > 0",
                     "formatted PRINT implied-DO items lower through the structured item tree");
     expect_contains(result.code, "switch ((int32_t)(assigned_format))",
                     "assigned FORMAT variables lower to an explicit runtime selector");
@@ -489,8 +489,10 @@ static void test_iolength_codegen(void) {
                     "IOLENGTH uses the same unformatted transfer representation in count mode");
     expect_contains(result.code, "f2c_unformatted_extent_1",
                     "IOLENGTH expands array sections in scalar element order");
-    expect_contains(result.code, "while (f2c_iolength_status == F2C_IO_STATUS_OK",
+    expect_contains(result.code, "F2C_LOOP_BEGIN(f2c_io_do_start_0",
                     "IOLENGTH implied-DO bounds are captured once in a checked loop");
+    expect_contains(result.code, "f2c_iolength_status == F2C_IO_STATUS_OK",
+                    "IOLENGTH stops expanding items after a transfer failure");
     expect_contains(result.code, "f2c_complex_float f2c_unformatted_value = (",
                     "complex output expressions are captured before extracting both parts");
     expect_contains(result.code, "f2c_inquiry_size_integer(f2c_iolength_stream.position, 4)",

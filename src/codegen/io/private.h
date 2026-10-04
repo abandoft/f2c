@@ -4,6 +4,9 @@
 #include "internal/f2c.h"
 
 void f2c_io_indent(Buffer *output, int depth);
+int f2c_io_implied_do_begin(Context *context, Unit *unit, const F2cIoItem *item, const char *status,
+                            int formatted_status, int depth);
+void f2c_io_implied_do_end(Context *context, int depth);
 void f2c_io_append_symbol_element(Buffer *output, Unit *unit, const Symbol *symbol,
                                   const char *index);
 void f2c_io_emit_qualified_input(Context *context, Unit *unit, const char *file, const char *value,

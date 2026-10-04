@@ -48,6 +48,7 @@ struct Context {
     size_t token_count;
     size_t ast_node_count;
     size_t constant_evaluation_steps;
+    size_t generated_loop_count;
     size_t diagnostic_count;
     int ast_node_limit_reported;
     int parse_depth_limit_reported;
