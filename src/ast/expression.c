@@ -49,6 +49,13 @@ F2cExpr *f2c_expr_new(F2cExprKind kind, Type type, const char *text, size_t leng
     expression->parse_error_offset = SIZE_MAX;
     expression->tree_depth = 1U;
     if (text != NULL) {
+        if (kind == F2C_EXPR_UNARY || kind == F2C_EXPR_BINARY) {
+            F2cToken token = {0};
+            token.kind = F2C_TOKEN_OPERATOR;
+            token.begin = text;
+            token.length = length;
+            expression->operator_kind = f2c_token_operator(&token);
+        }
         expression->text = f2c_strdup_n(text, length);
         if (expression->text == NULL) {
             free(expression);
@@ -161,6 +168,7 @@ F2cExpr *f2c_expr_clone_substitute_integers(const F2cExpr *expression,
     if (clone == NULL)
         return NULL;
     clone->kind = expression->kind;
+    clone->operator_kind = expression->operator_kind;
     clone->intrinsic = expression->intrinsic;
     clone->type = expression->type;
     clone->type_kind = expression->type_kind;
