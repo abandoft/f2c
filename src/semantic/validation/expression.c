@@ -1,4 +1,5 @@
 #include "semantic/default_initialization.h"
+#include "semantic/operator.h"
 #include "semantic/validation/private.h"
 
 #include "ast/declaration/designator.h"
@@ -468,23 +469,6 @@ static void bind_specific_expression(Unit *unit, F2cExpr *expression, Unit *defi
     }
 }
 
-static int intrinsic_operator_key(const char *key) {
-    static const char *const keys[] = {
-        "operator(+)",    "operator(-)",     "operator(*)",      "operator(/)",
-        "operator(**)",   "operator(//)",    "operator(==)",     "operator(/=)",
-        "operator(<)",    "operator(<=)",    "operator(>)",      "operator(>=)",
-        "operator(.eq.)", "operator(.ne.)",  "operator(.lt.)",   "operator(.le.)",
-        "operator(.gt.)", "operator(.ge.)",  "operator(.not.)",  "operator(.and.)",
-        "operator(.or.)", "operator(.eqv.)", "operator(.neqv.)",
-    };
-    size_t index;
-    for (index = 0U; index < sizeof(keys) / sizeof(keys[0]); ++index) {
-        if (strcmp(key, keys[index]) == 0)
-            return 1;
-    }
-    return 0;
-}
-
 static int resolve_operator(Context *context, Unit *unit, size_t line, const char *statement_text,
                             F2cExpr *expression) {
     char *generic_name;
@@ -492,7 +476,8 @@ static int resolve_operator(Context *context, Unit *unit, size_t line, const cha
     int handled = 0;
     int required;
     if (expression == NULL || expression->text == NULL ||
-        (expression->kind != F2C_EXPR_UNARY && expression->kind != F2C_EXPR_BINARY))
+        (expression->kind != F2C_EXPR_UNARY && expression->kind != F2C_EXPR_BINARY) ||
+        expression->operator_kind == F2C_OPERATOR_NONE)
         return 0;
     generic_name = f2c_generic_operator_key(expression->text);
     if (generic_name == NULL) {
@@ -500,7 +485,7 @@ static int resolve_operator(Context *context, Unit *unit, size_t line, const cha
                                  "out of memory resolving operator generic");
         return 1;
     }
-    required = !intrinsic_operator_key(generic_name);
+    required = expression->operator_kind == F2C_OPERATOR_DEFINED;
     definition = f2c_validation_generic_specific(context, unit, line, generic_name,
                                                  &expression->span, expression->children,
                                                  expression->child_count, 0, required, &handled);
@@ -595,6 +580,16 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
             expression->value_category = F2C_VALUE_CONSTANT;
     }
     operator_handled = resolve_operator(context, unit, line, statement_text, expression);
+    if (!operator_handled) {
+        const F2cOperatorStatus status = f2c_expression_refresh_operator_type(expression);
+        if (status == F2C_OPERATOR_INVALID_OPERANDS || status == F2C_OPERATOR_INCOMPATIBLE_KINDS)
+            f2c_diagnostic_span_code(
+                context, F2C_DIAGNOSTIC_SEMANTIC, &expression->span, 1,
+                status == F2C_OPERATOR_INCOMPATIBLE_KINDS
+                    ? "intrinsic operator '%s' requires matching CHARACTER kinds"
+                    : "invalid operand types for intrinsic operator '%s'",
+                expression->text);
+    }
     refresh_intrinsic_operator_shape(expression, operator_handled);
     f2c_validate_designator_components(context, expression);
     validate_substring_semantics(context, unit, line, statement_text, expression);
