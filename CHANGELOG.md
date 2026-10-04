@@ -1,3 +1,14 @@
+## 1.53.0
+
+- Preserve integer `DO` kinds, correcting conversions in narrow and wide integer loop controls.
+- Correct very large iteration ranges, minimum negative strides, empty loops, and post-loop variable values.
+- Evaluate loop controls once and check zero strides and unrepresentable integer or real conversions.
+- Unify array-constructor implied `DO` controls and static element counts without inheriting outer-variable storage attributes.
+- Unify implied `DO` controls in formatted, list-directed, unformatted, and `IOLENGTH` transfers, and finish formatted records with empty data lists.
+- Correct loop-variable access through qualified objects, pointers, allocatable scalars, and unaligned storage, and improve storage cleanup for loop-bound function results.
+- Support zero `DATA` repeats and correct counts in nested implied `DO` and cross-kind initialization.
+- Avoid collisions between generated loop helper names and source identifiers, separating control generation, constant counting, and semantic validation by responsibility.
+
 ## 1.52.0
 
 - Improve expression kind inference, mixed numeric conversions, and invalid-operation diagnostics.
