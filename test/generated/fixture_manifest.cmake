@@ -138,6 +138,8 @@ set(
     loop_real_count
     loop_real_storage
     parameter_array
+    parameter_transform
+    parameter_spread_contract
     loop_legacy
     operator_power_policy
     select_case
