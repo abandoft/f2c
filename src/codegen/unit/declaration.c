@@ -319,7 +319,11 @@ void f2c_unit_emit_declarations(Context *context, Unit *unit) {
         } else if (symbol->initializer != NULL || (persistent && symbol->type == TYPE_DERIVED)) {
             if (symbol->type == TYPE_CHARACTER) {
                 int supported = 0;
-                initializer = f2c_character_declaration_initializer(unit, symbol, &supported);
+                if (symbol->rank != 0U) {
+                    initializer = f2c_unit_static_storage_initializer(unit, symbol);
+                    supported = initializer != NULL;
+                } else
+                    initializer = f2c_character_declaration_initializer(unit, symbol, &supported);
                 if (!supported) {
                     f2c_diagnostic(context, symbol->declaration_line, 1,
                                    "unsupported non-constant or shape-incompatible CHARACTER "

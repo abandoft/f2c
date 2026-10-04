@@ -256,10 +256,9 @@ static void test_unmaterialized_array_initializer(void) {
                                  "end program\n";
     DiagnosticCapture capture = {0};
     F2cResult result = transpile(source, &capture);
-    expect(result.code == NULL && result.error_count != 0U,
-           "unmaterialized static initializers never silently become zeros");
-    expect(capture.captured && capture.code == F2C_DIAGNOSTIC_UNSUPPORTED && capture.line == 2U,
-           "unmaterialized static initializers retain their declaration location");
+    expect(result.code != NULL && result.error_count == 0U &&
+               strstr(result.code, "{INT32_C(1), INT32_C(2)}") != NULL,
+           "RESHAPE declaration initializers materialize their actual constant values");
     f2c_result_free(&result);
 }
 
