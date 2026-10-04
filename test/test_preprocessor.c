@@ -814,6 +814,41 @@ static void test_condition_expression_depth(void) {
     free(flat.data);
 }
 
+static void test_condition_explicit_stack(void) {
+    const size_t depth = 10000U;
+    for (size_t kind = 0U; kind < 6U; ++kind) {
+        TestBuffer source = {0};
+        F2cConfig config = config_with_definitions(NULL, 0U, NULL);
+        config.limits.max_parse_depth = depth;
+        append(&source, kind == 3U ? "#if 0 && " : kind == 5U ? "#if 1 || " : "#if ");
+        for (size_t index = 0U; index < depth; ++index)
+            append(&source, kind == 1U   ? "!"
+                            : kind == 2U ? "0 ? 1 / 0 : "
+                            : kind == 4U ? "1 ? "
+                                         : "(");
+        append(&source, "1");
+        if (kind == 0U || kind == 3U || kind == 5U)
+            for (size_t index = 0U; index < depth; ++index)
+                append(&source, ")");
+        if (kind == 4U)
+            for (size_t index = 0U; index < depth; ++index)
+                append(&source, " : 1 / 0");
+        append(&source, "\nsubroutine deep_true()\nend subroutine deep_true\n"
+                        "#else\nsubroutine deep_false()\nend subroutine deep_false\n#endif\n");
+        F2cResult result = translate(source.data, &config);
+        expect(result.error_count == 0U,
+               "large configured condition depths use explicit frames instead of native recursion");
+        expect_contains(
+            result.code, kind == 3U ? "void deep_false(void)" : "void deep_true(void)",
+            "deep parentheses, unary and ternary frames retain short-circuit semantics");
+        expect(result.code == NULL ||
+                   strstr(result.code, kind == 3U ? "deep_true" : "deep_false") == NULL,
+               "deep explicit-frame evaluation never selects the inactive Fortran branch");
+        f2c_result_free(&result);
+        free(source.data);
+    }
+}
+
 static void test_invalid_configuration(void) {
     static const F2cPreprocessorDefinition invalid_name[] = {{"1INVALID", "1"}};
     static const F2cPreprocessorDefinition multiline_value[] = {{"INVALID", "1\n2"}};
@@ -879,6 +914,7 @@ int main(void) {
     test_malformed_conditions();
     test_resource_limits();
     test_condition_expression_depth();
+    test_condition_explicit_stack();
     test_invalid_configuration();
     test_bom_crlf_and_final_line();
     if (failures != 0)
