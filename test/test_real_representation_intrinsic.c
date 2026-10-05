@@ -52,7 +52,7 @@ static void test_argument_contracts(void) {
     expect_diagnostic("  real(kind=16) :: value\n", "fraction(value)",
                       "FRACTION argument X uses unsupported REAL kind 16");
     expect_diagnostic("  real :: value\n  integer(kind=16) :: power\n", "scale(value, power)",
-                      "SCALE argument I uses unsupported INTEGER kind 16");
+                      "kind selector uses an unsupported scalar model 16");
 }
 
 static void test_keyword_and_direction_contracts(void) {
