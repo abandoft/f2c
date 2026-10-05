@@ -193,6 +193,11 @@ The currently tested implementation includes:
   list-directed CHARACTER output, and inherited DT child controls and record positions;
 - `RESHAPE`, `PACK`, `UNPACK`, `SPREAD`, `CSHIFT`, `EOSHIFT`, and `FINDLOC` lowering for the tested
   numeric, CHARACTER, and derived-type combinations.
+- Intrinsic `FINDLOC` comparisons across tested numeric categories/kinds and LOGICAL kinds,
+  blank-padded CHARACTER searches, scalar `DIM` results, conformable masks, strided views,
+  selected result kinds, and typed assignment conversions.
+- Automatic allocation of tested intrinsic scalar assignments, including allocatable components,
+  dummies and function results; scoped function-header kinds from host/module association and `USE`.
 
 Important remaining work includes complete token-stream coverage for declarations and modules,
 all kind/rank and arbitrary-array-expression combinations, complete module generics and submodules,
@@ -202,8 +207,7 @@ and argument mappings, every formatted-I/O layout rule, complete list-directed n
 input combinations,
 pointer reassociation during NAMELIST input, and multi-compiler ABI
 certification. Unsupported semantics must produce diagnostics rather than plausible but incorrect
-C. `FINDLOC` currently still rejects valid searches across numeric categories or kinds; its
-complete comparison contract remains open. The detailed checklist is maintained in
+C. Complete intrinsic/model/shape combinations and independent certification remain open. The detailed checklist is maintained in
 [TODO.md](TODO.md).
 
 ## Validation
