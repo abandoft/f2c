@@ -197,6 +197,7 @@ foreach(io_fixture IN LISTS F2C_GENERATED_FIXTURES)
 endforeach()
 
 include("${SOURCE_DIR}/test/generated/loop.cmake")
+include("${SOURCE_DIR}/test/generated/findloc.cmake")
 
 if(F2C_MSVC_FRONTEND)
     execute_process(
