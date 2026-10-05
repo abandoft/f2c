@@ -1,3 +1,17 @@
+## 1.55.0
+
+- Support `FINDLOC` searches across numeric categories and kinds with shared constant and runtime comparison rules.
+- Correct cross-kind logical equivalence and preserve exact integer, NaN, and signed-zero search semantics.
+- Improve scalar `DIM` results, multidimensional slices, masks, and reverse searches in `FINDLOC`.
+- Correct noncontiguous and negative-stride searches while preserving bounds and storage identity of conforming allocatable targets.
+- Preserve `FINDLOC` result kinds, including narrow integers and typed assignment conversions.
+- Support nested scalar `FINDLOC` without repeated evaluation or unnecessary result heap allocation.
+- Correct readonly CHARACTER searches and blank-padding comparisons while preserving qualified array and character snapshot access.
+- Automatically allocate tested intrinsic scalar assignments, including components, dummies, and function results.
+- Resolve function-header kinds in their declaration scope, including host/module association and local `USE`.
+- Unify optional `KIND` argument resolution for named constants, arithmetic expressions, and registered positional mappings.
+- Improve rejection of unsupported models, invalid dynamic `DIM`, nonconformable masks, and out-of-range results.
+
 ## 1.54.0
 
 - Support static storage and whole-array arguments for local, host-associated, and imported `PARAMETER` arrays.
