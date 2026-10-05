@@ -2,6 +2,7 @@
 
 #include "codegen/array/private.h"
 #include "codegen/lowering/private.h"
+#include "codegen/operator.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -300,6 +301,13 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
         free(right);
         return 1;
     }
+    const int allocated = f2c_emit_allocatable_scalar_assignment(context, unit, statement, right,
+                                                                 line, depth);
+    if (allocated != 0) {
+        free(left);
+        free(right);
+        return allocated > 0;
+    }
     indent(&context->output, depth);
     if (unit->kind == UNIT_FUNCTION && unit->return_type == TYPE_CHARACTER &&
         unit->result_name != NULL && left_symbol != NULL && left_symbol->name != NULL &&
@@ -342,9 +350,16 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
         }
     } else if (left_symbol != NULL && left_symbol->type == TYPE_CHARACTER && right[0] == '"') {
         f2c_buffer_printf(&context->output, "%s = %s[0];\n", left, right);
-    } else if (left_symbol != NULL && numeric_type(left_symbol->type) && numeric_type(right_type) &&
-               left_symbol->type != right_type) {
-        char *converted = f2c_emit_numeric_conversion(right, right_type, left_symbol->type);
+    } else if (left_symbol != NULL && numeric_type(left_symbol->type) && numeric_type(right_type)) {
+        char *converted = f2c_emit_scalar_conversion(
+            (F2cScalarOperand){right, f2c_expression_scalar_type(statement->right)},
+            f2c_expression_scalar_type(statement->left));
+        if (converted == NULL) {
+            free(left);
+            free(right);
+            f2c_diagnostic(context, line, 1, "numeric assignment has no supported model conversion");
+            return 0;
+        }
         f2c_buffer_printf(&context->output, "%s = %s;\n", left, converted);
         free(converted);
     } else {

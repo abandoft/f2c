@@ -37,6 +37,10 @@ int f2c_emit_pointer_assignment_statement(Context *context, Unit *unit,
                                           const F2cStatement *statement, size_t line, int depth);
 int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStatement *statement,
                                   size_t line, int depth);
+/* Zero is not applicable, one is emitted, minus one is diagnosed failure. */
+int f2c_emit_allocatable_scalar_assignment(Context *context, Unit *unit,
+                                            const F2cStatement *statement, const char *right,
+                                            size_t line, int depth);
 int f2c_emit_mvbits_statement(Context *context, Unit *unit, const F2cStatement *statement,
                               int depth);
 int f2c_emit_random_statement(Context *context, Unit *unit, const F2cStatement *statement,

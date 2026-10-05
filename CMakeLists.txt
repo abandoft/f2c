@@ -216,6 +216,7 @@ set(
     src/codegen/storage/element.c
     src/codegen/storage/private.h
     src/codegen/statement/assignment.c
+    src/codegen/statement/scalar_allocation.c
     src/codegen/statement/bit.c
     src/codegen/statement/loop.c
     src/codegen/statement/pointer.c
