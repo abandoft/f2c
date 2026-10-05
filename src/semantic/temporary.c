@@ -16,6 +16,9 @@ typedef struct ExpressionTemporaryAssigner {
 } ExpressionTemporaryAssigner;
 
 F2cTemporaryReleaseKind f2c_expression_temporary_release_kind(const F2cExpr *expression) {
+    if (expression != NULL && expression->kind == F2C_EXPR_CALL && expression->rank == 0U &&
+        expression->intrinsic == F2C_INTRINSIC_FINDLOC)
+        return F2C_TEMPORARY_STACK_VALUE;
     if (f2c_expression_has_pointer_result(expression) &&
         expression->result_use != F2C_FUNCTION_RESULT_VALUE)
         return F2C_TEMPORARY_BORROWED_REFERENCE;
@@ -38,6 +41,9 @@ static F2cOwnedTemporaryKind owned_temporary_kind(const F2cExpr *expression) {
     if (expression->kind == F2C_EXPR_CALL && expression->intrinsic == F2C_INTRINSIC_NONE &&
         f2c_expression_has_descriptor_result(expression))
         return F2C_OWNED_TEMPORARY_FUNCTION_RESULT;
+    if (expression->kind == F2C_EXPR_CALL && expression->rank == 0U &&
+        expression->intrinsic == F2C_INTRINSIC_FINDLOC)
+        return F2C_OWNED_TEMPORARY_TRANSFORMATIONAL_RESULT;
     if (expression->rank == 0U)
         return F2C_OWNED_TEMPORARY_NONE;
     if (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR)
