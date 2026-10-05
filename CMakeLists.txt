@@ -230,6 +230,9 @@ set(
     src/codegen/statement/where.c
     src/codegen/transform.c
     src/codegen/transform/findloc.c
+    src/codegen/transform/findloc/prepare.c
+    src/codegen/transform/findloc/result.c
+    src/codegen/transform/findloc/scan.c
     src/codegen/transform/inquiry.c
     src/codegen/transform/matrix.c
     src/codegen/transform/reduction.c
