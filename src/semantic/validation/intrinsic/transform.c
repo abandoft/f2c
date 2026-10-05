@@ -1,6 +1,7 @@
 #include "semantic/validation/private.h"
 
 #include "semantic/validation/intrinsic/arguments.h"
+#include "semantic/operator.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -325,11 +326,19 @@ static void validate_findloc(Context *context, Unit *unit, size_t line, const ch
     const F2cExpr *kind = arguments->values[4];
     const F2cExpr *back = arguments->values[5];
     int64_t constant;
-    if (array != NULL && array->rank == 0U)
-        diagnose_argument(context, line, statement_text, "FINDLOC", "ARRAY", array, "an array");
-    if (value != NULL && (value->rank != 0U || !same_element_type(array, value)))
+    F2cOperatorTyping typing;
+    if (array != NULL &&
+        (array->rank == 0U || (!f2c_type_is_numeric(array->type) && array->type != TYPE_LOGICAL &&
+                               array->type != TYPE_CHARACTER)))
+        diagnose_argument(context, line, statement_text, "FINDLOC", "ARRAY", array,
+                          "an array of intrinsic type");
+    if (value != NULL &&
+        (value->rank != 0U || array == NULL ||
+         f2c_operator_typing(f2c_value_equality_operator(array->type, value->type), 0,
+                             f2c_expression_scalar_type(array), f2c_expression_scalar_type(value),
+                             &typing) != F2C_OPERATOR_VALID))
         diagnose_argument(context, line, statement_text, "FINDLOC", "VALUE", value,
-                          "a scalar with ARRAY element type and kind");
+                          "a scalar comparable with ARRAY using intrinsic equality");
     validate_scalar_integer(context, line, statement_text, "FINDLOC", "DIM", dimension);
     if (array != NULL && dimension != NULL)
         (void)constant_dimension(context, unit, line, statement_text, "FINDLOC", dimension,

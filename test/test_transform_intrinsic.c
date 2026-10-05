@@ -79,8 +79,9 @@ static void test_argument_contracts(void) {
                       "eoshift(values, 1, boundary=boundary)",
                       "EOSHIFT argument BOUNDARY must be a scalar or rank-(ARRAY rank - 1) value "
                       "with ARRAY element type and kind");
-    expect_diagnostic("  integer :: values(4)\n", "findloc(values, 1.0)",
-                      "FINDLOC argument VALUE must be a scalar with ARRAY element type and kind");
+    expect_diagnostic("  integer :: values(4)\n", "findloc(values, .true.)",
+                      "FINDLOC argument VALUE must be a scalar comparable with ARRAY using "
+                      "intrinsic equality");
     expect_diagnostic("  integer :: values(4)\n", "transpose(values)",
                       "TRANSPOSE argument MATRIX must be a rank-two array");
     expect_diagnostic("  integer :: left(2), right(2)\n", "matmul(left, right)",
