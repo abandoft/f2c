@@ -1132,6 +1132,16 @@ if(F2C_BUILD_TESTING)
             )
             if(F2C_GFORTRAN_EXECUTABLE)
                 add_test(
+                    NAME findloc_differential
+                    COMMAND
+                        ${CMAKE_COMMAND} -E env
+                        CC=${CMAKE_C_COMPILER}
+                        FC=${F2C_GFORTRAN_EXECUTABLE}
+                        ${F2C_SH_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/test/findloc_differential.sh
+                        $<TARGET_FILE:f2c>
+                )
+                add_test(
                     NAME parameter_array_differential
                     COMMAND
                         ${CMAKE_COMMAND} -E env
