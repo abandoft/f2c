@@ -1,37 +1,6 @@
 #include "semantic/constant/transform/private.h"
-
-static int equal_value(const F2cConstantValue *left, const F2cConstantValue *right) {
-    switch (left->type.type) {
-    case TYPE_INTEGER:
-    case TYPE_LOGICAL:
-        return left->payload.integer == right->payload.integer;
-    case TYPE_REAL:
-    case TYPE_DOUBLE:
-        return left->payload.number.real == right->payload.number.real;
-    case TYPE_COMPLEX:
-    case TYPE_DOUBLE_COMPLEX:
-        return left->payload.number.real == right->payload.number.real &&
-               left->payload.number.imaginary == right->payload.number.imaginary;
-    case TYPE_CHARACTER: {
-        const size_t left_length = left->payload.character.length;
-        const size_t right_length = right->payload.character.length;
-        const size_t length = left_length > right_length ? left_length : right_length;
-        for (size_t index = 0U; index < length; ++index) {
-            const unsigned char a = index < left_length
-                                        ? (unsigned char)left->payload.character.bytes[index]
-                                        : (unsigned char)' ';
-            const unsigned char b = index < right_length
-                                        ? (unsigned char)right->payload.character.bytes[index]
-                                        : (unsigned char)' ';
-            if (a != b)
-                return 0;
-        }
-        return 1;
-    }
-    default:
-        return 0;
-    }
-}
+#include "semantic/constant/relation.h"
+#include "semantic/operator.h"
 
 static int location(F2cConstantValue *value, F2cScalarType type, size_t position) {
     if (position > (size_t)INT64_MAX)
@@ -50,6 +19,8 @@ int f2c_constant_transform_findloc(F2cConstantEvaluation *evaluation, const F2cE
     F2cConstantArray source = {0}, value = {0}, mask = {0}, output = {0};
     int64_t dimension = 0, kind = 4, back = 0;
     size_t count, stride = 1U;
+    F2cOperatorTyping typing;
+    F2cOperator comparison;
     int success = 0;
     if (!f2c_constant_evaluate_array(evaluation, f2c_constant_argument(call, "array", 0U), &source,
                                      depth + 1U) ||
@@ -58,13 +29,10 @@ int f2c_constant_transform_findloc(F2cConstantEvaluation *evaluation, const F2cE
                                      depth + 1U) ||
         value.shape.rank != 0U)
         goto cleanup;
-    /* CHARACTER equality pads operands to the longer length. Unlike storage
-     * transforms, FINDLOC therefore does not require equal character lengths. */
-    const size_t value_length = value.character_length;
-    value.character_length = source.character_length;
-    const int same_type = f2c_constant_same_element(&source, &value);
-    value.character_length = value_length;
-    if (!same_type ||
+    comparison = f2c_value_equality_operator(source.type.type, value.type.type);
+    if (f2c_operator_typing(comparison, 0, f2c_scalar_type(source.type.type, source.type.kind),
+                            f2c_scalar_type(value.type.type, value.type.kind), &typing) !=
+            F2C_OPERATOR_VALID ||
         (dimension_expression != NULL &&
          (!f2c_constant_integer_argument(evaluation, dimension_expression, &dimension,
                                          depth + 1U) ||
@@ -106,7 +74,11 @@ int f2c_constant_transform_findloc(F2cConstantEvaluation *evaluation, const F2cE
             if (mask_expression != NULL &&
                 mask.values[mask.shape.rank == 0U ? 0U : index].payload.integer == 0)
                 continue;
-            if (equal_value(&source.values[index], &value.values[0])) {
+            int64_t equal;
+            if (!f2c_constant_value_relation(comparison, &source.values[index], &value.values[0],
+                                              &equal))
+                goto cleanup;
+            if (equal) {
                 found = index;
                 matched = 1;
                 if (!back)
@@ -131,8 +103,13 @@ int f2c_constant_transform_findloc(F2cConstantEvaluation *evaluation, const F2cE
                 mask.values[mask.shape.rank == 0U ? 0U : index].payload.integer == 0)
                 continue;
             const size_t slice = index % stride + (index / span) * stride;
-            if ((!back && output.values[slice].payload.integer != 0) ||
-                !equal_value(&source.values[index], &value.values[0]))
+            if (!back && output.values[slice].payload.integer != 0)
+                continue;
+            int64_t equal;
+            if (!f2c_constant_value_relation(comparison, &source.values[index], &value.values[0],
+                                              &equal))
+                goto cleanup;
+            if (!equal)
                 continue;
             if (!location(&output.values[slice], output.type, (index / stride) % extent + 1U))
                 goto cleanup;

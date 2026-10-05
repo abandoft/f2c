@@ -142,9 +142,30 @@ static void test_findloc(Unit *unit) {
     integers(unit, "findloc(['A ','B '],'A')", 1U, one, padded, 1U);
     integers(unit, "findloc([1,2],2,mask=.false.)", 1U, one, missing, 1U);
     integers(unit, "findloc(reshape([1],[0,2]),1,dim=1)", 1U, two, zero_slices, 2U);
+    const int64_t second[] = {2};
+    integers(unit, "findloc([1,2,2],2.0_8)", 1U, one, second, 1U);
+    integers(unit, "findloc([1.0_4,2.0_4,2.0_4],2_8)", 1U, one, second, 1U);
+    integers(unit, "findloc([(2.0_4,1.0_4),(2.0_4,0.0_4)],2.0_8)", 1U, one, second, 1U);
+    integers(unit, "findloc([.false._1,.true._1,.true._1],.true._8)", 1U, one, second, 1U);
+    integers(unit, "findloc([.false._1,.true._1,.true._1],.true._8,back=.true.)", 1U, one,
+             scalar, 1U);
+    integers(unit, "findloc([9007199254740992_8,9007199254740993_8],9007199254740993_8)",
+             1U, one, second, 1U);
+    integers(unit, "findloc([16777216.0_4],16777217_8)", 1U, one, padded, 1U);
+    integers(unit, "findloc([16777216.0_8],16777217_8)", 1U, one, missing, 1U);
+    integers(unit, "findloc([4611686018427387904.0_4,4611686568183201792.0_4],"
+                   "4611686293305294849_8)", 1U, one, second, 1U);
     rejected(unit, "findloc([1,2],2,mask=[.true.])");
     rejected(unit, "findloc([1,2],2,kind=3)");
     rejected(unit, "findloc([1,2],2,dim=0)");
+    rejected(unit, "findloc([1,2],.true.)");
+    rejected(unit, "findloc([.true.],1)");
+    rejected(unit, "findloc(['A'],'A'_4)");
+    F2cConstantArray wide = {0};
+    expect(evaluate(unit, "findloc([1,2],2.0_8,kind=8)", &wide) && wide.type.kind == 8 &&
+               wide.values[0].payload.integer == 2,
+           "mixed-value FINDLOC retains requested result kind");
+    f2c_constant_array_free(&wide);
     int64_t folded = 0;
     F2cExpr *expression = parse(unit, "findloc([1,2,2],2,dim=1,back=.true.)+7");
     expect(expression != NULL && f2c_evaluate_integer_constant(unit, expression, &folded) &&
