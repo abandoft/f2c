@@ -24,12 +24,12 @@ fi
 cmake -E remove_directory "$WORK"
 cmake -E make_directory "$WORK"
 
-for CASE in function_result scalar_result result_identity result_snapshot result_kinds; do
+for CASE in function_result scalar_result result_identity result_snapshot result_kinds result_type_scope scalar_allocation; do
     SOURCE=$ROOT/test/fixtures/$CASE.f90
     CASE_WORK=$WORK/$CASE
     cmake -E make_directory "$CASE_WORK"
     "$F2C" "$SOURCE" -o "$CASE_WORK/generated.c"
-    "$FC" -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -Wno-surprising \
+    "$FC" -cpp -DF2C_NATIVE_ORACLE_PROFILE -std=f2018 -pedantic-errors -O2 -Wall -Wextra -Werror -Wno-surprising \
         -Wno-aggressive-loop-optimizations -J"$CASE_WORK" -I"$CASE_WORK" "$SOURCE" \
         -o "$CASE_WORK/native"
     "$CASE_WORK/native" >"$CASE_WORK/native.out"
