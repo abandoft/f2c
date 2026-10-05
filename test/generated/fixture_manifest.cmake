@@ -31,6 +31,7 @@ set(
     pointer_bounds_once
     pointer_allocation
     allocation_model
+    scalar_allocation
     allocation_model_rich
     allocation_model_guard
     allocation_result
@@ -70,6 +71,8 @@ set(
     transform_character_derived
     nested_transform_intrinsics
     nested_transform_derived_ownership
+    findloc_models
+    findloc_runtime
     derived_namelist
     namelist_derived_array
     dynamic_derived_namelist
@@ -159,4 +162,5 @@ set(
     descriptor_temporary
     equivalence_group
     declaration_matrix
+    result_type_scope
     complex_arithmetic)
