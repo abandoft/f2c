@@ -911,7 +911,49 @@ static void test_character_designator_tree(void) {
     f2c_expr_free(symbols[2].initializer_expression);
 }
 
+static void test_scoped_optional_intrinsic_kind(void) {
+    Unit unit = {0};
+    Symbol symbols[3] = {0};
+    symbols[0].name = "values";
+    symbols[0].type = TYPE_INTEGER;
+    symbols[0].kind = 4;
+    symbols[0].rank = 1U;
+    symbols[1].name = "narrow";
+    symbols[1].type = TYPE_INTEGER;
+    symbols[1].kind = 4;
+    symbols[1].parameter = 1;
+    symbols[1].initializer_expression = f2c_parse_expression_ast(NULL, "1", NULL);
+    symbols[2].name = "mask";
+    symbols[2].type = TYPE_LOGICAL;
+    symbols[2].kind = 4;
+    symbols[2].rank = 1U;
+    unit.symbols = symbols;
+    unit.symbol_count = 3U;
+    static const struct {
+        const char *source;
+        int kind;
+    } cases[] = {
+        {"findloc(values, 2, dim=1, kind=narrow)", 1},
+        {"findloc(values, 2, dim=1, kind=narrow+1)", 2},
+        {"findloc(values, 2, 1, mask, narrow, .true.)", 1},
+        {"findloc(values, 2, 1, mask, 2*4, .true.)", 8},
+        {"maxloc(values, 1, mask, narrow, .true.)", 1},
+        {"minloc(values, 1, mask, narrow+1, .false.)", 2},
+        {"count(mask, kind=narrow)", 1},
+        {"size(values, kind=narrow+1)", 2},
+    };
+    for (size_t index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        const char *error = NULL;
+        F2cExpr *expression = f2c_parse_expression_ast(&unit, cases[index].source, &error);
+        expect(expression != NULL && error == NULL && expression->type_kind == cases[index].kind,
+               cases[index].source);
+        f2c_expr_free(expression);
+    }
+    f2c_expr_free(symbols[1].initializer_expression);
+}
+
 int main(void) {
+    test_scoped_optional_intrinsic_kind();
     test_character_designator_tree();
     test_kind_shape_and_value_category();
     test_operator_kind_rules();

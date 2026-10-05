@@ -1,5 +1,6 @@
 #include "ast/internal.h"
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -211,7 +212,8 @@ static void resolve_intrinsic_shape(AstParser *parser, F2cExpr *expression,
         f2c_ast_set_transform_intrinsic_shape(parser, expression);
 }
 
-static void resolve_intrinsic_kind(F2cExpr *expression, const F2cIntrinsicSignature *signature) {
+static void resolve_intrinsic_kind(AstParser *parser, F2cExpr *expression,
+                                   const F2cIntrinsicSignature *signature) {
     expression->type_kind = f2c_default_kind(expression->type);
     if (expression->child_count != 0U) {
         const F2cExpr *first_argument = f2c_ast_intrinsic_argument_value(expression->children[0]);
@@ -280,6 +282,26 @@ static void resolve_intrinsic_kind(F2cExpr *expression, const F2cIntrinsicSignat
         const int selected_kind = f2c_ast_kind_value_from_argument(kind);
         expression->type_kind = selected_kind != 0 ? selected_kind : 4;
     }
+    /* Resolve optional KIND from the registered argument slot and the scoped
+     * typed constant service, not an inferred type or a last-slot convention.
+     * FINDLOC/MAXLOC/MINLOC have BACK after KIND; named integer kind constants
+     * and arithmetic selectors must retain their actual model value. */
+    const F2cIntrinsicArgumentSchema *schema =
+        signature != NULL ? f2c_intrinsic_argument_schema(signature->id) : NULL;
+    if (schema != NULL) {
+        for (size_t position = 0U; position < schema->count; ++position) {
+            if (strcmp(schema->names[position], "kind") != 0)
+                continue;
+            const F2cExpr *kind = f2c_intrinsic_argument(expression->children,
+                                                        expression->child_count, "kind", position);
+            int64_t value;
+            if (kind != NULL && kind->type == TYPE_INTEGER && kind->rank == 0U &&
+                f2c_evaluate_integer_constant(parser != NULL ? parser->unit : NULL, kind, &value) &&
+                value > 0 && value <= INT_MAX)
+                expression->type_kind = (int)value;
+            break;
+        }
+    }
 }
 
 void f2c_ast_resolve_intrinsic_call(AstParser *parser, F2cExpr *expression) {
@@ -287,5 +309,5 @@ void f2c_ast_resolve_intrinsic_call(AstParser *parser, F2cExpr *expression) {
     resolve_intrinsic_type(expression, signature);
     expression->intrinsic = signature != NULL ? signature->id : F2C_INTRINSIC_NONE;
     resolve_intrinsic_shape(parser, expression, signature);
-    resolve_intrinsic_kind(expression, signature);
+    resolve_intrinsic_kind(parser, expression, signature);
 }
