@@ -19,6 +19,8 @@ typedef struct F2cOperatorTyping {
 
 F2cScalarType f2c_scalar_type(Type type, int kind);
 F2cScalarType f2c_expression_scalar_type(const F2cExpr *expression);
+/* Numeric/logical scalar models supported by the generated C processor policy. */
+int f2c_scalar_model_supported(F2cScalarType type);
 /* FINDLOC and other intrinsic value comparisons use logical equivalence for
  * two LOGICAL values, ordinary intrinsic equality otherwise. */
 F2cOperator f2c_value_equality_operator(Type left, Type right);

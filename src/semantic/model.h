@@ -328,6 +328,7 @@ struct Unit {
     int return_kind;
     int return_type_explicit;
     F2cSourceSpan return_type_span;
+    F2cTokenRange return_type_syntax;
     char *result_name;
     F2cSourceSpan result_name_span;
     char *result_character_length;

@@ -2,6 +2,7 @@
 
 #include "ast/declaration/use.h"
 #include "frontend/declaration/symbol.h"
+#include "frontend/declaration/private.h"
 #include "frontend/module/access.h"
 
 #include <ctype.h>
@@ -152,6 +153,16 @@ void f2c_analyze_unit(Context *context, Unit *unit) {
         f2c_parse_common_declaration(context, unit, &context->lines.items[i]);
         f2c_parse_namelist_declaration(context, unit, &context->lines.items[i]);
         f2c_mark_call_targets(unit, &context->lines.items[i]);
+    }
+    if (unit->kind == UNIT_FUNCTION && unit->return_type_syntax.count != 0U) {
+        const Line *header = &context->lines.items[unit->begin];
+        const size_t begin = (size_t)(unit->return_type_syntax.tokens - header->tokens);
+        F2cDeclarationTypeSpec result_type;
+        if (f2c_parse_type_spec_tokens(context, unit, header, begin, &result_type)) {
+            unit->return_type = result_type.type;
+            unit->return_kind = result_type.kind;
+        }
+        f2c_release_type_spec(&result_type);
     }
     f2c_parse_access_statements(context, unit);
     f2c_discover_implicit_symbols(context, unit);

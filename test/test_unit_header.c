@@ -261,7 +261,24 @@ static void test_module_header_ast(void) {
     parsed_line_discard(&parsed);
 }
 
+static void test_scoped_result_selector_diagnostics(void) {
+    static const char *const sources[] = {
+        "real(missing_kind) function bad()\nimplicit none\nbad=1\nend function\n",
+        "real(kind=8,kind=8) function bad()\nbad=1\nend function\n",
+        "real(kind=3) function bad()\nbad=1\nend function\n",
+    };
+    const F2cOptions options = {"result-selector.f90", F2C_SOURCE_FREE, 0};
+    for (size_t index = 0U; index < sizeof(sources) / sizeof(sources[0]); ++index) {
+        F2cResult result = f2c_transpile(sources[index], strlen(sources[index]), &options);
+        expect(result.code == NULL && result.error_count != 0U && result.diagnostics != NULL &&
+                   strstr(result.diagnostics, "kind selector") != NULL,
+               "invalid or unresolved function-header kinds never silently use a default model");
+        f2c_result_free(&result);
+    }
+}
+
 int main(void) {
+    test_scoped_result_selector_diagnostics();
     test_function_header_ast();
     test_header_lowering();
     test_legacy_alternate_return_ast();

@@ -12,14 +12,6 @@ static const char *real_component(int kind) {
     return kind == 4 ? "crealf" : kind == 8 ? "creal" : "creall";
 }
 
-static int supported_scalar_type(F2cScalarType type) {
-    if (type.type == TYPE_INTEGER || type.type == TYPE_LOGICAL)
-        return type.kind == 1 || type.kind == 2 || type.kind == 4 || type.kind == 8;
-    if (f2c_type_is_numeric(type.type))
-        return type.kind == 4 || type.kind == 8 || type.kind == 16;
-    return 0;
-}
-
 static char *convert_operand(F2cScalarOperand operand, F2cScalarType target) {
     Buffer output = {0};
     if (operand.type.type == target.type && operand.type.kind == target.kind)
@@ -48,8 +40,8 @@ static char *convert_operand(F2cScalarOperand operand, F2cScalarType target) {
 char *f2c_emit_scalar_conversion(F2cScalarOperand operand, F2cScalarType target) {
     operand.type = f2c_scalar_type(operand.type.type, operand.type.kind);
     target = f2c_scalar_type(target.type, target.kind);
-    if (operand.code == NULL || !supported_scalar_type(operand.type) ||
-        !supported_scalar_type(target) ||
+    if (operand.code == NULL || !f2c_scalar_model_supported(operand.type) ||
+        !f2c_scalar_model_supported(target) ||
         !((f2c_type_is_numeric(operand.type.type) && f2c_type_is_numeric(target.type)) ||
           (operand.type.type == TYPE_LOGICAL && target.type == TYPE_LOGICAL)))
         return NULL;
@@ -99,7 +91,8 @@ char *f2c_emit_scalar_operator(F2cOperator operator_kind, int unary, F2cScalarOp
         f2c_operator_typing(operator_kind, unary, left.type, right.type, &typing) !=
             F2C_OPERATOR_VALID ||
         typing.result.type != expected.type || typing.result.kind != expected.kind ||
-        !supported_scalar_type(typing.left) || (!unary && !supported_scalar_type(typing.right)))
+        !f2c_scalar_model_supported(typing.left) ||
+        (!unary && !f2c_scalar_model_supported(typing.right)))
         return NULL;
     converted_left = f2c_emit_scalar_conversion(left, typing.left);
     converted_right = unary ? NULL : f2c_emit_scalar_conversion(right, typing.right);

@@ -1,4 +1,5 @@
 #include "frontend/declaration/private.h"
+#include "semantic/operator.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -180,6 +181,37 @@ static int parse_selector_item(Context *context, Unit *unit, const Line *line, s
     if ((key != NULL && strcmp(key, "kind") == 0) ||
         (key == NULL && specification->type != TYPE_CHARACTER && position == 0U)) {
         Type kind_type = TYPE_UNKNOWN;
+        /* Header discovery has no declaration scope yet. Retain a valid,
+         * scope-dependent selector for resolution after USE/host association
+         * and local parameters have been established; literals remain checked
+         * immediately. The complete type token range belongs to the Unit. */
+        if (unit == NULL && specification->kind == 0) {
+            int dependent = 0;
+            for (size_t token = begin; token < end; ++token) {
+                if (line->tokens[token].kind != F2C_TOKEN_IDENTIFIER ||
+                    (token + 1U < end && f2c_token_equals(&line->tokens[token + 1U], "=")))
+                    continue;
+                char *name = f2c_token_text(&line->tokens[token]);
+                dependent = name != NULL &&
+                            !(token + 1U < end &&
+                              line->tokens[token + 1U].kind == F2C_TOKEN_LEFT_PAREN &&
+                              f2c_is_intrinsic_name(name));
+                free(name);
+                if (dependent)
+                    break;
+            }
+            if (dependent) {
+                const char *error = NULL;
+                F2cExpr *expression = f2c_parse_expression_tokens(
+                    NULL, &line->tokens[begin], end - begin, line->text, &error);
+                const int valid = expression != NULL && error == NULL;
+                f2c_expr_free(expression);
+                if (valid) {
+                    specification->kind = f2c_default_kind(specification->type);
+                    return 1;
+                }
+            }
+        }
         if (specification->kind != 0 ||
             !kind_value(unit, line, begin, end, &specification->kind, &kind_type)) {
             if (context != NULL)
@@ -335,6 +367,15 @@ int f2c_parse_type_spec_tokens(Context *context, Unit *unit, const Line *line, s
     }
     if (specification->kind == 0)
         specification->kind = f2c_default_kind(specification->type);
+    if ((f2c_type_is_numeric(specification->type) || specification->type == TYPE_LOGICAL) &&
+        !f2c_scalar_model_supported((F2cScalarType){specification->type, specification->kind})) {
+        if (context != NULL)
+            f2c_diagnostic_token_code(context, F2C_DIAGNOSTIC_SEMANTIC, line,
+                                      &line->tokens[begin], 1,
+                                      "kind selector uses an unsupported scalar model %d",
+                                      specification->kind);
+        return 0;
+    }
     if ((specification->type == TYPE_REAL || specification->type == TYPE_COMPLEX) &&
         (specification->kind == 8 || specification->kind_type == TYPE_DOUBLE))
         specification->type = specification->type == TYPE_REAL ? TYPE_DOUBLE : TYPE_DOUBLE_COMPLEX;

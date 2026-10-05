@@ -19,6 +19,15 @@ F2cScalarType f2c_expression_scalar_type(const F2cExpr *expression) {
                               : f2c_scalar_type(TYPE_UNKNOWN, 0);
 }
 
+int f2c_scalar_model_supported(F2cScalarType type) {
+    type = f2c_scalar_type(type.type, type.kind);
+    if (type.type == TYPE_INTEGER || type.type == TYPE_LOGICAL)
+        return type.kind == 1 || type.kind == 2 || type.kind == 4 || type.kind == 8;
+    if (f2c_type_is_numeric(type.type))
+        return type.kind == 4 || type.kind == 8 || type.kind == 16;
+    return 0;
+}
+
 F2cOperator f2c_value_equality_operator(Type left, Type right) {
     return left == TYPE_LOGICAL && right == TYPE_LOGICAL ? F2C_OPERATOR_EQUIVALENT
                                                         : F2C_OPERATOR_EQUAL;

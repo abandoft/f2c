@@ -114,6 +114,7 @@ static int lower_result_type(Context *context, const Line *line, const F2cUnitHe
     unit->return_type = type_spec.type;
     unit->return_kind = type_spec.kind;
     unit->return_type_explicit = 1;
+    unit->return_type_syntax = f2c_line_token_range(line, begin, end);
     unit->return_type_span =
         f2c_source_span_cover(&line->tokens[begin].span, &line->tokens[end - 1U].span);
     unit->result_character_length = type_spec.character_length;
