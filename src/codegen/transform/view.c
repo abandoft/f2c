@@ -1,5 +1,6 @@
 #include "codegen/transform/private.h"
 
+#include "codegen/array/copy.h"
 #include "codegen/array/private.h"
 #include "codegen/lowering/private.h"
 
@@ -178,6 +179,12 @@ int f2c_transform_materialize_array(Context *context, Unit *unit, TransformArray
     element_code = element != NULL ? f2c_transform_emit_expression(unit, element) : NULL;
     element_definable = element != NULL && element->definable;
     element_kind = element != NULL ? element->kind : F2C_EXPR_INVALID;
+    const unsigned int element_qualifiers = element != NULL ? element->storage_qualifiers : 0U;
+    if (array->type == TYPE_CHARACTER && element_code != NULL) {
+        char *pointer = f2c_character_source_pointer(unit, element, element_code);
+        free(element_code);
+        element_code = pointer;
+    }
     f2c_codegen_expression_free(unit, element);
     if (element_code == NULL ||
         (array->type == TYPE_DERIVED && !element_definable && element_kind != F2C_EXPR_CALL &&
@@ -257,19 +264,20 @@ int f2c_transform_materialize_array(Context *context, Unit *unit, TransformArray
                           ordinal_names[dimension], role, array->extents[dimension], role,
                           array->extents[dimension]);
     if (array->type == TYPE_CHARACTER) {
-        f2c_buffer_printf(&context->output,
-                          "char *f2c_destination = %s + f2c_transform_%s_index * "
-                          "f2c_transform_%s_element_length; const char *f2c_source = %s(%s); "
-                          "if (f2c_transform_%s_element_length != 0U) memmove(f2c_destination, "
-                          "f2c_source, f2c_transform_%s_element_length); }\n",
-                          pointer_name.data, role, role, element_definable ? "&" : "", element_code,
-                          role, role);
+        Buffer destination = {0}, length = {0};
+        f2c_buffer_printf(&destination,
+                          "(%s + f2c_transform_%s_index * "
+                          "f2c_transform_%s_element_length)",
+                          pointer_name.data, role, role);
+        f2c_buffer_printf(&length, "f2c_transform_%s_element_length", role);
+        f2c_buffer_append(&context->output, "\n");
+        f2c_array_copy_snapshot(&context->output, unit, destination.data, element_code, length.data,
+                                "char", F2C_STORAGE_UNQUALIFIED, element_qualifiers, depth + 1);
+        f2c_transform_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
+        free(destination.data);
         free(array->element_length);
-        {
-            Buffer length = {0};
-            f2c_buffer_printf(&length, "f2c_transform_%s_element_length", role);
-            array->element_length = f2c_buffer_take(&length);
-        }
+        array->element_length = f2c_buffer_take(&length);
     } else if (array->type == TYPE_DERIVED) {
         if (element_definable) {
             f2c_buffer_printf(&context->output,
