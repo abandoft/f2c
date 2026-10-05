@@ -332,6 +332,9 @@ static void validate_findloc(Context *context, Unit *unit, size_t line, const ch
                                array->type != TYPE_CHARACTER)))
         diagnose_argument(context, line, statement_text, "FINDLOC", "ARRAY", array,
                           "an array of intrinsic type");
+    if (array != NULL && array->type == TYPE_CHARACTER && array->type_kind != 1)
+        diagnose_argument(context, line, statement_text, "FINDLOC", "ARRAY", array,
+                          "a supported CHARACTER kind (1)");
     if (value != NULL &&
         (value->rank != 0U || array == NULL ||
          f2c_operator_typing(f2c_value_equality_operator(array->type, value->type), 0,

@@ -82,6 +82,8 @@ static void test_argument_contracts(void) {
     expect_diagnostic("  integer :: values(4)\n", "findloc(values, .true.)",
                       "FINDLOC argument VALUE must be a scalar comparable with ARRAY using "
                       "intrinsic equality");
+    expect_diagnostic("  character(kind=4) :: values(4)\n", "findloc(values, 4_'A')",
+                      "FINDLOC argument ARRAY must be a supported CHARACTER kind (1)");
     expect_diagnostic("  integer :: values(4)\n", "transpose(values)",
                       "TRANSPOSE argument MATRIX must be a rank-two array");
     expect_diagnostic("  integer :: left(2), right(2)\n", "matmul(left, right)",
