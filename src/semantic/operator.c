@@ -19,6 +19,11 @@ F2cScalarType f2c_expression_scalar_type(const F2cExpr *expression) {
                               : f2c_scalar_type(TYPE_UNKNOWN, 0);
 }
 
+F2cOperator f2c_value_equality_operator(Type left, Type right) {
+    return left == TYPE_LOGICAL && right == TYPE_LOGICAL ? F2C_OPERATOR_EQUIVALENT
+                                                        : F2C_OPERATOR_EQUAL;
+}
+
 static int wider_kind(F2cScalarType left, F2cScalarType right) {
     const F2cNumericModel *left_model = f2c_numeric_model(left.type, left.kind);
     const F2cNumericModel *right_model = f2c_numeric_model(right.type, right.kind);

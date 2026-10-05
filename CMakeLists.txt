@@ -394,6 +394,7 @@ set(
     src/semantic/constant/model.c
     src/semantic/constant/numeric.c
     src/semantic/constant/operator.c
+    src/semantic/constant/relation.c
     src/semantic/constant/private.h
     src/semantic/constant/real.c
     src/semantic/constant/storage.c
@@ -770,6 +771,11 @@ if(F2C_BUILD_TESTING)
     target_include_directories(f2c_constant_array_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_constant_array_tests)
     add_test(NAME constant_array COMMAND f2c_constant_array_tests)
+
+    add_executable(f2c_constant_relation_tests test/test_constant_relation.c)
+    target_include_directories(f2c_constant_relation_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_constant_relation_tests)
+    add_test(NAME constant_relation COMMAND f2c_constant_relation_tests)
 
     add_executable(f2c_numeric_model_tests test/test_numeric_model.c)
     target_include_directories(
