@@ -23,8 +23,15 @@ static char *temporary_name(size_t identifier, const char *suffix, size_t dimens
     return f2c_buffer_take(&result);
 }
 
-static char *contiguous_stride(const F2cDescriptorView *view, size_t dimension) {
-    char *stride = f2c_strdup("1");
+static char *contiguous_stride(Unit *unit, const F2cExpr *expression, const F2cDescriptorView *view,
+                               size_t dimension) {
+    char *stride = f2c_descriptor_expression_record_size(unit, expression);
+    if (stride != NULL) {
+        Buffer checked = {0};
+        f2c_buffer_printf(&checked, "f2c_descriptor_record_stride((size_t)(%s))", stride);
+        free(stride);
+        stride = f2c_buffer_take(&checked);
+    }
     size_t prior;
     for (prior = 0U; stride != NULL && prior < dimension; ++prior) {
         Buffer next = {0};
@@ -52,8 +59,8 @@ static int initialize_shape(Buffer *prelude, Unit *unit, const F2cExpr *expressi
         f2c_buffer_printf(prelude, "const size_t %s = (size_t)(%s);\n", view->extent[dimension],
                           extent);
         free(extent);
-        view->stride[dimension] = contiguous_stride(view, dimension);
-        if (view->stride[dimension] == NULL)
+        view->byte_stride[dimension] = contiguous_stride(unit, expression, view, dimension);
+        if (view->byte_stride[dimension] == NULL)
             return 0;
     }
     return 1;
@@ -216,6 +223,9 @@ int f2c_descriptor_materialize_view(Buffer *prelude, Buffer *cleanup, Unit *unit
          f2c_default_kind(TYPE_CHARACTER) != expression->type_kind))
         return 0;
     memset(view, 0, sizeof(*view));
+    view->record_size = f2c_descriptor_expression_record_size(unit, expression);
+    if (view->record_size == NULL)
+        goto failed;
     if (!initialize_shape(prelude, unit, expression, identifier, depth, view))
         goto failed;
     element_code = emit_element(unit, expression, identifier, &element);

@@ -13,16 +13,23 @@ void f2c_descriptor_view_free(F2cDescriptorView *view) {
         return;
     free(view->data);
     free(view->character_length);
+    free(view->record_size);
     for (dimension = 0U; dimension < F2C_MAX_RANK; ++dimension) {
         free(view->lower[dimension]);
         free(view->extent[dimension]);
-        free(view->stride[dimension]);
+        free(view->byte_stride[dimension]);
     }
     memset(view, 0, sizeof(*view));
 }
 
 static char *contiguous_stride(Unit *unit, const Symbol *symbol, size_t dimension) {
-    char *stride = f2c_strdup("1");
+    char *stride = f2c_descriptor_symbol_record_size(unit, symbol);
+    if (stride != NULL) {
+        Buffer checked = {0};
+        f2c_buffer_printf(&checked, "f2c_descriptor_record_stride((size_t)(%s))", stride);
+        free(stride);
+        stride = f2c_buffer_take(&checked);
+    }
     size_t prior;
     for (prior = 0U; stride != NULL && prior < dimension; ++prior) {
         char *extent = f2c_symbol_dimension_extent(unit, symbol, prior);
@@ -40,9 +47,9 @@ static char *contiguous_stride(Unit *unit, const Symbol *symbol, size_t dimensio
     return stride;
 }
 
-char *f2c_descriptor_source_stride(Unit *unit, const Symbol *symbol, size_t dimension) {
+char *f2c_descriptor_source_byte_stride(Unit *unit, const Symbol *symbol, size_t dimension) {
     if (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol))) {
-        return f2c_storage_symbol_property(unit, symbol, F2C_OBJECT_STRIDE, dimension);
+        return f2c_storage_symbol_property(unit, symbol, F2C_OBJECT_BYTE_STRIDE, dimension);
     }
     return contiguous_stride(unit, symbol, dimension);
 }
@@ -73,9 +80,10 @@ static int whole_array_view(Unit *unit, const F2cExpr *expression, F2cDescriptor
     for (dimension = 0U; dimension < view->rank; ++dimension) {
         view->lower[dimension] = f2c_descriptor_dimension_lower(unit, expression, dimension);
         view->extent[dimension] = f2c_descriptor_dimension_extent(unit, expression, dimension);
-        view->stride[dimension] = f2c_descriptor_expression_stride(unit, expression, dimension);
+        view->byte_stride[dimension] =
+            f2c_descriptor_expression_byte_stride(unit, expression, dimension);
         if (view->lower[dimension] == NULL || view->extent[dimension] == NULL ||
-            view->stride[dimension] == NULL)
+            view->byte_stride[dimension] == NULL)
             return 0;
     }
     return view->data != NULL;
@@ -95,7 +103,7 @@ static int section_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView
         if (selector->kind == F2C_EXPR_ARRAY_SECTION) {
             char *step = section_step(unit, selector);
             char *base_stride =
-                f2c_descriptor_expression_stride(unit, expression, source_dimension);
+                f2c_descriptor_expression_byte_stride(unit, expression, source_dimension);
             char *last = selector->children[1]->kind != F2C_EXPR_INVALID
                              ? f2c_emit_typed_expression(unit, selector->children[1])
                              : f2c_descriptor_dimension_upper(unit, expression, source_dimension);
@@ -113,12 +121,13 @@ static int section_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView
                 f2c_buffer_printf(&stride,
                                   "f2c_descriptor_stride_step((ptrdiff_t)(%s), (int64_t)(%s))",
                                   base_stride, step);
-            view->stride[result_dimension] = f2c_buffer_take(&stride);
+            view->byte_stride[result_dimension] = f2c_buffer_take(&stride);
             free(step);
             free(base_stride);
             free(last);
             if (indices[source_dimension] == NULL || view->lower[result_dimension] == NULL ||
-                view->extent[result_dimension] == NULL || view->stride[result_dimension] == NULL)
+                view->extent[result_dimension] == NULL ||
+                view->byte_stride[result_dimension] == NULL)
                 goto failed;
             ++result_dimension;
         } else if (selector->rank == 0U) {
@@ -132,12 +141,8 @@ static int section_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView
     if (result_dimension != expression->rank)
         goto failed;
     reference = f2c_descriptor_element_designator(unit, expression, indices, symbol->rank);
-    if (reference != NULL) {
-        Buffer data = {0};
-        f2c_buffer_printf(&data, "(&%s)", reference);
-        view->data = f2c_buffer_take(&data);
-    }
     view->rank = result_dimension;
+    view->data = f2c_descriptor_section_address(unit, expression, reference, view);
     for (source_dimension = 0U; source_dimension < symbol->rank; ++source_dimension)
         free(indices[source_dimension]);
     free(reference);
@@ -160,17 +165,12 @@ static int lowered_array_view(Unit *unit, const F2cExpr *expression, F2cDescript
     if (expression->type == TYPE_CHARACTER)
         view->character_length = f2c_character_length_expression(unit, expression);
     for (dimension = 0U; dimension < view->rank; ++dimension) {
-        Buffer stride = {0};
-        size_t prior;
         view->lower[dimension] = f2c_strdup("1");
         view->extent[dimension] = f2c_array_expression_extent(unit, expression, dimension);
-        f2c_buffer_append(&stride, "((ptrdiff_t)1");
-        for (prior = 0U; prior < dimension; ++prior)
-            f2c_buffer_printf(&stride, " * (ptrdiff_t)(%s)", view->extent[prior]);
-        f2c_buffer_append(&stride, ")");
-        view->stride[dimension] = f2c_buffer_take(&stride);
+        view->byte_stride[dimension] =
+            f2c_descriptor_dense_byte_stride(unit, expression, dimension);
         if (view->lower[dimension] == NULL || view->extent[dimension] == NULL ||
-            view->stride[dimension] == NULL)
+            view->byte_stride[dimension] == NULL)
             return 0;
     }
     return view->data != NULL &&
@@ -194,12 +194,12 @@ static int pointer_result_view(const F2cExpr *expression, const char *descriptor
         Buffer stride = {0};
         f2c_buffer_printf(&lower, "%s.lower[%zu]", descriptor, dimension);
         f2c_buffer_printf(&extent, "%s.extent[%zu]", descriptor, dimension);
-        f2c_buffer_printf(&stride, "%s.stride[%zu]", descriptor, dimension);
+        f2c_buffer_printf(&stride, "%s.byte_stride[%zu]", descriptor, dimension);
         view->lower[dimension] = f2c_buffer_take(&lower);
         view->extent[dimension] = f2c_buffer_take(&extent);
-        view->stride[dimension] = f2c_buffer_take(&stride);
+        view->byte_stride[dimension] = f2c_buffer_take(&stride);
         if (view->lower[dimension] == NULL || view->extent[dimension] == NULL ||
-            view->stride[dimension] == NULL)
+            view->byte_stride[dimension] == NULL)
             return 0;
     }
     return view->data != NULL &&
@@ -211,6 +211,9 @@ int f2c_descriptor_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView
     if (unit == NULL || expression == NULL || view == NULL)
         return 0;
     memset(view, 0, sizeof(*view));
+    view->record_size = f2c_descriptor_expression_record_size(unit, expression);
+    if (view->record_size == NULL)
+        return 0;
     view->storage_qualifiers = f2c_lowering_storage_qualifiers(unit, expression);
     view->readonly_storage = f2c_lowering_is_array_temporary(unit, expression)
                                  ? f2c_lowering_readonly_storage(unit, expression)
@@ -221,10 +224,15 @@ int f2c_descriptor_view(Unit *unit, const F2cExpr *expression, F2cDescriptorView
         result = pointer_result_view(expression, result_descriptor, view);
     else if (f2c_lowering_is_array_temporary(unit, expression))
         result = lowered_array_view(unit, expression, view);
-    else if (expression->symbol == NULL)
+    else if (expression->kind == F2C_EXPR_SUBSTRING ||
+             (expression->kind == F2C_EXPR_COMPONENT && expression->child_count != 0U &&
+              expression->children[0]->rank != 0U))
+        result = f2c_descriptor_project_view(NULL, unit, expression, 0, view);
+    else if (expression->symbol == NULL) {
+        f2c_descriptor_view_free(view);
         return 0;
-    else if (expression->kind == F2C_EXPR_NAME ||
-             (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U))
+    } else if (expression->kind == F2C_EXPR_NAME ||
+               (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U))
         result = whole_array_view(unit, expression, view);
     else if (expression->kind == F2C_EXPR_ARRAY_REFERENCE || expression->kind == F2C_EXPR_COMPONENT)
         result = section_view(unit, expression, view);

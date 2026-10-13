@@ -136,6 +136,8 @@ set(
     src/codegen/descriptor/materialize.c
     src/codegen/descriptor/private.h
     src/codegen/descriptor/view.c
+    src/codegen/descriptor/layout.c
+    src/codegen/descriptor/project.c
     src/codegen/expression.c
     src/codegen/expression/designator.c
     src/codegen/expression/access.c

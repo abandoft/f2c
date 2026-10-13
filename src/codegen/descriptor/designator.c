@@ -5,6 +5,27 @@
 
 #include <stdlib.h>
 
+char *f2c_descriptor_section_address(Unit *unit, const F2cExpr *expression, const char *element,
+                                     const F2cDescriptorView *view) {
+    Buffer address = {0};
+    F2cStorageReference storage = f2c_ir_storage_reference(expression);
+    storage.object_qualifiers = F2C_STORAGE_UNQUALIFIED;
+    char *base = f2c_storage_read_property(unit, &storage, F2C_OBJECT_DATA, 0U);
+    if (element == NULL || base == NULL || view->rank == 0U) {
+        free(base);
+        return NULL;
+    }
+    f2c_buffer_append(&address, "(");
+    for (size_t dimension = 0U; dimension < view->rank; ++dimension)
+        f2c_buffer_printf(&address, "%s(size_t)(%s) == 0U", dimension == 0U ? "" : " || ",
+                          view->extent[dimension]);
+    /* An empty section has no first element. Preserve target identity without
+     * checking an unselected subscript or forming an out-of-range address. */
+    f2c_buffer_printf(&address, " ? (%s) : (&%s))", base, element);
+    free(base);
+    return f2c_buffer_take(&address);
+}
+
 static int component_designator_supported(const F2cExpr *expression) {
     return expression != NULL && expression->kind == F2C_EXPR_COMPONENT &&
            expression->child_count != 0U && expression->children[0] != NULL &&
@@ -90,7 +111,13 @@ char *f2c_descriptor_dimension_upper(Unit *unit, const F2cExpr *expression, size
 }
 
 static char *contiguous_stride(Unit *unit, const F2cExpr *expression, size_t dimension) {
-    char *stride = f2c_strdup("1");
+    char *stride = f2c_descriptor_expression_record_size(unit, expression);
+    if (stride != NULL) {
+        Buffer checked = {0};
+        f2c_buffer_printf(&checked, "f2c_descriptor_record_stride((size_t)(%s))", stride);
+        free(stride);
+        stride = f2c_buffer_take(&checked);
+    }
     size_t prior;
     for (prior = 0U; stride != NULL && prior < dimension; ++prior) {
         Buffer next = {0};
@@ -108,15 +135,16 @@ static char *contiguous_stride(Unit *unit, const F2cExpr *expression, size_t dim
     return stride;
 }
 
-char *f2c_descriptor_expression_stride(Unit *unit, const F2cExpr *expression, size_t dimension) {
+char *f2c_descriptor_expression_byte_stride(Unit *unit, const F2cExpr *expression,
+                                            size_t dimension) {
     const Symbol *symbol = expression != NULL ? expression->symbol : NULL;
     if (symbol == NULL || dimension >= symbol->rank)
         return NULL;
     if (component_designator_supported(expression) && symbol->pointer)
-        return metadata_designator(unit, expression, F2C_OBJECT_STRIDE, dimension);
+        return metadata_designator(unit, expression, F2C_OBJECT_BYTE_STRIDE, dimension);
     if (component_designator_supported(expression))
         return contiguous_stride(unit, expression, dimension);
-    return f2c_descriptor_source_stride(unit, symbol, dimension);
+    return f2c_descriptor_source_byte_stride(unit, symbol, dimension);
 }
 
 static char *component_offset(Unit *unit, const F2cExpr *expression, char **indices, size_t count) {
@@ -124,7 +152,8 @@ static char *component_offset(Unit *unit, const F2cExpr *expression, char **indi
     Buffer result = {0};
     size_t dimension;
     if (symbol->pointer) {
-        f2c_buffer_printf(&result, "f2c_array_descriptor_offset(%zuU, (const int64_t[]){", count);
+        f2c_buffer_printf(&result, "f2c_array_descriptor_byte_offset(%zuU, (const int64_t[]){",
+                          count);
         for (dimension = 0U; dimension < count; ++dimension)
             f2c_buffer_printf(&result, "%s(int64_t)(%s)", dimension == 0U ? "" : ", ",
                               indices[dimension]);
@@ -144,7 +173,7 @@ static char *component_offset(Unit *unit, const F2cExpr *expression, char **indi
         }
         f2c_buffer_append(&result, "}, (const ptrdiff_t[]){");
         for (dimension = 0U; dimension < count; ++dimension) {
-            char *stride = f2c_descriptor_expression_stride(unit, expression, dimension);
+            char *stride = f2c_descriptor_expression_byte_stride(unit, expression, dimension);
             f2c_buffer_printf(&result, "%s(ptrdiff_t)(%s)", dimension == 0U ? "" : ", ",
                               stride != NULL ? stride : "0");
             free(stride);
@@ -183,7 +212,9 @@ char *f2c_descriptor_element_designator(Unit *unit, const F2cExpr *expression, c
         return NULL;
     if (!component_designator_supported(expression))
         return f2c_emit_array_reference(unit, expression->symbol, indices, count);
-    const F2cStorageReference reference = f2c_ir_storage_reference(expression);
+    F2cStorageReference reference = f2c_ir_storage_reference(expression);
+    /* Taking an address does not perform a scoped access. */
+    reference.object_qualifiers = F2C_STORAGE_UNQUALIFIED;
     storage = f2c_storage_read_property(unit, &reference, F2C_OBJECT_DATA, 0U);
     offset = component_offset(unit, expression, indices, count);
     if (symbol->type == TYPE_CHARACTER) {
@@ -201,15 +232,23 @@ char *f2c_descriptor_element_designator(Unit *unit, const F2cExpr *expression, c
         free(character_length);
         return NULL;
     }
-    f2c_buffer_printf(&result, "%s[", storage);
-    if (character_length != NULL)
-        f2c_buffer_append(&result, "f2c_descriptor_stride_extent((ptrdiff_t)(");
-    f2c_buffer_append(&result, offset);
-    if (character_length != NULL)
-        f2c_buffer_printf(&result, "), (size_t)(%s))", character_length);
-    f2c_buffer_append(&result, "]");
+    if (!symbol->pointer) {
+        char *size = f2c_descriptor_expression_record_size(unit, expression);
+        if (size == NULL) {
+            free(storage);
+            free(offset);
+            free(character_length);
+            return NULL;
+        }
+        f2c_buffer_printf(&result, "f2c_descriptor_stride_extent((ptrdiff_t)(%s), (size_t)(%s))",
+                          offset, size);
+        free(size);
+        free(offset);
+        offset = f2c_buffer_take(&result);
+    }
+    char *element = f2c_storage_byte_element(&reference, storage, offset);
     free(storage);
     free(offset);
     free(character_length);
-    return f2c_buffer_take(&result);
+    return element;
 }

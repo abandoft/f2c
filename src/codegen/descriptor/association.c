@@ -46,7 +46,7 @@ static int emit_section(Buffer *prelude, Unit *unit, const F2cExpr *expression,
     step = emit_bound(unit, section->children[2]);
     if (step == NULL)
         step = f2c_strdup("1");
-    base_stride = f2c_descriptor_expression_stride(unit, expression, source_dimension);
+    base_stride = f2c_descriptor_expression_byte_stride(unit, expression, source_dimension);
     first_name = temporary_name("first", source_dimension);
     last_name = temporary_name("last", source_dimension);
     step_name = temporary_name("step", source_dimension);
@@ -95,9 +95,9 @@ static int emit_section(Buffer *prelude, Unit *unit, const F2cExpr *expression,
     *index = f2c_strdup(first_name);
     view->lower[result_dimension] = f2c_strdup("1");
     view->extent[result_dimension] = f2c_strdup(extent_name);
-    view->stride[result_dimension] = f2c_strdup(stride_name);
+    view->byte_stride[result_dimension] = f2c_strdup(stride_name);
     success = *index != NULL && view->lower[result_dimension] != NULL &&
-              view->extent[result_dimension] != NULL && view->stride[result_dimension] != NULL;
+              view->extent[result_dimension] != NULL && view->byte_stride[result_dimension] != NULL;
 
 cleanup:
     free(declared_lower);
@@ -126,18 +126,32 @@ int f2c_descriptor_association_view(Buffer *prelude, Unit *unit, const F2cExpr *
     if (prelude == NULL || unit == NULL || expression == NULL || view == NULL ||
         expression->symbol == NULL || expression->rank == 0U)
         return 0;
+    if (expression->kind == F2C_EXPR_SUBSTRING ||
+        (expression->kind == F2C_EXPR_COMPONENT && expression->child_count != 0U &&
+         expression->children[0]->rank != 0U)) {
+        memset(view, 0, sizeof(*view));
+        view->storage_qualifiers = f2c_lowering_storage_qualifiers(unit, expression);
+        view->readonly_storage = f2c_descriptor_readonly_storage(expression);
+        const int result = f2c_descriptor_project_view(prelude, unit, expression, depth, view);
+        if (!result)
+            f2c_descriptor_view_free(view);
+        return result;
+    }
     if (f2c_expression_has_pointer_result(expression) || expression->kind == F2C_EXPR_NAME ||
         (expression->kind == F2C_EXPR_COMPONENT && expression->child_count == 1U))
         return f2c_descriptor_view(unit, expression, view);
     symbol = expression->symbol;
     selector_offset = f2c_descriptor_selector_offset(expression);
     memset(view, 0, sizeof(*view));
+    view->record_size = f2c_descriptor_expression_record_size(unit, expression);
+    if (view->record_size == NULL)
+        return 0;
     view->storage_qualifiers = f2c_lowering_storage_qualifiers(unit, expression);
     view->readonly_storage = f2c_lowering_readonly_storage(unit, expression) ||
                              f2c_descriptor_readonly_storage(expression);
     if ((expression->kind != F2C_EXPR_ARRAY_REFERENCE && expression->kind != F2C_EXPR_COMPONENT) ||
         expression->child_count != symbol->rank + selector_offset)
-        return 0;
+        goto cleanup;
 
     for (source_dimension = 0U; source_dimension < symbol->rank; ++source_dimension) {
         const F2cExpr *selector = f2c_descriptor_selector(expression, source_dimension);
@@ -165,12 +179,8 @@ int f2c_descriptor_association_view(Buffer *prelude, Unit *unit, const F2cExpr *
     if (result_dimension != expression->rank)
         goto cleanup;
     reference = f2c_descriptor_element_designator(unit, expression, indices, symbol->rank);
-    if (reference != NULL) {
-        Buffer data = {0};
-        f2c_buffer_printf(&data, "(&%s)", reference);
-        view->data = f2c_buffer_take(&data);
-    }
     view->rank = result_dimension;
+    view->data = f2c_descriptor_section_address(unit, expression, reference, view);
     success = view->data != NULL;
 
 cleanup:
