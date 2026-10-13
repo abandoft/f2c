@@ -60,8 +60,8 @@ int f2c_namelist_emit_state_snapshot(Context *context, Unit *unit, const Symbol 
             !snapshot_property(context, unit, &reference, F2C_OBJECT_EXTENT, "extent", "int32_t",
                                dimension, member, depth) ||
             (symbol->pointer &&
-             !snapshot_property(context, unit, &reference, F2C_OBJECT_STRIDE, "stride", "ptrdiff_t",
-                                dimension, member, depth)))
+             !snapshot_property(context, unit, &reference, F2C_OBJECT_BYTE_STRIDE, "byte_stride",
+                                "ptrdiff_t", dimension, member, depth)))
             return 0;
     }
     return !context->output.failed;

@@ -67,7 +67,7 @@ static void emit_target_reference(Context *context, Unit *unit, const Symbol *sy
             f2c_io_indent(&context->output, depth);
             f2c_buffer_printf(&context->output,
                               "ptrdiff_t *f2c_namelist_target_stride_%zu_%zu = "
-                              "&%s_stride_%zu;\n",
+                              "&%s_byte_stride_%zu;\n",
                               member, dimension + 1U, name, dimension + 1U);
         }
     }
@@ -134,7 +134,7 @@ static void emit_dynamic_metadata(Context *context, Unit *unit, const Symbol *sy
         if (pointer_storage(symbol)) {
             f2c_io_indent(&context->output, depth);
             f2c_buffer_printf(&context->output,
-                              "ptrdiff_t %s_stride_%zu = "
+                              "ptrdiff_t %s_byte_stride_%zu = "
                               "*f2c_namelist_target_stride_%zu_%zu;\n",
                               name, dimension + 1U, member, dimension + 1U);
         }

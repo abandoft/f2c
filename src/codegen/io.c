@@ -195,7 +195,8 @@ int f2c_io_emit_defined_io_call(Context *context, const char *value, F2cDerivedT
         f2c_buffer_append(&context->output, "f2c_dtio_v_list_descriptor.lower[0] = 1; "
                                             "f2c_dtio_v_list_descriptor.extent[0] = "
                                             "(int64_t)f2c_dtio_v_list_count; "
-                                            "f2c_dtio_v_list_descriptor.stride[0] = 1;\n");
+                                            "f2c_dtio_v_list_descriptor.byte_stride[0] = "
+                                            "(ptrdiff_t)sizeof(int32_t);\n");
         f2c_io_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "++f2c_child_io_depth;\n");
         f2c_io_indent(&context->output, depth + 1);
