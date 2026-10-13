@@ -75,6 +75,12 @@ directory first.
 
 Run `build/f2c --help` for the complete CLI reference.
 
+Generated interfaces share one guarded `f2c_descriptor` definition. Its `byte_stride` fields
+are signed physical byte offsets, independent of `element_size` and `character_length`.
+This supports direct substring and derived-array component views without losing target identity;
+ordinary contiguous arguments use logical-record copy-in/copy-out when needed. Descriptor inputs
+are checked for rank, element type width, alignment, and representable address spans.
+
 ## Library API
 
 The public interface in [`include/f2c/f2c.h`](include/f2c/f2c.h) supports in-memory translation:

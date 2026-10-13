@@ -67,6 +67,11 @@ build/f2c -I include -DUSE_ISNAN=1 source.F90 -o output.c
 
 完整 CLI 说明见 `build/f2c --help`。
 
+生成接口共用带声明保护的 `f2c_descriptor`。其中 `byte_stride` 表示带符号的物理字节跨度，
+独立于 `element_size` 和 `character_length`。字符数组子串和派生数组组件可以直接传递视图，
+保留目标地址身份；需要连续存储的普通实参则按逻辑记录复制与写回。描述符入口会检查 rank、
+元素类型宽度、对齐以及地址跨度的可表示范围。
+
 ## 库接口
 
 公共头文件 [`include/f2c/f2c.h`](include/f2c/f2c.h) 提供内存内转译接口：
