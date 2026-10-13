@@ -90,6 +90,8 @@ jobs:
         run: sh test/numeric_operation_intrinsic_differential.sh build/numerical/f2c
       - name: Differential-test mathematical and conversion intrinsics
         run: sh test/mathematical_conversion_intrinsic_differential.sh build/numerical/f2c
+      - name: Differential-test intrinsic result kinds and generic selection
+        run: sh test/intrinsic_result_differential.sh build/numerical/f2c
       - name: Differential-test reduction intrinsics
         run: sh test/reduction_intrinsic_differential.sh build/numerical/f2c
       - name: Validate parenthesized values and ownership
