@@ -3,6 +3,7 @@
 #include "codegen/array/copy.h"
 #include "codegen/array/private.h"
 #include "codegen/lowering/private.h"
+#include "codegen/value/private.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -99,9 +100,7 @@ int f2c_transform_array_view(Unit *unit, const F2cExpr *expression, TransformArr
         array->pointer = f2c_transform_emit_expression(unit, expression);
         array->count = f2c_array_expression_extent(unit, expression, 0U);
         array->extents[0] = array->count != NULL ? f2c_strdup(array->count) : NULL;
-    } else if (expression->type != TYPE_DERIVED || expression->kind == F2C_EXPR_ARRAY_REFERENCE ||
-               (expression->kind == F2C_EXPR_CALL && expression->resolved_procedure != NULL &&
-                expression->resolved_procedure->elemental)) {
+    } else {
         const char *ordinals[F2C_MAX_RANK] = {0};
         F2cExpr *element;
         char *code;
@@ -111,8 +110,10 @@ int f2c_transform_array_view(Unit *unit, const F2cExpr *expression, TransformArr
             array->extents[dimension] = f2c_array_expression_extent(unit, expression, dimension);
         }
         element = f2c_array_element_expression(unit, expression, array->rank, ordinals);
-        code = element != NULL ? f2c_transform_emit_expression(unit, element) : NULL;
-        if (element == NULL || code == NULL) {
+        code = element != NULL && array->type != TYPE_DERIVED
+                   ? f2c_transform_emit_expression(unit, element)
+                   : NULL;
+        if (element == NULL || (array->type != TYPE_DERIVED && code == NULL)) {
             f2c_codegen_expression_free(unit, element);
             free(code);
             f2c_transform_free_array(array);
@@ -149,8 +150,6 @@ int f2c_transform_materialize_array(Context *context, Unit *unit, TransformArray
     Buffer pointer_name = {0};
     Buffer count_name = {0};
     size_t dimension;
-    int element_definable;
-    F2cExprKind element_kind;
     if (context == NULL || unit == NULL || array == NULL || role == NULL)
         return 0;
     if (array->pointer != NULL)
@@ -176,25 +175,24 @@ int f2c_transform_materialize_array(Context *context, Unit *unit, TransformArray
         ordinals[dimension] = ordinal_names[dimension];
     }
     element = f2c_array_element_expression(unit, array->expression, array->rank, ordinals);
-    element_code = element != NULL ? f2c_transform_emit_expression(unit, element) : NULL;
-    element_definable = element != NULL && element->definable;
-    element_kind = element != NULL ? element->kind : F2C_EXPR_INVALID;
+    element_code = element != NULL && array->type != TYPE_DERIVED
+                       ? f2c_transform_emit_expression(unit, element)
+                       : NULL;
     const unsigned int element_qualifiers = element != NULL ? element->storage_qualifiers : 0U;
     if (array->type == TYPE_CHARACTER && element_code != NULL) {
         char *pointer = f2c_character_source_pointer(unit, element, element_code);
         free(element_code);
         element_code = pointer;
     }
-    f2c_codegen_expression_free(unit, element);
-    if (element_code == NULL ||
-        (array->type == TYPE_DERIVED && !element_definable && element_kind != F2C_EXPR_CALL &&
-         element_kind != F2C_EXPR_STRUCTURE_CONSTRUCTOR)) {
+    if (element == NULL || (array->type != TYPE_DERIVED && element_code == NULL)) {
+        f2c_codegen_expression_free(unit, element);
         free(element_code);
         return 0;
     }
     f2c_buffer_printf(&pointer_name, "f2c_transform_%s_values", role);
     f2c_buffer_printf(&count_name, "f2c_transform_%s_count", role);
     if (pointer_name.data == NULL || count_name.data == NULL) {
+        f2c_codegen_expression_free(unit, element);
         free(element_code);
         free(pointer_name.data);
         free(count_name.data);
@@ -259,9 +257,10 @@ int f2c_transform_materialize_array(Context *context, Unit *unit, TransformArray
                       role, role, count_name.data, role, role, role);
     for (dimension = 0U; dimension < array->rank; ++dimension)
         f2c_buffer_printf(&context->output,
-                          "size_t %s = f2c_transform_%s_ordinal %% %s; "
-                          "f2c_transform_%s_ordinal /= %s; ",
-                          ordinal_names[dimension], role, array->extents[dimension], role,
+                          "size_t %s = f2c_transform_%s_ordinal %% (%s != 0U ? %s : 1U); "
+                          "f2c_transform_%s_ordinal /= (%s != 0U ? %s : 1U); ",
+                          ordinal_names[dimension], role, array->extents[dimension],
+                          array->extents[dimension], role, array->extents[dimension],
                           array->extents[dimension]);
     if (array->type == TYPE_CHARACTER) {
         Buffer destination = {0}, length = {0};
@@ -279,27 +278,27 @@ int f2c_transform_materialize_array(Context *context, Unit *unit, TransformArray
         free(array->element_length);
         array->element_length = f2c_buffer_take(&length);
     } else if (array->type == TYPE_DERIVED) {
-        if (element_definable) {
-            f2c_buffer_printf(&context->output,
-                              "f2c_clone_%s(&%s[f2c_transform_%s_index], &(%s)); }\n",
-                              array->derived_type->c_name, pointer_name.data, role, element_code);
-        } else {
-            f2c_buffer_printf(&context->output, "%s f2c_source = (%s); ",
-                              array->derived_type->c_name, element_code);
-            if (element_kind == F2C_EXPR_STRUCTURE_CONSTRUCTOR)
-                f2c_buffer_printf(&context->output, "f2c_refresh_%s(&f2c_source); ",
-                                  array->derived_type->c_name);
-            f2c_buffer_printf(&context->output,
-                              "f2c_clone_%s(&%s[f2c_transform_%s_index], &f2c_source); "
-                              "f2c_destroy_%s(&f2c_source); }\n",
-                              array->derived_type->c_name, pointer_name.data, role,
-                              array->derived_type->c_name);
+        Buffer destination = {0};
+        f2c_buffer_printf(&destination, "%s[f2c_transform_%s_index]", pointer_name.data, role);
+        f2c_buffer_append(&context->output, "\n");
+        const int cloned = destination.data != NULL &&
+                           f2c_emit_derived_clone_expression(&context->output, unit, element,
+                                                             destination.data, role, 0U, depth + 1);
+        free(destination.data);
+        if (!cloned) {
+            f2c_codegen_expression_free(unit, element);
+            free(pointer_name.data);
+            free(count_name.data);
+            return 0;
         }
+        f2c_transform_indent(&context->output, depth);
+        f2c_buffer_append(&context->output, "}\n");
     } else {
         f2c_buffer_printf(&context->output, "%s[f2c_transform_%s_index] = (%s); }\n",
                           pointer_name.data, role, element_code);
     }
     free(element_code);
+    f2c_codegen_expression_free(unit, element);
     free(array->pointer);
     free(array->count);
     array->pointer = f2c_buffer_take(&pointer_name);
