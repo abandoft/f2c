@@ -1,3 +1,4 @@
+#include "ir/call.h"
 #include "ir/storage.h"
 #include "semantic/scope.h"
 #include "semantic/validation/private.h"
@@ -453,6 +454,7 @@ static void validate_statement(Context *context, Unit *unit, F2cStatement *state
             definition = f2c_validation_call_statement(context, unit, statement);
         statement->resolved_procedure = definition;
         if (definition != NULL && definition->name != NULL && !definition->interface_abstract &&
+            !f2c_procedure_is_indirect(f2c_find_symbol(unit, statement->name)) &&
             strcmp(statement->name, definition->name) != 0) {
             char *resolved = f2c_strdup(definition->name);
             if (resolved != NULL) {

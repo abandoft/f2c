@@ -4,6 +4,7 @@
 #include "semantic/validation/private.h"
 
 #include "ast/declaration/designator.h"
+#include "ir/call.h"
 #include "semantic/validation/intrinsic/arguments.h"
 
 #include <ctype.h>
@@ -464,7 +465,7 @@ static void bind_specific_expression(Unit *unit, F2cExpr *expression, Unit *defi
     char *resolved;
     Symbol *resolved_symbol;
     if (unit == NULL || expression == NULL || definition == NULL || definition->name == NULL ||
-        definition->interface_abstract ||
+        definition->interface_abstract || f2c_procedure_is_indirect(expression->symbol) ||
         (expression->text != NULL && strcmp(expression->text, definition->name) == 0))
         return;
     resolved = f2c_strdup(definition->name);

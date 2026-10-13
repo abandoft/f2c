@@ -1,5 +1,10 @@
 #include "ir/call.h"
 
+int f2c_procedure_is_indirect(const Symbol *procedure) {
+    return procedure != NULL &&
+           (procedure->procedure_pointer || (procedure->argument && procedure->external));
+}
+
 static const F2cExpr *argument_value(const F2cExpr *argument) {
     return argument != NULL && argument->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
                    argument->child_count == 1U

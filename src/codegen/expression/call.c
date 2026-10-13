@@ -40,7 +40,8 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
     Buffer call_setup = {0};
     Buffer call_cleanup = {0};
     const Unit *resolved = expression->resolved_procedure != NULL &&
-                                   !expression->resolved_procedure->interface_abstract
+                                   !expression->resolved_procedure->interface_abstract &&
+                                   !f2c_procedure_is_indirect(expression->symbol)
                                ? expression->resolved_procedure
                                : NULL;
     const Unit *capture_procedure =

@@ -10,5 +10,7 @@ size_t f2c_call_parameter_count(const F2cExpr *call);
 const F2cExpr *f2c_call_passed_object(const F2cExpr *call);
 const F2cExpr *f2c_call_parameter_actual(const F2cExpr *call, size_t parameter);
 size_t f2c_call_child_parameter(const F2cExpr *call, size_t child);
+/* A resolved interface describes characteristics, not an indirect call target. */
+int f2c_procedure_is_indirect(const Symbol *procedure);
 
 #endif

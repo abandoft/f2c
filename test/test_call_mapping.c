@@ -88,9 +88,27 @@ static void test_invalid_calls(void) {
            "missing child storage is safely rejected");
 }
 
+static void test_indirect_identity(void) {
+    Symbol procedure = {0};
+    expect(!f2c_procedure_is_indirect(NULL) && !f2c_procedure_is_indirect(&procedure),
+           "missing and ordinary procedures are not indirect targets");
+    procedure.external = 1;
+    procedure.external_signature_explicit = 1;
+    expect(!f2c_procedure_is_indirect(&procedure),
+           "a known specific interface does not make an ordinary procedure indirect");
+    procedure.argument = 1;
+    expect(f2c_procedure_is_indirect(&procedure),
+           "a procedure dummy keeps runtime target identity with a specific interface");
+    procedure.argument = 0;
+    procedure.procedure_pointer = 1;
+    expect(f2c_procedure_is_indirect(&procedure),
+           "a procedure pointer is not replaced by its interface's implementation");
+}
+
 int main(void) {
     test_ordinary_call();
     test_pass_positions();
     test_invalid_calls();
+    test_indirect_identity();
     return failures != 0;
 }
