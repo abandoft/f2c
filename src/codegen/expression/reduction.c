@@ -8,6 +8,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+static char *take_scalar_result(Buffer *result, const F2cExpr *expression) {
+    char *code = f2c_buffer_take(result);
+    if (code == NULL || (expression->type != TYPE_INTEGER && expression->type != TYPE_LOGICAL))
+        return code;
+    /* C promotes narrow INTEGER arms of a conditional to int. Preserve the
+     * complete guarded Fortran result model, also for bool-returning kernels. */
+    Buffer typed = {0};
+    f2c_buffer_printf(&typed, "((%s)(%s))", f2c_expression_c_type(expression), code);
+    free(code);
+    return f2c_buffer_take(&typed);
+}
+
 static const F2cExpr *reduction_argument_value(const F2cExpr *argument) {
     return argument != NULL && argument->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
                    argument->child_count == 1U
@@ -502,7 +514,7 @@ static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) 
     f2c_array_view_discard(&left_view);
     f2c_array_view_discard(&right_view);
     free(zero);
-    return f2c_buffer_take(&result);
+    return take_scalar_result(&result, expression);
 
 unsupported:
     f2c_array_view_discard(&left_view);
@@ -648,7 +660,7 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
     free(back_code);
     free(zero);
     free(qualified_kernel.data);
-    return f2c_buffer_take(&result);
+    return take_scalar_result(&result, expression);
 
 unsupported:
     f2c_array_view_discard(&array_view);
