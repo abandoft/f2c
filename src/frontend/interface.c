@@ -195,10 +195,14 @@ static Unit *find_signature_in_scope(Unit *scope, const char *name, int include_
         Unit *candidate = &scope->interfaces[i];
         if ((!candidate->interface_abstract || include_abstract) &&
             (strcmp(candidate->name, name) == 0 ||
-             (candidate->interface_generic_name != NULL &&
-              strcmp(candidate->interface_generic_name, name) == 0)))
+             strcmp(interface_specific_name(candidate), name) == 0))
             return candidate;
     }
+    const Symbol *associated = f2c_find_symbol(scope, name);
+    if (associated != NULL && associated->external_signature_explicit &&
+        associated->generic_candidate_count == 0U && associated->procedure_interface != NULL &&
+        (!associated->procedure_interface->interface_abstract || include_abstract))
+        return associated->procedure_interface;
     return NULL;
 }
 

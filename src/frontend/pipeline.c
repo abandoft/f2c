@@ -80,6 +80,9 @@ int f2c_build_typed_program(Context *context) {
         context->options = &context->units.items[index].options;
         f2c_analyze_unit(context, &context->units.items[index]);
     }
+    if (context->result.error_count == 0U && !f2c_finalize_procedure_declarations(context))
+        f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
+                            "out of memory finalizing procedure declaration characteristics");
     if (context->result.error_count == 0U && !f2c_build_procedure_registry(context))
         f2c_diagnostic_code(context, F2C_DIAGNOSTIC_OUT_OF_MEMORY, 1U, 1,
                             "out of memory while building procedure registry");

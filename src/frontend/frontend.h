@@ -42,6 +42,7 @@ void f2c_analyze_unit(Context *context, Unit *unit);
 void f2c_analyze_module(Context *context, Unit *unit);
 void f2c_parse_procedure_declaration(Context *context, Unit *unit, Line *source_line);
 int f2c_copy_procedure_signature(Symbol *symbol, Unit *signature);
+int f2c_finalize_procedure_declarations(Context *context);
 int f2c_copy_function_result_metadata(Symbol *symbol, Unit *signature);
 void f2c_build_statement_ir(Context *context, Unit *unit);
 void f2c_prepare_implicit_map(Context *context, Unit *unit);

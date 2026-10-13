@@ -183,7 +183,7 @@ static void lower_declaration(Context *context, Unit *unit, const Line *line,
         return;
     }
     signature = f2c_find_interface_signature(context, unit, interface_name, 1);
-    if (signature == NULL || strcmp(signature->name, interface_name) != 0) {
+    if (signature == NULL) {
         f2c_diagnostic_token_code(
             context, F2C_DIAGNOSTIC_SEMANTIC, line, syntax->interface_name, 1,
             "PROCEDURE interface '%s' is not a visible specific or abstract interface",
@@ -226,6 +226,33 @@ static void lower_declaration(Context *context, Unit *unit, const Line *line,
         free(name);
     }
     free(interface_name);
+}
+
+static int refresh_procedure_declarations(Unit *scope) {
+    for (size_t index = 0U; index < scope->symbol_count; ++index) {
+        Symbol *symbol = &scope->symbols[index];
+        if (symbol->external_signature_explicit && symbol->procedure_interface != NULL &&
+            !symbol->type_bound &&
+            !f2c_copy_procedure_signature(symbol, symbol->procedure_interface))
+            return 0;
+    }
+    for (size_t index = 0U; index < scope->interface_count; ++index)
+        if (!refresh_procedure_declarations(&scope->interfaces[index]))
+            return 0;
+    return 1;
+}
+
+int f2c_finalize_procedure_declarations(Context *context) {
+    /* Specific procedures may be declared after a referencing entity. Refresh
+     * the copied characteristics only after every declaration scope is ready,
+     * before statement AST binding and procedure compatibility validation. */
+    for (size_t index = 0U; index < context->modules.count; ++index)
+        if (!refresh_procedure_declarations(&context->modules.items[index]))
+            return 0;
+    for (size_t index = 0U; index < context->units.count; ++index)
+        if (!refresh_procedure_declarations(&context->units.items[index]))
+            return 0;
+    return 1;
 }
 
 void f2c_parse_procedure_declaration(Context *context, Unit *unit, Line *source_line) {
