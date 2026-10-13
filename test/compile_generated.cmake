@@ -41,6 +41,8 @@ if(F2C_MSVC_FRONTEND AND
     set(CC_COMMAND cmd.exe /d /c call "${compiler_wrapper}")
 endif()
 
+include("${SOURCE_DIR}/test/generated/array_copy.cmake")
+
 set(generated "${BINARY_DIR}/generated_daxpy.c")
 set(executable "${BINARY_DIR}/generated_daxpy_test")
 
