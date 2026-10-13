@@ -1,5 +1,7 @@
 #include "codegen/unit/private.h"
 
+#include "core/generated/private.h"
+
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -288,18 +290,9 @@ void f2c_emit_interface_header(Context *context) {
                               "#define F2C_COMPLEX_DOUBLE_INITIALIZER(real_part, imag_part) "
                               "((real_part) + (imag_part) * I)\n"
                               "#endif\n"
-                              "#endif\n\n"
-                              "typedef struct f2c_descriptor {\n"
-                              "    void *data;\n"
-                              "    bool deallocatable;\n"
-                              "    size_t element_size;\n"
-                              "    size_t rank;\n"
-                              "    int64_t lower[15];\n"
-                              "    int64_t extent[15];\n"
-                              "    ptrdiff_t stride[15];\n"
-                              "    size_t character_length;\n"
-                              "} f2c_descriptor;\n\n"
-                              "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
+                              "#endif\n\n");
+    f2c_emit_descriptor_declaration(output);
+    f2c_buffer_append(output, "\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
     for (i = 0U; i < context->units.count; ++i) {
         if (context->units.items[i].kind == UNIT_SUBROUTINE ||
             context->units.items[i].kind == UNIT_FUNCTION) {
