@@ -118,8 +118,5 @@ int f2c_intrinsic_is_reduction(F2cIntrinsicId intrinsic);
 int f2c_intrinsic_is_transformational(F2cIntrinsicId intrinsic);
 const F2cExpr *f2c_intrinsic_argument(F2cExpr *const *arguments, size_t count, const char *keyword,
                                       size_t position);
-Type f2c_resolve_intrinsic_type(const char *name, const Type *arguments, size_t count);
-size_t f2c_resolve_intrinsic_rank(const char *name, F2cExpr *const *arguments, size_t count);
-int f2c_resolve_intrinsic_kind(const char *name, F2cExpr *const *arguments, size_t count);
 
 #endif

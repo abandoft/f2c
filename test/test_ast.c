@@ -1,4 +1,5 @@
 #include "internal/f2c.h"
+#include "semantic/intrinsic/result.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -389,9 +390,10 @@ static void test_single_precision_intrinsic_expression(void) {
 }
 
 static void test_intrinsic_type_registry(void) {
-    const Type real_argument[] = {TYPE_REAL};
-    const Type complex_argument[] = {TYPE_COMPLEX};
-    const Type transfer_arguments[] = {TYPE_REAL, TYPE_COMPLEX, TYPE_INTEGER};
+    F2cExpr real_argument = {.type = TYPE_REAL, .type_kind = 4};
+    F2cExpr complex_argument = {.type = TYPE_COMPLEX, .type_kind = 4};
+    F2cExpr integer_argument = {.type = TYPE_INTEGER, .type_kind = 4};
+    F2cExpr *model_arguments[] = {&real_argument, &complex_argument, &integer_argument};
     F2cExpr integer_eight;
     F2cExpr *kind_arguments[1];
     F2cExpr array_argument;
@@ -401,23 +403,32 @@ static void test_intrinsic_type_registry(void) {
     F2cExpr *intrinsic_call;
     const char *error_at = NULL;
     const F2cIntrinsicSignature *mod_signature;
-    expect(f2c_resolve_intrinsic_type("sqrt", real_argument, 1U) == TYPE_REAL,
-           "generic SQRT preserves REAL kind");
-    expect(f2c_resolve_intrinsic_type("abs", complex_argument, 1U) == TYPE_REAL,
+    expect(
+        f2c_intrinsic_result(NULL, f2c_find_intrinsic("sqrt"), model_arguments, 1U).scalar.type ==
+            TYPE_REAL,
+        "generic SQRT preserves REAL kind");
+    model_arguments[0] = &complex_argument;
+    expect(f2c_intrinsic_result(NULL, f2c_find_intrinsic("abs"), model_arguments, 1U).scalar.type ==
+               TYPE_REAL,
            "complex ABS has a REAL result");
-    expect(f2c_resolve_intrinsic_type("transfer", transfer_arguments, 3U) == TYPE_COMPLEX,
+    model_arguments[0] = &real_argument;
+    expect(f2c_intrinsic_result(NULL, f2c_find_intrinsic("transfer"), model_arguments, 3U)
+                   .scalar.type == TYPE_COMPLEX,
            "TRANSFER result type is determined by its mold");
     memset(&integer_eight, 0, sizeof(integer_eight));
     integer_eight.type = TYPE_INTEGER;
     integer_eight.type_kind = 8;
     integer_eight.rank = 2U;
     kind_arguments[0] = &integer_eight;
-    expect(f2c_resolve_intrinsic_kind("iand", kind_arguments, 1U) == 8,
+    expect(f2c_intrinsic_result(NULL, f2c_find_intrinsic("iand"), kind_arguments, 1U).scalar.kind ==
+               8,
            "bit intrinsic result kind is inherited from I");
     integer_eight.type = TYPE_DERIVED;
     integer_eight.type_kind = 0;
-    expect(f2c_resolve_intrinsic_kind("merge", kind_arguments, 1U) == 0,
-           "MERGE preserves the absence of a kind parameter for derived values");
+    expect(
+        f2c_intrinsic_result(NULL, f2c_find_intrinsic("merge"), kind_arguments, 1U).scalar.kind ==
+            0,
+        "MERGE preserves the absence of a kind parameter for derived values");
     integer_eight.type = TYPE_INTEGER;
     integer_eight.type_kind = 8;
     expect(f2c_find_intrinsic("ishftc") != NULL &&
@@ -434,7 +445,7 @@ static void test_intrinsic_type_registry(void) {
     expect(f2c_find_intrinsic("selected_real_kind") != NULL &&
                f2c_find_intrinsic("selected_real_kind")->id == F2C_INTRINSIC_SELECTED_REAL_KIND,
            "numeric model intrinsics have stable typed-IR identities");
-    expect(f2c_resolve_intrinsic_rank("bit_size", kind_arguments, 1U) == 0U,
+    expect(f2c_intrinsic_result_rank(f2c_find_intrinsic("bit_size"), kind_arguments, 1U) == 0U,
            "BIT_SIZE is scalar even when its model argument is not elemental");
     mod_signature = f2c_find_intrinsic("mod");
     expect(mod_signature != NULL && mod_signature->minimum_arguments == 2U &&
@@ -448,21 +459,23 @@ static void test_intrinsic_type_registry(void) {
     rank_arguments[0] = &array_argument;
     rank_arguments[1] = &scalar_argument;
     rank_arguments[2] = &scalar_argument;
-    expect(f2c_resolve_intrinsic_rank("len", rank_arguments, 1U) == 0U,
+    expect(f2c_intrinsic_result_rank(f2c_find_intrinsic("len"), rank_arguments, 1U) == 0U,
            "inquiry LEN is scalar even when its character argument is an array");
-    expect(f2c_resolve_intrinsic_rank("adjustl", rank_arguments, 1U) == 2U,
+    expect(f2c_intrinsic_result_rank(f2c_find_intrinsic("adjustl"), rank_arguments, 1U) == 2U,
            "elemental character intrinsics derive rank from their value argument");
-    expect(f2c_resolve_intrinsic_rank("trim", rank_arguments, 1U) == 0U,
+    expect(f2c_intrinsic_result_rank(f2c_find_intrinsic("trim"), rank_arguments, 1U) == 0U,
            "transformational TRIM requires and returns a scalar");
-    expect(f2c_resolve_intrinsic_rank("kind", rank_arguments, 1U) == 0U,
+    expect(f2c_intrinsic_result_rank(f2c_find_intrinsic("kind"), rank_arguments, 1U) == 0U,
            "inquiry KIND has a scalar result for an array model");
     array_argument.type = TYPE_DOUBLE;
     array_argument.type_kind = 8;
-    expect(f2c_resolve_intrinsic_kind("epsilon", rank_arguments, 1U) == 8,
-           "EPSILON preserves the model REAL kind");
-    expect(f2c_resolve_intrinsic_rank("precision", rank_arguments, 1U) == 0U,
+    expect(
+        f2c_intrinsic_result(NULL, f2c_find_intrinsic("epsilon"), rank_arguments, 1U).scalar.kind ==
+            8,
+        "EPSILON preserves the model REAL kind");
+    expect(f2c_intrinsic_result_rank(f2c_find_intrinsic("precision"), rank_arguments, 1U) == 0U,
            "numeric model inquiries return scalars for array model arguments");
-    expect(f2c_resolve_intrinsic_rank("transfer", rank_arguments, 3U) == 1U,
+    expect(f2c_intrinsic_result_rank(f2c_find_intrinsic("transfer"), rank_arguments, 3U) == 1U,
            "TRANSFER with SIZE has a rank-one result");
     memset(&unit, 0, sizeof(unit));
     intrinsic_call = f2c_parse_expression_ast(

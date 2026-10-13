@@ -1,313 +1,54 @@
 #include "ast/internal.h"
 
-#include <limits.h>
-#include <stdlib.h>
+#include "semantic/intrinsic/result.h"
+#include "semantic/operator.h"
+
 #include <string.h>
 
-static int matmul_result_kind(const F2cExpr *expression) {
-    int result = 0;
-    size_t argument;
-    if (expression == NULL)
-        return f2c_default_kind(TYPE_UNKNOWN);
-    for (argument = 0U; argument < expression->child_count; ++argument) {
-        const F2cExpr *value = f2c_ast_intrinsic_argument_value(expression->children[argument]);
-        int contributes = 0;
-        if (value == NULL)
-            continue;
-        if (expression->type == TYPE_INTEGER)
-            contributes = value->type == TYPE_INTEGER;
-        else if (expression->type == TYPE_LOGICAL)
-            contributes = value->type == TYPE_LOGICAL;
-        else if (expression->type == TYPE_REAL || expression->type == TYPE_DOUBLE)
-            contributes = value->type == TYPE_REAL || value->type == TYPE_DOUBLE;
-        else if (expression->type == TYPE_COMPLEX || expression->type == TYPE_DOUBLE_COMPLEX)
-            contributes = value->type == TYPE_REAL || value->type == TYPE_DOUBLE ||
-                          value->type == TYPE_COMPLEX || value->type == TYPE_DOUBLE_COMPLEX;
-        if (contributes && value->type_kind > result)
-            result = value->type_kind;
-    }
-    return result != 0 ? result : f2c_default_kind(expression->type);
-}
-
-static const F2cExpr *typed_intrinsic_primary(const F2cExpr *expression,
-                                              const F2cIntrinsicSignature *signature) {
-    const char *keyword = "x";
-    if (expression == NULL || signature == NULL)
-        return NULL;
-    switch (signature->id) {
-    case F2C_INTRINSIC_ABS:
-    case F2C_INTRINSIC_DBLE:
-    case F2C_INTRINSIC_INT:
-    case F2C_INTRINSIC_REAL:
-        keyword = "a";
-        break;
-    case F2C_INTRINSIC_LOGICAL:
-        keyword = "l";
-        break;
-    case F2C_INTRINSIC_AIMAG:
-    case F2C_INTRINSIC_CONJG:
-        keyword = "z";
-        break;
-    case F2C_INTRINSIC_ATAN2:
-        keyword = "y";
-        break;
-    case F2C_INTRINSIC_CMPLX:
-        keyword = "x";
-        break;
-    case F2C_INTRINSIC_MAX:
-    case F2C_INTRINSIC_MIN:
-        keyword = "a1";
-        break;
-    case F2C_INTRINSIC_DOT_PRODUCT:
-        keyword = "vector_a";
-        break;
-    case F2C_INTRINSIC_MAXVAL:
-    case F2C_INTRINSIC_MINVAL:
-    case F2C_INTRINSIC_PRODUCT:
-    case F2C_INTRINSIC_SUM:
-        keyword = "array";
-        break;
-    case F2C_INTRINSIC_NONE:
-    default:
-        break;
-    }
-    return f2c_intrinsic_argument(expression->children, expression->child_count, keyword, 0U);
-}
-
-static void resolve_intrinsic_type(F2cExpr *expression, const F2cIntrinsicSignature *signature) {
-    Type *argument_types = expression->child_count != 0U
-                               ? (Type *)malloc(expression->child_count * sizeof(*argument_types))
+static void resolve_generated_call(F2cExpr *expression) {
+    const F2cExpr *first = expression->child_count != 0U
+                               ? f2c_ast_intrinsic_argument_value(expression->children[0])
                                : NULL;
-    size_t argument;
-    for (argument = 0U; argument < expression->child_count && argument_types != NULL; ++argument)
-        argument_types[argument] = expression->children[argument]->type;
-    expression->type =
-        argument_types != NULL || expression->child_count == 0U
-            ? f2c_resolve_intrinsic_type(expression->text, argument_types, expression->child_count)
-            : TYPE_UNKNOWN;
-    free(argument_types);
-
-    if (signature != NULL && signature->id == F2C_INTRINSIC_TRANSFER) {
-        const F2cExpr *mold =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "mold", 1U);
-        if (mold != NULL)
-            expression->type = mold->type;
-    }
-
-    if (signature != NULL && (f2c_intrinsic_is_mathematical(signature->id) ||
-                              f2c_intrinsic_is_conversion(signature->id))) {
-        const F2cExpr *primary = typed_intrinsic_primary(expression, signature);
-        if (primary != NULL) {
-            if (signature->id == F2C_INTRINSIC_ABS || signature->id == F2C_INTRINSIC_AIMAG) {
-                expression->type = primary->type == TYPE_DOUBLE_COMPLEX ? TYPE_DOUBLE
-                                   : primary->type == TYPE_COMPLEX      ? TYPE_REAL
-                                                                        : primary->type;
-            } else if (signature->id == F2C_INTRINSIC_REAL) {
-                expression->type = primary->type == TYPE_DOUBLE_COMPLEX ? TYPE_DOUBLE : TYPE_REAL;
-            } else if (signature->type_rule == F2C_INTRINSIC_TYPE_FIRST) {
-                expression->type = primary->type;
-            }
-        }
-    }
-    if (signature != NULL && f2c_intrinsic_is_reduction(signature->id) &&
-        signature->type_rule == F2C_INTRINSIC_TYPE_FIRST) {
-        const F2cExpr *array = typed_intrinsic_primary(expression, signature);
-        if (array != NULL)
-            expression->type = array->type;
-    }
-    if (signature != NULL && f2c_intrinsic_is_real_representation(signature->id)) {
-        const F2cExpr *model =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "x", 0U);
-        if (model != NULL)
-            expression->type = signature->id == F2C_INTRINSIC_EXPONENT ? TYPE_INTEGER : model->type;
-    }
-    if (signature != NULL &&
-        (signature->id == F2C_INTRINSIC_AINT || signature->id == F2C_INTRINSIC_ANINT)) {
-        const F2cExpr *model =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "a", 0U);
-        const F2cExpr *kind =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 1U);
-        const Type selected = f2c_ast_kind_type_from_argument(kind);
-        if (model != NULL)
-            expression->type = model->type;
-        if (selected == TYPE_REAL || selected == TYPE_DOUBLE)
-            expression->type = selected;
-    } else if (signature != NULL && signature->id == F2C_INTRINSIC_MERGE) {
-        const F2cExpr *source =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "tsource", 0U);
-        if (source != NULL)
-            expression->type = source->type;
-    }
-    if (signature != NULL && signature->id == F2C_INTRINSIC_REAL &&
-        signature->maximum_arguments == 2U) {
-        const F2cExpr *kind =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 1U);
-        const Type kind_type = f2c_ast_kind_type_from_argument(kind);
-        if (kind_type == TYPE_REAL || kind_type == TYPE_DOUBLE)
-            expression->type = kind_type;
-    } else if (signature != NULL && signature->id == F2C_INTRINSIC_CMPLX &&
-               signature->maximum_arguments == 3U) {
-        const F2cExpr *kind =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 2U);
-        const Type kind_type = f2c_ast_kind_type_from_argument(kind);
-        if (kind_type == TYPE_REAL)
-            expression->type = TYPE_COMPLEX;
-        else if (kind_type == TYPE_DOUBLE)
-            expression->type = TYPE_DOUBLE_COMPLEX;
-    }
-}
-
-static void resolve_intrinsic_shape(AstParser *parser, F2cExpr *expression,
-                                    const F2cIntrinsicSignature *signature) {
-    size_t argument;
-    expression->rank = signature != NULL
-                           ? f2c_resolve_intrinsic_rank(signature->name, expression->children,
-                                                        expression->child_count)
-                           : 0U;
-    if (signature == NULL) {
-        for (argument = 0U; argument < expression->child_count; ++argument) {
-            if (expression->children[argument]->rank > expression->rank)
-                expression->rank = expression->children[argument]->rank;
-        }
-    }
-    f2c_ast_set_expression_shape(expression, expression->rank, F2C_SHAPE_EXPRESSION);
-    if (expression->rank != 0U) {
-        for (argument = 0U; argument < expression->child_count; ++argument) {
-            if (expression->children[argument]->rank == expression->rank &&
-                expression->children[argument]->shape.rank == expression->rank) {
-                f2c_ast_copy_expression_shape(expression, &expression->children[argument]->shape);
+    const Type primary = first != NULL ? first->type : TYPE_UNKNOWN;
+    expression->type = f2c_generated_intrinsic_type(expression->text, primary);
+    expression->type_kind = first != NULL && first->type == expression->type
+                                ? first->type_kind
+                                : f2c_default_kind(expression->type);
+    if ((strcmp(expression->text, "F2C_FORTRAN_MAX") == 0 ||
+         strcmp(expression->text, "F2C_FORTRAN_MIN") == 0) &&
+        first != NULL) {
+        F2cScalarType common = f2c_expression_scalar_type(first);
+        for (size_t index = 1U; index < expression->child_count; ++index) {
+            F2cOperatorTyping typing;
+            const F2cExpr *argument = f2c_ast_intrinsic_argument_value(expression->children[index]);
+            if (f2c_operator_typing(F2C_OPERATOR_ADD, 0, common,
+                                    f2c_expression_scalar_type(argument),
+                                    &typing) != F2C_OPERATOR_VALID)
                 break;
-            }
+            common = typing.result;
         }
+        expression->type = common.type;
+        expression->type_kind = common.kind;
     }
-    if (expression->intrinsic == F2C_INTRINSIC_TRANSPOSE && expression->child_count == 1U &&
-        expression->children[0]->shape.rank == 2U) {
-        const F2cShape source_shape = expression->children[0]->shape;
-        expression->shape.rank = 2U;
-        expression->shape.kind = F2C_SHAPE_EXPRESSION;
-        expression->shape.dimensions[0] = source_shape.dimensions[1];
-        expression->shape.dimensions[1] = source_shape.dimensions[0];
-    } else if (expression->intrinsic == F2C_INTRINSIC_MATMUL && expression->child_count == 2U) {
-        const F2cExpr *left = f2c_ast_intrinsic_argument_value(expression->children[0]);
-        const F2cExpr *right = f2c_ast_intrinsic_argument_value(expression->children[1]);
-        expression->shape.kind = F2C_SHAPE_EXPRESSION;
-        expression->shape.rank = expression->rank;
-        if (expression->rank == 2U) {
-            if (left != NULL && left->rank == 2U)
-                expression->shape.dimensions[0] = left->shape.dimensions[0];
-            if (right != NULL && right->rank == 2U)
-                expression->shape.dimensions[1] = right->shape.dimensions[1];
-        } else if (expression->rank == 1U) {
-            if (left != NULL && left->rank == 2U)
-                expression->shape.dimensions[0] = left->shape.dimensions[0];
-            else if (right != NULL && right->rank == 2U)
-                expression->shape.dimensions[0] = right->shape.dimensions[1];
-        }
+    size_t rank = 0U;
+    for (size_t index = 0U; index < expression->child_count; ++index) {
+        const F2cExpr *argument = f2c_ast_intrinsic_argument_value(expression->children[index]);
+        if (argument != NULL && argument->rank > rank)
+            rank = argument->rank;
     }
-    if (f2c_intrinsic_is_transformational(expression->intrinsic) ||
-        expression->intrinsic == F2C_INTRINSIC_SHAPE ||
-        expression->intrinsic == F2C_INTRINSIC_LBOUND ||
-        expression->intrinsic == F2C_INTRINSIC_UBOUND ||
-        f2c_intrinsic_is_reduction(expression->intrinsic))
-        f2c_ast_set_transform_intrinsic_shape(parser, expression);
-}
-
-static void resolve_intrinsic_kind(AstParser *parser, F2cExpr *expression,
-                                   const F2cIntrinsicSignature *signature) {
-    expression->type_kind = f2c_default_kind(expression->type);
-    if (expression->child_count != 0U) {
-        const F2cExpr *first_argument = f2c_ast_intrinsic_argument_value(expression->children[0]);
-        if (first_argument != NULL && first_argument->type == expression->type) {
-            expression->type_kind = first_argument->type_kind;
-            if (expression->type == TYPE_DERIVED)
-                expression->derived_type = first_argument->derived_type;
-        }
-    }
-    if (expression->intrinsic == F2C_INTRINSIC_MATMUL)
-        expression->type_kind = matmul_result_kind(expression);
-    if (signature != NULL && signature->id == F2C_INTRINSIC_TRANSFER) {
-        const F2cExpr *mold =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "mold", 1U);
-        if (mold != NULL) {
-            expression->type_kind =
-                mold->type_kind != 0 ? mold->type_kind : f2c_default_kind(mold->type);
-            expression->derived_type = mold->derived_type;
-        }
-    }
-    if (signature != NULL && signature->id == F2C_INTRINSIC_MERGE) {
-        const F2cExpr *source =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "tsource", 0U);
-        if (source != NULL) {
-            expression->type_kind = source->type_kind;
-            expression->derived_type = source->derived_type;
-        }
-    }
-    if (expression->intrinsic == F2C_INTRINSIC_SIZE ||
-        expression->intrinsic == F2C_INTRINSIC_LBOUND ||
-        expression->intrinsic == F2C_INTRINSIC_UBOUND ||
-        expression->intrinsic == F2C_INTRINSIC_SHAPE) {
-        const F2cExpr *kind_argument = f2c_ast_intrinsic_argument(
-            expression, "kind", expression->intrinsic == F2C_INTRINSIC_SHAPE ? 1U : 2U);
-        const int selected_kind = f2c_ast_kind_value_from_argument(kind_argument);
-        if (selected_kind != 0)
-            expression->type_kind = selected_kind;
-    }
-    if (signature != NULL && signature->kind_rule != F2C_INTRINSIC_KIND_DEFAULT)
-        expression->type_kind = f2c_resolve_intrinsic_kind(expression->text, expression->children,
-                                                           expression->child_count);
-    if (signature != NULL && (signature->kind_rule == F2C_INTRINSIC_KIND_OPTIONAL ||
-                              signature->kind_rule == F2C_INTRINSIC_KIND_FIRST_OPTIONAL)) {
-        const F2cExpr *kind_argument =
-            f2c_ast_intrinsic_argument(expression, "kind", signature->maximum_arguments - 1U);
-        const int selected_kind = f2c_ast_kind_value_from_argument(kind_argument);
-        if (selected_kind != 0)
-            expression->type_kind = selected_kind;
-    }
-    if (strcmp(expression->text, "real") == 0) {
-        const F2cExpr *source =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "a", 0U);
-        const F2cExpr *kind =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 1U);
-        const int selected_kind = f2c_ast_kind_value_from_argument(kind);
-        if (selected_kind != 0) {
-            expression->type_kind = selected_kind;
-        } else if (source != NULL &&
-                   (source->type == TYPE_COMPLEX || source->type == TYPE_DOUBLE_COMPLEX)) {
-            expression->type_kind =
-                source->type_kind != 0 ? source->type_kind : f2c_default_kind(source->type);
-        }
-    } else if (strcmp(expression->text, "cmplx") == 0) {
-        const F2cExpr *kind =
-            f2c_intrinsic_argument(expression->children, expression->child_count, "kind", 2U);
-        const int selected_kind = f2c_ast_kind_value_from_argument(kind);
-        expression->type_kind = selected_kind != 0 ? selected_kind : 4;
-    }
-    /* Resolve optional KIND from the registered argument slot and the scoped
-     * typed constant service, not an inferred type or a last-slot convention.
-     * FINDLOC/MAXLOC/MINLOC have BACK after KIND; named integer kind constants
-     * and arithmetic selectors must retain their actual model value. */
-    const F2cIntrinsicArgumentSchema *schema =
-        signature != NULL ? f2c_intrinsic_argument_schema(signature->id) : NULL;
-    if (schema != NULL) {
-        for (size_t position = 0U; position < schema->count; ++position) {
-            if (strcmp(schema->names[position], "kind") != 0)
-                continue;
-            const F2cExpr *kind = f2c_intrinsic_argument(expression->children,
-                                                        expression->child_count, "kind", position);
-            int64_t value;
-            if (kind != NULL && kind->type == TYPE_INTEGER && kind->rank == 0U &&
-                f2c_evaluate_integer_constant(parser != NULL ? parser->unit : NULL, kind, &value) &&
-                value > 0 && value <= INT_MAX)
-                expression->type_kind = (int)value;
+    f2c_ast_set_expression_shape(expression, rank, F2C_SHAPE_EXPRESSION);
+    for (size_t index = 0U; index < expression->child_count && rank != 0U; ++index) {
+        const F2cExpr *argument = f2c_ast_intrinsic_argument_value(expression->children[index]);
+        if (argument != NULL && argument->shape.rank == rank) {
+            f2c_ast_copy_expression_shape(expression, &argument->shape);
             break;
         }
     }
 }
 
 void f2c_ast_resolve_intrinsic_call(AstParser *parser, F2cExpr *expression) {
-    const F2cIntrinsicSignature *signature = f2c_find_intrinsic(expression->text);
-    resolve_intrinsic_type(expression, signature);
-    expression->intrinsic = signature != NULL ? signature->id : F2C_INTRINSIC_NONE;
-    resolve_intrinsic_shape(parser, expression, signature);
-    resolve_intrinsic_kind(parser, expression, signature);
+    if (f2c_find_intrinsic(expression->text) != NULL)
+        f2c_intrinsic_refresh_result(parser != NULL ? parser->unit : NULL, expression);
+    else
+        resolve_generated_call(expression);
 }

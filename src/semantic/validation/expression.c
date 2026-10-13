@@ -1,4 +1,5 @@
 #include "semantic/default_initialization.h"
+#include "semantic/intrinsic/result.h"
 #include "semantic/operator.h"
 #include "semantic/validation/private.h"
 
@@ -576,6 +577,7 @@ void f2c_validation_expression_calls(Context *context, Unit *unit, size_t line,
     for (i = 0U; i < expression->child_count; ++i)
         f2c_validation_expression_calls(context, unit, line, statement_text,
                                         expression->children[i]);
+    f2c_intrinsic_refresh_result(unit, expression);
     if (expression->kind == F2C_EXPR_PARENTHESIZED) {
         f2c_expr_refresh_parenthesized(expression);
         if (expression->child_count != 1U || expression->children[0] == NULL ||

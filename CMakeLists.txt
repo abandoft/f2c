@@ -425,6 +425,9 @@ set(
     src/semantic/intrinsic/extremum.c
     src/semantic/intrinsic/extremum.h
     src/semantic/intrinsic/resolution.c
+    src/semantic/intrinsic/result.c
+    src/semantic/intrinsic/result.h
+    src/semantic/intrinsic/shape.c
     src/semantic/intrinsic.h
     src/semantic/model.h
     src/semantic/scope.c
