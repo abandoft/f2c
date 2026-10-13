@@ -707,6 +707,10 @@ if(F2C_BUILD_TESTING)
     f2c_configure_internal_test_target(f2c_access_tests)
     add_test(NAME access_qualifiers COMMAND f2c_access_tests)
 
+    add_executable(f2c_array_copy_emit test/generated/array_copy_emit.c)
+    target_include_directories(f2c_array_copy_emit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_array_copy_emit)
+
     add_executable(f2c_storage_state_tests test/test_storage_state.c)
     target_include_directories(f2c_storage_state_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     f2c_configure_internal_test_target(f2c_storage_state_tests)
@@ -1047,6 +1051,7 @@ if(F2C_BUILD_TESTING)
         COMMAND
             ${CMAKE_COMMAND}
             -DF2C=$<TARGET_FILE:f2c>
+            -DCOPY_EMITTER=$<TARGET_FILE:f2c_array_copy_emit>
             -DCC=${CMAKE_C_COMPILER}
             -DCC_ID=${CMAKE_C_COMPILER_ID}
             -DCC_FRONTEND_VARIANT=${CMAKE_C_COMPILER_FRONTEND_VARIANT}
