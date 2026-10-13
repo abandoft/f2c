@@ -1,7 +1,8 @@
 #include "semantic/validation/private.h"
 
-#include "semantic/validation/intrinsic/arguments.h"
+#include "semantic/constant/array.h"
 #include "semantic/operator.h"
+#include "semantic/validation/intrinsic/arguments.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -165,7 +166,6 @@ static void validate_reshape(Context *context, Unit *unit, size_t line, const ch
     const F2cExpr *shape = arguments->values[1];
     const F2cExpr *pad = arguments->values[2];
     const F2cExpr *order = arguments->values[3];
-    size_t element;
     if (source != NULL && source->rank == 0U)
         diagnose_argument(context, line, statement_text, "RESHAPE", "SOURCE", source, "an array");
     if (shape != NULL && (shape->type != TYPE_INTEGER || shape->rank != 1U))
@@ -177,42 +177,49 @@ static void validate_reshape(Context *context, Unit *unit, size_t line, const ch
     if (order != NULL && (order->type != TYPE_INTEGER || order->rank != 1U))
         diagnose_argument(context, line, statement_text, "RESHAPE", "ORDER", order,
                           "a rank-one INTEGER array");
-    if (shape != NULL && shape->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
-        unsigned char seen[F2C_MAX_RANK] = {0};
-        if (shape->child_count == 0U || shape->child_count > F2C_MAX_RANK)
-            f2c_diagnostic_at(
-                context, line, f2c_validation_expression_start_column(statement_text, shape), 1,
-                "RESHAPE SHAPE must contain between 1 and %u extents", (unsigned int)F2C_MAX_RANK);
-        for (element = 0U; element < shape->child_count; ++element) {
-            int64_t extent;
-            if (f2c_evaluate_integer_constant(unit, shape->children[element], &extent) &&
-                extent < 0)
+    if (shape == NULL || shape->type != TYPE_INTEGER || shape->rank != 1U)
+        return;
+    const F2cShapeDimension *length = &shape->shape.dimensions[0];
+    if (!length->extent_known)
+        return; /* Lowering requires a statically determined result rank. */
+    const uint64_t rank = length->extent;
+    if (rank == 0U || rank > F2C_MAX_RANK) {
+        f2c_diagnostic_at(
+            context, line, f2c_validation_expression_start_column(statement_text, shape), 1,
+            "RESHAPE SHAPE must contain between 1 and %u extents", (unsigned int)F2C_MAX_RANK);
+        return;
+    }
+    F2cConstantArray shape_values = {0};
+    if (f2c_evaluate_constant_array(unit, shape, &shape_values))
+        for (size_t element = 0U; element < shape_values.count; ++element)
+            if (shape_values.values[element].payload.integer < 0)
                 f2c_diagnostic_at(context, line,
-                                  f2c_validation_expression_start_column(statement_text,
-                                                                         shape->children[element]),
-                                  1, "RESHAPE SHAPE extents must not be negative");
-        }
-        if (order != NULL && order->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
-            if (order->child_count != shape->child_count)
-                f2c_diagnostic_at(
-                    context, line, f2c_validation_expression_start_column(statement_text, order), 1,
-                    "RESHAPE ORDER must contain exactly one value for each SHAPE extent");
-            for (element = 0U; element < order->child_count; ++element) {
-                int64_t value;
-                if (!f2c_evaluate_integer_constant(unit, order->children[element], &value))
-                    continue;
-                if (value < 1 || (uint64_t)value > shape->child_count ||
-                    seen[(size_t)(value > 0 ? value - 1 : 0)] != 0U)
-                    f2c_diagnostic_at(context, line,
-                                      f2c_validation_expression_start_column(
-                                          statement_text, order->children[element]),
-                                      1,
-                                      "RESHAPE ORDER must be a permutation of result dimensions");
-                else
-                    seen[(size_t)value - 1U] = 1U;
-            }
+                                  f2c_validation_expression_start_column(statement_text, shape), 1,
+                                  "RESHAPE SHAPE extents must not be negative");
+    f2c_constant_array_free(&shape_values);
+    if (order == NULL || order->type != TYPE_INTEGER || order->rank != 1U)
+        return;
+    const F2cShapeDimension *order_length = &order->shape.dimensions[0];
+    if (order_length->extent_known && order_length->extent != rank) {
+        f2c_diagnostic_at(context, line,
+                          f2c_validation_expression_start_column(statement_text, order), 1,
+                          "RESHAPE ORDER must contain exactly one value for each SHAPE extent");
+        return;
+    }
+    F2cConstantArray order_values = {0};
+    if (order_length->extent_known && f2c_evaluate_constant_array(unit, order, &order_values)) {
+        unsigned char seen[F2C_MAX_RANK] = {0};
+        for (size_t element = 0U; element < order_values.count; ++element) {
+            const int64_t value = order_values.values[element].payload.integer;
+            if (value < 1 || (uint64_t)value > rank || seen[(size_t)value - 1U] != 0U)
+                f2c_diagnostic_at(context, line,
+                                  f2c_validation_expression_start_column(statement_text, order), 1,
+                                  "RESHAPE ORDER must be a permutation of result dimensions");
+            else
+                seen[(size_t)value - 1U] = 1U;
         }
     }
+    f2c_constant_array_free(&order_values);
 }
 
 static void validate_pack(Context *context, size_t line, const char *statement_text,

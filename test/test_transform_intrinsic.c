@@ -94,6 +94,14 @@ static void test_argument_contracts(void) {
                       "RESHAPE SHAPE extents must not be negative");
     expect_diagnostic("  integer :: values(4)\n", "reshape(values, [2, 2], order=[1, 1])",
                       "RESHAPE ORDER must be a permutation of result dimensions");
+    expect_diagnostic("  integer :: values(4), i\n", "reshape(values, [(i,i=2,-1,-3)])",
+                      "RESHAPE SHAPE extents must not be negative");
+    expect_diagnostic("  integer :: values(4), i\n", "reshape(values, [2,2], order=[(1,i=1,2)])",
+                      "RESHAPE ORDER must be a permutation of result dimensions");
+    expect_diagnostic("  integer :: values(4), i\n", "reshape(values, [(2,i=1,2)], order=[1])",
+                      "RESHAPE ORDER must contain exactly one value for each SHAPE extent");
+    expect_diagnostic("  integer, parameter :: extents(2)=[2,-1]\n  integer :: values(4)\n",
+                      "reshape(values, extents)", "RESHAPE SHAPE extents must not be negative");
     expect_diagnostic("  integer :: values(4), mold\n", "transfer(values, mold, -1)",
                       "TRANSFER SIZE must not be negative");
     expect_diagnostic("  integer :: values(4), mold\n", "transfer(values, mold, 1.0)",
