@@ -101,6 +101,9 @@ foreach(PRODUCTION_FILE IN LISTS PRODUCTION_FILES)
     if(CONTENT MATCHES "netlib-f2c")
         message(FATAL_ERROR "${RELATIVE_FILE} references the archived netlib-f2c tree")
     endif()
+    if(CONTENT MATCHES "f2c_resolve_intrinsic_(type|rank|kind)[ \t\r\n]*\\(")
+        message(FATAL_ERROR "${RELATIVE_FILE} restores independent intrinsic result inference")
+    endif()
     if(
         RELATIVE_FILE MATCHES "^src/ast/declaration/(bindings|storage_bindings)\\.c$"
         AND CONTENT MATCHES "f2c_(ensure_symbol|find_symbol|diagnostic|parse_expression)"
