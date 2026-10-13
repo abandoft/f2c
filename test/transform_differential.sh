@@ -31,7 +31,7 @@ fi
 cmake -E remove_directory "$WORK"
 cmake -E make_directory "$WORK"
 
-for fixture in transform_intrinsics transform_character_derived readonly_derived_borrowed nested_transform_intrinsics \
+for fixture in transform_intrinsics transform_character_derived readonly_derived_borrowed readonly_derived_calls nested_transform_intrinsics \
     transfer_mold transfer_intrinsic; do
     case_work=$WORK/$fixture
     source=$ROOT/test/fixtures/$fixture.f90

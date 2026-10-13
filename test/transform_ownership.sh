@@ -24,7 +24,7 @@ if [ "$(uname -s)" = Darwin ]; then
     asan_leaks=0
 fi
 
-for fixture in nested_transform_derived_ownership readonly_derived_transform transfer_derived_ownership; do
+for fixture in nested_transform_derived_ownership readonly_derived_transform readonly_derived_calls transfer_derived_ownership; do
     source=$ROOT/test/fixtures/$fixture.f90
     case_work=$WORK/$fixture
     cmake -E make_directory "$case_work"

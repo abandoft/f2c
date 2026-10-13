@@ -71,6 +71,7 @@ set(
     transform_character_derived
     readonly_derived_transform
     readonly_derived_borrowed
+    readonly_derived_calls
     nested_transform_intrinsics
     nested_transform_derived_ownership
     findloc_models
