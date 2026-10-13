@@ -43,6 +43,7 @@ endif()
 
 include("${SOURCE_DIR}/test/generated/array_copy.cmake")
 include("${SOURCE_DIR}/test/generated/intrinsic_result.cmake")
+include("${SOURCE_DIR}/test/generated/descriptor_interface.cmake")
 
 set(generated "${BINARY_DIR}/generated_daxpy.c")
 set(executable "${BINARY_DIR}/generated_daxpy_test")
