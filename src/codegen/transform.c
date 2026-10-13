@@ -21,9 +21,15 @@ static char *vector_element(Unit *unit, const F2cExpr *vector, size_t index) {
          value->intrinsic == F2C_INTRINSIC_UBOUND))
         return f2c_transform_inquiry_element(unit, value, index);
     if (value->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
-        if (index >= value->child_count)
-            return NULL;
-        return f2c_transform_emit_expression(unit, value->children[index]);
+        /* An array-valued item or implied DO contributes multiple elements.
+         * The shared constructor materializer owns expansion and evaluation. */
+        for (size_t item = 0U; item < value->child_count; ++item)
+            if (value->children[item] == NULL || value->children[item]->rank != 0U ||
+                value->children[item]->kind == F2C_EXPR_IMPLIED_DO)
+                return NULL;
+        return index < value->child_count
+                   ? f2c_transform_emit_expression(unit, value->children[index])
+                   : NULL;
     }
     if (value->kind == F2C_EXPR_NAME && value->symbol != NULL && value->rank == 1U) {
         Buffer result = {0};
@@ -177,9 +183,10 @@ static int emit_reshape(Context *context, Unit *unit, Symbol *target, const F2cE
         f2c_buffer_printf(
             &context->output,
             "f2c_transform_coordinates[%zu] = (f2c_transform_output / f2c_transform_stride) %% "
-            "f2c_transform_result_extent_%zu; f2c_transform_stride *= "
+            "(f2c_transform_result_extent_%zu != 0U ? f2c_transform_result_extent_%zu : 1U); "
+            "f2c_transform_stride *= "
             "f2c_transform_result_extent_%zu; ",
-            dimension, dimension + 1U, dimension + 1U);
+            dimension, dimension + 1U, dimension + 1U, dimension + 1U);
     f2c_buffer_printf(&context->output,
                       "for (size_t f2c_transform_k = 0U; f2c_transform_k < %zuU; "
                       "++f2c_transform_k) { size_t f2c_transform_d = "
@@ -704,9 +711,10 @@ static int emit_shift(Context *context, Unit *unit, Symbol *target, const F2cExp
         f2c_buffer_printf(
             &context->output,
             "f2c_transform_coordinates[%zu] = (f2c_transform_output / f2c_transform_stride) %% "
-            "f2c_transform_source_extent_%zu; f2c_transform_stride *= "
+            "(f2c_transform_source_extent_%zu != 0U ? f2c_transform_source_extent_%zu : 1U); "
+            "f2c_transform_stride *= "
             "f2c_transform_source_extent_%zu; ",
-            dimension, dimension + 1U, dimension + 1U);
+            dimension, dimension + 1U, dimension + 1U, dimension + 1U);
         if (need_slice)
             f2c_buffer_printf(&context->output,
                               "if (f2c_transform_dimension != %zu) "
