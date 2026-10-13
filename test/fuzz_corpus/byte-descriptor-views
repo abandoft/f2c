@@ -1,0 +1,17 @@
+0program byte_views
+implicit none
+type :: cell
+  real(8) :: value
+  character(5) :: label
+end type
+type(cell), target :: cells(2,3)
+real(8), pointer :: matrix(:,:)
+character(:), pointer :: text(:)
+integer :: i
+cells%value = 1.0_8
+cells%label = 'abcde'
+matrix => cells(2:1:-1,3:1:-1)%value
+i = int(sum(matrix))
+text => cells(:,1)%label(2:3)
+if (associated(text,cells(:,1)%label(2:3))) text = 'XY'
+end program
