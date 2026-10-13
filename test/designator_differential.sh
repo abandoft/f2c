@@ -15,7 +15,7 @@ cmake -E make_directory "$work"
 for name in character_designators character_array_actuals character_length_parameters \
     character_result_effects \
     type_bound_character_results derived_default_initialization \
-    scalar_component_actuals \
+    scalar_component_actuals byte_view_values \
     procedure_pointer_component reduction_designators nested_array_reductions; do
     source=$root/test/fixtures/$name.f90
     "$f2c" "$source" -o "$work/$name.c"

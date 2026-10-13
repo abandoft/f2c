@@ -25,6 +25,7 @@ set(
     character_broadcast_reallocation
     character_actual_evaluation
     scalar_component_actuals
+    byte_view_values
     reduction_designators
     nested_array_reductions
     pointer_section
