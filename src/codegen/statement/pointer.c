@@ -282,6 +282,21 @@ static int emit_array_pointer_assignment(Context *context, Unit *unit,
     indent(&context->output, depth + 1);
     f2c_buffer_printf(&context->output, "%s = %s;\n", pointer_name,
                       null_target ? "NULL" : view.data);
+    const F2cStorageReference pointer_reference = f2c_ir_storage_reference(statement->left);
+    if (pointer_reference.state_source == F2C_OBJECT_STATE_DESCRIPTOR) {
+        indent(&context->output, depth + 1);
+        if ((pointer_reference.state_qualifiers & F2C_STORAGE_VOLATILE) != 0U)
+            f2c_buffer_printf(&context->output,
+                              "(*(volatile unsigned int *)&f2c_descriptor_%s->"
+                              "storage_qualifiers) = %uU;\n",
+                              f2c_symbol_c_name(unit, pointer_reference.symbol),
+                              null_target ? 0U : view.storage_qualifiers);
+        else
+            f2c_buffer_printf(&context->output,
+                              "f2c_descriptor_%s->storage_qualifiers = %uU;\n",
+                              f2c_symbol_c_name(unit, pointer_reference.symbol),
+                              null_target ? 0U : view.storage_qualifiers);
+    }
     indent(&context->output, depth + 1);
     if (statement->pointer_bounds == F2C_POINTER_BOUNDS_REMAPPING) {
         f2c_buffer_printf(&context->output,
