@@ -50,7 +50,7 @@ static void test_live_descriptor_properties(void) {
                 "volatile *)&(f2c_descriptor_values->lower[0])",
                 "bounds writes preserve descriptor-state qualification");
     expect(f2c_storage_write_property(&unit, &reference, F2C_OBJECT_EXTENT, 2U) == NULL &&
-               f2c_storage_read_property(&unit, &reference, F2C_OBJECT_STRIDE, 2U) == NULL,
+               f2c_storage_read_property(&unit, &reference, F2C_OBJECT_BYTE_STRIDE, 2U) == NULL,
            "out-of-rank property accesses are rejected");
     symbol.argument = 0;
     const F2cStorageReference local = f2c_ir_symbol_storage_reference(&symbol);
@@ -66,7 +66,7 @@ static void test_live_descriptor_properties(void) {
            "owned call bridges commit through the same typed property provider");
     expect(commit.data != NULL && strstr(commit.data, "f2c_descriptor_bridge_valid") != NULL &&
                strstr(commit.data, "values_extent_2") != NULL &&
-               strstr(commit.data, "values_stride_2") != NULL &&
+               strstr(commit.data, "values_byte_stride_2") != NULL &&
                strstr(commit.data, "int32_t *volatile") != NULL,
            "bridge validation precedes qualified data and shape commits");
     free(f2c_buffer_take(&commit));

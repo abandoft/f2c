@@ -67,7 +67,7 @@ static void test_allocation_lowering(void) {
                     "allocating an associated pointer creates a new target instead of failing");
     expect_contains(result.code, "values_deallocatable = true;",
                     "successful pointer allocation records a deallocatable target");
-    expect_contains(result.code, "values_stride_1 = 1;",
+    expect_contains(result.code, "values_byte_stride_1 = (ptrdiff_t)sizeof(int32_t);",
                     "pointer allocation initializes a contiguous descriptor stride");
     expect_contains(result.code, "f2c_descriptor_values->deallocatable = true;",
                     "pointer dummy allocation immediately updates target ownership state");

@@ -33,7 +33,7 @@ static void expect_view(Unit *unit, const char *source, unsigned int qualifiers)
     int supported = 1;
     expect(expression != NULL && f2c_array_view(unit, expression, &view, &supported) && supported,
            "array views describe valid storage");
-    expect(view.pointer != NULL && view.count != NULL && view.stride != NULL &&
+    expect(view.pointer != NULL && view.count != NULL && view.byte_stride != NULL &&
                view.storage_qualifiers == qualifiers,
            source);
     f2c_array_view_discard(&view);
@@ -207,8 +207,9 @@ int main(void) {
         const char *captured_target = copy.data != NULL ? strstr(copy.data, "next_target()") : NULL;
         const char *captured_count = copy.data != NULL ? strstr(copy.data, "next_count()") : NULL;
         expect(captured_source != NULL && strstr(captured_source + 1, "next_source()") == NULL &&
-                   captured_target != NULL && strstr(captured_target + 1, "next_target()") == NULL &&
-                   captured_count != NULL && strstr(captured_count + 1, "next_count()") == NULL &&
+                   captured_target != NULL &&
+                   strstr(captured_target + 1, "next_target()") == NULL && captured_count != NULL &&
+                   strstr(captured_count + 1, "next_count()") == NULL &&
                    strstr(copy.data, "sizeof(float)") != NULL &&
                    strstr(copy.data, "SIZE_MAX / sizeof(float)") != NULL,
                "snapshot operands are captured once and sized from the typed element model");

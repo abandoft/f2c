@@ -178,9 +178,10 @@ static void test_dynamic_character_and_pointer_capture_lowering(void) {
            "pointer and deferred CHARACTER host entities complete descriptor lowering");
     expect_contains(result.code, ".deallocatable = view_deallocatable",
                     "pointer allocation provenance enters the capture descriptor");
-    expect_contains(result.code,
-                    "view_stride_1 = f2c_descriptor_state_stride(&f2c_host_call_descriptor_",
-                    "pointer association stride metadata is written back");
+    expect_contains(
+        result.code,
+        "view_byte_stride_1 = f2c_descriptor_state_byte_stride(&f2c_host_call_descriptor_",
+        "pointer association stride metadata is written back");
     expect_contains(result.code, "f2c_char_len_text = (&f2c_host_call_descriptor_",
                     "deferred CHARACTER length is written back");
     expect(result.code == NULL || strstr(result.code, ".lower = {}") == NULL,
