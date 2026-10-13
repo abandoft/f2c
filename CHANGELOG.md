@@ -9,6 +9,9 @@
 - Distinguish readonly derived actual arguments from owned temporary values and correct snapshot cleanup for procedure arguments, parentheses, and function results.
 - Improve ownership handling for derived array components, `MERGE`, elemental results, vector subscripts, and nested transformations.
 - Correct shifts, reshaping, transposition, and spreading of zero-sized derived arrays without emitting static division-by-zero expressions.
+- Allow procedures with unspecified `INTENT` to read readonly derived actuals while preserving the original object's address identity.
+- Support associated and renamed module specifics as `PROCEDURE` interfaces, refreshing procedure characteristics after declarations are complete.
+- Correct calls through procedure pointers and procedure dummies with specific interfaces, preserving runtime target dispatch.
 
 ## 1.55.0
 
