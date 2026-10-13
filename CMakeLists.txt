@@ -808,6 +808,11 @@ if(F2C_BUILD_TESTING)
     f2c_configure_internal_test_target(f2c_intrinsic_registry_tests)
     add_test(NAME intrinsic_registry COMMAND f2c_intrinsic_registry_tests)
 
+    add_executable(f2c_intrinsic_result_tests test/test_intrinsic_result.c)
+    target_include_directories(f2c_intrinsic_result_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    f2c_configure_internal_test_target(f2c_intrinsic_result_tests)
+    add_test(NAME intrinsic_result COMMAND f2c_intrinsic_result_tests)
+
     # Compile the real registry with hostile platform-style macros, without
     # linking its ordinary copy from f2c_core into this isolated executable.
     add_executable(
