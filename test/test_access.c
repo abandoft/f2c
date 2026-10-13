@@ -190,16 +190,28 @@ int main(void) {
         Buffer copy = {0};
         f2c_array_copy_snapshot(&copy, &unit, "target", "source", "4U", "float",
                                 F2C_STORAGE_VOLATILE, F2C_STORAGE_UNQUALIFIED, 0);
-        expect(copy.data != NULL && strstr(copy.data, "((volatile float *)(target))") != NULL &&
-                   strstr(copy.data, "((const float *)(source))") != NULL &&
+        expect(copy.data != NULL && strstr(copy.data, "= (volatile float *)(target)") != NULL &&
+                   strstr(copy.data, "= (const float *)(source)") != NULL &&
                    strstr(copy.data, "const volatile") == NULL,
                "a qualified destination does not qualify the owned source snapshot");
         free(f2c_buffer_take(&copy));
         f2c_array_copy_snapshot(&copy, &unit, "target", "source", "4U", "float",
                                 F2C_STORAGE_UNQUALIFIED, F2C_STORAGE_VOLATILE, 0);
-        expect(copy.data != NULL && strstr(copy.data, "((float *)(target))") != NULL &&
-                   strstr(copy.data, "((const volatile float *)(source))") != NULL,
+        expect(copy.data != NULL && strstr(copy.data, "= (float *)(target)") != NULL &&
+                   strstr(copy.data, "= (const volatile float *)(source)") != NULL,
                "a qualified source does not qualify the newly owned destination");
+        free(f2c_buffer_take(&copy));
+        f2c_array_copy_snapshot(&copy, &unit, "next_target()", "next_source()", "next_count()",
+                                "float", F2C_STORAGE_UNQUALIFIED, F2C_STORAGE_UNQUALIFIED, 0);
+        const char *captured_source = copy.data != NULL ? strstr(copy.data, "next_source()") : NULL;
+        const char *captured_target = copy.data != NULL ? strstr(copy.data, "next_target()") : NULL;
+        const char *captured_count = copy.data != NULL ? strstr(copy.data, "next_count()") : NULL;
+        expect(captured_source != NULL && strstr(captured_source + 1, "next_source()") == NULL &&
+                   captured_target != NULL && strstr(captured_target + 1, "next_target()") == NULL &&
+                   captured_count != NULL && strstr(captured_count + 1, "next_count()") == NULL &&
+                   strstr(copy.data, "sizeof(float)") != NULL &&
+                   strstr(copy.data, "SIZE_MAX / sizeof(float)") != NULL,
+               "snapshot operands are captured once and sized from the typed element model");
         free(f2c_buffer_take(&copy));
     }
     symbols[2].argument = 1;
