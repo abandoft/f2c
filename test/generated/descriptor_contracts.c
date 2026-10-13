@@ -35,11 +35,11 @@ static void test_numeric_records(void) {
                              .rank = 1U,
                              .lower = {-2},
                              .extent = {4},
-                             .stride = {-2}};
+                             .byte_stride = {-2 * (ptrdiff_t)sizeof(int32_t)}};
     f2c_descriptor temporary = {0};
     f2c_descriptor_prepare_contiguous(&temporary, &source, false, true);
     require(temporary.storage_qualifiers == 0U && !temporary.deallocatable &&
-            temporary.stride[0] == 1 && temporary.lower[0] == -2);
+            temporary.byte_stride[0] == (ptrdiff_t)sizeof(int32_t) && temporary.lower[0] == -2);
     for (size_t index = 0U; index < 4U; ++index) {
         int32_t *values = (int32_t *)temporary.data;
         require(values[index] == 7 - 2 * (int32_t)index);
@@ -55,7 +55,7 @@ static void test_numeric_records(void) {
                                .element_size = sizeof(int32_t),
                                .rank = 1U,
                                .extent = {3},
-                               .stride = {1}};
+                               .byte_stride = {(ptrdiff_t)sizeof(int32_t)}};
         f2c_descriptor_prepare_contiguous(&temporary, &view, false, true);
         require(memcmp(temporary.readonly_data, readonly, sizeof(readonly)) == 0);
         f2c_descriptor_finish_contiguous(&view, &temporary, false, false);
@@ -70,7 +70,7 @@ static void test_character_records(void) {
                              .element_size = 1U,
                              .rank = 1U,
                              .extent = {3},
-                             .stride = {-1},
+                             .byte_stride = {-3},
                              .character_length = 3U};
     f2c_descriptor temporary = {0};
     f2c_descriptor_prepare_contiguous(&temporary, &source, true, true);
@@ -94,7 +94,7 @@ static void test_empty_records(void) {
                              .element_size = sizeof(int32_t),
                              .rank = 1U,
                              .extent = {0},
-                             .stride = {-2}};
+                             .byte_stride = {-2}};
     f2c_descriptor temporary = {0};
     f2c_descriptor_read_record(NULL, NULL, PTRDIFF_MAX, 0U);
     f2c_descriptor_write_record(NULL, PTRDIFF_MIN, NULL, 0U);
@@ -109,18 +109,75 @@ static void test_empty_records(void) {
 }
 
 static void test_linear_offsets(void) {
-    const f2c_descriptor view = {.rank = 2U, .extent = {2, 3}, .stride = {-2, 7}};
+    const f2c_descriptor view = {.rank = 2U, .extent = {2, 3}, .byte_stride = {-2, 7}};
     const ptrdiff_t expected[] = {0, -2, 7, 5, 14, 12};
     for (size_t index = 0U; index < sizeof(expected) / sizeof(expected[0]); ++index)
-        require(f2c_descriptor_linear_offset(&view, index) == expected[index]);
+        require(f2c_descriptor_linear_byte_offset(&view, index) == expected[index]);
     require(f2c_array_offset(INT64_MIN + 1, INT64_MIN, 2U) == 1U);
+}
+
+static void test_layout_validation(void) {
+    struct record {
+        double values[2];
+        int32_t guard;
+    } records[3] = {{{1, 2}, 1}, {{3, 4}, 2}, {{5, 6}, 3}};
+    f2c_descriptor view = {.data = records[0].values,
+                           .element_size = sizeof(records[0].values),
+                           .rank = 1U,
+                           .lower = {1},
+                           .extent = {3},
+                           .byte_stride = {(ptrdiff_t)sizeof(records[0])}};
+    require(
+        f2c_descriptor_bridge_valid(&view, 1U, sizeof(records[0].values), _Alignof(double), false));
+    view.data = records[2].values;
+    view.byte_stride[0] = -(ptrdiff_t)sizeof(records[0]);
+    require(
+        f2c_descriptor_bridge_valid(&view, 1U, sizeof(records[0].values), _Alignof(double), false));
+    view.byte_stride[0] = PTRDIFF_MAX;
+    require(!f2c_descriptor_bridge_valid(&view, 1U, sizeof(records[0].values), _Alignof(double),
+                                         false));
+    view.byte_stride[0] = PTRDIFF_MIN;
+    require(!f2c_descriptor_bridge_valid(&view, 1U, sizeof(records[0].values), _Alignof(double),
+                                         false));
+    view.byte_stride[0] = 1;
+    require(!f2c_descriptor_bridge_valid(&view, 1U, sizeof(records[0].values), _Alignof(double),
+                                         false));
+    view.byte_stride[0] = 0;
+    require(!f2c_descriptor_bridge_valid(&view, 1U, sizeof(records[0].values), _Alignof(double),
+                                         false));
+    view.extent[0] = 0;
+    require(
+        f2c_descriptor_bridge_valid(&view, 1U, sizeof(records[0].values), _Alignof(double), false));
+    view.extent[0] = 1;
+    view.data = (unsigned char *)records + 1;
+    require(!f2c_descriptor_bridge_valid(&view, 1U, sizeof(records[0].values), _Alignof(double),
+                                         false));
+    require(!f2c_descriptor_span_valid(NULL, 1U, 1U));
+    require(f2c_descriptor_is_contiguous(1U, (const size_t[]){1U}, (const ptrdiff_t[]){PTRDIFF_MIN},
+                                         sizeof(double)));
+    require(!f2c_descriptor_is_contiguous(1U, (const size_t[]){3U},
+                                          (const ptrdiff_t[]){(ptrdiff_t)sizeof(records[0])},
+                                          sizeof(records[0].values)));
+    {
+        char zero_width = 0;
+        f2c_descriptor characters = {.data = &zero_width,
+                                     .element_size = sizeof(char),
+                                     .rank = 1U,
+                                     .lower = {1},
+                                     .extent = {3},
+                                     .byte_stride = {0},
+                                     .character_length = 0U};
+        require(f2c_descriptor_bridge_valid(&characters, 1U, sizeof(char), _Alignof(char), true));
+        characters.extent[0] = INT64_C(4294967297);
+        require(!f2c_descriptor_bridge_valid(&characters, 1U, sizeof(char), _Alignof(char), true));
+    }
 }
 
 int main(int argc, char **argv) {
     if (argc > 1) {
         char byte = 0;
         f2c_descriptor source = {
-            .data = &byte, .element_size = 1U, .rank = 1U, .extent = {1}, .stride = {1}};
+            .data = &byte, .element_size = 1U, .rank = 1U, .extent = {1}, .byte_stride = {1}};
         f2c_descriptor temporary = {0};
         if (signal(SIGABRT, expected_abort) == SIG_ERR)
             return 2;
@@ -140,30 +197,34 @@ int main(int argc, char **argv) {
             source.element_size = sizeof(int32_t);
             f2c_descriptor_prepare_contiguous(&temporary, &source, false, true);
         } else if (strcmp(argv[1], "--linear-null") == 0) {
-            (void)f2c_descriptor_linear_offset(NULL, 0U);
+            (void)f2c_descriptor_linear_byte_offset(NULL, 0U);
         } else if (strcmp(argv[1], "--linear-rank-zero") == 0) {
             source.rank = 0U;
-            (void)f2c_descriptor_linear_offset(&source, 0U);
+            (void)f2c_descriptor_linear_byte_offset(&source, 0U);
         } else if (strcmp(argv[1], "--linear-rank-high") == 0) {
             source.rank = 16U;
-            (void)f2c_descriptor_linear_offset(&source, 0U);
+            (void)f2c_descriptor_linear_byte_offset(&source, 0U);
         } else if (strcmp(argv[1], "--linear-negative") == 0) {
             source.extent[0] = -1;
-            (void)f2c_descriptor_linear_offset(&source, 0U);
+            (void)f2c_descriptor_linear_byte_offset(&source, 0U);
         } else if (strcmp(argv[1], "--linear-empty") == 0) {
             source.extent[0] = 0;
-            (void)f2c_descriptor_linear_offset(&source, 0U);
+            (void)f2c_descriptor_linear_byte_offset(&source, 0U);
         } else if (strcmp(argv[1], "--linear-range") == 0) {
-            (void)f2c_descriptor_linear_offset(&source, 1U);
+            (void)f2c_descriptor_linear_byte_offset(&source, 1U);
         } else if (strcmp(argv[1], "--linear-overflow") == 0) {
             source.extent[0] = 3;
-            source.stride[0] = PTRDIFF_MAX;
-            (void)f2c_descriptor_linear_offset(&source, 2U);
+            source.byte_stride[0] = PTRDIFF_MAX;
+            (void)f2c_descriptor_linear_byte_offset(&source, 2U);
         } else if (strcmp(argv[1], "--state-dimension") == 0) {
             source.rank = 16U;
             (void)f2c_descriptor_state_extent(&source, 15U, 1U);
         } else if (strcmp(argv[1], "--subscript-distance") == 0) {
             (void)f2c_array_offset(INT64_MAX, INT64_MIN, SIZE_MAX);
+        } else if (strcmp(argv[1], "--descriptor-rank") == 0) {
+            (void)f2c_array_descriptor_byte_offset(16U, NULL, NULL, NULL, NULL);
+        } else if (strcmp(argv[1], "--descriptor-null") == 0) {
+            (void)f2c_array_descriptor_byte_offset(1U, NULL, NULL, NULL, NULL);
         } else {
             return 2;
         }
@@ -173,6 +234,7 @@ int main(int argc, char **argv) {
     test_character_records();
     test_empty_records();
     test_linear_offsets();
+    test_layout_validation();
     puts("descriptor record contracts passed");
     return EXIT_SUCCESS;
 }

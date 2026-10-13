@@ -150,7 +150,7 @@ f2c_descriptor borrowed_array(void) {
                             .rank = 1U,
                             .lower = {-5},
                             .extent = {mode >= 5 ? 0 : 3},
-                            .stride = {-2}};
+                            .byte_stride = {-2 * (ptrdiff_t)sizeof(*result_contract_target)}};
 }
 
 f2c_descriptor owned_character(void) {

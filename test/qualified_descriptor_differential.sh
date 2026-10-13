@@ -52,7 +52,7 @@ for optimization in 0 2; do
         "$root/test/generated/descriptor_contracts.c" -lm -o "$work/records-O$optimization"
     "$work/records-O$optimization"
 done
-failures='null-read null-write allocation offset count linear-null linear-rank-zero linear-rank-high linear-negative linear-empty linear-range linear-overflow state-dimension subscript-distance'
+failures='null-read null-write allocation offset count linear-null linear-rank-zero linear-rank-high linear-negative linear-empty linear-range linear-overflow state-dimension subscript-distance descriptor-rank descriptor-null'
 for failure in $failures; do
     status=0
     "$work/records-O2" "--$failure" > "$work/failure-$failure.out" 2>&1 || status=$?

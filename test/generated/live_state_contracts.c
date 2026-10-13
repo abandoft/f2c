@@ -16,7 +16,7 @@ void change_state(void) {
         active_state->data = replacement;
         active_state->lower[0] = -2;
         active_state->extent[0] = 3;
-        active_state->stride[0] = 2;
+        active_state->byte_stride[0] = 2 * (ptrdiff_t)sizeof(int32_t);
     } else if (mode == 1) {
         active_state->data = NULL;
         active_state->extent[0] = 0;
@@ -37,7 +37,7 @@ int main(void) {
                             .rank = 1U,
                             .lower = {1},
                             .extent = {4},
-                            .stride = {1}};
+                            .byte_stride = {(ptrdiff_t)sizeof(int32_t)}};
     active_state = &state;
     observe_live_pointer(&state, results);
     for (size_t index = 0U; index < sizeof(expected) / sizeof(expected[0]); ++index) {
@@ -48,14 +48,14 @@ int main(void) {
         }
     }
     if (state.data != replacement || state.lower[0] != -2 || state.extent[0] != 3 ||
-        state.stride[0] != 2) {
+        state.byte_stride[0] != 2 * (ptrdiff_t)sizeof(int32_t)) {
         fprintf(stderr, "return overwrote externally updated pointer state\n");
         ++failures;
     }
     state.data = initial;
     state.lower[0] = 1;
     state.extent[0] = 4;
-    state.stride[0] = 1;
+    state.byte_stride[0] = (ptrdiff_t)sizeof(int32_t);
     mode = 1;
     observe_live_allocatable(&state, results);
     if (results[0] != 1 || results[1] != 0 || state.data != NULL) {
