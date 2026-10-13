@@ -217,11 +217,12 @@ static void test_array_result_lowering(void) {
                strstr(result.code, "f2c_transform_result_extent_1") != NULL &&
                strstr(result.code, "f2c_transform_back") != NULL,
            "runtime DIM, dynamic result shape, and BACK remain explicit");
-    expect(result.code != NULL &&
-               strstr(result.code, "free(f2c_descriptor_totals->data)") != NULL &&
-               strstr(result.code, "f2c_descriptor_totals->extent[0] =") != NULL &&
-               strstr(result.code, "f2c_descriptor_totals->stride[0] = 1;") != NULL,
-           "allocatable reduction results commit their new storage and shape");
+    expect(
+        result.code != NULL && strstr(result.code, "free(f2c_descriptor_totals->data)") != NULL &&
+            strstr(result.code, "f2c_descriptor_totals->extent[0] =") != NULL &&
+            strstr(result.code, "f2c_descriptor_totals->byte_stride[0] = "
+                                "f2c_descriptor_record_stride((size_t)(sizeof(int32_t)));") != NULL,
+        "allocatable reduction results commit their new storage and shape");
     f2c_result_free(&result);
 }
 

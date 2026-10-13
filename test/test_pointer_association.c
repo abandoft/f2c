@@ -48,7 +48,7 @@ static void test_section_lowering(void) {
     F2cResult result = transpile(source, "pointer-section.f90");
     expect(result.error_count == 0U && result.code != NULL,
            "array sections and scalar elements complete the typed pointer-association pipeline");
-    expect_contains(result.code, "ptrdiff_t values_stride_1 = 0;",
+    expect_contains(result.code, "ptrdiff_t values_byte_stride_1 = 0;",
                     "array pointer storage retains a dynamic stride");
     expect_contains(result.code, "f2c_section_extent(f2c_pointer_first_1",
                     "section extent is computed from single-evaluation temporaries");
@@ -62,13 +62,14 @@ static void test_section_lowering(void) {
                     "rank remapping rejects targets that are too small");
     expect_contains(result.code, "ptrdiff_t f2c_pointer_remap_stride",
                     "rank remapping creates a column-major descriptor stride chain");
-    expect_contains(result.code, "f2c_associated_array_target((const void *)(values)",
+    expect_contains(result.code,
+                    "f2c_descriptor_same_target(&(f2c_descriptor){.readonly_data = values",
                     "ASSOCIATED lowers target sections through descriptor identity checks");
-    expect_contains(result.code, "f2c_descriptor_stride_step((ptrdiff_t)(values_stride_1)",
+    expect_contains(result.code, "f2c_descriptor_stride_step((ptrdiff_t)(values_byte_stride_1)",
                     "pointer-to-pointer sections compose their source and section strides");
     expect_contains(result.code, "element = &(storage[",
                     "a scalar pointer can associate with a target array element");
-    expect_contains(result.code, "f2c_array_descriptor_offset(1U",
+    expect_contains(result.code, "f2c_array_descriptor_byte_offset(1U",
                     "subsequent pointer element access consumes dynamic descriptor metadata");
     f2c_result_free(&result);
 }
@@ -86,7 +87,7 @@ static void test_intent_out_initialization(void) {
                     "INTENT(OUT) clears all incoming pointer descriptor metadata");
     expect_contains(result.code, "f2c_descriptor_pointer_value->extent[0] = 0;",
                     "INTENT(OUT) clears the incoming extent");
-    expect_contains(result.code, "f2c_descriptor_pointer_value->stride[0] = 0;",
+    expect_contains(result.code, "f2c_descriptor_pointer_value->byte_stride[0] = 0;",
                     "INTENT(OUT) clears the incoming stride");
     expect_contains(result.code, "if (f2c_descriptor_pointer_value != NULL)",
                     "entry state initialization guards an absent optional descriptor");
@@ -127,7 +128,7 @@ static void test_array_pointer_component_lowering(void) {
            "array POINTER components complete semantic analysis and C17 lowering");
     expect_contains(result.code, "(object).values_lower_1 = (int32_t)f2c_pointer_bound_lower_1",
                     "component pointer bounds update the owning object's descriptor metadata");
-    expect_contains(result.code, "(source).values_stride_1)}, (const bool[]){true}",
+    expect_contains(result.code, ".byte_stride = {(ptrdiff_t)(f2c_descriptor_stride_step",
                     "ASSOCIATED compares component target sections with their dynamic stride");
     expect_contains(result.code, ".deallocatable = (object).values_deallocatable",
                     "component array actuals preserve pointer provenance in call descriptors");
@@ -139,7 +140,7 @@ static void test_array_pointer_component_lowering(void) {
                     "NULLIFY clears every component descriptor dimension");
     expect_contains(result.code, "(object).matrix_extent_2 = 0;",
                     "NULLIFY clears the component descriptor extent");
-    expect_contains(result.code, "(object).matrix_stride_2 = 0;",
+    expect_contains(result.code, "(object).matrix_byte_stride_2 = 0;",
                     "NULLIFY clears the component descriptor stride");
     f2c_result_free(&result);
 }

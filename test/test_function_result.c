@@ -105,7 +105,7 @@ static void test_pointer_result_view(void) {
            "pointer-valued array results complete descriptor lowering");
     expect_contains(result.code, "f2c_descriptor_stride_step(",
                     "pointer result descriptors retain noncontiguous section strides");
-    expect_contains(result.code, "f2c_descriptor_linear_offset(",
+    expect_contains(result.code, "f2c_descriptor_linear_byte_offset(",
                     "nonowning pointer results are copied through descriptor offsets");
     expect_contains(result.code, "f2c_result_descriptor.deallocatable = output_deallocatable;",
                     "pointer result descriptors preserve allocation provenance");

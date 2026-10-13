@@ -206,10 +206,13 @@ static void test_target_actual_requires_affine_storage(void) {
                                  "end program\n";
     F2cOptions options = {"target_actual.f90", F2C_SOURCE_FREE, 0};
     F2cResult result = f2c_transpile(source, sizeof(source) - 1U, &options);
-    expect(result.code == NULL && result.error_count != 0U,
-           "unsupported persistent TARGET view cannot silently become a dangling copy");
-    expect(result.diagnostics != NULL && strstr(result.diagnostics, "byte-strided") != NULL,
-           "persistent TARGET view reports the remaining descriptor model limitation");
+    expect(result.code != NULL && result.error_count == 0U,
+           "persistent TARGET substring uses an affine descriptor without a copy");
+    expect(result.code != NULL && strstr(result.code, "f2c_call_actual_0_data") == NULL,
+           "persistent TARGET substring does not escape a temporary allocation");
+    expect(result.code != NULL &&
+               strstr(result.code, "f2c_call_descriptor_0.byte_stride[0]") != NULL,
+           "persistent TARGET substring carries its physical byte stride");
     f2c_result_free(&result);
 }
 
