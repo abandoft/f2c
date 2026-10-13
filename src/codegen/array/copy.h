@@ -3,8 +3,9 @@
 
 #include "internal/f2c.h"
 
-/* Source and target are distinct storage regions with stable addresses.
- * A qualified source or destination requires typed element accesses. */
+/* Snapshot distinct storage regions using the explicitly selected element model.
+ * Count is captured once; addresses are captured once only for a nonempty copy.
+ * Qualified storage requires typed accesses, not a qualifier-erasing memmove. */
 void f2c_array_copy_snapshot(Buffer *output, Unit *unit, const char *target, const char *source,
                              const char *count, const char *element_c_type,
                              unsigned int target_qualifiers, unsigned int source_qualifiers,
