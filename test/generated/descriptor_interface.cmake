@@ -1,7 +1,7 @@
-# Exercise public headers in a separate translation unit, including two
+# Exercise public headers in a separate translation unit, including three
 # independently generated interfaces with the same canonical descriptor ABI.
 set(descriptor_sources "")
-foreach(descriptor_fixture descriptor_interface descriptor_interface_second)
+foreach(descriptor_fixture descriptor_interface descriptor_interface_second descriptor_byte_views)
     string(REPLACE "_" "-" descriptor_stem "${descriptor_fixture}")
     set(descriptor_source "${BINARY_DIR}/${descriptor_stem}.c")
     execute_process(
@@ -52,6 +52,6 @@ foreach(descriptor_profile IN LISTS descriptor_profiles)
         RESULT_VARIABLE descriptor_status OUTPUT_VARIABLE descriptor_output
         ERROR_VARIABLE descriptor_error)
     if(NOT descriptor_status EQUAL 0)
-        message(FATAL_ERROR "descriptor interface ${descriptor_profile} ABI failed: ${descriptor_error}${descriptor_output}")
+        message(FATAL_ERROR "descriptor interface ${descriptor_profile} ABI failed (exit ${descriptor_status}): ${descriptor_error}${descriptor_output}")
     endif()
 endforeach()
