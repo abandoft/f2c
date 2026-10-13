@@ -29,11 +29,11 @@ static int commit_property(Buffer *output, Unit *unit, const F2cStorageReference
         break;
     case F2C_OBJECT_LOWER:
     case F2C_OBJECT_EXTENT:
-    case F2C_OBJECT_STRIDE:
+    case F2C_OBJECT_BYTE_STRIDE:
         f2c_buffer_printf(output, "f2c_descriptor_state_%s(%s, %zuU, 0U)",
                           property == F2C_OBJECT_LOWER    ? "lower"
                           : property == F2C_OBJECT_EXTENT ? "extent"
-                                                          : "stride",
+                                                          : "byte_stride",
                           descriptor, dimension);
         break;
     case F2C_OBJECT_CHARACTER_LENGTH:
@@ -62,8 +62,10 @@ int f2c_storage_emit_descriptor_commit(Buffer *output, Unit *unit,
         return 1;
     indent(&transaction, style, depth);
     f2c_buffer_printf(&transaction,
-                      "f2c_descriptor_bridge_valid(%s, %zuU, sizeof(%s)) ? (void)0 : abort()",
-                      descriptor_pointer, symbol->rank, f2c_symbol_c_type(symbol));
+                      "f2c_descriptor_bridge_valid(%s, %zuU, sizeof(%s), _Alignof(%s), %s) "
+                      "? (void)0 : abort()",
+                      descriptor_pointer, symbol->rank, f2c_symbol_c_type(symbol),
+                      f2c_symbol_c_type(symbol), symbol->type == TYPE_CHARACTER ? "true" : "false");
     finish_operation(&transaction, style);
     if (!commit_property(&transaction, unit, reference, F2C_OBJECT_DATA, 0U, physical_binding,
                          descriptor_pointer, style, depth) ||
@@ -80,7 +82,7 @@ int f2c_storage_emit_descriptor_commit(Buffer *output, Unit *unit,
             !commit_property(&transaction, unit, reference, F2C_OBJECT_EXTENT, dimension,
                              physical_binding, descriptor_pointer, style, depth) ||
             ((symbol->pointer || reference->state_source == F2C_OBJECT_STATE_DESCRIPTOR) &&
-             !commit_property(&transaction, unit, reference, F2C_OBJECT_STRIDE, dimension,
+             !commit_property(&transaction, unit, reference, F2C_OBJECT_BYTE_STRIDE, dimension,
                               physical_binding, descriptor_pointer, style, depth)))
             goto done;
     }

@@ -51,8 +51,8 @@ int f2c_storage_emit_dummy_entry(Buffer *output, Unit *unit, Symbol *symbol, int
                                     "1", depth + 1) ||
             !f2c_storage_emit_store(output, unit, &reference, F2C_OBJECT_EXTENT, dimension, NULL,
                                     "0", depth + 1) ||
-            !f2c_storage_emit_store(output, unit, &reference, F2C_OBJECT_STRIDE, dimension, NULL,
-                                    "0", depth + 1))
+            !f2c_storage_emit_store(output, unit, &reference, F2C_OBJECT_BYTE_STRIDE, dimension,
+                                    NULL, "0", depth + 1))
             return 0;
     }
     indent(output, depth);

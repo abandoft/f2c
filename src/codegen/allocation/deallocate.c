@@ -106,7 +106,7 @@ int f2c_emit_deallocate_statement(Context *context, Unit *unit, const F2cStateme
             f2c_allocation_store(&context->output, unit, &reference, F2C_OBJECT_EXTENT, d,
                                  target_binding, "0", depth + 2);
             if (symbol->pointer || reference.state_source == F2C_OBJECT_STATE_DESCRIPTOR)
-                f2c_allocation_store(&context->output, unit, &reference, F2C_OBJECT_STRIDE, d,
+                f2c_allocation_store(&context->output, unit, &reference, F2C_OBJECT_BYTE_STRIDE, d,
                                      target_binding, symbol->pointer || d != 0U ? "0" : "1",
                                      depth + 2);
         }

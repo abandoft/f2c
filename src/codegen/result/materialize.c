@@ -16,9 +16,11 @@ static void append_shape_validation(Buffer *prelude, const F2cExpr *expression,
                                     const char *descriptor, const char *storage, int depth) {
     size_t dimension;
     f2c_array_indent(prelude, depth);
-    f2c_buffer_printf(prelude,
-                      "if (!f2c_descriptor_bridge_valid(&%s, %zuU, sizeof(%s))) abort();\n",
-                      descriptor, expression->rank, f2c_expression_c_type(expression));
+    f2c_buffer_printf(
+        prelude,
+        "if (!f2c_descriptor_bridge_valid(&%s, %zuU, sizeof(%s), _Alignof(%s), %s)) abort();\n",
+        descriptor, expression->rank, f2c_expression_c_type(expression),
+        f2c_expression_c_type(expression), expression->type == TYPE_CHARACTER ? "true" : "false");
     if (expression->rank == 0U) {
         f2c_array_indent(prelude, depth);
         f2c_buffer_printf(prelude, "const size_t %s_count = 1U;\n", storage);
@@ -68,7 +70,9 @@ static void append_shape_validation(Buffer *prelude, const F2cExpr *expression,
     for (dimension = 0U; dimension < expression->rank; ++dimension)
         f2c_buffer_printf(prelude, "%s%s_extent_%zu", dimension == 0U ? "" : ", ", storage,
                           dimension + 1U);
-    f2c_buffer_printf(prelude, "}, %s.stride);\n", descriptor);
+    f2c_buffer_printf(prelude, "}, %s.byte_stride, f2c_descriptor_record_size(&%s, %s));\n",
+                      descriptor, descriptor,
+                      expression->type == TYPE_CHARACTER ? "true" : "false");
     f2c_array_indent(prelude, depth);
     if (f2c_result_kind_owns_storage(expression->result_kind))
         f2c_buffer_printf(prelude, "if (!%s.deallocatable || !%s_contiguous) abort();\n",
@@ -84,7 +88,7 @@ static void append_nonowning_copy(Buffer *prelude, const F2cExpr *expression,
     if (expression->rank == 0U)
         f2c_buffer_append(&offset, "0");
     else
-        f2c_buffer_printf(&offset, "f2c_descriptor_linear_offset(&%s, %s_index)", descriptor,
+        f2c_buffer_printf(&offset, "f2c_descriptor_linear_byte_offset(&%s, %s_index)", descriptor,
                           storage);
     f2c_array_indent(prelude, depth);
     if (expression->type == TYPE_CHARACTER) {
@@ -108,10 +112,9 @@ static void append_nonowning_copy(Buffer *prelude, const F2cExpr *expression,
                           "ptrdiff_t f2c_offset = %s; "
                           "f2c_descriptor_read_record(%s + %s_index * "
                           "%s.character_length, &%s, "
-                          "f2c_descriptor_stride_multiply(f2c_offset, "
-                          "(ptrdiff_t)%s.character_length), %s.character_length); }\n",
+                          "f2c_offset, %s.character_length); }\n",
                           storage, storage, storage, storage, offset.data, storage, storage,
-                          descriptor, descriptor, descriptor, descriptor);
+                          descriptor, descriptor, descriptor);
     } else {
         f2c_buffer_printf(prelude, "if (%s_count > SIZE_MAX / sizeof(%s)) abort();\n", storage,
                           c_type);
@@ -132,20 +135,18 @@ static void append_nonowning_copy(Buffer *prelude, const F2cExpr *expression,
                 prelude,
                 "for (size_t %s_index = 0U; %s_index < %s_count; ++%s_index) { "
                 "ptrdiff_t f2c_offset = %s; %s f2c_snapshot; "
-                "f2c_descriptor_read_record(&f2c_snapshot, &%s, "
-                "f2c_descriptor_stride_multiply(f2c_offset, (ptrdiff_t)sizeof(%s)), sizeof(%s)); "
+                "f2c_descriptor_read_record(&f2c_snapshot, &%s, f2c_offset, sizeof(%s)); "
                 "f2c_clone_%s(&%s[%s_index], &f2c_snapshot); }\n",
-                storage, storage, storage, storage, offset.data, c_type, descriptor, c_type, c_type,
+                storage, storage, storage, storage, offset.data, c_type, descriptor, c_type,
                 expression->derived_type->c_name, storage, storage);
         else
             f2c_buffer_printf(prelude,
                               "for (size_t %s_index = 0U; %s_index < %s_count; ++%s_index) { "
                               "ptrdiff_t f2c_offset = %s; "
                               "f2c_descriptor_read_record(&%s[%s_index], &%s, "
-                              "f2c_descriptor_stride_multiply(f2c_offset, (ptrdiff_t)sizeof(%s)), "
-                              "sizeof(%s)); }\n",
+                              "f2c_offset, sizeof(%s)); }\n",
                               storage, storage, storage, storage, offset.data, storage, storage,
-                              descriptor, c_type, c_type);
+                              descriptor, c_type);
     }
     free(offset.data);
 }

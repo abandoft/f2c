@@ -299,20 +299,27 @@ int f2c_emit_allocate_statement(Context *context, Unit *unit, const F2cStatement
             free(lower.data);
             free(extent.data);
             if (symbol->pointer || reference.state_source == F2C_OBJECT_STATE_DESCRIPTOR) {
-                if (d == 0U)
-                    f2c_allocation_store(&context->output, unit, &reference, F2C_OBJECT_STRIDE, d,
-                                         target_binding, "1", depth + 2);
-                else {
-                    char *prior = f2c_storage_bound_property(unit, &reference, F2C_OBJECT_STRIDE,
-                                                             d - 1U, target_binding, 0);
+                if (d == 0U) {
+                    Buffer record = {0};
+                    if (symbol->type == TYPE_CHARACTER)
+                        f2c_buffer_append(&record, "(ptrdiff_t)f2c_alloc_char_len");
+                    else
+                        f2c_buffer_printf(&record, "(ptrdiff_t)sizeof(%s)",
+                                          f2c_symbol_c_type(symbol));
+                    f2c_allocation_store(&context->output, unit, &reference, F2C_OBJECT_BYTE_STRIDE,
+                                         d, target_binding, record.data, depth + 2);
+                    free(record.data);
+                } else {
+                    char *prior = f2c_storage_bound_property(
+                        unit, &reference, F2C_OBJECT_BYTE_STRIDE, d - 1U, target_binding, 0);
                     Buffer stride = {0};
                     if (prior != NULL)
                         f2c_buffer_printf(&stride,
                                           "f2c_descriptor_stride_extent((ptrdiff_t)(%s), "
                                           "f2c_alloc_extent_%zu)",
                                           prior, d);
-                    f2c_allocation_store(&context->output, unit, &reference, F2C_OBJECT_STRIDE, d,
-                                         target_binding, stride.data, depth + 2);
+                    f2c_allocation_store(&context->output, unit, &reference, F2C_OBJECT_BYTE_STRIDE,
+                                         d, target_binding, stride.data, depth + 2);
                     free(prior);
                     free(stride.data);
                 }
