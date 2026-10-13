@@ -8,7 +8,7 @@ typedef enum F2cObjectStateProperty {
     F2C_OBJECT_DATA,
     F2C_OBJECT_LOWER,
     F2C_OBJECT_EXTENT,
-    F2C_OBJECT_STRIDE,
+    F2C_OBJECT_BYTE_STRIDE,
     F2C_OBJECT_CHARACTER_LENGTH,
     F2C_OBJECT_DEALLOCATABLE
 } F2cObjectStateProperty;
@@ -47,9 +47,11 @@ char *f2c_storage_read_property(Unit *unit, const F2cStorageReference *reference
 char *f2c_storage_symbol_data(Unit *unit, const Symbol *symbol);
 char *f2c_storage_symbol_property(Unit *unit, const Symbol *symbol, F2cObjectStateProperty property,
                                   size_t dimension);
-char *f2c_storage_linear_offset(Unit *unit, const F2cStorageReference *reference,
-                                const char *index);
+char *f2c_storage_linear_byte_offset(Unit *unit, const F2cStorageReference *reference,
+                                     const char *index);
 char *f2c_storage_linear_element(Unit *unit, const F2cStorageReference *reference,
                                  const char *index);
+char *f2c_storage_byte_element(const F2cStorageReference *reference, const char *data,
+                               const char *byte_offset);
 
 #endif

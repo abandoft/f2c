@@ -12,8 +12,8 @@ static const char *property_name(F2cObjectStateProperty property) {
         return "lower";
     case F2C_OBJECT_EXTENT:
         return "extent";
-    case F2C_OBJECT_STRIDE:
-        return "stride";
+    case F2C_OBJECT_BYTE_STRIDE:
+        return "byte_stride";
     case F2C_OBJECT_CHARACTER_LENGTH:
         return "character_length";
     case F2C_OBJECT_DEALLOCATABLE:
@@ -24,7 +24,7 @@ static const char *property_name(F2cObjectStateProperty property) {
 
 static int dimension_property(F2cObjectStateProperty property) {
     return property == F2C_OBJECT_LOWER || property == F2C_OBJECT_EXTENT ||
-           property == F2C_OBJECT_STRIDE;
+           property == F2C_OBJECT_BYTE_STRIDE;
 }
 
 static char *local_property(Unit *unit, const F2cStorageReference *reference,
@@ -54,7 +54,7 @@ static char *local_property(Unit *unit, const F2cStorageReference *reference,
         Buffer qualified = {0};
         const char *type = property == F2C_OBJECT_CHARACTER_LENGTH ? "size_t"
                            : property == F2C_OBJECT_DEALLOCATABLE  ? "bool"
-                           : property == F2C_OBJECT_STRIDE         ? "ptrdiff_t"
+                           : property == F2C_OBJECT_BYTE_STRIDE    ? "ptrdiff_t"
                                                                    : "int32_t";
         if (property == F2C_OBJECT_DATA)
             f2c_buffer_printf(&qualified, "(*(%s *%svolatile *)&(%s))", f2c_symbol_c_type(symbol),
@@ -85,7 +85,7 @@ char *f2c_storage_bound_property(Unit *unit, const F2cStorageReference *referenc
     const char *type = property == F2C_OBJECT_DATA               ? "void *"
                        : property == F2C_OBJECT_CHARACTER_LENGTH ? "size_t "
                        : property == F2C_OBJECT_DEALLOCATABLE    ? "bool "
-                       : property == F2C_OBJECT_STRIDE           ? "ptrdiff_t "
+                       : property == F2C_OBJECT_BYTE_STRIDE      ? "ptrdiff_t "
                                                                  : "int64_t ";
     if (qualified)
         f2c_buffer_printf(&result, "(*(%svolatile *)&(", type);
