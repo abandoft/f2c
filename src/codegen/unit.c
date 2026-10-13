@@ -145,15 +145,21 @@ void f2c_emit_unit_cleanup(Buffer *output, Unit *unit, int depth) {
                               dimension, extent != NULL ? extent : "0");
             f2c_unit_indent(output, depth);
             if (function_result->pointer)
-                f2c_buffer_printf(output, "f2c_result_descriptor.stride[%zu] = %s_stride_%zu;\n",
+                f2c_buffer_printf(output,
+                                  "f2c_result_descriptor.byte_stride[%zu] = %s_byte_stride_%zu;\n",
                                   dimension, name, dimension + 1U);
-            else if (dimension == 0U)
-                f2c_buffer_append(output, "f2c_result_descriptor.stride[0] = 1;\n");
-            else
+            else if (dimension == 0U) {
+                char *size = f2c_descriptor_symbol_record_size(unit, function_result);
+                f2c_buffer_printf(output,
+                                  "f2c_result_descriptor.byte_stride[0] = "
+                                  "f2c_descriptor_record_stride((size_t)(%s));\n",
+                                  size != NULL ? size : "0U");
+                free(size);
+            } else
                 f2c_buffer_printf(
                     output,
-                    "f2c_result_descriptor.stride[%zu] = f2c_descriptor_stride_extent("
-                    "f2c_result_descriptor.stride[%zu], "
+                    "f2c_result_descriptor.byte_stride[%zu] = f2c_descriptor_stride_extent("
+                    "f2c_result_descriptor.byte_stride[%zu], "
                     "(size_t)f2c_result_descriptor.extent[%zu]);\n",
                     dimension, dimension - 1U, dimension - 1U);
             free(lower);
@@ -263,8 +269,8 @@ static void emit_unused_suppression(Buffer *output, Unit *unit) {
                 f2c_buffer_printf(output, "(void)%s_extent_%zu;\n", f2c_symbol_c_name(unit, symbol),
                                   dimension + 1U);
                 f2c_unit_indent(output, 1);
-                f2c_buffer_printf(output, "(void)%s_stride_%zu;\n", f2c_symbol_c_name(unit, symbol),
-                                  dimension + 1U);
+                f2c_buffer_printf(output, "(void)%s_byte_stride_%zu;\n",
+                                  f2c_symbol_c_name(unit, symbol), dimension + 1U);
             }
         }
         if (symbol != NULL && !symbol->external && symbol->type == TYPE_CHARACTER &&
@@ -299,8 +305,8 @@ static void emit_unused_suppression(Buffer *output, Unit *unit) {
                               dimension + 1U);
             if (symbol->pointer) {
                 f2c_unit_indent(output, 1);
-                f2c_buffer_printf(output, "(void)%s_stride_%zu;\n", f2c_symbol_c_name(unit, symbol),
-                                  dimension + 1U);
+                f2c_buffer_printf(output, "(void)%s_byte_stride_%zu;\n",
+                                  f2c_symbol_c_name(unit, symbol), dimension + 1U);
             }
         }
     }

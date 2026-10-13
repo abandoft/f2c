@@ -146,8 +146,8 @@ void f2c_emit_project_modules(Context *context) {
                                       name, dimension + 1U, name, dimension + 1U);
                     if (symbol->pointer)
                         f2c_buffer_printf(&context->output,
-                                          "static F2C_UNUSED ptrdiff_t %s_stride_%zu = 0;\n", name,
-                                          dimension + 1U);
+                                          "static F2C_UNUSED ptrdiff_t %s_byte_stride_%zu = 0;\n",
+                                          name, dimension + 1U);
                 }
                 free(initializer);
                 continue;

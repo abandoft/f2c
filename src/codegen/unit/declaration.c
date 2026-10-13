@@ -22,9 +22,11 @@ void f2c_unit_emit_declarations(Context *context, Unit *unit) {
         name = f2c_symbol_c_name(unit, symbol);
         f2c_unit_indent(output, 1);
         f2c_buffer_printf(output,
-                          "if (f2c_descriptor_%s != NULL && (f2c_descriptor_%s->rank != %zuU || "
-                          "f2c_descriptor_%s->element_size != sizeof(%s))) abort();\n",
-                          name, name, symbol->rank, name, f2c_symbol_c_type(symbol));
+                          "if (f2c_descriptor_%s != NULL && !f2c_descriptor_bridge_valid("
+                          "f2c_descriptor_%s, %zuU, sizeof(%s), _Alignof(%s), %s)) abort();\n",
+                          name, name, symbol->rank, f2c_symbol_c_type(symbol),
+                          f2c_symbol_c_type(symbol),
+                          symbol->type == TYPE_CHARACTER ? "true" : "false");
         if (!symbol->optional) {
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output, "if (f2c_descriptor_%s == NULL) abort();\n", name);
@@ -86,9 +88,11 @@ void f2c_unit_emit_declarations(Context *context, Unit *unit) {
                 "INT32_MIN || f2c_descriptor_%s->lower[%zu] > INT32_MAX || "
                 "f2c_descriptor_%s->extent[%zu] < 0 || f2c_descriptor_%s->extent[%zu] > "
                 "INT32_MAX || (f2c_descriptor_%s->extent[%zu] > 1 && "
-                "f2c_descriptor_%s->stride[%zu] == 0))) abort();\n",
+                "f2c_descriptor_%s->byte_stride[%zu] == 0 && "
+                "f2c_descriptor_record_size(f2c_descriptor_%s, %s) != 0U))) abort();\n",
                 name, name, dimension, name, dimension, name, dimension, name, dimension, name,
-                dimension, name, dimension);
+                dimension, name, dimension, name,
+                symbol->type == TYPE_CHARACTER ? "true" : "false");
             f2c_unit_indent(output, 1);
             if (symbol->allocatable || symbol->pointer)
                 f2c_buffer_printf(output,
@@ -105,8 +109,8 @@ void f2c_unit_emit_declarations(Context *context, Unit *unit) {
                               name, dimension + 1U, name, name, dimension);
             f2c_unit_indent(output, 1);
             f2c_buffer_printf(output,
-                              "%sptrdiff_t %s_stride_%zu = f2c_descriptor_%s != NULL ? "
-                              "f2c_descriptor_%s->stride[%zu] : 0;\n",
+                              "%sptrdiff_t %s_byte_stride_%zu = f2c_descriptor_%s != NULL ? "
+                              "f2c_descriptor_%s->byte_stride[%zu] : 0;\n",
                               symbol->allocatable || symbol->pointer ? "" : "const ", name,
                               dimension + 1U, name, name, dimension);
             free(declared_lower);
@@ -120,7 +124,10 @@ void f2c_unit_emit_declarations(Context *context, Unit *unit) {
             for (dimension = 0U; dimension < symbol->rank; ++dimension)
                 f2c_buffer_printf(output, "%s(size_t)f2c_descriptor_%s->extent[%zu]",
                                   dimension == 0U ? "" : ", ", name, dimension);
-            f2c_buffer_printf(output, "}, f2c_descriptor_%s->stride)) abort();\n", name);
+            f2c_buffer_printf(output,
+                              "}, f2c_descriptor_%s->byte_stride, "
+                              "f2c_descriptor_record_size(f2c_descriptor_%s, %s))) abort();\n",
+                              name, name, symbol->type == TYPE_CHARACTER ? "true" : "false");
         }
     }
     f2c_unit_emit_value_copies(output, unit, 1);
@@ -149,7 +156,7 @@ void f2c_unit_emit_declarations(Context *context, Unit *unit) {
                     f2c_buffer_printf(output, "int32_t %s_extent_%zu = 0;\n", name, dimension + 1U);
                     if (result->pointer) {
                         f2c_unit_indent(output, 1);
-                        f2c_buffer_printf(output, "ptrdiff_t %s_stride_%zu = 0;\n", name,
+                        f2c_buffer_printf(output, "ptrdiff_t %s_byte_stride_%zu = 0;\n", name,
                                           dimension + 1U);
                     }
                 }
@@ -228,7 +235,7 @@ void f2c_unit_emit_declarations(Context *context, Unit *unit) {
                     f2c_unit_indent(output, 1);
                     if (persistent)
                         f2c_buffer_append(output, "static ");
-                    f2c_buffer_printf(output, "ptrdiff_t %s_stride_%zu = 0;\n",
+                    f2c_buffer_printf(output, "ptrdiff_t %s_byte_stride_%zu = 0;\n",
                                       f2c_symbol_c_name(unit, symbol), d + 1U);
                 }
             }

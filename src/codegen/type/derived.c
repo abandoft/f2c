@@ -76,7 +76,7 @@ static void emit_component(Context *context, Unit *unit, Symbol *component) {
             f2c_buffer_printf(output, "    int32_t %s_extent_%zu;\n",
                               f2c_symbol_c_name(unit, component), dimension + 1U);
             if (component->pointer)
-                f2c_buffer_printf(output, "    ptrdiff_t %s_stride_%zu;\n",
+                f2c_buffer_printf(output, "    ptrdiff_t %s_byte_stride_%zu;\n",
                                   f2c_symbol_c_name(unit, component), dimension + 1U);
         }
         return;
@@ -547,18 +547,19 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                     derived->finalizer_ranks != NULL ? derived->finalizer_ranks[finalizer] : 0U;
                 if (procedure == NULL || rank == 0U)
                     continue;
-                f2c_buffer_printf(&context->output,
-                                  "    if (rank == %zuU) { f2c_descriptor f2c_finalizer = {"
-                                  ".data = value, .element_size = sizeof(*value), .rank = rank}; "
-                                  "for (size_t d = 0U; d < rank; ++d) { "
-                                  "f2c_finalizer.lower[d] = 1; f2c_finalizer.extent[d] = "
-                                  "d == 0U ? (int64_t)count : 1; f2c_finalizer.stride[d] = "
-                                  "d == 0U ? 1 : f2c_descriptor_stride_extent("
-                                  "f2c_finalizer.stride[d - 1U], "
-                                  "(size_t)f2c_finalizer.extent[d - 1U]); } %s(&f2c_finalizer); "
-                                  "for (size_t i = count; i-- > 0U;) "
-                                  "f2c_destroy_own_components_%s(&value[i]); ",
-                                  rank, procedure->name, derived->c_name);
+                f2c_buffer_printf(
+                    &context->output,
+                    "    if (rank == %zuU) { f2c_descriptor f2c_finalizer = {"
+                    ".data = value, .element_size = sizeof(*value), .rank = rank}; "
+                    "for (size_t d = 0U; d < rank; ++d) { "
+                    "f2c_finalizer.lower[d] = 1; f2c_finalizer.extent[d] = "
+                    "d == 0U ? (int64_t)count : 1; f2c_finalizer.byte_stride[d] = "
+                    "d == 0U ? (ptrdiff_t)sizeof(*value) : f2c_descriptor_stride_extent("
+                    "f2c_finalizer.byte_stride[d - 1U], "
+                    "(size_t)f2c_finalizer.extent[d - 1U]); } %s(&f2c_finalizer); "
+                    "for (size_t i = count; i-- > 0U;) "
+                    "f2c_destroy_own_components_%s(&value[i]); ",
+                    rank, procedure->name, derived->c_name);
                 if (derived->parent != NULL)
                     f2c_buffer_printf(
                         &context->output,
@@ -658,13 +659,13 @@ static void emit_lifecycle_definitions(Context *context, Units *units) {
                                       "source->%s_deallocatable;\n",
                                       name, name);
                     for (size_t dimension = 0U; dimension < component->rank; ++dimension)
-                        f2c_buffer_printf(&context->output,
-                                          "    temporary.%s_lower_%zu = source->%s_lower_%zu; "
-                                          "temporary.%s_extent_%zu = source->%s_extent_%zu; "
-                                          "temporary.%s_stride_%zu = source->%s_stride_%zu;\n",
-                                          name, dimension + 1U, name, dimension + 1U, name,
-                                          dimension + 1U, name, dimension + 1U, name,
-                                          dimension + 1U, name, dimension + 1U);
+                        f2c_buffer_printf(
+                            &context->output,
+                            "    temporary.%s_lower_%zu = source->%s_lower_%zu; "
+                            "temporary.%s_extent_%zu = source->%s_extent_%zu; "
+                            "temporary.%s_byte_stride_%zu = source->%s_byte_stride_%zu;\n",
+                            name, dimension + 1U, name, dimension + 1U, name, dimension + 1U, name,
+                            dimension + 1U, name, dimension + 1U, name, dimension + 1U);
                 } else if (component->type == TYPE_DERIVED && component->derived_type != NULL &&
                            component->rank == 0U) {
                     f2c_buffer_printf(&context->output,

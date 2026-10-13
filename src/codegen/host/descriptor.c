@@ -76,9 +76,9 @@ static int emit_descriptor_initialization(Buffer *output, Unit *caller, const Sy
                               dimension == 0U ? "" : ", ", extent);
             free(extent);
         }
-        f2c_buffer_append(output, "}, .stride = {");
+        f2c_buffer_append(output, "}, .byte_stride = {");
         for (dimension = 0U; dimension < actual->rank; ++dimension) {
-            char *stride = f2c_descriptor_source_stride(caller, actual, dimension);
+            char *stride = f2c_descriptor_source_byte_stride(caller, actual, dimension);
             if (stride == NULL) {
                 free(character_length);
                 return 0;
@@ -143,7 +143,7 @@ static int emit_descriptor_forward_sync(Buffer *output, Unit *caller, const Symb
     for (dimension = 0U; dimension < actual->rank; ++dimension) {
         char *lower = f2c_symbol_dimension_lower(caller, actual, dimension);
         char *extent = f2c_symbol_dimension_extent(caller, actual, dimension);
-        char *stride = f2c_descriptor_source_stride(caller, actual, dimension);
+        char *stride = f2c_descriptor_source_byte_stride(caller, actual, dimension);
         if (lower == NULL || extent == NULL || stride == NULL) {
             free(lower);
             free(extent);
@@ -154,7 +154,7 @@ static int emit_descriptor_forward_sync(Buffer *output, Unit *caller, const Symb
         F2C_HOST_SYNC("(%s)->lower[%zu] = (int64_t)(%s)", descriptor, dimension, lower);
         F2C_HOST_SYNC("(%s)->extent[%zu] = f2c_descriptor_extent((size_t)(%s))", descriptor,
                       dimension, extent);
-        F2C_HOST_SYNC("(%s)->stride[%zu] = (ptrdiff_t)(%s)", descriptor, dimension, stride);
+        F2C_HOST_SYNC("(%s)->byte_stride[%zu] = (ptrdiff_t)(%s)", descriptor, dimension, stride);
         free(lower);
         free(extent);
         free(stride);
