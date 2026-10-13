@@ -1,3 +1,18 @@
+## 1.57.0
+
+- Unify descriptor element widths, character lengths, and signed byte strides, separating logical elements from physical layout.
+- Support direct character-array substring views while retaining persistent pointer aliases through `TARGET` assumed-shape arguments.
+- Support affine views of scalar, nested, and selected fixed-array components of derived-type arrays.
+- Preserve bounds, strides, pointer associations, and function-result layouts for multidimensional and reversed views.
+- Unify descriptor-argument lowering for subroutines, ordinary functions, and type-bound calls.
+- Evaluate `ASSOCIATED` bounds, component subscripts, and substring bounds once.
+- Correct reductions and comparisons over noncontiguous numeric, complex, and character views while retaining direct dense-array indexing.
+- Copy and write back contiguous arguments by logical records without changing adjacent components or padding.
+- Correct scalar reductions over multidimensional noncontiguous views instead of assuming a single linear stride.
+- Share descriptor definitions between generated headers and implementations, allowing multiple generated headers in one client.
+- Retain storage qualification during descriptor pointer association and preserve `VOLATILE` access in wide-integer reductions.
+- Validate descriptor ranks, extents, alignment, and byte spans, and avoid forming nonexistent first-element addresses for empty sections.
+
 ## 1.56.0
 
 - Unify intrinsic type, kind, and shape inference and correct result models for reordered keyword arguments.
