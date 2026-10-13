@@ -1,7 +1,9 @@
 #include "core/generated/private.h"
 
 void f2c_emit_descriptor_declaration(Buffer *output) {
-    f2c_buffer_append(output, "/* Qualified/unqualified versions of a pointer have identical\n"
+    f2c_buffer_append(output, "#ifndef F2C_GENERATED_DESCRIPTOR\n"
+                              "#define F2C_GENERATED_DESCRIPTOR\n"
+                              "/* Qualified/unqualified versions of a pointer have identical\n"
                               " * representation and alignment (ISO C17 6.2.5). The address\n"
                               " * union transports qualification without discarding casts;\n"
                               " * each Fortran scope selects its own access-qualified view. */\n"
@@ -20,7 +22,8 @@ void f2c_emit_descriptor_declaration(Buffer *output) {
                               "    int64_t extent[15];\n"
                               "    ptrdiff_t stride[15];\n"
                               "    size_t character_length;\n"
-                              "} f2c_descriptor;\n");
+                              "} f2c_descriptor;\n"
+                              "#endif\n");
 }
 
 void f2c_emit_descriptor_contiguous_support(Buffer *output) {
