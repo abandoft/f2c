@@ -10,28 +10,56 @@ void f2c_array_copy_snapshot(Buffer *output, Unit *unit, const char *target, con
                              const char *count, const char *element_c_type,
                              unsigned int target_qualifiers, unsigned int source_qualifiers,
                              int depth) {
-    f2c_array_indent(output, depth);
-    if (((target_qualifiers | source_qualifiers) & F2C_STORAGE_VOLATILE) != 0U) {
-        char *index = f2c_codegen_local_name(unit, "f2c_copy_index");
-        if (index == NULL) {
-            output->failed = 1;
-            return;
-        }
-        f2c_buffer_printf(output,
-                          "for (size_t %s = 0U; %s < (size_t)(%s); ++%s) "
-                          "((%s%s *)(%s))[%s] = ((const %s%s *)(%s))[%s];\n",
-                          index, index, count, index,
-                          (target_qualifiers & F2C_STORAGE_VOLATILE) != 0U ? "volatile " : "",
-                          element_c_type, target, index,
-                          (source_qualifiers & F2C_STORAGE_VOLATILE) != 0U ? "volatile " : "",
-                          element_c_type, source, index);
+    char *length = f2c_codegen_local_name(unit, "f2c_copy_count");
+    char *destination = f2c_codegen_local_name(unit, "f2c_copy_target");
+    char *origin = f2c_codegen_local_name(unit, "f2c_copy_source");
+    char *index = f2c_codegen_local_name(unit, "f2c_copy_index");
+    if (length == NULL || destination == NULL || origin == NULL || index == NULL) {
+        free(length);
+        free(destination);
+        free(origin);
         free(index);
-    } else {
-        f2c_buffer_printf(output,
-                          "if ((%s) != 0U) memmove(%s, %s, "
-                          "(size_t)(%s) * sizeof(*(%s)));\n",
-                          count, target, source, count, source);
+        output->failed = 1;
+        return;
     }
+    f2c_array_indent(output, depth);
+    f2c_buffer_append(output, "{\n");
+    f2c_array_indent(output, depth + 1);
+    f2c_buffer_printf(output, "const size_t %s = (size_t)(%s);\n", length, count);
+    f2c_array_indent(output, depth + 1);
+    f2c_buffer_printf(output, "if (%s > SIZE_MAX / sizeof(%s)) abort();\n", length,
+                      element_c_type);
+    f2c_array_indent(output, depth + 1);
+    f2c_buffer_printf(output, "if (%s != 0U) {\n", length);
+    f2c_array_indent(output, depth + 2);
+    f2c_buffer_printf(output, "%s%s *const %s = (%s%s *)(%s);\n",
+                      (target_qualifiers & F2C_STORAGE_VOLATILE) != 0U ? "volatile " : "",
+                      element_c_type, destination,
+                      (target_qualifiers & F2C_STORAGE_VOLATILE) != 0U ? "volatile " : "",
+                      element_c_type, target);
+    f2c_array_indent(output, depth + 2);
+    f2c_buffer_printf(output, "const %s%s *const %s = (const %s%s *)(%s);\n",
+                      (source_qualifiers & F2C_STORAGE_VOLATILE) != 0U ? "volatile " : "",
+                      element_c_type, origin,
+                      (source_qualifiers & F2C_STORAGE_VOLATILE) != 0U ? "volatile " : "",
+                      element_c_type, source);
+    f2c_array_indent(output, depth + 2);
+    if (((target_qualifiers | source_qualifiers) & F2C_STORAGE_VOLATILE) != 0U) {
+        f2c_buffer_printf(output,
+                          "for (size_t %s = 0U; %s < %s; ++%s) %s[%s] = %s[%s];\n",
+                          index, index, length, index, destination, index, origin, index);
+    } else {
+        f2c_buffer_printf(output, "memmove(%s, %s, %s * sizeof(%s));\n", destination, origin,
+                          length, element_c_type);
+    }
+    f2c_array_indent(output, depth + 1);
+    f2c_buffer_append(output, "}\n");
+    f2c_array_indent(output, depth);
+    f2c_buffer_append(output, "}\n");
+    free(length);
+    free(destination);
+    free(origin);
+    free(index);
 }
 
 void f2c_array_copy_to_symbol(Buffer *output, Unit *unit, Symbol *target, const char *source,
