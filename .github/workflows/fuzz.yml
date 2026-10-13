@@ -33,6 +33,8 @@ jobs:
           -DF2C_BUILD_LIBFUZZER=ON
       - name: Build fuzzer
         run: cmake --build build/fuzz --target f2c_libfuzzer --parallel
+      - name: Verify versioned corpus input protocol
+        run: cmake -DSOURCE_DIR="$PWD" -P test/check_fuzz_corpus.cmake
       - name: Prepare persistent corpus
         run: mkdir -p build/fuzz-artifacts build/fuzz-corpus
       - name: Restore evolving corpus

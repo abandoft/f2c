@@ -994,6 +994,11 @@ if(F2C_BUILD_TESTING)
     add_executable(f2c_fuzz_tests test/test_fuzz.c)
     f2c_configure_test_target(f2c_fuzz_tests)
     add_test(NAME mutation_fuzz COMMAND f2c_fuzz_tests)
+    add_test(
+        NAME fuzz_corpus_protocol
+        COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/test/check_fuzz_corpus.cmake
+    )
 
     add_executable(f2c_storage_tests test/test_storage.c)
     f2c_configure_test_target(f2c_storage_tests)
