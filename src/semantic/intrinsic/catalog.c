@@ -5,14 +5,6 @@
 /* Specific legacy names and nonstandard compatibility extensions live here.  Every
  * canonical standard intrinsic is defined by semantic/intrinsic/identity.c. */
 
-#define ELEMENTAL(name, minimum, maximum, type)                                                    \
-    {name,                                                                                         \
-     minimum,                                                                                      \
-     maximum,                                                                                      \
-     type,                                                                                         \
-     F2C_INTRINSIC_RANK_ELEMENTAL,                                                                 \
-     F2C_INTRINSIC_NONE,                                                                           \
-     F2C_INTRINSIC_KIND_DEFAULT}
 #define SCALAR(name, minimum, maximum, type)                                                       \
     {name,                                                                                         \
      minimum,                                                                                      \
@@ -25,8 +17,10 @@
     {name, minimum, maximum, type, F2C_INTRINSIC_RANK_ELEMENTAL, id, kind}
 
 static const F2cIntrinsicSignature intrinsic_aliases[] = {
-    ELEMENTAL("abs1", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE),
-    ELEMENTAL("abssq", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE),
+    TYPED_ELEMENTAL("abs1", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE, F2C_INTRINSIC_NONE,
+                    F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("abssq", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE, F2C_INTRINSIC_NONE,
+                    F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("alog", 1U, 1U, F2C_INTRINSIC_TYPE_REAL, F2C_INTRINSIC_LOG,
                     F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_ELEMENTAL("alog10", 1U, 1U, F2C_INTRINSIC_TYPE_REAL, F2C_INTRINSIC_LOG10,
@@ -43,8 +37,10 @@ static const F2cIntrinsicSignature intrinsic_aliases[] = {
                     F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("cabs", 1U, 1U, F2C_INTRINSIC_TYPE_REAL, F2C_INTRINSIC_ABS,
                     F2C_INTRINSIC_KIND_DEFAULT),
-    ELEMENTAL("cabs1", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE),
-    ELEMENTAL("cabs2", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE),
+    TYPED_ELEMENTAL("cabs1", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE, F2C_INTRINSIC_NONE,
+                    F2C_INTRINSIC_KIND_FIRST),
+    TYPED_ELEMENTAL("cabs2", 1U, 1U, F2C_INTRINSIC_TYPE_ABSOLUTE, F2C_INTRINSIC_NONE,
+                    F2C_INTRINSIC_KIND_FIRST),
     TYPED_ELEMENTAL("cdabs", 1U, 1U, F2C_INTRINSIC_TYPE_DOUBLE, F2C_INTRINSIC_ABS,
                     F2C_INTRINSIC_KIND_DEFAULT),
     TYPED_ELEMENTAL("ccos", 1U, 1U, F2C_INTRINSIC_TYPE_COMPLEX, F2C_INTRINSIC_COS,
@@ -141,7 +137,6 @@ static const F2cIntrinsicSignature intrinsic_aliases[] = {
 
 #undef TYPED_ELEMENTAL
 #undef SCALAR
-#undef ELEMENTAL
 
 static const F2cExpr *argument_value(const F2cExpr *argument) {
     if (argument != NULL && argument->kind == F2C_EXPR_KEYWORD_ARGUMENT &&
