@@ -44,7 +44,7 @@ jobs:
             -DF2C_ENABLE_WARNINGS_AS_ERRORS=ON
           cmake --build build/host --target f2c --parallel
           for fixture in \
-            internal_file_semantics mathematical_conversion_intrinsics \
+            internal_file_semantics mathematical_conversion_intrinsics byte_view_values \
             character_designators character_array_actuals character_actual_evaluation \
             character_length_parameters character_result_effects character_broadcast_reallocation \
             type_bound_character_results derived_default_initialization \
@@ -99,6 +99,18 @@ jobs:
             -sFILESYSTEM=0 -sEXIT_RUNTIME=1 build/wasm/loop-contract.c \
             test/generated/loop_contract.c -o build/wasm/loop-contracts.js
           node build/wasm/loop-contracts.js
+          for fixture in descriptor_interface descriptor_interface_second descriptor_byte_views; do
+            stem=$(printf '%s' "$fixture" | tr '_' '-')
+            build/host/f2c -o "build/wasm/$stem.c" --header "build/wasm/$stem.h" \
+              "test/fixtures/$fixture.f90"
+          done
+          emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+            -Wstrict-prototypes -Wmissing-prototypes -Werror -Ibuild/wasm \
+            -sFILESYSTEM=0 -sEXIT_RUNTIME=1 \
+            build/wasm/descriptor-interface.c build/wasm/descriptor-interface-second.c \
+            build/wasm/descriptor-byte-views.c test/generated/descriptor_interface_contract.c \
+            -o build/wasm/descriptor-interface-contracts.js
+          node build/wasm/descriptor-interface-contracts.js
           emcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
             -Wstrict-prototypes -Wmissing-prototypes -Werror -Ibuild/wasm \
             -DF2C_CHARACTER_LENGTH_SOURCE='"generated-character_length_parameters.c"' \

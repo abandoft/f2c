@@ -42,7 +42,8 @@ generate_outputs() {
         extremum_boundaries extremum_policy extremum_arguments \
         lexical_literals numeric_model_intrinsics elemental_procedure operator_kinds operator_power_policy operator_contract \
         loop_control loop_storage loop_result_bounds loop_names loop_static_constructor loop_contract \
-        loop_inquire loop_data loop_static_flat loop_real_controls; do
+        loop_inquire loop_data loop_static_flat loop_real_controls \
+        descriptor_interface descriptor_interface_second descriptor_byte_views byte_view_values; do
         "$translator" "$ROOT/test/fixtures/$fixture.f90" \
             -o "$output/$fixture.c" --header "$output/$fixture.h"
     done
@@ -80,7 +81,9 @@ loop_control.c loop_control.h loop_storage.c loop_storage.h
 loop_result_bounds.c loop_result_bounds.h loop_names.c loop_names.h
 loop_static_constructor.c loop_static_constructor.h loop_contract.c loop_contract.h
 loop_legacy.c loop_legacy.h loop_inquire.c loop_inquire.h loop_data.c loop_data.h
-loop_static_flat.c loop_static_flat.h loop_real_controls.c loop_real_controls.h'
+loop_static_flat.c loop_static_flat.h loop_real_controls.c loop_real_controls.h
+descriptor_interface.c descriptor_interface.h descriptor_interface_second.c descriptor_interface_second.h
+descriptor_byte_views.c descriptor_byte_views.h byte_view_values.c byte_view_values.h'
 for file in $FILES; do
     if ! cmake -E compare_files "$WORK/first/$file" "$WORK/second/$file"; then
         echo "cross-toolchain generated output differs: $file" >&2
