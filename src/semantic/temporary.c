@@ -208,8 +208,16 @@ static const Unit *capture_procedure(const F2cExpr *expression) {
 }
 
 int f2c_expression_is_derived_actual_temporary(const F2cExpr *expression) {
-    return expression != NULL && expression->type == TYPE_DERIVED &&
-           expression->derived_type != NULL && expression->rank == 0U && !expression->definable;
+    if (expression == NULL || expression->type != TYPE_DERIVED ||
+        expression->derived_type == NULL || expression->rank != 0U || expression->definable)
+        return 0;
+    /* Read-only variable/constant storage is addressable without being
+     * definable. Parentheses and producing calls still require value storage. */
+    const int storage_primary = expression->kind == F2C_EXPR_NAME ||
+                                expression->kind == F2C_EXPR_ARRAY_REFERENCE ||
+                                expression->kind == F2C_EXPR_COMPONENT;
+    return !storage_primary || (expression->value_category != F2C_VALUE_VARIABLE &&
+                                expression->value_category != F2C_VALUE_CONSTANT);
 }
 
 static int actual_guaranteed_contiguous(const F2cExpr *actual) {

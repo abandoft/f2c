@@ -541,6 +541,33 @@ static void test_scalar_result_ownership(void) {
     free(scalar_count);
 }
 
+static void test_readonly_derived_actual_storage(void) {
+    F2cDerivedType derived = {0};
+    F2cExpr expression = {0};
+    expression.type = TYPE_DERIVED;
+    expression.derived_type = &derived;
+    expression.rank = 0U;
+    expression.definable = 0;
+    expression.value_category = F2C_VALUE_VARIABLE;
+    const F2cExprKind primaries[] = {F2C_EXPR_NAME, F2C_EXPR_ARRAY_REFERENCE, F2C_EXPR_COMPONENT};
+    for (size_t index = 0U; index < sizeof(primaries) / sizeof(primaries[0]); ++index) {
+        expression.kind = primaries[index];
+        expect(!f2c_expression_is_derived_actual_temporary(&expression),
+               "readonly borrowed derived storage does not need a value snapshot for a call");
+        expression.value_category = F2C_VALUE_CONSTANT;
+        expect(!f2c_expression_is_derived_actual_temporary(&expression),
+               "constant derived storage remains addressable without becoming definable");
+        expression.value_category = F2C_VALUE_VARIABLE;
+    }
+    expression.kind = F2C_EXPR_PARENTHESIZED;
+    expression.value_category = F2C_VALUE_TEMPORARY;
+    expect(f2c_expression_is_derived_actual_temporary(&expression),
+           "parenthesized derived values still require independent argument value storage");
+    expression.kind = F2C_EXPR_CALL;
+    expect(f2c_expression_is_derived_actual_temporary(&expression),
+           "derived function values retain their owned call argument lifecycle");
+}
+
 int main(void) {
     test_character_temporary_plan();
     test_ordered_call_plan();
@@ -553,6 +580,7 @@ int main(void) {
     test_reduction_designator_ownership();
     test_call_lowering_failure_is_atomic();
     test_scalar_result_ownership();
+    test_readonly_derived_actual_storage();
     if (failures != 0)
         fprintf(stderr, "%d temporary-lifetime test(s) failed\n", failures);
     return failures == 0 ? 0 : 1;
