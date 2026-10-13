@@ -69,6 +69,8 @@ set(
     parenthesized_character_values
     transform_intrinsics
     transform_character_derived
+    readonly_derived_transform
+    readonly_derived_borrowed
     nested_transform_intrinsics
     nested_transform_derived_ownership
     findloc_models

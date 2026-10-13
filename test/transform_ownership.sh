@@ -24,16 +24,26 @@ if [ "$(uname -s)" = Darwin ]; then
     asan_leaks=0
 fi
 
-for fixture in nested_transform_derived_ownership transfer_derived_ownership; do
+for fixture in nested_transform_derived_ownership readonly_derived_transform transfer_derived_ownership; do
     source=$ROOT/test/fixtures/$fixture.f90
     case_work=$WORK/$fixture
     cmake -E make_directory "$case_work"
     "$F2C" "$source" -o "$case_work/generated.c"
+    for optimization in 0 2 3; do
+        "$CC" -std=c17 "-O$optimization" -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
+            -Wstrict-prototypes -Wmissing-prototypes -Werror "$case_work/generated.c" -lm \
+            -o "$case_work/generated-$optimization"
+        "$case_work/generated-$optimization" > "$case_work/generated-$optimization.out"
+        if [ "$optimization" -ne 0 ]; then
+            cmp "$case_work/generated-0.out" "$case_work/generated-$optimization.out"
+        fi
+    done
     "$CC" -std=c17 -O1 -g -Wall -Wextra -Wpedantic -Wconversion -Wshadow \
         -Wstrict-prototypes -Wmissing-prototypes -Werror -fsanitize=address,undefined \
         -fno-omit-frame-pointer "$case_work/generated.c" -lm -o "$case_work/generated"
     ASAN_OPTIONS=detect_leaks=$asan_leaks:halt_on_error=1 UBSAN_OPTIONS=halt_on_error=1 \
-        "$case_work/generated"
+        "$case_work/generated" > "$case_work/generated-sanitized.out"
+    cmp "$case_work/generated-0.out" "$case_work/generated-sanitized.out"
 done
 
 echo "derived transform ownership passed"
