@@ -41,6 +41,13 @@
 
 以上内容是“当前已通过的基线”，不是完整 Fortran 标准支持或商业化完成声明。
 
+当前 1.56.0 候选的最新源码已通过严格 Clang Debug、GCC 16 Release 和 ASan/UBSan Debug
+各 124 项本地 CTest；对应日志保留在 `build/validation/intrinsic-result/`。新增内建结果模型
+同时接受独立 C ABI 和原生 Fortran 检查；只读派生调用与可配对变换已通过原生逐行差分。
+修复语料选择字节后，最新 sanitizer fuzz campaign 完成 314,777 次执行，未发现崩溃。
+候选精确提交的远程跨平台、全量数值及 71 项性能门禁仍待验收；本地通过不替代这些门禁，
+也不代表全部标准组合、第二原生实现或下文列出的功能缺口已经完成。
+
 ## P0：编译器核心正确性
 
 ### 当前推进：统一运算符与完整 kind 降级
@@ -742,6 +749,12 @@ GNU 原生差分的范围分别记录，不能把已知原生缺陷当作生成�
   引擎，覆盖嵌套构造值和隐式 DO。独立负向语义测试、严格 C17 执行夹具及 gfortran 逐行差分已
   加入数值验证 CI；本任务仍因其他程序单元和过程属性组合未完成而保持未关闭。
 - [ ] 完成显式/隐式接口、关键字与可选实参、过程实参、交替返回、字符隐藏长度和存储序列关联。
+  模块关联及 `USE` 重命名的具体过程现可作为 `PROCEDURE` 接口；全部声明作用域完成后统一
+  刷新接口特征，避免引用方继承目标过程尚未解析的类型/kind/rank。具体接口不再冒充调用目标：
+  函数/子程序过程指针和过程哑实参保留间接身份与重新绑定后的分派。只读派生实际参数传给未
+  声明 `INTENT` 的形式参数时复用借用地址适配，不制造深拷贝，也不放宽 `OUT/INOUT` 的可
+  定义性检查；普通、内部、类型绑定、过程指针和过程哑实参路径已有目标身份与原生差分用例。
+  全部具体/抽象/泛型接口、嵌套宿主声明依赖、内部过程闭包及所有动态结果组合仍须继续验收。
   类型绑定函数和子程序已复用普通过程的实参关联器，按哑实参身份重排关键字、保留可选空槽并
   保留隐式 `PASS` 位置；未知/重复关键字、缺失必需参数、重复传递 `PASS` 对象及错误
   type/kind/rank/intent 可定义性会在 typed IR 阶段拒绝，不再只检查参数个数。
@@ -846,12 +859,18 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 
 ### P0-SEM-03 Intrinsic 注册与降级
 
-- [ ] 修复已独立复现的结果 kind 推导缺陷，并统一所有内建结果模型。`DIGITS/RANGE/RADIX`
-  对 INTEGER(8) 输入错误继承 kind 8，而不是注册规则要求的默认 INTEGER kind；
-  INTEGER(1) 的 `MATMUL/DOT_PRODUCT` 又被默认 kind 4 错误抬升。合法最小源码的
-  GNU Fortran 16 原生输出为 `4 4 4 8 1 1`，当前生成端为 `8 8 8 8 4 4`；其中
-  `BIT_SIZE` 保留输入 kind 的规则正确，不能用统一改成默认 kind 的补丁修复全部查询。
-  必须覆盖具名实参、嵌套查询、逻辑归约、泛型过程选择、常量与运行期以及独立 C ABI。
+- [ ] 完成所有内建结果模型的标准矩阵验收。已确认的 `DIGITS/RANGE/RADIX` 默认 INTEGER
+  kind 和 INTEGER(1) `MATMUL/DOT_PRODUCT` 错误提升已修复；最小源码现在与 GNU Fortran 16
+  同为 `4 4 4 8 1 1`，并保留 `BIT_SIZE` 的输入 kind。AST 建树与语义后序刷新现在使用
+  同一结果服务，按注册形式参数槽位推导 type/kind/rank/派生身份，混合运算复用类型化运算符
+  规则，不再保留独立的旧 type/kind 推导接口。另已修正 `ALL/ANY` 保留掩码逻辑 kind 的
+  注册规则。具名实参重排、嵌套查询、泛型过程选择、常量/运行期和独立 C ABI 已加入
+  默认测试；尚需逐项核对全部 canonical/specific 内建规则、目标 kind/ABI 和第二原生编译器。
+  `RESHAPE` rank 使用 SHAPE 数组的展开元素数；常量形状、负 extent 和 ORDER 排列检查
+  复用常量数组服务，覆盖隐式 DO 和 PARAMETER 数组，不再把构造器子节点数当作数组长度。
+  窄整数归约的完整防护条件表达式在降级边界恢复精确 C 类型，不依靠隐式整数提升来绑定
+  泛型过程，也不放宽严格转换警告。所有结果值数组维度统一采用下界 1；完整目标 ABI 矩阵
+  仍保持开放。
 - [ ] 用单一声明式注册表描述每个 intrinsic 的标准版本、泛型候选、参数关联、kind/rank/shape
   规则、常量折叠和 C17 降级，删除语义分析与代码生成之间的重复分派。当前 118 个 typed intrinsic
   已将唯一身份、首次标准版本、过程类别、语义家族、参数名称/必选掩码以及结果 type/rank/kind
@@ -946,10 +965,15 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   逆序销毁；向量下标、用户 ELEMENTAL 派生类型结果及非 elemental 派生类型数组函数结果继续使用
   同一所有权模型。仍需完成全部动态 CHARACTER/派生类型可选参数组合及定义相等组合，故本任务
   未关闭。
-- [ ] 修复只读派生数组变换的已确认功能缺口。含可分配组件的 `INTENT(IN)` 假定形状数组，
-  经反向数组段传给 `RESHAPE` 时被错误拒绝为“无法物化”；同一合法源码在原生构建中
-  正常完成深拷贝，修改结果组件不影响来源。应统一“可读取/可取地址”与“可定义”的不同
-  语义，覆盖全部变换、只读来源、组件和函数结果，不以来源不可写为由拒绝值快照。
+- [ ] 完成只读派生数组的全组合验收。已确认的 `INTENT(IN)` 假定形状反向数组段无法物化
+  问题已修复；变换元素统一使用共享派生值克隆，不再用“可定义”判定可读取来源。只读
+  标量过程实参也与拥有型值临时量区分，括号和产生值的调用仍保留独立快照及清理。
+  `RESHAPE/PACK/UNPACK/SPREAD/CSHIFT/EOSHIFT/TRANSPOSE` 的借用数组输入已有原生差分；
+  指针组件、括号、MERGE、elemental 派生结果、向量下标、组件、嵌套变换及零尺寸组合保留
+  独立所有权断言和 O0/O2/O3、ASan/UBSan 检查，未将借用对象误销毁。GNU Fortran 16 在新增
+  合法组合中的括号/派生 MERGE/elemental 结果/向量下标路径出现崩溃或组件值损坏，这些独立
+  断言不能宣称为同源原生差分通过，仍需第二原生编译器复验。qualified 派生来源、动态字符
+  组件、全部 rank-specific FINAL 与失败路径仍保持未关闭。
 - [ ] 对后续标准已经实现的 `FINDLOC` 等 intrinsic 逐项声明版本，并补齐字符、
   `DIM/MASK/BACK/KIND` 的全部合法组合。
   `FINDLOC` 的 ARRAY 按标准只允许内建类型，不将派生类型定义相等误列为待支持功能。
@@ -1204,7 +1228,9 @@ GCC 对前者使用目标代价模型，后者及其他后端保留原策略，�
   `core/generated/`，未恢复通用调用生成器中的标准名称分派。intrinsic 实现进一步拆为
   `semantic/intrinsic/catalog.c`、`identity.c` 和 `resolution.c`：`identity.c` 统一拥有 canonical
   typed identity、标准版本、参数模式和结果签名，`catalog.c` 只保留旧式 specific 名称及明确扩展，
-  `resolution.c` 负责 type/rank/kind 解析；intrinsic 子程序的中央验证分派位于
+  `result.c` 统一 Fortran 标量结果模型及派生身份，`shape.c` 负责共享 shape 推导；
+  `resolution.c` 只保留按注册槽位计算 rank 及生成端 C/libm 调用的类型映射，不再拥有独立
+  Fortran kind 推导。intrinsic 子程序的中央验证分派位于
   `semantic/validation/intrinsic/statement.c`。参数关联由共享验证器完成，家族验证器不再各自维护
   重复关键字表或按源码拼写重绑 typed ID。
   transformational intrinsic 的结果分配、元素复制、动态 extent 提交和派生类型销毁已从总控
@@ -1284,6 +1310,10 @@ GCC 对前者使用目标代价模型，后者及其他后端保留原策略，�
   provenance attestation 和 SHA-256 发布校验，不重新发布已明确移除的 SBOM 资产。
 - [ ] 扩展 libFuzzer 字典、语料去重、覆盖趋势和长时轮换任务；评估 parser/format/NAMELIST 独立
   fuzz target 与 AFL++ 互补运行。
+  已修复版本化语料遗漏格式选择字节导致首字符被吞掉的问题，默认 CTest 与 fuzz 工作流均
+  校验 ASCII `0/1` 选择字节。新内建模型、只读派生快照和具体过程接口案例进入同一语料目录；
+  原始语料及本地演化语料已有 sanitizer 回放，仍需每个候选提交的完整远程 campaign，不能
+  将语料格式检查或短时本地执行替代持续 fuzz 验收。
 
 ### P1-PORT-01 跨平台实际运行
 
