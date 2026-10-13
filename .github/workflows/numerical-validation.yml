@@ -177,10 +177,8 @@ jobs:
             build/allocation-result-contract/**/*.out
             build/reference-lapack-core/native-results/
             build/reference-lapack-core/differential-reports/
-            build/reference-lapack-core/xlintst*.out
-            build/reference-lapack-core/xlintstr*.out
-            build/reference-lapack-core/xdblat2rfp.out
-            build/reference-lapack-core/eig-*.out
+            build/reference-lapack-core/*.out
+            build/reference-lapack-core/*.err
             build/reference-lapack-core/blas-testing/
             build/reference-lapack-core/blas-exhaustive/report/
             build/reference-lapack-core/blas-exhaustive/transcript/
