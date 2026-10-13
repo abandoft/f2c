@@ -1,3 +1,4 @@
+0
 program character_array_arguments
   implicit none
   character(8) :: values(3)

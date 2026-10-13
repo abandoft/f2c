@@ -1,3 +1,4 @@
+0
 program p
 logical :: a
 a = .not. 2_8

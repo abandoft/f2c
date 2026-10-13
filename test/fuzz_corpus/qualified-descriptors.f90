@@ -1,3 +1,4 @@
+0
 program qualified_descriptors
   character(len=3), volatile :: words(3)
   call consume(words(3:1:-1))

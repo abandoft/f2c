@@ -1,3 +1,4 @@
+0
 subroutine apply(operation, value)
   abstract interface
     integer function integer_operation(item) result(answer)

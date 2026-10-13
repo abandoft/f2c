@@ -1,3 +1,4 @@
+0
 program storage
   integer, volatile :: words(5)
   double precision, volatile :: values(2)

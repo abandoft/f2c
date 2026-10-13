@@ -1,3 +1,4 @@
+0
 module controls
 integer,target::status
 character(len=20),target::message

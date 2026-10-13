@@ -1,3 +1,4 @@
+0
 program extremum_keywords
 implicit none
 integer :: x, y

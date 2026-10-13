@@ -1,3 +1,4 @@
+0
 module scopes
   integer, volatile :: stored
 contains

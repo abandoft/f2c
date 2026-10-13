@@ -1,3 +1,4 @@
+0
 module zero_character_effects
 integer :: calls = 0
 contains

@@ -1,3 +1,4 @@
+0
 program qualified_association
   integer, volatile :: values(6)
   call consume(values(6:1:-2))

@@ -1,3 +1,4 @@
+0
 program invalid_expanded_reshape
   implicit none
   integer, parameter :: shape(2) = [2,-1]

@@ -1,3 +1,4 @@
+0
 subroutine interface_seed(value)
   implicit none(type, external)
   real :: value

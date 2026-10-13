@@ -1,3 +1,4 @@
+0
 module readonly_derived_model
   implicit none
   type :: value

@@ -1,3 +1,4 @@
+0
 module control_results
 contains
 function extent(n) result(value)

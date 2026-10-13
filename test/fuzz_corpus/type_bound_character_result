@@ -1,3 +1,4 @@
+0
 module bound_result
   type :: box
     integer :: width = 2

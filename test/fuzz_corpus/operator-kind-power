@@ -1,3 +1,4 @@
+0
 program p
 integer(8), parameter :: k = 3_1 ** 39_8
 real(8), parameter :: odd = (-1.0_8) ** 9007199254740993_8

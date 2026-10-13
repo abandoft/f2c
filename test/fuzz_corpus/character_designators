@@ -1,3 +1,4 @@
+0
 program character_designators
   implicit none
   character(8), target :: records(-1:1)

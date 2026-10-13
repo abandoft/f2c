@@ -1,3 +1,4 @@
+0
 module invalid_recursive_storage
   type :: node
     type(node) :: next

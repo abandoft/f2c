@@ -1,3 +1,4 @@
+0
 module lengths
 contains
 function text(n) result(r)

@@ -1,3 +1,4 @@
+0
 program nested_array_reductions
   implicit none
   real(8) :: values(3), reference

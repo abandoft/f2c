@@ -1,3 +1,4 @@
+0
 program intrinsic_result_models
   implicit none
   integer, parameter :: selected = 8
