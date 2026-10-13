@@ -846,6 +846,12 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
 
 ### P0-SEM-03 Intrinsic 注册与降级
 
+- [ ] 修复已独立复现的结果 kind 推导缺陷，并统一所有内建结果模型。`DIGITS/RANGE/RADIX`
+  对 INTEGER(8) 输入错误继承 kind 8，而不是注册规则要求的默认 INTEGER kind；
+  INTEGER(1) 的 `MATMUL/DOT_PRODUCT` 又被默认 kind 4 错误抬升。合法最小源码的
+  GNU Fortran 16 原生输出为 `4 4 4 8 1 1`，当前生成端为 `8 8 8 8 4 4`；其中
+  `BIT_SIZE` 保留输入 kind 的规则正确，不能用统一改成默认 kind 的补丁修复全部查询。
+  必须覆盖具名实参、嵌套查询、逻辑归约、泛型过程选择、常量与运行期以及独立 C ABI。
 - [ ] 用单一声明式注册表描述每个 intrinsic 的标准版本、泛型候选、参数关联、kind/rank/shape
   规则、常量折叠和 C17 降级，删除语义分析与代码生成之间的重复分派。当前 118 个 typed intrinsic
   已将唯一身份、首次标准版本、过程类别、语义家族、参数名称/必选掩码以及结果 type/rank/kind
@@ -930,8 +936,9 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   矩阵×向量、向量×矩阵、混合数值 kind 提升及 LOGICAL/COMPLEX 运算，并在语义阶段拒绝非标准
   的向量×向量和静态不合形内维。非连续数组段经假定形状过程转发、可分配及零大小结果、严格
   C17 执行和 gfortran 差分均已覆盖。上述变换及 `FINDLOC` 现拥有独立 typed ID、规范关键字绑定
-  及 type/kind/rank/shape 语义检查；无效 `DIM`、负 extent/`NCOPIES`、不合形实参和非法 `ORDER`
-  会在生成前失败。嵌套变换结果可继续作为其他变换、elemental 表达式、标量归约和假定形状实参，
+  及 type/kind/rank/shape 语义检查；无效 `DIM`、负 SHAPE extent、不合形实参和非法 `ORDER`
+  会在生成前失败；`SPREAD` 的负 `NCOPIES` 是合法的零 extent，不能按负 SHAPE extent 拒绝。
+  嵌套变换结果可继续作为其他变换、elemental 表达式、标量归约和假定形状实参，
   数值、LOGICAL、COMPLEX、CHARACTER 和零大小动态结果均由严格 C17 与 gfortran 差分覆盖。
   归约操作数现为数组组件、数组段和非连续多维描述符规划只读值暂存，避免直接 `ALL` 等归约
   把派生数组成员误当作连续成员数组；用户过程实参不会因此被替换成不可回写的只读副本。
@@ -939,8 +946,13 @@ Reference LAPACK 继续全量严格编译且源码中不再存在模块名称硬
   逆序销毁；向量下标、用户 ELEMENTAL 派生类型结果及非 elemental 派生类型数组函数结果继续使用
   同一所有权模型。仍需完成全部动态 CHARACTER/派生类型可选参数组合及定义相等组合，故本任务
   未关闭。
-- [ ] 对后续标准已经实现的 `FINDLOC` 等 intrinsic 逐项声明版本，并补齐字符、派生类型定义相等、
+- [ ] 修复只读派生数组变换的已确认功能缺口。含可分配组件的 `INTENT(IN)` 假定形状数组，
+  经反向数组段传给 `RESHAPE` 时被错误拒绝为“无法物化”；同一合法源码在原生构建中
+  正常完成深拷贝，修改结果组件不影响来源。应统一“可读取/可取地址”与“可定义”的不同
+  语义，覆盖全部变换、只读来源、组件和函数结果，不以来源不可写为由拒绝值快照。
+- [ ] 对后续标准已经实现的 `FINDLOC` 等 intrinsic 逐项声明版本，并补齐字符、
   `DIM/MASK/BACK/KIND` 的全部合法组合。
+  `FINDLOC` 的 ARRAY 按标准只允许内建类型，不将派生类型定义相等误列为待支持功能。
 - [ ] 为每个 intrinsic 建立表驱动正向/负向组合测试，并与至少两个原生 Fortran 编译器差分。
 
 ### P0-STMT-01 语句 AST 和控制流
