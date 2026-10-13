@@ -92,8 +92,7 @@ void f2c_expression_append_derived_actual_releases(Buffer *output, const F2cExpr
     size_t child;
     for (child = first; expression != NULL && child < expression->child_count; ++child) {
         const F2cExpr *actual = actual_value(expression->children[child]);
-        if (actual == NULL || actual->type != TYPE_DERIVED || actual->derived_type == NULL ||
-            actual->rank != 0U || actual->definable)
+        if (!f2c_expression_is_derived_actual_temporary(actual))
             continue;
         f2c_buffer_printf(output,
                           ", f2c_release_%s(&f2c_derived_actual_%zu, "

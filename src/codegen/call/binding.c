@@ -28,8 +28,7 @@ char *f2c_call_bound_expression(Unit *unit, const F2cExpr *expression, int *supp
     for (parameter = 1U; parameter < expression->child_count; ++parameter) {
         const F2cExpr *actual =
             f2c_call_parameter_actual(expression, f2c_call_child_parameter(expression, parameter));
-        if (actual != NULL && actual->type == TYPE_DERIVED && actual->derived_type != NULL &&
-            actual->rank == 0U && !actual->definable) {
+        if (f2c_expression_is_derived_actual_temporary(actual)) {
             if (actual->temporary_index == SIZE_MAX) {
                 *supported = 0;
                 return NULL;

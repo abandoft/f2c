@@ -222,7 +222,7 @@ static char *lower_scalar_actual(LoweredCall *call, Unit *unit, const Symbol *ca
         (ast->kind == F2C_EXPR_NAME || ast->kind == F2C_EXPR_COMPONENT)) {
         return f2c_descriptor_storage_designator(unit, ast);
     }
-    if (ast->type == TYPE_DERIVED && ast->derived_type != NULL && !ast->definable) {
+    if (f2c_expression_is_derived_actual_temporary(ast)) {
         Buffer name = {0};
         Buffer reference = {0};
         f2c_buffer_printf(&name, "f2c_call_derived_%zu", index);

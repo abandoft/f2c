@@ -237,8 +237,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
     }
     for (i = 0U; i < expression->child_count; ++i) {
         const F2cExpr *actual = intrinsic_argument_value(expression->children[i]);
-        if (actual != NULL && actual->type == TYPE_DERIVED && actual->derived_type != NULL &&
-            actual->rank == 0U && !actual->definable) {
+        if (f2c_expression_is_derived_actual_temporary(actual)) {
             if (actual->temporary_index == SIZE_MAX) {
                 f2c_expression_free_arguments(arguments, types, expression->child_count);
                 *supported = 0;

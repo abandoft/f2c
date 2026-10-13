@@ -101,7 +101,9 @@ char *f2c_call_emit_actual_address(Unit *unit, const F2cExpr *actual, const char
     }
     if (actual->type == TYPE_CHARACTER)
         return f2c_strdup(code);
-    if (actual->definable && (actual->type == TYPE_DERIVED || actual->kind == F2C_EXPR_COMPONENT)) {
+    if ((actual->definable ||
+         (actual->type == TYPE_DERIVED && !f2c_expression_is_derived_actual_temporary(actual))) &&
+        (actual->type == TYPE_DERIVED || actual->kind == F2C_EXPR_COMPONENT)) {
         char *storage = f2c_expression_storage_designator(unit, actual, supported);
         if (storage == NULL)
             return NULL;
@@ -109,7 +111,7 @@ char *f2c_call_emit_actual_address(Unit *unit, const F2cExpr *actual, const char
         free(storage);
         return f2c_buffer_take(&result);
     }
-    if (actual->type == TYPE_DERIVED && !actual->definable)
+    if (f2c_expression_is_derived_actual_temporary(actual))
         return f2c_expression_derived_actual_pointer(unit, actual, supported);
     return f2c_emit_scalar_temporary_address(
         actual->type != TYPE_UNKNOWN ? f2c_expression_c_type(actual) : f2c_c_type(TYPE_REAL),
