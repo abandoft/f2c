@@ -54,7 +54,7 @@ static int transfer_mold_argument(const F2cExpr *call, size_t child) {
     return child == 1U;
 }
 
-int f2c_array_hoist_scalar_subexpressions(Unit *unit, F2cExpr *expression, size_t identifier,
+int f2c_array_hoist_scalar_subexpressions(Unit *unit, const F2cExpr *expression, size_t identifier,
                                           const char *role, size_t *temporary, Buffer *prelude,
                                           int depth, int root) {
     size_t child;
@@ -153,9 +153,8 @@ static int emit_flat_constructor_storage(Unit *unit, const F2cExpr *expression, 
 
 static int array_transform_call(const Unit *unit, const F2cExpr *expression) {
     return expression != NULL && expression->kind == F2C_EXPR_CALL &&
-           (expression->rank != 0U ||
-            (expression->intrinsic == F2C_INTRINSIC_FINDLOC &&
-             !f2c_expression_is_initialization_constant(expression))) &&
+           (expression->rank != 0U || (expression->intrinsic == F2C_INTRINSIC_FINDLOC &&
+                                       !f2c_expression_is_initialization_constant(expression))) &&
            f2c_lowering_code(unit, expression) == NULL &&
            f2c_intrinsic_is_transformational(expression->intrinsic);
 }
@@ -166,17 +165,20 @@ int f2c_array_contains_unmaterialized_value(const Unit *unit, const F2cExpr *exp
      * evaluated in their own scopes. Do not revisit the source-only children. */
     if (expression == NULL || f2c_lowering_code(unit, expression) != NULL)
         return 0;
+    if (f2c_call_expression_requires_materialization((Unit *)unit, expression))
+        return 1;
     if (f2c_expression_direct_relation_reduction(expression))
         return 0;
     if (array_transform_call(unit, expression) ||
         f2c_result_requires_materialization(unit, expression))
         return 1;
-    if (f2c_call_expression_requires_materialization((Unit *)unit, expression))
-        return 1;
     if (f2c_lowering_code(unit, expression) == NULL &&
         (expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR ||
          expression->owned_temporary_kind == F2C_OWNED_TEMPORARY_ELEMENTAL_ARRAY_VALUE ||
-         (expression->kind == F2C_EXPR_SUBSTRING && has_unlowered_call(unit, expression))))
+         ((expression->kind == F2C_EXPR_SUBSTRING ||
+           (expression->kind == F2C_EXPR_CALL &&
+            expression->intrinsic == F2C_INTRINSIC_ASSOCIATED)) &&
+          has_unlowered_call(unit, expression))))
         return 1;
     if (expression->owned_temporary_kind == F2C_OWNED_TEMPORARY_TRANSFER_SOURCE &&
         f2c_lowering_code(unit, expression) == NULL)
@@ -253,7 +255,8 @@ static int materialize_transform(Context *context, Unit *unit, F2cExpr *expressi
     }
     f2c_array_indent(&context->output, depth);
     if (target.rank != 0U)
-        f2c_buffer_printf(&context->output, "%s *%s = NULL;\n", f2c_symbol_c_type(&target), name.data);
+        f2c_buffer_printf(&context->output, "%s *%s = NULL;\n", f2c_symbol_c_type(&target),
+                          name.data);
     else
         f2c_buffer_printf(&context->output, "%s %s = 0;\n", f2c_symbol_c_type(&target), name.data);
     if (target.deferred_character) {
@@ -443,7 +446,8 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
         return 1;
     if (array_inquiry_call(expression))
         return 1;
-    if (f2c_expression_direct_relation_reduction(expression))
+    if (f2c_expression_direct_relation_reduction(expression) &&
+        !f2c_call_expression_requires_materialization(unit, expression))
         return 1;
     if (expression->kind != F2C_EXPR_ARRAY_CONSTRUCTOR) {
         for (child = 0U; child < expression->child_count; ++child) {
@@ -468,7 +472,10 @@ static int materialize_constructors(Context *context, Unit *unit, F2cExpr *expre
     }
     /* An owning index result must become a scalar value before substring
      * address arithmetic hoists it. Hoisting the raw call casts a descriptor. */
-    if (expression->kind == F2C_EXPR_SUBSTRING && has_unlowered_call(unit, expression) &&
+    if ((expression->kind == F2C_EXPR_SUBSTRING ||
+         (expression->kind == F2C_EXPR_CALL &&
+          expression->intrinsic == F2C_INTRINSIC_ASSOCIATED)) &&
+        has_unlowered_call(unit, expression) &&
         !f2c_array_hoist_scalar_subexpressions(unit, expression, identifier, role, temporary,
                                                prelude, depth, 1))
         return 0;

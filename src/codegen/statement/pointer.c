@@ -163,8 +163,8 @@ static void emit_contiguous_view_validation(Context *context, const F2cDescripto
     f2c_buffer_append(&context->output, "}, (const ptrdiff_t[]){");
     for (dimension = 0U; dimension < view->rank; ++dimension)
         f2c_buffer_printf(&context->output, "%s(ptrdiff_t)(%s)", dimension == 0U ? "" : ", ",
-                          view->stride[dimension]);
-    f2c_buffer_append(&context->output, "})) abort();\n");
+                          view->byte_stride[dimension]);
+    f2c_buffer_printf(&context->output, "}, (size_t)(%s))) abort();\n", view->record_size);
 }
 
 static int emit_array_pointer_metadata(Context *context, Unit *unit, const F2cStatement *statement,
@@ -176,7 +176,7 @@ static int emit_array_pointer_metadata(Context *context, Unit *unit, const F2cSt
         indent(&context->output, depth);
         f2c_buffer_printf(&context->output,
                           "ptrdiff_t f2c_pointer_remap_stride = (ptrdiff_t)(%s);\n",
-                          view->rank == 1U ? view->stride[0] : "1");
+                          view->rank == 1U ? view->byte_stride[0] : view->record_size);
     }
     for (dimension = 0U; dimension < rank; ++dimension) {
         Buffer lower = {0};
@@ -205,7 +205,7 @@ static int emit_array_pointer_metadata(Context *context, Unit *unit, const F2cSt
                 f2c_buffer_append(&checked_lower, view->lower[dimension]);
             }
             f2c_buffer_printf(&extent, "(int32_t)(%s)", view->extent[dimension]);
-            stride = view->stride[dimension];
+            stride = view->byte_stride[dimension];
             indent(&context->output, depth);
             f2c_buffer_printf(&context->output,
                               "if (!f2c_default_integer_bounds((int64_t)(%s), "
@@ -225,8 +225,8 @@ static int emit_array_pointer_metadata(Context *context, Unit *unit, const F2cSt
                                    NULL, lower.data, depth) &&
             f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_EXTENT, dimension,
                                    NULL, extent.data, depth) &&
-            f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_STRIDE, dimension,
-                                   NULL, stride, depth);
+            f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_BYTE_STRIDE,
+                                   dimension, NULL, stride, depth);
         free(lower.data);
         free(extent.data);
         if (!emitted)
@@ -292,8 +292,7 @@ static int emit_array_pointer_assignment(Context *context, Unit *unit,
                               f2c_symbol_c_name(unit, pointer_reference.symbol),
                               null_target ? 0U : view.storage_qualifiers);
         else
-            f2c_buffer_printf(&context->output,
-                              "f2c_descriptor_%s->storage_qualifiers = %uU;\n",
+            f2c_buffer_printf(&context->output, "f2c_descriptor_%s->storage_qualifiers = %uU;\n",
                               f2c_symbol_c_name(unit, pointer_reference.symbol),
                               null_target ? 0U : view.storage_qualifiers);
     }
@@ -533,7 +532,7 @@ int f2c_emit_nullify_statement(Context *context, Unit *unit, const F2cStatement 
                                         dimension, NULL, "1", depth) ||
                 !f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_EXTENT,
                                         dimension, NULL, "0", depth) ||
-                !f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_STRIDE,
+                !f2c_storage_emit_store(&context->output, unit, &reference, F2C_OBJECT_BYTE_STRIDE,
                                         dimension, NULL, "0", depth)) {
                 free(pointer_name);
                 return 0;
@@ -551,9 +550,9 @@ static int emit_prepared_pointer_assignment(Context *context, Unit *unit,
     F2cPreparedStatementExpression right = {0};
     F2cStatement prepared = *statement;
     int emitted = 0;
-    if (!f2c_prepare_statement_expression(context, unit, statement, statement->left, "pointer_left",
+    if (!f2c_prepare_statement_designator(context, unit, statement, statement->left, "pointer_left",
                                           line, depth + 1, &left) ||
-        !f2c_prepare_statement_expression(context, unit, statement, statement->right,
+        !f2c_prepare_statement_designator(context, unit, statement, statement->right,
                                           "pointer_right", line, depth + 1, &right))
         goto cleanup;
     prepared.left = (F2cExpr *)left.expression;

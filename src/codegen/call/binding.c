@@ -92,7 +92,9 @@ char *f2c_call_bound_expression(Unit *unit, const F2cExpr *expression, int *supp
             *supported = 0;
             return NULL;
         }
-        code = f2c_expression_emit(unit, actual, supported);
+        code = procedure->external_parameter_descriptor[parameter]
+                   ? f2c_strdup("NULL")
+                   : f2c_expression_emit(unit, actual, supported);
         if (actual != NULL && actual->symbol != NULL && actual->symbol->equivalence_unaligned &&
             !procedure->external_parameter_value[parameter] &&
             procedure->external_parameter_intents[parameter] != F2C_INTENT_IN) {

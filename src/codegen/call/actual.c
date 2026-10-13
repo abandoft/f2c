@@ -31,7 +31,7 @@ int f2c_call_actual_requires_materialization(Unit *unit, const Symbol *callee,
         !callee->external_parameter_pointer[parameter] &&
         !f2c_call_actual_guaranteed_contiguous(actual))
         return 1;
-    direct = actual->symbol != NULL && !actual->symbol->equivalence_unaligned &&
+    direct = (actual->symbol == NULL || !actual->symbol->equivalence_unaligned) &&
              f2c_descriptor_view(unit, actual, &view) && view.rank == actual->rank;
     f2c_descriptor_view_free(&view);
     return !direct;

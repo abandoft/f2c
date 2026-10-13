@@ -7,6 +7,20 @@
 
 #include <stdlib.h>
 
+static int reduction_requires_snapshot(const Unit *unit, const F2cExpr *expression) {
+    if (expression == NULL || expression->kind != F2C_EXPR_CALL || expression->rank != 0U ||
+        !f2c_intrinsic_is_reduction(expression->intrinsic) ||
+        f2c_lowering_code(unit, expression) != NULL)
+        return 0;
+    for (size_t index = 0U; index < f2c_call_parameter_count(expression); ++index) {
+        const F2cExpr *actual = f2c_call_parameter_actual(expression, index);
+        if (actual != NULL && actual->rank > 1U && !f2c_lowering_is_array_temporary(unit, actual) &&
+            !f2c_call_actual_guaranteed_contiguous(actual))
+            return 1;
+    }
+    return 0;
+}
+
 int f2c_call_has_object_state_parameters(const F2cExpr *expression) {
     const Symbol *callee = expression != NULL ? expression->symbol : NULL;
     if (callee == NULL)
@@ -21,6 +35,10 @@ int f2c_call_has_object_state_parameters(const F2cExpr *expression) {
 int f2c_call_expression_requires_materialization(Unit *unit, const F2cExpr *expression) {
     const Symbol *callee;
     size_t argument;
+    /* A rank-one kernel cannot flatten arbitrary multidimensional byte
+     * layouts. Reuse the managed scalar-call path for a dense read snapshot. */
+    if (reduction_requires_snapshot(unit, expression))
+        return 1;
     if (expression == NULL || expression->kind != F2C_EXPR_CALL || expression->rank != 0U ||
         expression->intrinsic != F2C_INTRINSIC_NONE ||
         f2c_expression_has_descriptor_result(expression) ||
@@ -108,13 +126,15 @@ int f2c_call_materialize_expression(Unit *unit, F2cExpr *expression, size_t iden
     for (argument = 0U; argument < f2c_call_parameter_count(expression); ++argument) {
         F2cExpr *actual = (F2cExpr *)f2c_call_parameter_actual(expression, argument);
         F2cDescriptorView view = {0};
-        const F2cIntent intent = argument < callee->external_parameter_count
+        const F2cIntent intent = callee != NULL && argument < callee->external_parameter_count
                                      ? callee->external_parameter_intents[argument]
+                                 : expression->intrinsic != F2C_INTRINSIC_NONE
+                                     ? F2C_INTENT_IN
                                      : F2C_INTENT_UNSPECIFIED;
         if (!f2c_call_actual_requires_materialization(unit, callee, actual, argument))
             continue;
         if (!f2c_call_actual_permits_copy(unit, callee, actual, argument) ||
-            (argument < callee->external_parameter_count &&
+            (callee != NULL && argument < callee->external_parameter_count &&
              (callee->external_parameter_allocatable[argument] ||
               callee->external_parameter_pointer[argument])) ||
             !f2c_descriptor_materialize_view(&setup, &cleanup, unit, actual, intent, 0U, argument,

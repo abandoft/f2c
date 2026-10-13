@@ -33,6 +33,43 @@ static const F2cExpr *intrinsic_argument_value(const F2cExpr *argument) {
                : argument;
 }
 
+static int call_children(Unit *unit, const F2cExpr *expression, const Unit *resolved, int intrinsic,
+                         char ***arguments_out, Type **types_out) {
+    if (intrinsic)
+        return f2c_expression_children(unit, expression, arguments_out, types_out);
+    char **arguments = calloc(expression->child_count, sizeof(*arguments));
+    Type *types = calloc(expression->child_count, sizeof(*types));
+    if (expression->child_count != 0U && (arguments == NULL || types == NULL)) {
+        free(arguments);
+        free(types);
+        return 0;
+    }
+    for (size_t index = 0U; index < expression->child_count; ++index) {
+        const Symbol *dummy = resolved != NULL && index < resolved->argument_count
+                                  ? f2c_find_symbol((Unit *)resolved, resolved->arguments[index])
+                                  : NULL;
+        const int descriptor = dummy != NULL
+                                   ? f2c_symbol_uses_descriptor(dummy)
+                                   : expression->symbol != NULL &&
+                                         index < expression->symbol->external_parameter_count &&
+                                         expression->symbol->external_parameter_descriptor[index];
+        int supported = 1;
+        /* A descriptor actual is a storage view, not a scalar C expression.
+         * Its address and metadata are lowered together below. */
+        arguments[index] = descriptor
+                               ? f2c_strdup("NULL")
+                               : f2c_expression_emit(unit, expression->children[index], &supported);
+        types[index] = expression->children[index]->type;
+        if (!supported || arguments[index] == NULL) {
+            f2c_expression_free_arguments(arguments, types, expression->child_count);
+            return 0;
+        }
+    }
+    *arguments_out = arguments;
+    *types_out = types;
+    return 1;
+}
+
 static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supported) {
     char **arguments = NULL;
     Type *types = NULL;
@@ -226,7 +263,7 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
         return f2c_expression_reduction_intrinsic(unit, expression, supported);
     if (intrinsic_call && expression->intrinsic == F2C_INTRINSIC_TRANSFER && expression->rank == 0U)
         return f2c_expression_transfer_intrinsic(unit, expression, supported);
-    if (!f2c_expression_children(unit, expression, &arguments, &types)) {
+    if (!call_children(unit, expression, resolved, intrinsic_call, &arguments, &types)) {
         *supported = 0;
         return NULL;
     }

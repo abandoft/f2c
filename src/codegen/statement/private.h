@@ -21,6 +21,10 @@ size_t f2c_statement_unit_index(const Unit *unit, const F2cStatement *statement)
 
 char *f2c_emit_statement_expression(Context *context, Unit *unit, const F2cExpr *expression,
                                     size_t line);
+int f2c_prepare_statement_designator(Context *context, Unit *unit, const F2cStatement *statement,
+                                     const F2cExpr *expression, const char *role,
+                                     size_t source_line, int depth,
+                                     F2cPreparedStatementExpression *prepared);
 int f2c_prepare_statement_expression(Context *context, Unit *unit, const F2cStatement *statement,
                                      const F2cExpr *expression, const char *role,
                                      size_t source_line, int depth,
@@ -39,8 +43,8 @@ int f2c_emit_assignment_statement(Context *context, Unit *unit, const F2cStateme
                                   size_t line, int depth);
 /* Zero is not applicable, one is emitted, minus one is diagnosed failure. */
 int f2c_emit_allocatable_scalar_assignment(Context *context, Unit *unit,
-                                            const F2cStatement *statement, const char *right,
-                                            size_t line, int depth);
+                                           const F2cStatement *statement, const char *right,
+                                           size_t line, int depth);
 int f2c_emit_mvbits_statement(Context *context, Unit *unit, const F2cStatement *statement,
                               int depth);
 int f2c_emit_random_statement(Context *context, Unit *unit, const F2cStatement *statement,

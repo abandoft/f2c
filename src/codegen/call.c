@@ -450,8 +450,8 @@ static int prepare_allocatable_descriptors(LoweredCall *call, Unit *unit, const 
                               i, dimension, view.extent[dimension]);
             emit_indent(&call->prelude, depth);
             f2c_buffer_printf(&call->prelude,
-                              "f2c_call_descriptor_%zu.stride[%zu] = (ptrdiff_t)(%s);\n", i,
-                              dimension, view.stride[dimension]);
+                              "f2c_call_descriptor_%zu.byte_stride[%zu] = (ptrdiff_t)(%s);\n", i,
+                              dimension, view.byte_stride[dimension]);
         }
         free(character_length);
         free(call->arguments[i]);

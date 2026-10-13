@@ -26,10 +26,11 @@ static size_t expression_identifier(const Unit *unit, const F2cStatement *statem
     return identifier != SIZE_MAX ? identifier : source_line;
 }
 
-int f2c_prepare_statement_expression(Context *context, Unit *unit, const F2cStatement *statement,
-                                     const F2cExpr *expression, const char *role,
-                                     size_t source_line, int depth,
-                                     F2cPreparedStatementExpression *prepared) {
+static int prepare_statement_expression(Context *context, Unit *unit, const F2cStatement *statement,
+                                        const F2cExpr *expression, const char *role,
+                                        size_t source_line, int depth,
+                                        F2cPreparedStatementExpression *prepared,
+                                        int value_required) {
     const size_t previous_errors = context != NULL ? context->result.error_count : 0U;
     size_t temporary = 0U;
     if (context == NULL || unit == NULL || expression == NULL || role == NULL || prepared == NULL)
@@ -53,6 +54,8 @@ int f2c_prepare_statement_expression(Context *context, Unit *unit, const F2cStat
         prepared->expression = prepared->owned_expression;
         prepared->materialized = 1;
     }
+    if (!value_required)
+        return 1;
     prepared->code =
         f2c_emit_statement_expression(context, unit, prepared->expression, source_line);
     if (prepared->code == NULL) {
@@ -60,6 +63,22 @@ int f2c_prepare_statement_expression(Context *context, Unit *unit, const F2cStat
         return 0;
     }
     return 1;
+}
+
+int f2c_prepare_statement_expression(Context *context, Unit *unit, const F2cStatement *statement,
+                                     const F2cExpr *expression, const char *role,
+                                     size_t source_line, int depth,
+                                     F2cPreparedStatementExpression *prepared) {
+    return prepare_statement_expression(context, unit, statement, expression, role, source_line,
+                                        depth, prepared, 1);
+}
+
+int f2c_prepare_statement_designator(Context *context, Unit *unit, const F2cStatement *statement,
+                                     const F2cExpr *expression, const char *role,
+                                     size_t source_line, int depth,
+                                     F2cPreparedStatementExpression *prepared) {
+    return prepare_statement_expression(context, unit, statement, expression, role, source_line,
+                                        depth, prepared, 0);
 }
 
 void f2c_release_statement_expression(F2cPreparedStatementExpression *prepared) {
