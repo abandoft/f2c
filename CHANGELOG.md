@@ -1,3 +1,15 @@
+## 1.56.0
+
+- Unify intrinsic type, kind, and shape inference and correct result models for reordered keyword arguments.
+- Correct the default integer kinds of `DIGITS/RANGE/RADIX` while preserving the input kind of `BIT_SIZE`.
+- Preserve narrow-integer and mixed-kind `MATMUL/DOT_PRODUCT` results, correcting generic procedure selection and integer promotions in generated code.
+- Correct logical result kinds for `ALL/ANY` and result inference for numeric conversions and optional `KIND` arguments.
+- Support implied `DO` and parameter-array shapes in `RESHAPE`, with expanded `ORDER` values and permutation checks.
+- Support transformations and deep copies of readonly derived arrays, preserving independent allocatable-component storage and pointer-component associations.
+- Distinguish readonly derived actual arguments from owned temporary values and correct snapshot cleanup for procedure arguments, parentheses, and function results.
+- Improve ownership handling for derived array components, `MERGE`, elemental results, vector subscripts, and nested transformations.
+- Correct shifts, reshaping, transposition, and spreading of zero-sized derived arrays without emitting static division-by-zero expressions.
+
 ## 1.55.0
 
 - Support `FINDLOC` searches across numeric categories and kinds with shared constant and runtime comparison rules.
