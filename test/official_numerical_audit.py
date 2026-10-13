@@ -23,6 +23,7 @@ import math
 from pathlib import Path
 import re
 import sys
+import tempfile
 from typing import TextIO
 
 # Keep every generated/intermediate artifact under build/, including Python's
@@ -30,6 +31,7 @@ from typing import TextIO
 sys.dont_write_bytecode = True
 
 from differential_manifest import build_manifest as build_observable_manifest
+from differential_manifest import load_reports as load_observable_reports
 from exhaustive_result_diff import (
     NumericRecord,
     official_threshold_applies,
@@ -223,7 +225,8 @@ def validate_transcript(
         raise AuditError(f"{label} transcript metadata is absent")
     filename = metadata.get("file")
     expected_digest = metadata.get("sha256")
-    if not isinstance(filename, str) or not filename:
+    if (not isinstance(filename, str) or not filename
+            or Path(filename).name != filename or filename in {".", ".."}):
         raise AuditError(f"{label} transcript filename is invalid")
     if not isinstance(expected_digest, str) or SHA256.fullmatch(expected_digest) is None:
         raise AuditError(f"{label} transcript SHA-256 is invalid")
@@ -237,6 +240,35 @@ def validate_transcript(
             f"actual={actual_digest}"
         )
     return {"file": filename, "sha256": actual_digest, "bytes": path.stat().st_size}
+
+
+def validate_observable_transcripts(
+    artifact_root: Path, reports: list[tuple[Path, dict[str, object]]]
+) -> list[dict[str, object]]:
+    entries = []
+    for report_path, report in reports:
+        suite = report["suite"]
+        if report.get("mode") in {"level1", "level23"}:
+            if not isinstance(suite, str) or re.fullmatch(r"[sdcz]blat[123]", suite) is None:
+                raise AuditError(f"{report_path} has an invalid BLAS suite identity")
+            generated_root = artifact_root / "blas-testing" / "generated-results" / suite
+            native_root = artifact_root / "blas-testing" / "native-results" / suite
+        else:
+            generated_root = artifact_root
+            native_root = artifact_root / "native-results"
+        metadata = report.get("transcripts")
+        if not isinstance(metadata, dict):
+            raise AuditError(f"{suite} official transcript metadata is absent")
+        entries.append({
+            "suite": suite,
+            "generated_c": validate_transcript(
+                generated_root, metadata.get("generated_c"), f"{suite} generated C"
+            ),
+            "native_fortran": validate_transcript(
+                native_root, metadata.get("native_fortran"), f"{suite} native Fortran"
+            ),
+        })
+    return entries
 
 
 def validate_report(report_path: Path, report_root: Path) -> dict[str, object]:
@@ -488,6 +520,9 @@ def build_audit(
     stored = json.loads(stored_observable.read_text(encoding="utf-8"))
     if stored != observable:
         raise AuditError("stored official observable manifest differs from recomputed data")
+    observable_transcripts = validate_observable_transcripts(
+        observable_root.parent, load_observable_reports(observable_root)
+    )
 
     blas_totals, blas_entries = validate_internal_root("blas", blas_root)
     lapack_totals, lapack_entries = validate_internal_root("lapack", lapack_root)
@@ -515,6 +550,7 @@ def build_audit(
             "manifest": stored_observable.name,
             "manifest_sha256": file_sha256(stored_observable),
         },
+        "observable_transcripts": observable_transcripts,
         "internal": {
             "suite_count": int(blas_totals["suites"])
             + int(lapack_totals["suites"]),
@@ -605,6 +641,54 @@ def self_test() -> None:
         pass
     else:
         raise AssertionError("forged per-result difference was accepted")
+
+    build_root = Path(__file__).resolve().parent.parent / "build"
+    build_root.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="numerical-audit-", dir=build_root) as temporary:
+        root = Path(temporary)
+        generated_root = root / "blas-testing" / "generated-results" / "dblat1"
+        native_root = root / "blas-testing" / "native-results" / "dblat1"
+        for directory in (root / "native-results", generated_root, native_root):
+            directory.mkdir(parents=True, exist_ok=True)
+        install = root / "test_zcomplexabs.out"
+        native_install = root / "native-results" / install.name
+        for path in (install, native_install, generated_root / "stdout", native_root / "stdout"):
+            path.write_text("all tests pass\n", encoding="utf-8")
+        digest = file_sha256(install)
+        reports = []
+        for suite, mode, filename in (
+            ("install-test_zcomplexabs", "install", install.name),
+            ("dblat1", "level1", "stdout"),
+        ):
+            side = {"file": filename, "sha256": digest}
+            reports.append((root / (suite + ".json"), {
+                "suite": suite, "mode": mode,
+                "transcripts": {"generated_c": side, "native_fortran": dict(side)},
+            }))
+        assert len(validate_observable_transcripts(root, reports)) == 2
+        # Identical native output must not stand in for a missing generated file.
+        for missing in (install, native_install, generated_root / "stdout", native_root / "stdout"):
+            missing.unlink()
+            try:
+                validate_observable_transcripts(root, reports)
+            except AuditError as error:
+                assert "transcript is missing" in str(error)
+            else:
+                raise AssertionError("missing original transcript was accepted")
+            missing.write_text("all tests pass\n", encoding="utf-8")
+        native_install.write_text("corrupt output\n", encoding="utf-8")
+        try:
+            validate_observable_transcripts(root, reports)
+        except AuditError as error:
+            assert "SHA-256 differs" in str(error)
+        else:
+            raise AssertionError("corrupt native transcript was accepted")
+        try:
+            validate_transcript(root, {"file": "../escape", "sha256": digest}, "invalid")
+        except AuditError as error:
+            assert "filename is invalid" in str(error)
+        else:
+            raise AssertionError("escaping transcript path was accepted")
 
 
 def main() -> int:
