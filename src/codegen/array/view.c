@@ -104,7 +104,7 @@ static int contiguous_section_view(Unit *unit, const F2cExpr *array, char **poin
                       f2c_expression_c_type(array), reference);
     *pointer = f2c_buffer_take(&address);
     *count = f2c_buffer_take(&count_code);
-    *stride = f2c_strdup("1");
+    *stride = f2c_descriptor_dense_byte_stride(unit, array, 0U);
 
 cleanup:
     for (source_dimension = 0U; source_dimension < array->symbol->rank; ++source_dimension)
@@ -129,6 +129,21 @@ static int build_array_view(Unit *unit, const F2cExpr *array, char **pointer, ch
     size_t dimension;
     if (array == NULL || array->rank == 0U)
         return 0;
+    if (array->rank == 1U) {
+        F2cDescriptorView descriptor = {0};
+        if (f2c_descriptor_view(unit, array, &descriptor)) {
+            Buffer count_code = {0};
+            f2c_buffer_printf(&count_code, "(size_t)(%s)", descriptor.extent[0]);
+            *pointer = descriptor.data;
+            *count = f2c_buffer_take(&count_code);
+            *stride = descriptor.byte_stride[0];
+            *qualifiers = descriptor.storage_qualifiers;
+            descriptor.data = NULL;
+            descriptor.byte_stride[0] = NULL;
+            f2c_descriptor_view_free(&descriptor);
+            return 1;
+        }
+    }
     *qualifiers = array->storage_qualifiers;
     lowered_code = f2c_lowering_code(unit, array);
     if (f2c_lowering_is_array_temporary(unit, array) && lowered_code != NULL) {
@@ -141,7 +156,7 @@ static int build_array_view(Unit *unit, const F2cExpr *array, char **pointer, ch
                               lowered_code, dimension + 1U);
         f2c_buffer_append(&count_code, "})");
         *count = f2c_buffer_take(&count_code);
-        *stride = f2c_strdup("1");
+        *stride = f2c_descriptor_dense_byte_stride(unit, array, 0U);
         return *pointer != NULL && *count != NULL && *stride != NULL;
     }
     if (array->kind == F2C_EXPR_NAME && array->symbol != NULL) {
@@ -150,9 +165,9 @@ static int build_array_view(Unit *unit, const F2cExpr *array, char **pointer, ch
         if (array->symbol->rank == 1U &&
             (array->symbol->pointer ||
              (array->symbol->argument && f2c_symbol_uses_descriptor(array->symbol)))) {
-            *stride = f2c_descriptor_source_stride(unit, array->symbol, 0U);
+            *stride = f2c_descriptor_source_byte_stride(unit, array->symbol, 0U);
         } else {
-            *stride = f2c_strdup("1");
+            *stride = f2c_descriptor_dense_byte_stride(unit, array, 0U);
         }
         return *pointer != NULL && *count != NULL && *stride != NULL;
     }
@@ -167,7 +182,7 @@ static int build_array_view(Unit *unit, const F2cExpr *array, char **pointer, ch
             f2c_buffer_printf(&count_code, "(size_t)(%s)", component_extent);
         free(component_extent);
         *count = f2c_buffer_take(&count_code);
-        *stride = f2c_descriptor_expression_stride(unit, array, 0U);
+        *stride = f2c_descriptor_expression_byte_stride(unit, array, 0U);
         return *pointer != NULL && *count != NULL && *stride != NULL;
     }
     if (array->kind == F2C_EXPR_ARRAY_CONSTRUCTOR) {
@@ -179,7 +194,7 @@ static int build_array_view(Unit *unit, const F2cExpr *array, char **pointer, ch
         free(constructor);
         *pointer = f2c_buffer_take(&grouped);
         *count = f2c_array_expression_extent(unit, array, 0U);
-        *stride = f2c_strdup("1");
+        *stride = f2c_descriptor_dense_byte_stride(unit, array, 0U);
         return *supported && *pointer != NULL && *count != NULL && *stride != NULL;
     }
     if (array->kind == F2C_EXPR_CALL && array->intrinsic == F2C_INTRINSIC_RESHAPE) {
@@ -207,7 +222,7 @@ static int build_array_view(Unit *unit, const F2cExpr *array, char **pointer, ch
                           result_count.data, source_view.count, result_count.data);
         free(result_count.data);
         *pointer = source_view.pointer;
-        *stride = source_view.stride;
+        *stride = source_view.byte_stride;
         *qualifiers = source_view.storage_qualifiers;
         free(source_view.count);
         *count = f2c_buffer_take(&extent);
@@ -317,13 +332,13 @@ void f2c_array_view_discard(F2cArrayView *view) {
         return;
     free(view->pointer);
     free(view->count);
-    free(view->stride);
+    free(view->byte_stride);
     memset(view, 0, sizeof(*view));
 }
 
 int f2c_array_view(Unit *unit, const F2cExpr *array, F2cArrayView *view, int *supported) {
     F2cArrayView result = {0};
-    if (!build_array_view(unit, array, &result.pointer, &result.count, &result.stride,
+    if (!build_array_view(unit, array, &result.pointer, &result.count, &result.byte_stride,
                           &result.storage_qualifiers, supported)) {
         f2c_array_view_discard(&result);
         return 0;

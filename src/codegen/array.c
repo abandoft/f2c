@@ -99,14 +99,19 @@ int f2c_emit_whole_array_assignment(Context *context, Unit *unit, const F2cExpr 
         f2c_array_indent(&context->output, depth + 1);
         f2c_buffer_printf(
             &context->output,
-            "if (!f2c_descriptor_bridge_valid(&f2c_function_result, %zuU, sizeof(%s)) || "
+            "if (!f2c_descriptor_bridge_valid(&f2c_function_result, %zuU, sizeof(%s), "
+            "_Alignof(%s), %s) || "
             "!f2c_function_result.deallocatable || "
             "!f2c_descriptor_is_contiguous(%zuU, (const size_t[]){",
-            left_symbol->rank, f2c_symbol_c_type(left_symbol), left_symbol->rank);
+            left_symbol->rank, f2c_symbol_c_type(left_symbol), f2c_symbol_c_type(left_symbol),
+            left_symbol->type == TYPE_CHARACTER ? "true" : "false", left_symbol->rank);
         for (dimension = 0U; dimension < left_symbol->rank; ++dimension)
             f2c_buffer_printf(&context->output, "%s(size_t)f2c_function_result.extent[%zu]",
                               dimension == 0U ? "" : ", ", dimension);
-        f2c_buffer_append(&context->output, "}, f2c_function_result.stride)) abort();\n");
+        f2c_buffer_printf(&context->output,
+                          "}, f2c_function_result.byte_stride, "
+                          "f2c_descriptor_record_size(&f2c_function_result, %s))) abort();\n",
+                          left_symbol->type == TYPE_CHARACTER ? "true" : "false");
         f2c_array_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output,
                           "if (f2c_descriptor_element_count(&f2c_function_result) != 0U && "

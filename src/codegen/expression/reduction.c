@@ -140,9 +140,9 @@ static int scalar_view(Unit *unit, const F2cExpr *expression, F2cArrayView *view
     free(value);
     view->pointer = f2c_buffer_take(&address);
     view->count = f2c_strdup("SIZE_MAX");
-    view->stride = f2c_strdup("0");
+    view->byte_stride = f2c_strdup("0");
     view->storage_qualifiers = F2C_STORAGE_UNQUALIFIED;
-    return view->pointer != NULL && view->count != NULL && view->stride != NULL;
+    return view->pointer != NULL && view->count != NULL && view->byte_stride != NULL;
 }
 
 static int operand_view(Unit *unit, const F2cExpr *expression, F2cArrayView *view, int *supported) {
@@ -153,7 +153,7 @@ static int operand_view(Unit *unit, const F2cExpr *expression, F2cArrayView *vie
 typedef struct CharacterOperand {
     char *pointer;
     char *count;
-    char *stride;
+    char *byte_stride;
     char *length;
     int pointer_vector;
     unsigned int storage_qualifiers;
@@ -162,7 +162,7 @@ typedef struct CharacterOperand {
 static void free_character_operand(CharacterOperand *operand) {
     free(operand->pointer);
     free(operand->count);
-    free(operand->stride);
+    free(operand->byte_stride);
     free(operand->length);
     memset(operand, 0, sizeof(*operand));
 }
@@ -201,9 +201,9 @@ static int character_constructor_operand(Unit *unit, const F2cExpr *expression,
         f2c_buffer_printf(&count, "%zuU", expression->child_count);
         operand->count = f2c_buffer_take(&count);
     }
-    operand->stride = f2c_strdup("1");
+    operand->byte_stride = f2c_strdup("sizeof(const char *)");
     operand->pointer_vector = (operand->storage_qualifiers & F2C_STORAGE_VOLATILE) != 0U ? 2 : 1;
-    return operand->pointer != NULL && operand->count != NULL && operand->stride != NULL &&
+    return operand->pointer != NULL && operand->count != NULL && operand->byte_stride != NULL &&
            operand->length != NULL;
 
 unsupported:
@@ -222,7 +222,7 @@ static int character_operand(Unit *unit, const F2cExpr *expression, CharacterOpe
                                : NULL;
         operand->length = f2c_character_length_expression(unit, expression);
         operand->count = f2c_strdup("SIZE_MAX");
-        operand->stride = f2c_strdup("0");
+        operand->byte_stride = f2c_strdup("0");
         free(value);
     } else if (f2c_lowering_code(unit, expression) == NULL &&
                expression->kind == F2C_EXPR_ARRAY_CONSTRUCTOR && expression->child_count == 1U &&
@@ -238,11 +238,11 @@ static int character_operand(Unit *unit, const F2cExpr *expression, CharacterOpe
             return 0;
         operand->pointer = view.pointer;
         operand->count = view.count;
-        operand->stride = view.stride;
+        operand->byte_stride = view.byte_stride;
         operand->storage_qualifiers = view.storage_qualifiers;
     }
     return *supported && operand->pointer != NULL && operand->count != NULL &&
-           operand->stride != NULL && operand->length != NULL;
+           operand->byte_stride != NULL && operand->length != NULL;
 }
 
 static char *character_relation_reduction(Unit *unit, const F2cExpr *left, const F2cExpr *right,
@@ -264,10 +264,10 @@ static char *character_relation_reduction(Unit *unit, const F2cExpr *left, const
         "f2c_character_relation_reduce%s((const %svoid *)(%s), %s, %s, (size_t)(%s), %d, "
         "(const %svoid *)(%s), %s, %s, (size_t)(%s), %d, %d, %d)",
         qualified ? "_volatile" : "", qualified ? "volatile " : "", left_operand.pointer,
-        left_operand.stride, left_operand.count, left_operand.length, left_operand.pointer_vector,
-        qualified ? "volatile " : "", right_operand.pointer, right_operand.stride,
-        right_operand.count, right_operand.length, right_operand.pointer_vector, relation,
-        reduction);
+        left_operand.byte_stride, left_operand.count, left_operand.length,
+        left_operand.pointer_vector, qualified ? "volatile " : "", right_operand.pointer,
+        right_operand.byte_stride, right_operand.count, right_operand.length,
+        right_operand.pointer_vector, relation, reduction);
     free_character_operand(&left_operand);
     free_character_operand(&right_operand);
     return f2c_buffer_take(&result);
@@ -320,8 +320,8 @@ char *f2c_expression_relation_reduction(Unit *unit, const F2cExpr *expression, i
         f2c_buffer_append(&result, "F2C_RELATION_REDUCE");
     }
     f2c_buffer_printf(&result, "(%s, %s, %s, %s, %s, %s, %d, %d)", left_view.pointer,
-                      left_view.stride, left_view.count, right_view.pointer, right_view.stride,
-                      right_view.count, relation, reduction);
+                      left_view.byte_stride, left_view.count, right_view.pointer,
+                      right_view.byte_stride, right_view.count, relation, reduction);
     f2c_array_view_discard(&left_view);
     f2c_array_view_discard(&right_view);
     return f2c_buffer_take(&result);
@@ -492,8 +492,8 @@ static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) 
                           "(abort(), false))",
                           left_view.count, right_view.count, helper, qualified ? "_volatile" : "",
                           qualified ? "volatile " : "", left_view.pointer, left_view.pointer,
-                          left_view.stride, qualified ? "volatile " : "", right_view.pointer,
-                          right_view.pointer, right_view.stride, left_view.count);
+                          left_view.byte_stride, qualified ? "volatile " : "", right_view.pointer,
+                          right_view.pointer, right_view.byte_stride, left_view.count);
     } else {
         const char *left_type = reduction_type_code(left_array);
         const char *right_type = reduction_type_code(right_array);
@@ -508,8 +508,8 @@ static char *dot_product(Unit *unit, const F2cExpr *expression, int *supported) 
                           "(abort(), %s))",
                           left_view.count, right_view.count, helper, qualified ? "_volatile" : "",
                           qualified ? "volatile " : "", left_view.pointer, left_type,
-                          left_view.stride, qualified ? "volatile " : "", right_view.pointer,
-                          right_type, right_view.stride, left_view.count, zero);
+                          left_view.byte_stride, qualified ? "volatile " : "", right_view.pointer,
+                          right_type, right_view.byte_stride, left_view.count, zero);
     }
     f2c_array_view_discard(&left_view);
     f2c_array_view_discard(&right_view);
@@ -581,7 +581,7 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
     if (mask == NULL || mask->rank == 0U) {
         mask_view.pointer = f2c_strdup("NULL");
         mask_view.count = f2c_strdup(array_view.count);
-        mask_view.stride = f2c_strdup("0");
+        mask_view.byte_stride = f2c_strdup("0");
         mask_size = f2c_strdup("1U");
         mask_scalar =
             mask != NULL ? f2c_expression_emit(unit, mask, supported) : f2c_strdup("true");
@@ -600,8 +600,8 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
     if (dimension != NULL)
         dimension_code = f2c_expression_emit(unit, dimension, supported);
     if (!*supported || mask_view.pointer == NULL || mask_view.count == NULL ||
-        mask_view.stride == NULL || mask_size == NULL || mask_scalar == NULL || back_code == NULL ||
-        (mask != NULL && mask->rank != 0U && conformance == NULL) ||
+        mask_view.byte_stride == NULL || mask_size == NULL || mask_scalar == NULL ||
+        back_code == NULL || (mask != NULL && mask->rank != 0U && conformance == NULL) ||
         (dimension != NULL && dimension_code == NULL))
         goto unsupported;
     qualified = ((array_view.storage_qualifiers | mask_view.storage_qualifiers) &
@@ -630,12 +630,12 @@ char *f2c_expression_reduction_intrinsic(Unit *unit, const F2cExpr *expression, 
     if (logical) {
         f2c_buffer_printf(&result, "%s((const %svoid *)(%s), sizeof(*(%s)), %s, %s)", macro,
                           qualified ? "volatile " : "", array_view.pointer, array_view.pointer,
-                          array_view.count, array_view.stride);
+                          array_view.count, array_view.byte_stride);
     } else {
         f2c_buffer_printf(&result, "%s(%s, %s, %s, (const %svoid *)(%s), %s, %s, (%s)", macro,
-                          array_view.pointer, array_view.count, array_view.stride,
+                          array_view.pointer, array_view.count, array_view.byte_stride,
                           qualified ? "volatile " : "", mask_view.pointer, mask_size,
-                          mask_view.stride, mask_scalar);
+                          mask_view.byte_stride, mask_scalar);
         if (expression->intrinsic == F2C_INTRINSIC_MAXLOC ||
             expression->intrinsic == F2C_INTRINSIC_MINLOC)
             f2c_buffer_printf(&result, ", (%s)", back_code);

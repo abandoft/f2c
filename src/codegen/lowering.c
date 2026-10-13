@@ -352,84 +352,83 @@ char *f2c_emit_unaligned_load(Unit *unit, Symbol *symbol, char **indices, size_t
 static char *emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count,
                                   int physical_storage) {
     Buffer result = {0};
+    Buffer offset = {0};
+    char *data;
+    char *linear;
     char *character_length = NULL;
-    char *offset;
-    size_t i;
+    const int descriptor =
+        symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol));
     if (symbol->equivalence_unaligned)
         return f2c_emit_unaligned_load(unit, symbol, indices, count);
-    {
-        char *data = f2c_storage_symbol_data(unit, symbol);
-        if (data == NULL)
-            return NULL;
-        if (!physical_storage && symbol->volatile_entity && symbol->type != TYPE_CHARACTER)
-            f2c_buffer_printf(&result, "((volatile %s *)%s)[", f2c_symbol_c_type(symbol), data);
-        else
-            f2c_buffer_printf(&result, "%s[", data);
+    data = f2c_storage_symbol_data(unit, symbol);
+    if (data == NULL)
+        return NULL;
+    if (descriptor) {
+        f2c_buffer_printf(&offset, "f2c_array_descriptor_byte_offset(%zuU, (const int64_t[]){",
+                          count);
+        for (size_t dimension = 0U; dimension < count; ++dimension)
+            f2c_buffer_printf(&offset, "%s(int64_t)(%s)", dimension == 0U ? "" : ", ",
+                              indices[dimension]);
+        f2c_buffer_append(&offset, "}, (const int64_t[]){");
+        for (size_t dimension = 0U; dimension < count; ++dimension) {
+            char *lower = f2c_symbol_dimension_lower(unit, symbol, dimension);
+            if (lower == NULL)
+                goto failed;
+            f2c_buffer_printf(&offset, "%s(int64_t)(%s)", dimension == 0U ? "" : ", ", lower);
+            free(lower);
+        }
+        f2c_buffer_append(&offset, "}, (const size_t[]){");
+        for (size_t dimension = 0U; dimension < count; ++dimension) {
+            char *extent = f2c_symbol_dimension_extent(unit, symbol, dimension);
+            if (extent == NULL)
+                goto failed;
+            f2c_buffer_printf(&offset, "%s(size_t)(%s)", dimension == 0U ? "" : ", ", extent);
+            free(extent);
+        }
+        f2c_buffer_append(&offset, "}, (const ptrdiff_t[]){");
+        for (size_t dimension = 0U; dimension < count; ++dimension) {
+            char *stride =
+                f2c_storage_symbol_property(unit, symbol, F2C_OBJECT_BYTE_STRIDE, dimension);
+            if (stride == NULL)
+                goto failed;
+            f2c_buffer_printf(&offset, "%s(%s)", dimension == 0U ? "" : ", ", stride);
+            free(stride);
+        }
+        f2c_buffer_append(&offset, "})");
+        F2cStorageReference reference = f2c_ir_symbol_storage_reference(symbol);
+        if (physical_storage)
+            reference.object_qualifiers = F2C_STORAGE_UNQUALIFIED;
+        char *element = f2c_storage_byte_element(&reference, data, offset.data);
         free(data);
+        free(offset.data);
+        return element;
     }
+    linear = emit_contiguous_array_offset(unit, symbol, indices, count);
+    if (linear == NULL)
+        goto failed;
+    if (!physical_storage && symbol->volatile_entity && symbol->type != TYPE_CHARACTER)
+        f2c_buffer_printf(&result, "((volatile %s *)%s)[", f2c_symbol_c_type(symbol), data);
+    else
+        f2c_buffer_printf(&result, "%s[", data);
     if (symbol->type == TYPE_CHARACTER) {
         character_length = f2c_symbol_character_length(unit, symbol);
         if (character_length == NULL)
             character_length = f2c_strdup("1U");
-        f2c_buffer_append(&result, "f2c_descriptor_stride_extent((ptrdiff_t)(");
+        f2c_buffer_printf(&result, "f2c_descriptor_stride_extent((ptrdiff_t)(%s), (size_t)(%s))",
+                          linear, character_length);
+    } else {
+        f2c_buffer_append(&result, linear);
     }
-    if (symbol->pointer || (symbol->argument && f2c_symbol_uses_descriptor(symbol))) {
-        f2c_buffer_printf(&result, "f2c_array_descriptor_offset(%zuU, (const int64_t[]){", count);
-        for (i = 0U; i < count; ++i)
-            f2c_buffer_printf(&result, "%s(int64_t)(%s)", i == 0U ? "" : ", ", indices[i]);
-        f2c_buffer_append(&result, "}, (const int64_t[]){");
-        for (i = 0U; i < count; ++i) {
-            char *lower = f2c_symbol_dimension_lower(unit, symbol, i);
-            if (lower == NULL) {
-                free(f2c_buffer_take(&result));
-                free(character_length);
-                return NULL;
-            }
-            f2c_buffer_printf(&result, "%s(int64_t)(%s)", i == 0U ? "" : ", ", lower);
-            free(lower);
-        }
-        f2c_buffer_append(&result, "}, (const size_t[]){");
-        for (i = 0U; i < count; ++i) {
-            char *extent = f2c_symbol_dimension_extent(unit, symbol, i);
-            if (extent == NULL) {
-                free(f2c_buffer_take(&result));
-                free(character_length);
-                return NULL;
-            }
-            f2c_buffer_printf(&result, "%s(size_t)(%s)", i == 0U ? "" : ", ", extent);
-            free(extent);
-        }
-        f2c_buffer_append(&result, "}, (const ptrdiff_t[]){");
-        for (i = 0U; i < count; ++i) {
-            char *stride = f2c_storage_symbol_property(unit, symbol, F2C_OBJECT_STRIDE, i);
-            if (stride == NULL) {
-                free(f2c_buffer_take(&result));
-                free(character_length);
-                return NULL;
-            }
-            f2c_buffer_printf(&result, "%s(%s)", i == 0U ? "" : ", ", stride);
-            free(stride);
-        }
-        f2c_buffer_append(&result, "})");
-        if (character_length != NULL)
-            f2c_buffer_printf(&result, "), (size_t)(%s))", character_length);
-        f2c_buffer_append(&result, "]");
-        free(character_length);
-        return f2c_buffer_take(&result);
-    }
-    offset = emit_contiguous_array_offset(unit, symbol, indices, count);
-    if (offset == NULL) {
-        free(character_length);
-        free(result.data);
-        return NULL;
-    }
-    f2c_buffer_append(&result, offset);
-    if (character_length != NULL)
-        f2c_buffer_printf(&result, "), (size_t)(%s))", character_length);
     f2c_buffer_append(&result, "]");
-    free(offset);
+    free(linear);
+    free(data);
     free(character_length);
     return f2c_buffer_take(&result);
+failed:
+    free(data);
+    free(offset.data);
+    free(result.data);
+    return NULL;
 }
 
 char *f2c_emit_array_reference(Unit *unit, Symbol *symbol, char **indices, size_t count) {

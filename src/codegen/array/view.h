@@ -8,7 +8,7 @@
 typedef struct F2cArrayView {
     char *pointer;
     char *count;
-    char *stride;
+    char *byte_stride;
     unsigned int storage_qualifiers;
 } F2cArrayView;
 

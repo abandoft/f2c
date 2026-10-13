@@ -35,12 +35,16 @@ static char *emit_lowered_descriptor_actual(Unit *unit, const F2cExpr *actual) {
     for (dimension = 0U; dimension < actual->rank; ++dimension)
         f2c_buffer_printf(&result, "%s(int64_t)%s_extent_%zu", dimension == 0U ? "" : ", ",
                           lowered_code, dimension + 1U);
-    f2c_buffer_append(&result, "}, .stride = {");
+    f2c_buffer_append(&result, "}, .byte_stride = {");
     for (dimension = 0U; dimension < actual->rank; ++dimension) {
-        size_t prior;
-        f2c_buffer_printf(&result, "%s(ptrdiff_t)1", dimension == 0U ? "" : ", ");
-        for (prior = 0U; prior < dimension; ++prior)
-            f2c_buffer_printf(&result, " * (ptrdiff_t)%s_extent_%zu", lowered_code, prior + 1U);
+        char *stride = f2c_descriptor_dense_byte_stride(unit, actual, dimension);
+        if (stride == NULL) {
+            free(character_length);
+            free(result.data);
+            return NULL;
+        }
+        f2c_buffer_printf(&result, "%s%s", dimension == 0U ? "" : ", ", stride);
+        free(stride);
     }
     f2c_buffer_printf(&result, "}, .character_length = (size_t)(%s)})",
                       character_length != NULL ? character_length : "0U");
@@ -52,7 +56,6 @@ static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supp
     Buffer result = {0};
     char *character_length = NULL;
     F2cDescriptorView view = {0};
-    Symbol *symbol;
     size_t dimension;
     actual = actual_value(actual);
     if (actual != NULL && actual->kind == F2C_EXPR_ABSENT_ARGUMENT)
@@ -65,18 +68,17 @@ static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supp
     }
     if (actual != NULL && f2c_lowering_is_array_temporary(unit, actual))
         return emit_lowered_descriptor_actual(unit, actual);
-    if (actual == NULL || actual->symbol == NULL || !f2c_descriptor_view(unit, actual, &view)) {
+    if (actual == NULL || !f2c_descriptor_view(unit, actual, &view)) {
         *supported = 0;
         return NULL;
     }
-    symbol = actual->symbol;
     if (actual->type == TYPE_CHARACTER)
         character_length = f2c_character_length_expression(unit, actual);
     f2c_buffer_printf(&result,
                       "(&(f2c_descriptor){.%s = %s, .storage_qualifiers = %uU, "
                       ".element_size = sizeof(%s), .rank = %zuU, .lower = {",
                       f2c_descriptor_address_member(view.storage_qualifiers, view.readonly_storage),
-                      view.data, view.storage_qualifiers, f2c_symbol_c_type(symbol), view.rank);
+                      view.data, view.storage_qualifiers, f2c_expression_c_type(actual), view.rank);
     for (dimension = 0U; dimension < view.rank; ++dimension)
         f2c_buffer_printf(&result, "%s(int64_t)(%s)", dimension == 0U ? "" : ", ",
                           view.lower[dimension]);
@@ -84,10 +86,10 @@ static char *emit_descriptor_actual(Unit *unit, const F2cExpr *actual, int *supp
     for (dimension = 0U; dimension < view.rank; ++dimension)
         f2c_buffer_printf(&result, "%sf2c_descriptor_extent((size_t)(%s))",
                           dimension == 0U ? "" : ", ", view.extent[dimension]);
-    f2c_buffer_append(&result, "}, .stride = {");
+    f2c_buffer_append(&result, "}, .byte_stride = {");
     for (dimension = 0U; dimension < view.rank; ++dimension)
         f2c_buffer_printf(&result, "%s(ptrdiff_t)(%s)", dimension == 0U ? "" : ", ",
-                          view.stride[dimension]);
+                          view.byte_stride[dimension]);
     f2c_buffer_printf(&result, "}, .character_length = (size_t)(%s)})",
                       character_length != NULL ? character_length : "0U");
     free(character_length);
