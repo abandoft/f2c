@@ -115,6 +115,11 @@ char *f2c_call_bound_expression(Unit *unit, const F2cExpr *expression, int *supp
                              : f2c_call_emit_actual_address(unit, actual, code, supported))
                       : NULL;
         free(code);
+        if (lowered != NULL) {
+            char *bridged = f2c_call_bridge_readonly_actual(procedure, parameter, actual, lowered);
+            free(lowered);
+            lowered = bridged;
+        }
         if (lowered == NULL) {
             free(callee);
             free(result.data);

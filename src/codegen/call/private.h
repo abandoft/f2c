@@ -17,6 +17,8 @@ int f2c_call_materialize_expression(Unit *unit, F2cExpr *expression, size_t iden
 char *f2c_call_result_character_length(Unit *unit, const F2cExpr *expression);
 char *f2c_call_emit_actual_address(Unit *unit, const F2cExpr *actual, const char *code,
                                    int *supported);
+char *f2c_call_bridge_readonly_actual(const Symbol *callee, size_t parameter, const F2cExpr *actual,
+                                      const char *code);
 char *f2c_call_bound_expression(Unit *unit, const F2cExpr *expression, int *supported);
 int f2c_call_has_object_state_parameters(const F2cExpr *expression);
 int f2c_call_emit_function_value(Buffer *output, Unit *unit, const F2cExpr *expression,

@@ -900,10 +900,10 @@ static void test_character_and_external_interface(void) {
     expect_contains(result.code, "extern void consume_text(char *, char *, size_t, size_t);",
                     "implicit external prototypes do not infer dummy constness from actuals");
     expect_contains(result.code,
-                    "consume_values(f2c_implicit_mutable_actual(n), "
-                    "f2c_implicit_mutable_actual(values));",
+                    "consume_values(f2c_borrowed_actual_address(n), "
+                    "f2c_borrowed_actual_address(values));",
                     "legacy calls bridge const dummy actuals without changing the external ABI");
-    expect_contains(result.code, "inspect_value(f2c_implicit_mutable_actual(n))",
+    expect_contains(result.code, "inspect_value(f2c_borrowed_actual_address(n))",
                     "legacy function calls bridge const dummy actuals without a cast warning");
     f2c_result_free(&result);
 }

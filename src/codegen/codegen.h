@@ -74,8 +74,6 @@ int f2c_emit_alternate_return_call(Buffer *output, Unit *unit, const char *name,
                                    size_t count, const F2cStatement *statement, int depth);
 int f2c_emit_call_with_procedure(Buffer *output, Unit *unit, const Unit *procedure,
                                  F2cExpr *const *argument_expressions, size_t count, int depth);
-char *f2c_bridge_implicit_mutable_actual(const Symbol *callee, size_t parameter,
-                                         const F2cExpr *actual, const char *code);
 int f2c_emit_statement(Context *context, Unit *unit, const F2cStatement *statement,
                        Line *source_line, int *depth);
 int f2c_emit_select_case_begin(Context *context, Unit *unit, const F2cStatement *statement,

@@ -122,6 +122,7 @@ set(
     src/codegen/call/actual.c
     src/codegen/call/expression.c
     src/codegen/call/private.h
+    src/codegen/call/readonly.c
     src/codegen/call/specification.c
     src/codegen/character.c
     src/codegen/character/deferred.c

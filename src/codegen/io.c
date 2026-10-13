@@ -189,7 +189,7 @@ int f2c_io_emit_defined_io_call(Context *context, const char *value, F2cDerivedT
         f2c_io_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output,
                           "f2c_descriptor f2c_dtio_v_list_descriptor = {"
-                          ".data = f2c_implicit_mutable_actual(f2c_dtio_v_list), "
+                          ".data = f2c_borrowed_actual_address(f2c_dtio_v_list), "
                           ".element_size = sizeof(*f2c_dtio_v_list), .rank = 1U};\n");
         f2c_io_indent(&context->output, depth + 1);
         f2c_buffer_append(&context->output, "f2c_dtio_v_list_descriptor.lower[0] = 1; "

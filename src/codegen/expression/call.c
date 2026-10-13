@@ -324,8 +324,8 @@ static char *emit_call_body(Unit *unit, const F2cExpr *expression, int *supporte
             *supported = 0;
             return NULL;
         }
-        bridged = f2c_bridge_implicit_mutable_actual(expression->symbol, i, expression->children[i],
-                                                     actual);
+        bridged =
+            f2c_call_bridge_readonly_actual(expression->symbol, i, expression->children[i], actual);
         free(actual);
         actual = bridged;
         if (actual == NULL) {
